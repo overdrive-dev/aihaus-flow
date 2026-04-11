@@ -1,0 +1,31 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code local config — created by install.sh, never source
+/.claude/
+
+# Local AIhaus installation — created by running install.sh on this repo.
+# All runtime artifacts (project.md, plans, milestones, memory) live here.
+# The publishable package source is in pkg/.aihaus/ (committed separately).
+/.aihaus/
+
+# Old top-level scripts dir (moved to pkg/scripts/)
+/scripts/
+
+# Temp files
+*.tmp
+*.bak
+.header.tmp
+.footer.tmp
+.auto.tmp
+.merged.tmp
+.rendered-template.tmp

@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+# AIhaus update — re-syncs local .aihaus/ from pkg/ package source.
+# Usage: bash pkg/scripts/update.sh [--target <path>]
+#
+# Re-links (or re-copies) skills, agents, hooks, templates from pkg/.aihaus/
+# Preserves ALL local data: project.md, plans/, milestones/, memory/, etc.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: update.sh [--target <path>]
+
+Re-syncs package-managed files in .aihaus/ from the AIhaus package source.
+Local data (project.md, plans/, milestones/, memory/, etc.) is preserved.
+
+Options:
+  --target <path>   Target directory (default: current working directory)
+  -h, --help        Show this message
+EOF
+}
+
+# Resolve package root (the directory containing this script's parent)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PKG_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PKG_AIHAUS="${PKG_ROOT}/.aihaus"
+PKG_TEMPLATES="${PKG_ROOT}/templates"
+
+TARGET="${PWD}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --target)
+      [[ $# -ge 2 ]] || { echo "ERROR: --target requires a path" >&2; exit 2; }
+      TARGET="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage; exit 0
+      ;;
+    *)
+      echo "ERROR: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+# Absolute path for target
+TARGET="$(cd "${TARGET}" 2>/dev/null && pwd)" || {
+  echo "ERROR: target directory does not exist: ${TARGET}" >&2
+  exit 1
+}
+
+AIHAUS="${TARGET}/.aihaus"
+CLAUDE="${TARGET}/.claude"
+
+# ---- Preflight checks -------------------------------------------------------
+
+if [[ ! -d "${AIHAUS}" ]]; then
+  echo "ERROR: No .aihaus/ directory found at ${TARGET}." >&2
+  echo "  Run install.sh first." >&2
+  exit 1
+fi
+
+# Read install mode from marker file
+MODE_FILE="${AIHAUS}/.install-mode"
+if [[ -f "${MODE_FILE}" ]]; then
+  MODE="$(cat "${MODE_FILE}" | tr -d '[:space:]')"
+else
+  # Default to copy if no marker exists (legacy installs)
+  MODE="copy"
+  echo "  warn: .install-mode not found; defaulting to copy mode"
+fi
+
+echo "AIhaus updater"
+echo "  package: ${PKG_ROOT}"
+echo "  target:  ${TARGET}"
+echo "  mode:    ${MODE}"
+
+# ---- Counters for summary ----------------------------------------------------
+count_skills=0
+count_agents=0
+count_hooks=0
+
+# ---- Update package directories in .aihaus/ ---------------------------------
+# These are the package-owned directories that get refreshed.
+# Local data directories (plans/, milestones/, features/, bugfixes/, memory/,
+# rules/, notion/, debug/) are NEVER touched.
+
+update_aihaus_dir() {
+  local name="$1"
+  local src="${PKG_AIHAUS}/${name}"
+  local dst="${AIHAUS}/${name}"
+
+  if [[ ! -e "${src}" ]]; then
+    echo "  skip: ${name} not found in package"
+    return 0
+  fi
+
+  # Remove old directory contents and replace with fresh copy from package
+  if [[ -e "${dst}" ]]; then
+    rm -rf "${dst}"
+  fi
+  cp -R "${src}" "${dst}"
+  echo "  refreshed: .aihaus/${name}"
+}
+
+for name in skills agents hooks templates; do
+  update_aihaus_dir "${name}"
+done
+
+# Count what was updated
+if [[ -d "${AIHAUS}/skills" ]]; then
+  count_skills=$(find "${AIHAUS}/skills" -type f -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
+fi
+if [[ -d "${AIHAUS}/agents" ]]; then
+  count_agents=$(find "${AIHAUS}/agents" -maxdepth 1 -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+fi
+if [[ -d "${AIHAUS}/hooks" ]]; then
+  count_hooks=$(find "${AIHAUS}/hooks" -maxdepth 1 -type f -name '*.sh' 2>/dev/null | wc -l | tr -d ' ')
+fi
+
+# ---- Re-link / re-copy .claude/{skills,agents,hooks} ------------------------
+
+link_or_copy() {
+  local name="$1"
+  local src="${AIHAUS}/${name}"
+  local dst="${CLAUDE}/${name}"
+
+  if [[ ! -e "${src}" ]]; then
+    echo "  skip: ${src} does not exist"
+    return 0
+  fi
+
+  # Remove stale destination
+  if [[ -L "${dst}" || -e "${dst}" ]]; then
+    rm -rf "${dst}"
+  fi
+
+  if [[ "${MODE}" == "link" ]]; then
+    if ln -s "${src}" "${dst}" 2>/dev/null; then
+      echo "  link: .claude/${name} -> .aihaus/${name}"
+      return 0
+    fi
+    echo "  warn: symlink failed for ${name}, falling back to copy"
+    MODE="copy"
+  fi
+  cp -R "${src}" "${dst}"
+  echo "  copy: .claude/${name}"
+}
+
+mkdir -p "${CLAUDE}"
+for name in skills agents hooks; do
+  link_or_copy "${name}"
+done
+
+# ---- Deep-merge settings template -------------------------------------------
+SETTINGS_SRC="${PKG_TEMPLATES}/settings.local.json"
+SETTINGS_DST="${CLAUDE}/settings.local.json"
+
+if [[ ! -f "${SETTINGS_SRC}" ]]; then
+  echo "  warn: settings template missing at ${SETTINGS_SRC}, skipping merge"
+else
+  if [[ ! -f "${SETTINGS_DST}" ]]; then
+    cp "${SETTINGS_SRC}" "${SETTINGS_DST}"
+    echo "  settings: copied template"
+  else
+    # Merge: preserve user keys, add package required keys
+    if command -v jq >/dev/null 2>&1; then
+      tmp="$(mktemp)"
+      jq -s '.[0] * .[1]' "${SETTINGS_DST}" "${SETTINGS_SRC}" > "${tmp}"
+      mv "${tmp}" "${SETTINGS_DST}"
+      echo "  settings: merged via jq"
+    elif command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || command -v py >/dev/null 2>&1; then
+      py_bin="$(command -v python3 || command -v python || command -v py)"
+      "${py_bin}" - "${SETTINGS_DST}" "${SETTINGS_SRC}" <<'PY'
+import json, sys
+
+dst_path, src_path = sys.argv[1], sys.argv[2]
+with open(dst_path, "r", encoding="utf-8") as fh:
+    dst = json.load(fh)
+with open(src_path, "r", encoding="utf-8") as fh:
+    src = json.load(fh)
+
+def deep_merge(base, overlay):
+    if isinstance(base, dict) and isinstance(overlay, dict):
+        out = dict(base)
+        for k, v in overlay.items():
+            out[k] = deep_merge(base.get(k), v) if k in base else v
+        return out
+    return overlay if overlay is not None else base
+
+merged = deep_merge(dst, src)
+with open(dst_path, "w", encoding="utf-8") as fh:
+    json.dump(merged, fh, indent=2)
+PY
+      echo "  settings: merged via python"
+    else
+      echo "  warn: neither jq nor python available; leaving settings.local.json untouched"
+    fi
+  fi
+fi
+
+# ---- Update install mode marker ----------------------------------------------
+echo "${MODE}" > "${AIHAUS}/.install-mode"
+
+# ---- Summary -----------------------------------------------------------------
+echo ""
+echo "Updated ${count_skills} skills, ${count_agents} agents, ${count_hooks} hooks"
+echo "AIhaus updated (${MODE} mode)."
+exit 0
