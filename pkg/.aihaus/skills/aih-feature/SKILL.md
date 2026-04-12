@@ -33,6 +33,13 @@ If `$ARGUMENTS` contains `--plan`, extract the word immediately after `--plan` a
 3. Read `.aihaus/decisions.md` (if present) — do not contradict any ADR
 4. Read `.aihaus/knowledge.md` (if present) — avoid known pitfalls
 
+### Step 1.5: Persist Attachments
+If the user's feature request includes pasted images (mockups, screenshots, references) or files:
+1. Copy from source (e.g., `~/.claude/image-cache/[uuid]/[n].png`) to `.aihaus/features/[YYMMDD]-[slug]/attachments/[seq]-[desc].[ext]` via `cp`.
+2. Describe each via vision.
+3. List in PLAN.md `## Attachments` (Step 11 artifact). Reference in Approach when they inform decisions.
+4. When spawning `code-reviewer`, `verifier`, or `integration-checker` later, include attachment paths so they can Read if relevant.
+
 ### Step 2: Check Working Tree
 Run `git status` and `git branch --show-current`.
 - If there are uncommitted changes, **warn the user** in your plan summary: "Your working tree has uncommitted changes. I can stash them before branching, or work on the current branch — your call."

@@ -20,6 +20,13 @@ $ARGUMENTS
 - Read `.aihaus/decisions.md` (if present) — do not contradict any ADR
 - Read `.aihaus/knowledge.md` (if present) — avoid known pitfalls
 
+### 1.5. Persist Attachments
+If the user's bug report includes a pasted image (screenshot of error UI, stack trace image) or file (log, crash dump):
+1. Copy from source path (usually `~/.claude/image-cache/[uuid]/[n].png`) to `.aihaus/bugfixes/[YYMMDD]-[slug]/attachments/[seq]-[desc].[ext]` via `cp`.
+2. Describe each via vision.
+3. List in TRIAGE.md `## Attachments` section.
+4. When spawning the `debugger` agent (Step 2), include the attachment paths in its prompt so it can `Read` them during root-cause analysis.
+
 ### 2. Triage (delegate to debugger agent)
 Spawn the `debugger` agent with `subagent_type: "debugger"` and the instruction:
 > "Investigate this bug using scientific method. Symptom: [user's bug description]. Form 2-3 hypotheses, test each, trace from symptom to root cause. Write `.aihaus/debug/[session-id].md` with hypotheses, evidence, and root cause. Report back the root cause and all affected files."

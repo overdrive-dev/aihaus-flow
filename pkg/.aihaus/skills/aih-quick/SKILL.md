@@ -19,6 +19,9 @@ $ARGUMENTS
 5. **Adversarial sanity check**: Spawn `code-reviewer` with `subagent_type: "code-reviewer"` for a single pass on the staged diff. No fix loop — reviewer reports findings inline, user decides whether to address before commit. Keeps `/aih-quick` fast while preventing trivial bugs from slipping through.
 6. **Commit**: Atomic commit with descriptive message
 
+## Attachment Handling
+If the user pastes an image/file, persist to `.aihaus/features/[YYMMDD]-[slug]/attachments/` (or a quick sibling dir) via `cp` from `~/.claude/image-cache/`. Pass the path to `code-reviewer` in Step 5. Reject > 20 MB.
+
 ## Guardrails
 - If the change touches more than 5 files, STOP and suggest using `/aih-feature` instead
 - If the change requires a database migration or schema change (and the project uses a database), STOP and suggest `/aih-plan` or `/aih-milestone` first
