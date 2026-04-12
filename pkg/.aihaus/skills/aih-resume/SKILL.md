@@ -70,9 +70,11 @@ Based on phase:
 - **completion** → re-run completion protocol.
 - **implement / verify / commit** (feature/bugfix) → resume from next uncompleted step.
 
-### 7. Update manifest
+### 7. Update manifest + refresh Active Milestones
 
 Append to Progress Log: `[ts] — Resumed by /aih-resume`. Update Status to `running` and Phase as appropriate.
+
+If `.aihaus/project.md` exists, spawn `project-analyst` with `--refresh-active-milestones` and merge the scratch file into `project.md` between the `ACTIVE-MILESTONES-START/END` markers. This removes the entry from the Paused table and adds it to Running.
 
 ## Phase 3 — Finalize
 

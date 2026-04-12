@@ -53,25 +53,34 @@ _A short prose description of how the codebase is organized will appear here aft
 
 ## Active Milestones
 
-<!-- Edit this manually; preserved across /aih-init runs. Add a bullet per milestone currently in flight. -->
+<!-- AIHAUS:ACTIVE-MILESTONES-START -->
+<!-- Auto-populated by /aih-milestone, /aih-run, /aih-resume. Do not edit by hand — content between these markers is overwritten. -->
 
 - _No active milestones yet._
 
+<!-- AIHAUS:ACTIVE-MILESTONES-END -->
+
 ## Decisions
 
-<!-- Edit this manually; preserved across /aih-init runs. -->
+<!-- AIHAUS:RECENT-DECISIONS-START -->
+<!-- Auto-populated: last 5 ADRs from DECISIONS.md or .aihaus/decisions.md. Do not edit between these markers. -->
 
 See [.aihaus/decisions.md](.aihaus/decisions.md) for the full ADR list.
 
-High-level summary of load-bearing decisions can be recorded here for quick reference.
+<!-- AIHAUS:RECENT-DECISIONS-END -->
+
+High-level summary of load-bearing decisions can be recorded here (outside the markers) for quick reference.
 
 ## Knowledge
 
-<!-- Edit this manually; preserved across /aih-init runs. -->
+<!-- AIHAUS:RECENT-KNOWLEDGE-START -->
+<!-- Auto-populated: last 5 knowledge entries. Do not edit between these markers. -->
 
 See [.aihaus/knowledge.md](.aihaus/knowledge.md) for accumulated lessons and gotchas.
 
-Short pointers to the most important knowledge entries can live here.
+<!-- AIHAUS:RECENT-KNOWLEDGE-END -->
+
+Short pointers to the most important knowledge entries can live here (outside the markers).
 
 ## Milestone History
 

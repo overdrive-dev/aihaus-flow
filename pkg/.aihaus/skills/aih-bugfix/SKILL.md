@@ -171,6 +171,7 @@ Runs AFTER the commit. If `.aihaus/project.md` does not exist, print
    the manual header/footer byte-for-byte; back up to `project.md.bak` first).
 4. Always append to `## Milestone History` in the manual section:
    `- [YYYY-MM-DD] fix/[slug] — [one-line summary]`.
+5. If `DECISIONS.md` / `.aihaus/decisions.md` / `.aihaus/knowledge.md` was touched, spawn `project-analyst` with `--refresh-recent-decisions` and merge the scratch files between the `RECENT-DECISIONS-START/END` and `RECENT-KNOWLEDGE-START/END` markers in `.aihaus/project.md`.
 
 ### 16. Report Completion
 Update RUN-MANIFEST.md: set Status `completed`, Phase `completed`, append final timestamp. Summarize what was done:

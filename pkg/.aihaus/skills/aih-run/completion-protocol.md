@@ -103,5 +103,10 @@ Runs AFTER the completion report. Skips cleanly when `.aihaus/project.md` is abs
    in the manual section of `.aihaus/project.md` (create it if absent, just
    above the closing manual marker). Append:
    `- [YYYY-MM-DD] [M0XX]-[slug] — [one-line summary from MILESTONE-SUMMARY.md]`
-6. **Report.** Print either `"project.md refreshed (inventory + history)"` or
-   `"project.md history appended (no structural changes detected)"`.
+6. **Refresh Active Milestones.** Spawn `project-analyst` with `--refresh-active-milestones`. Merge `.aihaus/.active-milestones-scratch.md` between the `ACTIVE-MILESTONES-START/END` markers — the completed milestone disappears from all three tables.
+
+7. **Refresh Recent Decisions + Knowledge.** Spawn `project-analyst` with `--refresh-recent-decisions`. Merge `.aihaus/.recent-decisions-scratch.md` between `RECENT-DECISIONS-START/END` markers, and `.aihaus/.recent-knowledge-scratch.md` between `RECENT-KNOWLEDGE-START/END` markers.
+
+8. **Report.** Print a concise summary of what was refreshed:
+   `"project.md refreshed: inventory + history + active-milestones + recent-decisions"`
+   or the subset that actually ran.

@@ -68,6 +68,20 @@ Check whether `.aihaus/project.md` already exists.
   - Anything else → abort with: "Leaving project.md untouched. Fix markers
     manually, then re-run `/aih-init`."
 
+### 2.5. Migrate older project.md files
+If project.md exists and the top-level AUTO/MANUAL markers are present but the newer sub-markers (`ACTIVE-MILESTONES-START/END`, `RECENT-DECISIONS-START/END`, `RECENT-KNOWLEDGE-START/END`) are absent, inject them automatically:
+
+1. Within the MANUAL block, find the `## Active Milestones` heading. Replace the section body with:
+   ```
+   <!-- AIHAUS:ACTIVE-MILESTONES-START -->
+   <existing body preserved>
+   <!-- AIHAUS:ACTIVE-MILESTONES-END -->
+   ```
+2. Same for `## Decisions` (wrap with `RECENT-DECISIONS-START/END`) and `## Knowledge` (wrap with `RECENT-KNOWLEDGE-START/END`). Preserve whatever the user had written — the markers just demarcate the auto-populated region for future refreshes.
+3. Back up to `.aihaus/project.md.bak` first. Report: "Migrated project.md — added sub-markers for living auto-population."
+
+Skip this step if sub-markers are already present.
+
 ### 3. Validate marker order (re-run only)
 When both markers are present, verify `AUTO-GENERATED-START` appears BEFORE
 `AUTO-GENERATED-END`. If not:

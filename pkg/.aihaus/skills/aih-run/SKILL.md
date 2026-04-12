@@ -118,6 +118,8 @@ fi
 
 Archive the draft: `mv .aihaus/milestones/drafts/[slug] .aihaus/milestones/drafts/.archive/[YYMMDD]-[slug]`
 
+**Refresh Active Milestones** (if `.aihaus/project.md` exists): spawn `project-analyst` with `--refresh-active-milestones`, then merge the content of `.aihaus/.active-milestones-scratch.md` into `project.md` between `<!-- AIHAUS:ACTIVE-MILESTONES-START -->` and `<!-- AIHAUS:ACTIVE-MILESTONES-END -->` markers. Preserve everything outside those markers. Do the same refresh whenever RUN-MANIFEST.md status changes (running → paused, paused → running, etc.).
+
 ### 9. Planning — Sequential Agent Subagents
 Spawn planning agents sequentially, updating RUN-MANIFEST.md progress log after each.
 
@@ -157,6 +159,8 @@ Read story files from `stories/`. For each story, TaskCreate with:
 Chain by story dependency order. First story blocked by "Verify plan coherence"; last story blocks completion. After all story tasks, create final task `Run completion protocol`. Assign stories to teammates, monitor progress, handle QA cycles.
 
 Update RUN-MANIFEST.md after each story: append `[ts] — Story [N] complete: [title]`.
+
+**Mid-story inventory refresh:** after each story's QA passes and commit lands, check if the committed paths fall within Inventory directories (same detection as completion-protocol Step 6). If yes, spawn `project-analyst` with `subagent_type: "project-analyst"` in `--refresh-inventory-only` mode and merge the AUTO block of `.aihaus/project.md`. Append `[ts] — project.md inventory refreshed after story [N]` to RUN-MANIFEST.md. Skip if the story was documentation-only. Also refresh Active Milestones (see Step 8 pattern) since phase may have changed.
 
 **CRITICAL:** You are the COORDINATOR. Never write code yourself. Delegate everything.
 

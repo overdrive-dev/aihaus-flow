@@ -25,6 +25,17 @@ and write a single structured findings file. ZERO writes outside
 - **`--refresh-inventory-only`:** read the existing `.aihaus/.init-scratch.md`,
   re-run ONLY steps 5, 6, 7 (models, endpoints, frontend inventories), and
   rewrite those fields while preserving every other field already on disk.
+- **`--refresh-active-milestones`:** scan `.aihaus/milestones/drafts/*/STATUS.md`
+  and `.aihaus/milestones/*/RUN-MANIFEST.md` (excluding `.archive/`), emit the
+  Active Milestones block to `.aihaus/.active-milestones-scratch.md`. Content:
+  three tables — Drafts (gathering), Running (status == running), Paused
+  (status in {paused, interrupted}). Empty tables are omitted. If no active
+  work exists, emit a single line `_No active milestones yet._`.
+- **`--refresh-recent-decisions`:** scan `DECISIONS.md` (repo root) or
+  `.aihaus/decisions.md` for `## ADR-NNN` headers, pull the last 5 by number,
+  emit a bullet list to `.aihaus/.recent-decisions-scratch.md` (format:
+  `- **ADR-NNN** — Title (YYYY-MM-DD)`). Same for `.aihaus/knowledge.md` →
+  `.aihaus/.recent-knowledge-scratch.md`.
 
 ## Discovery Protocol
 

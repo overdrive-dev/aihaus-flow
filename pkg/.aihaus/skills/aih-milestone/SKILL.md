@@ -89,6 +89,9 @@ _Things to resolve before execution._
 _Raw user messages appended during gathering, most recent last._
 ```
 
+## Step 3.5 — Refresh Active Milestones in project.md
+If `.aihaus/project.md` exists, spawn `project-analyst` with `subagent_type: "project-analyst"` in `--refresh-active-milestones` mode. Merge `.aihaus/.active-milestones-scratch.md` content between `<!-- AIHAUS:ACTIVE-MILESTONES-START -->` and `<!-- AIHAUS:ACTIVE-MILESTONES-END -->` markers. Preserves everything outside. This way the new draft appears in the Drafts table immediately.
+
 ## Step 4 — Enter Gathering Mode
 
 Print the initial prompt for the user:
