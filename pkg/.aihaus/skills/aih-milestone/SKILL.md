@@ -110,6 +110,7 @@ The main conversation continues after this skill exits. Follow these rules for t
 1. **On every user message that is not a slash command**:
    - Append raw message to `.aihaus/milestones/drafts/[slug]/CONVERSATION.md` with timestamp.
    - Update the relevant section(s) of `CONTEXT.md` with the distilled content.
+   - **Persist attachments** if the message includes pasted images or files (see Attachment Handling below).
    - Ask up to 1 follow-up question if you detect a gap (missing constraint, unclear success criterion, ambiguous scope).
 2. **On start intent** ("start", "go", "kick off", "let's begin", "ready", etc.):
    - Set `STATUS.md` to `ready`.
@@ -119,6 +120,19 @@ The main conversation continues after this skill exits. Follow these rules for t
    - Draft is preserved — user can come back via `/aih-milestone` later.
 4. **On new `/aih-milestone` invocation in a later session**:
    - The drafts listing (Step 2) will surface this draft for resumption.
+
+## Attachment Handling
+When a user message includes a pasted image or file:
+1. Detect source path. Pasted images land at `~/.claude/image-cache/[uuid]/[n].png`. Files referenced via absolute paths or drag-drop appear in the message text.
+2. Copy to `.aihaus/milestones/drafts/[slug]/attachments/[seq]-[short-desc].[ext]` using `cp`. Seq is 2-digit zero-padded (01, 02, ...). Short description derived from content (e.g., `login-error-screenshot`).
+3. Describe the content in one sentence using your vision capability.
+4. Append to CONTEXT.md `## Attachments` section:
+   ```
+   | # | File | Added | Description |
+   |---|------|-------|-------------|
+   | 01 | attachments/01-login-error.png | [ISO ts] | Login page showing "Network Error" |
+   ```
+5. Warn at 5+ attachments ("Consider culling"). Reject files > 20 MB. Remind: "If sensitive, crop/redact before committing — `.aihaus/` is git-tracked."
 
 ## Guardrails
 - NEVER execute the milestone. `/aih-run` is the only execution path.

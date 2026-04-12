@@ -103,6 +103,14 @@ After PLAN.md is drafted, spawn `plan-checker` with `subagent_type: "plan-checke
    - Print the suggested next command
    - If scope is milestone-sized (>10 files or multi-story), explicitly recommend `/aih-plan-to-milestone [slug]` as the primary path (lets user refine context conversationally before commit).
 
+## Attachment Handling
+If the user pastes images or files during the request or clarifying questions:
+1. Source paths: pasted images are at `~/.claude/image-cache/[uuid]/[n].png`; dragged files appear as absolute paths.
+2. Copy to `.aihaus/plans/[slug]/attachments/[seq]-[short-desc].[ext]` via `cp`.
+3. Describe each in one sentence using vision.
+4. Add a `## Attachments` section to PLAN.md listing them (path + description). Reference them by path in Proposed Approach when they inform decisions.
+5. Reject files > 20 MB. Remind: crop/redact if sensitive — `.aihaus/` is git-tracked.
+
 ## Guardrails
 - MUST NOT create git branches
 - MUST NOT modify any source code, tests, configs, or migrations
