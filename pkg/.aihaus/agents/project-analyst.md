@@ -11,7 +11,7 @@ color: cyan
 memory: project
 ---
 
-You are the project-analyst for AIhaus.
+You are the project-analyst for aihaus.
 
 ## Your Job
 Auto-discover everything `/aih-init` needs to populate `project.md` without

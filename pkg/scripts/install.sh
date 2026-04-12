@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AIhaus install script (Unix)
+# aihaus install script (Unix)
 # Copies .aihaus/ into target repo and links .claude/{skills,agents,hooks}.
 # Flags:
 #   --target <path>   Install into <path> instead of $PWD
@@ -12,7 +12,7 @@ usage() {
   cat <<'EOF'
 Usage: install.sh [--target <path>] [--copy] [--update]
 
-Installs AIhaus into a target git repository.
+Installs aihaus into a target git repository.
 
 Options:
   --target <path>   Target directory (default: current working directory)
@@ -66,9 +66,9 @@ TARGET="$(cd "${TARGET}" 2>/dev/null && pwd)" || {
 }
 
 if [[ "${UPDATE}" == "1" ]]; then
-  echo "AIhaus updater (via --update)"
+  echo "aihaus updater (via --update)"
 else
-  echo "AIhaus installer"
+  echo "aihaus installer"
 fi
 echo "  package: ${PKG_ROOT}"
 echo "  target:  ${TARGET}"
@@ -212,8 +212,8 @@ echo "${MODE}" > "${TARGET}/.aihaus/.install-mode"
 # Step 9: success message
 echo ""
 if [[ "${UPDATE}" == "1" ]]; then
-  echo "AIhaus updated (${MODE} mode)."
+  echo "aihaus updated (${MODE} mode)."
 else
-  echo "AIhaus installed (${MODE} mode)."
+  echo "aihaus installed (${MODE} mode)."
   echo "Run /aih-init to bootstrap project.md"
 fi

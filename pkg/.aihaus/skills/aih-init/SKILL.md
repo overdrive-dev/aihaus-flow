@@ -18,7 +18,7 @@ branch changes, and NO writes outside `.aihaus/`.
 ## Phase 0 — Configure Claude Code for autonomous operation
 
 ### 0. Write `.claude/settings.local.json`
-Merge the AIhaus settings template into `.claude/settings.local.json` so
+Merge the aihaus settings template into `.claude/settings.local.json` so
 all subsequent commands and agent teams run without permission prompts.
 
 1. Read `.aihaus/templates/settings.local.json` (the template with
@@ -62,7 +62,7 @@ Check whether `.aihaus/project.md` already exists.
 - **Exists, both markers present in correct order → re-run mode.** Continue
   to step 5 and route to the re-run branch of Phase 2.
 - **Exists, markers absent or out of order → degraded.** Prompt the user:
-  > "`.aihaus/project.md` exists but is missing AIhaus section markers (or
+  > "`.aihaus/project.md` exists but is missing aihaus section markers (or
   > they are in the wrong order). Overwrite with a fresh file? [y/N]"
   - `y` / `yes` → treat as first-run mode.
   - Anything else → abort with: "Leaving project.md untouched. Fix markers

@@ -1,4 +1,4 @@
-# AIhaus install script (Windows PowerShell)
+# aihaus install script (Windows PowerShell)
 # Copies .aihaus/ into target repo and links .claude/{skills,agents,hooks}.
 # Flags:
 #   -Target <path>   Install into <path> instead of $PWD
@@ -20,7 +20,7 @@ function Show-Usage {
     @'
 Usage: install.ps1 [-Target <path>] [-Copy] [-Update]
 
-Installs AIhaus into a target git repository.
+Installs aihaus into a target git repository.
 
 Options:
   -Target <path>   Target directory (default: current working directory)
@@ -46,9 +46,9 @@ $Target = (Resolve-Path $Target).Path
 $Mode = if ($Copy) { 'copy' } else { 'link' }
 
 if ($Update) {
-    Write-Host "AIhaus updater (via -Update)"
+    Write-Host "aihaus updater (via -Update)"
 } else {
-    Write-Host "AIhaus installer"
+    Write-Host "aihaus installer"
 }
 Write-Host "  package: $PkgRoot"
 Write-Host "  target:  $Target"
@@ -195,8 +195,8 @@ Set-Content -Path (Join-Path $TargetAihaus '.install-mode') -Value $Mode -NoNewl
 # Step 9: success
 Write-Host ""
 if ($Update) {
-    Write-Host "AIhaus updated ($Mode mode)."
+    Write-Host "aihaus updated ($Mode mode)."
 } else {
-    Write-Host "AIhaus installed ($Mode mode)."
+    Write-Host "aihaus installed ($Mode mode)."
     Write-Host "Run /aih-init to bootstrap project.md"
 }

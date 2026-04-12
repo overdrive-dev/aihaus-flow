@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AIhaus package smoke test
+# aihaus package smoke test
 # Validates the structure and integrity of the aihaus-package/ tree.
 # Intended to be runnable from any directory and from CI.
 #
@@ -318,7 +318,7 @@ check_purity() {
 }
 
 # ---- Run everything ---------------------------------------------------------
-printf "AIhaus package smoke test\n"
+printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
 
 check_skills
@@ -337,7 +337,7 @@ check_purity
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "AIhaus package smoke test PASSED [OK]\n"
+  printf "aihaus package smoke test PASSED [OK]\n"
   exit 0
 else
   printf "FAILED - %d checks failed\n" "$FAILURES"

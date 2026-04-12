@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AIhaus uninstall script (Unix)
+# aihaus uninstall script (Unix)
 # Removes package-installed files while preserving user data.
 # Flags:
 #   --target <path>   Uninstall from <path> instead of $PWD
@@ -11,7 +11,7 @@ usage() {
   cat <<'EOF'
 Usage: uninstall.sh [--target <path>] [--purge]
 
-Removes AIhaus files from a target repository while preserving user data.
+Removes aihaus files from a target repository while preserving user data.
 
 Options:
   --target <path>   Target directory (default: current working directory)
@@ -119,7 +119,7 @@ with open(path, "w", encoding="utf-8") as fh:
 sys.exit(0)
 PY
     then
-      echo "  settings: cleaned AIhaus-managed keys"; touched="1"
+      echo "  settings: cleaned aihaus-managed keys"; touched="1"
     fi
   else
     echo "  warn: no python available; leaving .claude/settings.local.json untouched"

@@ -1,4 +1,4 @@
-# AIhaus uninstall script (Windows PowerShell)
+# aihaus uninstall script (Windows PowerShell)
 # Removes package-installed files while preserving user data.
 # Flags:
 #   -Target <path>   Uninstall from <path> instead of $PWD
@@ -17,7 +17,7 @@ function Show-Usage {
     @'
 Usage: uninstall.ps1 [-Target <path>] [-Purge]
 
-Removes AIhaus files from a target repository while preserving user data.
+Removes aihaus files from a target repository while preserving user data.
 
 Options:
   -Target <path>   Target directory (default: current working directory)
@@ -119,7 +119,7 @@ if (Test-Path $Settings) {
         }
         $json.PSObject.Properties.Remove('_aihaus_managed')
         $json | ConvertTo-Json -Depth 20 | Set-Content -Path $Settings -Encoding UTF8
-        Write-Host "  settings: cleaned AIhaus-managed keys"
+        Write-Host "  settings: cleaned aihaus-managed keys"
         $Touched = $true
     }
 }

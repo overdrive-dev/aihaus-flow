@@ -1,4 +1,4 @@
-# AIhaus update script (Windows PowerShell)
+# aihaus update script (Windows PowerShell)
 # Re-syncs local .aihaus/ from pkg/ package source.
 # Preserves ALL local data: project.md, plans/, milestones/, memory/, etc.
 # Flags:
@@ -17,7 +17,7 @@ function Show-Usage {
     @'
 Usage: update.ps1 [-Target <path>]
 
-Re-syncs package-managed files in .aihaus/ from the AIhaus package source.
+Re-syncs package-managed files in .aihaus/ from the aihaus package source.
 Local data (project.md, plans/, milestones/, memory/, etc.) is preserved.
 
 Options:
@@ -60,7 +60,7 @@ if (Test-Path $ModeFile) {
     Write-Host "  warn: .install-mode not found; defaulting to copy mode"
 }
 
-Write-Host "AIhaus updater"
+Write-Host "aihaus updater"
 Write-Host "  package: $PkgRoot"
 Write-Host "  target:  $Target"
 Write-Host "  mode:    $Mode"
@@ -197,5 +197,5 @@ Set-Content -Path (Join-Path $Aihaus '.install-mode') -Value $Mode -NoNewline
 # ---- Summary -----------------------------------------------------------------
 Write-Host ""
 Write-Host "Updated $countSkills skills, $countAgents agents, $countHooks hooks"
-Write-Host "AIhaus updated ($Mode mode)."
+Write-Host "aihaus updated ($Mode mode)."
 exit 0

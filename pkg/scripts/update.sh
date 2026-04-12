@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AIhaus update — re-syncs local .aihaus/ from pkg/ package source.
+# aihaus update — re-syncs local .aihaus/ from pkg/ package source.
 # Usage: bash pkg/scripts/update.sh [--target <path>]
 #
 # Re-links (or re-copies) skills, agents, hooks, templates from pkg/.aihaus/
@@ -10,7 +10,7 @@ usage() {
   cat <<'EOF'
 Usage: update.sh [--target <path>]
 
-Re-syncs package-managed files in .aihaus/ from the AIhaus package source.
+Re-syncs package-managed files in .aihaus/ from the aihaus package source.
 Local data (project.md, plans/, milestones/, memory/, etc.) is preserved.
 
 Options:
@@ -72,7 +72,7 @@ else
   echo "  warn: .install-mode not found; defaulting to copy mode"
 fi
 
-echo "AIhaus updater"
+echo "aihaus updater"
 echo "  package: ${PKG_ROOT}"
 echo "  target:  ${TARGET}"
 echo "  mode:    ${MODE}"
@@ -207,5 +207,5 @@ echo "${MODE}" > "${AIHAUS}/.install-mode"
 # ---- Summary -----------------------------------------------------------------
 echo ""
 echo "Updated ${count_skills} skills, ${count_agents} agents, ${count_hooks} hooks"
-echo "AIhaus updated (${MODE} mode)."
+echo "aihaus updated (${MODE} mode)."
 exit 0

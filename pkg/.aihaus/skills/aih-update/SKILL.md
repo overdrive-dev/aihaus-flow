@@ -1,6 +1,6 @@
 ---
 name: aih-update
-description: Update AIhaus to the latest version from the remote repository. Fetches, compares, applies, and re-links.
+description: Update aihaus to the latest version from the remote repository. Fetches, compares, applies, and re-links.
 disable-model-invocation: true
 allowed-tools: Read Grep Glob Bash
 argument-hint: "[--check | --force]"
@@ -8,7 +8,7 @@ argument-hint: "[--check | --force]"
 
 ## Task
 
-Update the local AIhaus installation by pulling the latest package from the
+Update the local aihaus installation by pulling the latest package from the
 remote git repository. Fully autonomous — fetches, compares versions, applies
 changes, re-links, and reports what changed.
 
@@ -24,7 +24,7 @@ $ARGUMENTS
 
 ## Phase 1 — Detect Package Source
 
-### 1. Find the AIhaus package repository
+### 1. Find the aihaus package repository
 
 Check these locations in order:
 
@@ -33,7 +33,7 @@ Check these locations in order:
    check `git -C <pkg-root> remote get-url origin`.
 3. If a `pkg/` directory exists in the current repo (dogfooding mode),
    use the current repo's remote: `git remote get-url origin`.
-4. If none found, ask the user: "Where is the AIhaus package repo?
+4. If none found, ask the user: "Where is the aihaus package repo?
    Provide a git URL or local path."
 
 Store as `PKG_REMOTE` and `PKG_LOCAL` (local clone path).
@@ -66,7 +66,7 @@ Read remote version: `git -C "$PKG_LOCAL" show origin/main:pkg/VERSION 2>/dev/nu
 If `--check` flag: print comparison and stop.
 
 ```
-AIhaus update check:
+aihaus update check:
   Local:  0.1.0
   Remote: 0.2.0
   Status: Update available (run /aih-update to apply)
@@ -156,7 +156,7 @@ Migration notice — command surface changed:
 ### 13. Report
 
 ```
-AIhaus updated: 0.1.0 → 0.2.0
+aihaus updated: 0.1.0 → 0.2.0
   Agents: [N] (was [M])
   Skills: [N] (was [M])
   Hooks: [N]

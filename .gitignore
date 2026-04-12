@@ -13,7 +13,7 @@ desktop.ini
 # Claude Code local config — created by install.sh, never source
 /.claude/
 
-# Local AIhaus installation — created by running install.sh on this repo.
+# Local aihaus installation — created by running install.sh on this repo.
 # All runtime artifacts (project.md, plans, milestones, memory) live here.
 # The publishable package source is in pkg/.aihaus/ (committed separately).
 /.aihaus/

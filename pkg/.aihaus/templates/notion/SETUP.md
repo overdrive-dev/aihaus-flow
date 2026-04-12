@@ -1,6 +1,6 @@
 # Notion Sync Setup Guide
 
-This guide walks you through configuring the AIhaus Notion sync agent for
+This guide walks you through configuring the aihaus Notion sync agent for
 your project. The agent keeps a Notion Kanban board synchronized with your
 milestone execution state.
 
@@ -8,7 +8,7 @@ milestone execution state.
 
 - A Notion account with permission to create integrations
 - A Notion workspace where you want the Kanban board
-- Your project installed with AIhaus (`/aih-init` completed)
+- Your project installed with aihaus (`/aih-init` completed)
 
 ---
 
@@ -16,7 +16,7 @@ milestone execution state.
 
 1. Go to [https://www.notion.so/my-integrations](https://www.notion.so/my-integrations)
 2. Click **New integration**
-3. Give it a name (e.g., "AIhaus Sync")
+3. Give it a name (e.g., "aihaus Sync")
 4. Select the workspace where your Kanban board lives
 5. Under **Capabilities**, ensure it has:
    - Read content
@@ -129,7 +129,7 @@ Then in your config:
 
 ## Step 4: Set Up Sync Scripts
 
-The AIhaus Notion agent calls your sync commands but does not include the
+The aihaus Notion agent calls your sync commands but does not include the
 sync scripts themselves — they are project-specific. You need to implement:
 
 1. **Sync script**: Reads `.aihaus/notion/sync-items.json` and updates Notion

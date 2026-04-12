@@ -1,4 +1,4 @@
-# AIhaus
+# aihaus
 
 > **You think. AI builds.** Plan heavy, then let 41 autonomous agents execute — from research to deployment.
 
@@ -18,7 +18,7 @@ You spend 80% of your time telling AI *how* to do things instead of *what* to do
 
 ## The Solution
 
-AIhaus flips the ratio. **You invest in planning — AI handles everything else.**
+aihaus flips the ratio. **You invest in planning — AI handles everything else.**
 
 One approval gate. After that, a coordinated team of 41 specialized agents researches, plans, architects, implements, reviews, tests, verifies, and ships — autonomously. Every agent reads the same project context. Every decision is logged. Every lesson feeds back into the system. The more you use it, the smarter it gets.
 
@@ -32,11 +32,11 @@ One approval gate. After that, a coordinated team of 41 specialized agents resea
 /aih-plan Add multi-tenant workspaces with role-based access
 ```
 
-AIhaus asks 3-5 scoping questions. You answer once. That's your last input.
+aihaus asks 3-5 scoping questions. You answer once. That's your last input.
 
 ### 2. AI Builds Autonomously
 
-Behind a single approval, AIhaus orchestrates a full agent team:
+Behind a single approval, aihaus orchestrates a full agent team:
 
 ```
 Research → Analysis → Requirements → Architecture → Plan Review (adversarial)
@@ -56,9 +56,9 @@ Your project gets a memory. Future sessions start smarter.
 
 ## Built on Claude Code Multi-Agent
 
-AIhaus is a workflow package for [Claude Code](https://claude.ai/code). It's not a wrapper or a framework — it's 9 intent-based skills, 41 agent definitions, and 12 lifecycle hooks that install directly into your repo. No runtime, no build step, no package manager. Just markdown and shell scripts that Claude Code reads natively.
+aihaus is a workflow package for [Claude Code](https://claude.ai/code). It's not a wrapper or a framework — it's 9 intent-based skills, 41 agent definitions, and 12 lifecycle hooks that install directly into your repo. No runtime, no build step, no package manager. Just markdown and shell scripts that Claude Code reads natively.
 
-**Token usage is significant.** A full milestone with adversarial review, code review, security audit, and goal verification uses substantial context. This is by design — AIhaus trades tokens for quality and autonomy. The alternative is spending your own time reviewing, re-prompting, and re-checking.
+**Token usage is significant.** A full milestone with adversarial review, code review, security audit, and goal verification uses substantial context. This is by design — aihaus trades tokens for quality and autonomy. The alternative is spending your own time reviewing, re-prompting, and re-checking.
 
 ### The Agent Catalog
 
@@ -90,7 +90,7 @@ AIhaus is a workflow package for [Claude Code](https://claude.ai/code). It's not
 /aih-milestone     # Full lifecycle with agent team — the big one
 /aih-quick         # Fast-track for trivial changes
 /aih-help          # Show all commands
-/aih-update        # Pull latest AIhaus from remote
+/aih-update        # Pull latest aihaus from remote
 /aih-sync-notion   # Notion Kanban sync (optional)
 ```
 
@@ -119,7 +119,7 @@ bash ~/tools/aihaus/pkg/scripts/install.sh
 
 ```
 your-project/
-├── .aihaus/                    # AIhaus workspace (git-tracked)
+├── .aihaus/                    # aihaus workspace (git-tracked)
 │   ├── skills/                 # 9 intent-based commands
 │   ├── agents/                 # 41 specialized agent definitions
 │   ├── hooks/                  # 12 lifecycle hooks
@@ -137,7 +137,7 @@ your-project/
 
 ## Stack Agnostic
 
-AIhaus works with **any** language, framework, or toolchain. Agents read `project.md` at runtime — they never assume Python, Node, Go, or anything else. The settings ship with `Bash(*)` permissions so every dev tool works without prompts. Install it in a Rust project, a Rails app, or a Go microservice — it adapts.
+aihaus works with **any** language, framework, or toolchain. Agents read `project.md` at runtime — they never assume Python, Node, Go, or anything else. The settings ship with `Bash(*)` permissions so every dev tool works without prompts. Install it in a Rust project, a Rails app, or a Go microservice — it adapts.
 
 ## Self-Evolving Agents
 
@@ -153,7 +153,7 @@ This is not fine-tuning. It's protocol evolution — the markdown definitions th
 
 ## Conflict Prevention
 
-Multiple autonomous agents writing code simultaneously is a recipe for divergent choices. AIhaus prevents this through:
+Multiple autonomous agents writing code simultaneously is a recipe for divergent choices. aihaus prevents this through:
 
 - **ADR Gate**: Every code-writing agent reads `decisions.md` before touching code
 - **Architect Mandate**: Conflict-prone areas (API style, DB conventions, auth patterns) require explicit ADRs *before* implementation begins

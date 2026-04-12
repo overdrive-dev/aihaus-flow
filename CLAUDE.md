@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-AIhaus is a workflow automation package for Claude Code. It provides 8 intent-based commands (`init`, `plan`, `bugfix`, `feature`, `milestone`, `help`, `quick`, `sync-notion`) that users install into their own repositories. There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, memory) and shell scripts (install/uninstall).
+aihaus is a workflow automation package for Claude Code. It provides 8 intent-based commands (`init`, `plan`, `bugfix`, `feature`, `milestone`, `help`, `quick`, `sync-notion`) that users install into their own repositories. There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, memory) and shell scripts (install/uninstall).
 
 ## Repo Structure
 
 This repo has two layers:
 
 - **`pkg/`** — The publishable package. Everything inside `pkg/` ships to users. This is what `install.sh` copies into target repos. Edits to skills, agents, and hooks go here.
-- **`.aihaus/`** — Local installation (gitignored). Created by running `bash pkg/scripts/install.sh --target .` to dogfood AIhaus on its own repo. Contains runtime artifacts (project.md, plans, milestones, memory) that never leave this machine.
+- **`.aihaus/`** — Local installation (gitignored). Created by running `bash pkg/scripts/install.sh --target .` to dogfood aihaus on its own repo. Contains runtime artifacts (project.md, plans, milestones, memory) that never leave this machine.
 
 Self-evolution: when agents improve their own definitions during milestone execution, those edits land in `pkg/.aihaus/agents/` and get committed — feeding improvements back into the published package.
 
@@ -60,7 +60,7 @@ The install scripts create symlinks (Unix) or directory junctions (Windows) from
 
 ## Dogfooding
 
-To use AIhaus on this repo itself:
+To use aihaus on this repo itself:
 ```bash
 bash pkg/scripts/install.sh --target .
 ```

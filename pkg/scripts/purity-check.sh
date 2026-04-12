@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# AIhaus framework purity check
+# aihaus framework purity check
 #
 # Scans the entire aihaus-package/ tree for references to foreign frameworks
-# or prior tool names. AIhaus ships as a standalone, original product and must
+# or prior tool names. aihaus ships as a standalone, original product and must
 # not contain attribution to any prior tooling.
 #
 # Exits 0 if no matches are found.
@@ -49,7 +49,7 @@ done
 BOUNDARY_REGEX="(^|[^A-Za-z0-9_])(${ALTERNATION})([^A-Za-z0-9_]|\$)"
 
 # ---- Run grep --------------------------------------------------------------
-printf "AIhaus framework purity check\n"
+printf "aihaus framework purity check\n"
 printf "Scanning: %s\n" "$PACKAGE_ROOT"
 printf "Forbidden terms: %s\n\n" "${FORBIDDEN_TERMS[*]}"
 

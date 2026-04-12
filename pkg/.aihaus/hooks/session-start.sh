@@ -22,6 +22,6 @@ AIHAUS_PL=$(ls -d "$CLAUDE_PROJECT_DIR/.aihaus/plans"/*/ 2>/dev/null | wc -l || 
 jq -n --arg status "${PLANNING_STATUS:-no artifacts yet}" '{
   hookSpecificOutput: {
     hookEventName: "SessionStart",
-    additionalContext: ("AIhaus status: " + $status + ". Use /aih-init to bootstrap project.md, /aih-plan to scope work, /aih-milestone to build, /aih-help for all commands.")
+    additionalContext: ("aihaus status: " + $status + ". Use /aih-init to bootstrap project.md, /aih-plan to scope work, /aih-milestone to build, /aih-help for all commands.")
   }
 }'

@@ -1,12 +1,12 @@
 ---
 name: aih-help
-description: Show all available AIhaus workflow commands and their usage. Use when someone asks for help or types /aih-help.
+description: Show all available aihaus workflow commands and their usage. Use when someone asks for help or types /aih-help.
 disable-model-invocation: true
 ---
 
-# AIhaus Workflow Commands
+# aihaus Workflow Commands
 
-AIhaus is a four-pillar intent-based workflow package. **Scope** the work, optionally **promote** a plan into a milestone draft, **execute** autonomously, and **resume** if interrupted.
+aihaus is a four-pillar intent-based workflow package. **Scope** the work, optionally **promote** a plan into a milestone draft, **execute** autonomously, and **resume** if interrupted.
 
 ## ⚠️ Upgrading from v0.1.x? Read this first
 
@@ -34,7 +34,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 
 | Command | What It Does | Use When |
 |---------|-------------|----------|
-| `/aih-init` | Bootstrap AIhaus in a project — creates `.aihaus/` layout and seeds project memory | First time using AIhaus in a repo |
+| `/aih-init` | Bootstrap aihaus in a project — creates `.aihaus/` layout and seeds project memory | First time using aihaus in a repo |
 | `/aih-plan [description]` | Research and write a plan without changing code | You want to think before building |
 | `/aih-plan-to-milestone [slug]` | Promote a plan to a milestone draft for conversational refinement | Plan is big enough to warrant milestone treatment |
 | `/aih-milestone [description]` | Enter gathering mode — iteratively build a milestone draft via conversation | You want to scope a milestone across multiple messages |
@@ -45,7 +45,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 | `/aih-quick [description]` | Fast-track a known change without planning overhead | Trivial change you already know how to do |
 | `/aih-help` | This help page | You forgot what's available |
 | `/aih-sync-notion [action]` | Sync the Notion Kanban board with current execution state | You mirror work to Notion |
-| `/aih-update [--check\|--force]` | Update AIhaus to the latest version from the remote repo | New version available or agents need updating |
+| `/aih-update [--check\|--force]` | Update aihaus to the latest version from the remote repo | New version available or agents need updating |
 
 ## Typical Flows
 
@@ -123,9 +123,9 @@ If you see lots of permission prompts during autonomous execution:
 
 1. **Check you're on v0.4.1+.** Run `/aih-update --check`. The auto-approve hooks only work silently if `bash-guard.sh` and `file-guard.sh` have the jq-optional fallback (shipped in v0.4.0) AND `auto-approve-bash.sh` + `auto-approve-writes.sh` have it too (shipped in v0.4.1). Older installs prompt every command.
 
-2. **Some prompts are hardcoded in Claude Code — not AIhaus:**
+2. **Some prompts are hardcoded in Claude Code — not aihaus:**
    - `cd <path> && git <cmd>` → "Compound commands with cd and git require approval to prevent bare repo attacks." Post-v0.4.1 agents use `git -C <path> <cmd>` instead, which sidesteps the guard. If you see this prompt, it means an older agent definition is still in play — run `/aih-update`.
-   - `rm -rf /`, `git push --force main`, drop table — blocked by AIhaus `deny` list (intentional).
+   - `rm -rf /`, `git push --force main`, drop table — blocked by aihaus `deny` list (intentional).
    - Writes to `.env`, credentials, `.pem`, `id_rsa` — blocked by file-guard (intentional).
 
 3. **Terminal noise from git CRLF warnings (Windows)** — not permission prompts, just stderr spam. `/aih-init` on Windows will offer to create a `.gitattributes` that suppresses them. Or manually: `git config core.safecrlf false` in the repo.
