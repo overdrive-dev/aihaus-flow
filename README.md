@@ -81,6 +81,14 @@ model: opus      # was: sonnet — upgrade for harder test suites
 
 Valid values: `opus`, `sonnet`, `haiku`. Skills can also override per-call — a normally-opus agent can be downgraded to sonnet for a specific invocation without changing the definition.
 
+### Living project.md + Intake Discipline (v0.4.0+)
+
+`project.md` is no longer a static snapshot. Inventory refreshes mid-milestone after every story that touches structural dirs, so story N+1 reads the current layout. An auto-populated **Active Milestones** table shows gathering drafts, running milestones, and paused runs — updated on every state change. **Recent Decisions** and **Recent Knowledge** sections surface the last 5 ADRs / lessons. Manual content outside the markers stays byte-for-byte intact.
+
+**Intake discipline:** during gathering, planning, triage, or plan→milestone handoff, implementable mid-conversation requests get **captured** to the task list — never executed inline. Breaks the productive-but-controlless pattern where "and also fix X" triggered an immediate branch+edit+commit. Explicit execution signals hand off to `/aih-quick` or `/aih-bugfix` with an acknowledged context switch.
+
+Also shipped: hooks now gracefully handle missing `jq` (no more `jq: command not found` spam on Windows/minimal environments).
+
 ### Adversarial Review Contract (v0.3.0+)
 
 Review-role agents (`code-reviewer`, `verifier`, `integration-checker`, `security-auditor`, `plan-checker`) operate under a **mandatory problem-finding contract**: zero findings without written justification triggers re-analysis. Cynical stance by default — reviewers must prove the work is clean, not just assume it. Adapted from [BMAD's adversarial review pattern](https://docs.bmad-method.org/explanation/adversarial-review/).

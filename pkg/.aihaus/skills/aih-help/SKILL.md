@@ -117,6 +117,18 @@ Applied at these gates:
 - `/aih-quick` → single `code-reviewer` pass
 - `/aih-run` → always-on `verifier` + `integration-checker`, systematic `security-auditor` for sensitive work
 
+## Living project.md (v0.4.0+)
+
+`project.md` stays fresh without manual editing:
+- **Inventory** refreshes mid-milestone after each story touches structural dirs (not just at completion).
+- **Active Milestones** table auto-populates with gathering drafts, running milestones, paused runs. Updates on every state change.
+- **Recent Decisions + Knowledge** show the last 5 ADRs and lessons, refreshed whenever those files change.
+- Manual content in `project.md` (Glossary, your own notes) is preserved byte-for-byte outside the auto-populated markers.
+
+## Intake Discipline (v0.4.0+)
+
+During `/aih-milestone` gathering, `/aih-plan` research, `/aih-plan-to-milestone` handoff, and `/aih-sync-notion` triage, implementable mid-conversation requests are **captured** into the artifact's task list — never executed inline. Explicit execution signals ("fix this now", "just do it") hand off to `/aih-quick` or `/aih-bugfix` with an acknowledged context switch.
+
 ## Multimodal Attachments (v0.3.0+)
 
 Paste images, screenshots, or drop files during any scoping or execution command. They persist under `.aihaus/[artifact-dir]/attachments/`, get referenced in the artifact's `## Attachments` section, and are passed to spawned agents so they can Read them via the Read tool. Survives sessions and `/aih-resume`.
