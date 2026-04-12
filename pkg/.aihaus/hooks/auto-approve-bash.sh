@@ -2,10 +2,27 @@
 set -euo pipefail
 
 INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+# jq-optional input extraction
+if command -v jq >/dev/null 2>&1; then
+  COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || echo "")
+else
+  COMMAND=$(echo "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"command"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || echo "")
+fi
+
+# Emit allow JSON — jq or raw printf
+emit_allow() {
+  if command -v jq >/dev/null 2>&1; then
+    jq -n '{ hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow" } } }'
+  else
+    printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}\n'
+  fi
+}
 
 # Auto-approve safe development commands (stack-agnostic)
 SAFE_PATTERNS=(
+  # Navigation (compound splits below will still gate unsafe segments)
+  '^cd\s+' '^pushd\s+' '^popd$'
   # Shell utilities (read-only)
   '^ls\b' '^pwd$' '^cat\b' '^head\b' '^tail\b' '^wc\b'
   '^echo\b' '^which\b' '^where\b' '^find\b' '^test\b'
@@ -42,14 +59,37 @@ SAFE_PATTERNS=(
 
 SAFE_REGEX=$(IFS='|'; echo "${SAFE_PATTERNS[*]}")
 
+# Check 1: whole command matches a safe prefix
 if echo "$COMMAND" | grep -qiE "$SAFE_REGEX"; then
-  jq -n '{
-    hookSpecificOutput: {
-      hookEventName: "PermissionRequest",
-      decision: { behavior: "allow" }
-    }
-  }'
+  emit_allow
   exit 0
 fi
 
+# Check 2: compound command — split on && and ; and verify EVERY segment is safe.
+# Avoid matching literal '&&' inside quoted strings by only splitting when both
+# sides look like separate commands (space-bounded).
+if [[ "$COMMAND" == *" && "* ]] || [[ "$COMMAND" == *" ; "* ]]; then
+  all_safe=1
+  OLD_IFS="$IFS"
+  IFS=$'\n'
+  segments=$(printf '%s' "$COMMAND" | sed 's/ && /\n/g; s/ ; /\n/g')
+  for seg in $segments; do
+    trimmed="${seg#"${seg%%[![:space:]]*}"}"
+    trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+    if [[ -z "$trimmed" ]]; then
+      continue
+    fi
+    if ! echo "$trimmed" | grep -qiE "$SAFE_REGEX"; then
+      all_safe=0
+      break
+    fi
+  done
+  IFS="$OLD_IFS"
+  if [[ $all_safe -eq 1 ]]; then
+    emit_allow
+    exit 0
+  fi
+fi
+
+# Not matched — fall through to Claude Code's default prompt behaviour.
 exit 0
