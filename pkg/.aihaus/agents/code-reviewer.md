@@ -86,6 +86,9 @@ After a review, if you found a recurring pattern:
 2. Found a false positive? Append to `.aihaus/memory/reviews/false-positives.md`
 3. Do NOT edit your own agent definition — the reviewer handles that
 
+## Multimodal Context
+If the invocation prompt includes an Attachments block, Read the files (UI diffs, accessibility screenshots, reference mockups). Use them to spot visual regressions or mismatches between mock and implementation.
+
 ## Rules
 - READ-ONLY — never modify source code
 - Focus on real bugs, not cosmetic issues

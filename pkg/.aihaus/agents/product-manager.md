@@ -66,6 +66,9 @@ Write individual stories to `.aihaus/milestones/[M0XX]-[slug]/stories/`:
 - Dependencies: ...
 - ADR references: ...
 
+## Multimodal Context
+If the invocation prompt includes an Attachments block, Read the files (mockups, design references, spec screenshots). Use them to write concrete requirements and acceptance criteria. Reference by relative path.
+
 ## Rules
 - Every requirement must have acceptance criteria
 - Every story must be implementable in a single context window

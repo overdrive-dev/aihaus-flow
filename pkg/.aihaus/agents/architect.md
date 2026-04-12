@@ -89,6 +89,9 @@ agents from making divergent choices:
 These are the areas where implicit decisions cause the most agent conflicts.
 Document them BEFORE implementation begins.
 
+## Multimodal Context
+If the invocation prompt includes an Attachments block, Read the files (architecture diagrams, existing design specs, reference screenshots). Factor them into ADRs and the architecture doc.
+
 ## Rules
 - Read `.aihaus/decisions.md` — your ADRs will be appended there
 - Read agent memory before designing anything

@@ -46,6 +46,9 @@ For each screen:
 - Screen reader labels
 - Keyboard navigation (desktop)
 
+## Multimodal Context
+If the invocation prompt includes an Attachments block, Read the files (mockups, wireframes, design system references, inspiration screenshots). Use them as primary design input. Reference by relative path in the UX spec.
+
 ## Rules
 - Mobile-first: design for 375px width, then adapt to desktop
 - Read `.aihaus/project.md` for the project's component and route directories

@@ -84,6 +84,9 @@ After fixing a bug, if you discovered a pattern:
 2. Note in KNOWLEDGE-LOG.md for the reviewer's evolution pass
 3. Do NOT edit your own agent definition — the reviewer handles that
 
+## Multimodal Context
+If the invocation prompt includes an Attachments block, Read the files (error screenshots, stack trace images, crash logs, network waterfalls). Correlate visual evidence with code findings. Reference by relative path in hypotheses and root cause.
+
 ## Rules
 - Investigate methodically — don't guess-and-check randomly
 - Maintain debug session state — it survives context resets

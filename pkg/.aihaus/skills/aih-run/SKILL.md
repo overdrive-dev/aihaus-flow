@@ -121,6 +121,15 @@ Archive the draft: `mv .aihaus/milestones/drafts/[slug] .aihaus/milestones/draft
 ### 9. Planning — Sequential Agent Subagents
 Spawn planning agents sequentially, updating RUN-MANIFEST.md progress log after each.
 
+**Attachments handoff:** If `.aihaus/milestones/[M0XX]-[slug]/attachments/` has files, include this block in every agent spawn prompt:
+```
+## Attachments Available
+The following files may be relevant to your task. Read them as needed.
+- attachments/01-[desc].png — [one-line description]
+- attachments/02-[desc].pdf — [one-line description]
+Use the Read tool to view. Reference what you observed in your output using relative paths.
+```
+
 **analyst** → writes `analysis-brief.md` (uses CONTEXT.md as input).
 **product-manager** → reads analysis brief, writes `PRD.md` and `stories/`.
 **architect** → reads PRD/stories, writes `architecture.md`, appends ADRs to `.aihaus/decisions.md`.
