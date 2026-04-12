@@ -1,6 +1,6 @@
 # aihaus
 
-> **You think. AI builds.** Plan heavy, then let 41 autonomous agents execute — from research to deployment.
+> **You think. ai builds.** Plan heavy, then let 41 autonomous agents execute — from research to deployment.
 
 ```
     _    ___ _
@@ -14,11 +14,11 @@
 
 ## The Problem
 
-You spend 80% of your time telling AI *how* to do things instead of *what* to do. Every prompt requires context about your stack, conventions, and past decisions. When you finally get a plan right, execution drifts because there's no shared memory between sessions. And when something breaks, you start from scratch.
+You spend 80% of your time telling ai *how* to do things instead of *what* to do. Every prompt requires context about your stack, conventions, and past decisions. When you finally get a plan right, execution drifts because there's no shared memory between sessions. And when something breaks, you start from scratch.
 
 ## The Solution
 
-aihaus flips the ratio. **You invest in planning — AI handles everything else.**
+aihaus flips the ratio. **You invest in planning — ai handles everything else.**
 
 One approval gate. After that, a coordinated team of 41 specialized agents researches, plans, architects, implements, reviews, tests, verifies, and ships — autonomously. Every agent reads the same project context. Every decision is logged. Every lesson feeds back into the system. The more you use it, the smarter it gets.
 
@@ -34,7 +34,7 @@ One approval gate. After that, a coordinated team of 41 specialized agents resea
 
 aihaus asks 3-5 scoping questions. You answer once. That's your last input.
 
-### 2. AI Builds Autonomously
+### 2. ai Builds Autonomously
 
 Behind a single approval, aihaus orchestrates a full agent team:
 
@@ -160,7 +160,7 @@ Each step transitions from pending → in-progress (with spinner) → completed 
 
 ```bash
 # Scope
-/aih-init                     # Bootstrap project.md — AI learns your codebase
+/aih-init                     # Bootstrap project.md — ai learns your codebase
 /aih-plan                     # Research and produce a plan (no code changes)
 /aih-milestone                # Enter gathering mode — iterative milestone draft via conversation
 
