@@ -8,6 +8,19 @@ disable-model-invocation: true
 
 AIhaus is a four-pillar intent-based workflow package. **Scope** the work, optionally **promote** a plan into a milestone draft, **execute** autonomously, and **resume** if interrupted.
 
+## ⚠️ Upgrading from v0.1.x? Read this first
+
+**`/aih-run` is NOT a rename of `/aih-milestone`.** They are distinct commands with different jobs:
+
+| Command | Job | Produces |
+|---------|-----|----------|
+| `/aih-milestone` | **Scope** — conversational gathering mode. You send context across multiple messages; each one is absorbed into a draft. Never executes. | Draft at `.aihaus/milestones/drafts/[slug]/` |
+| `/aih-run` | **Execute** — runs whatever ready draft or plan you point at. Full autonomous pipeline (planning agents → team → stories → completion). | Milestone at `.aihaus/milestones/[M0XX]-[slug]/` |
+
+The old `/aih-milestone "description"` one-shot flow was **split in two**. If you want the old behavior, pass `--execute`: `/aih-milestone "desc" --execute`.
+
+`team-template.md` and `completion-protocol.md` moved from `aih-milestone/` to `aih-run/` because that's where the execution logic now lives. `/aih-milestone` only deals with drafts.
+
 ## Four-Pillar Command Surface
 
 | Pillar | Commands | Purpose |

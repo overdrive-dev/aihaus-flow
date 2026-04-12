@@ -133,6 +133,8 @@ Each step transitions from pending → in-progress (with spinner) → completed 
 
 **Scope** context → **Promote** plan to milestone → **Execute** autonomously → **Resume** if interrupted.
 
+> **Upgrading from v0.1.x?** `/aih-run` is **not** a rename of `/aih-milestone`. `/aih-milestone` still exists — it now enters conversational gathering mode (creates a draft, iteratively absorbs your context). `/aih-run` is the new executor that runs any ready draft or plan. The old one-shot `/aih-milestone "description"` behavior is still available via `/aih-milestone "desc" --execute`.
+
 ```bash
 # Scope
 /aih-init                     # Bootstrap project.md — AI learns your codebase
