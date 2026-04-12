@@ -81,6 +81,21 @@ model: opus      # was: sonnet — upgrade for harder test suites
 
 Valid values: `opus`, `sonnet`, `haiku`. Skills can also override per-call — a normally-opus agent can be downgraded to sonnet for a specific invocation without changing the definition.
 
+### Adversarial Review Contract (v0.3.0+)
+
+Review-role agents (`code-reviewer`, `verifier`, `integration-checker`, `security-auditor`, `plan-checker`) operate under a **mandatory problem-finding contract**: zero findings without written justification triggers re-analysis. Cynical stance by default — reviewers must prove the work is clean, not just assume it. Adapted from [BMAD's adversarial review pattern](https://docs.bmad-method.org/explanation/adversarial-review/).
+
+Applied at every meaningful gate:
+- **Plan** → `plan-checker` on drafted plans
+- **Code** → `code-reviewer` + `code-fixer` auto-fix loop (2 iterations max)
+- **Goal** → `verifier` checks codebase delivers what was promised (not just "tasks done")
+- **Wiring** → `integration-checker` verifies E2E connections (existence ≠ integration)
+- **Security** → `security-auditor` on sensitive milestones (auth, payments, PII)
+
+### Multimodal Attachment Persistence (v0.3.0+)
+
+Paste screenshots, mockups, or drop files during any command. They persist under `.aihaus/[artifact-dir]/attachments/`, get catalogued in the artifact's `## Attachments` section, and are passed as file paths to spawned agents. Multimodal-capable agents (analyst, product-manager, architect, debugger, ux-designer, code-reviewer) Read them to factor visual context into their outputs. Survives sessions and `/aih-resume`.
+
 ### Real-Time Progress Tracking
 
 Long autonomous runs aren't a black box. Every execution skill creates a visible task checklist in your terminal using Claude Code's native task tracking:
