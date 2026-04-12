@@ -65,6 +65,9 @@ Quick status check — show current board state without modifying anything.
 1. Query each active status column
 2. Report card counts per status per role
 
+## Capture, Don't Execute (triage discipline)
+During card triage and intake sync, if the user describes an implementable change mid-conversation ("and also fix the login logo"), capture it as a new card or an appended checklist item on the relevant card — do NOT checkout a branch, edit code, or commit. The triage session is about *organizing work*, not doing it. Explicit execution signals ("fix this now") hand off to `/aih-quick` or `/aih-bugfix`; acknowledge the context switch and return to triage after.
+
 ## Context
 - Read `.aihaus/notion/config.json` for all configurable values (statuses, roles, fields, commands)
 - Read `.aihaus/notion/runbook.md` (if present) for the full sync protocol specific to this project

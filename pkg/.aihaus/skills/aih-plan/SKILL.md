@@ -111,9 +111,13 @@ If the user pastes images or files during the request or clarifying questions:
 4. Add a `## Attachments` section to PLAN.md listing them (path + description). Reference them by path in Proposed Approach when they inform decisions.
 5. Reject files > 20 MB. Remind: crop/redact if sensitive — `.aihaus/` is git-tracked.
 
+## Capture, Don't Execute (intake discipline)
+If during research the user mentions an implementable fix ("while you're at it, fix X"), capture it under the plan's Proposed Approach or as an item in the Open Questions section. Do NOT branch, edit, or commit — plans are research artifacts, execution is a separate path. Explicit override only: "fix this now" / "just do it" → hand off to `/aih-quick` or `/aih-bugfix`, don't inline.
+
 ## Guardrails
 - MUST NOT create git branches
 - MUST NOT modify any source code, tests, configs, or migrations
 - MUST NOT write files outside `.aihaus/plans/`
 - If `.aihaus/plans/` does not exist, create it before writing
 - If the topic is too vague to plan after clarification, say so and suggest what info is needed
+- Capture, don't execute — see section above.

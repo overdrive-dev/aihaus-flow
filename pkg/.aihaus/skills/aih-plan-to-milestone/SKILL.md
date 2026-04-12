@@ -124,7 +124,11 @@ Agents (and the main conversation) can invoke this skill when the user says:
 - "promote the plan"
 - "make this a milestone"
 
+## Capture, Don't Execute (intake discipline)
+After the draft is seeded and during subsequent gathering messages, if the user describes an implementable change, capture it to CONTEXT.md — do NOT branch, edit, or commit. Same escape hatch as `/aih-milestone` gathering: explicit execution signals hand off to `/aih-quick` or `/aih-bugfix`, the draft stays at `gathering`.
+
 ## Guardrails
 - NEVER delete or overwrite the original PLAN.md content — only append the `## Promoted To Milestone Draft` footer.
 - NEVER execute the milestone — hand off to `/aih-run`.
 - If a draft already exists for the slug, ask the user: "Draft exists. Overwrite or pick a new slug?"
+- Capture, don't execute — see section above.

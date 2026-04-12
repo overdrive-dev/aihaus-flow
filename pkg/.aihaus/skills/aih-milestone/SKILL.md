@@ -134,8 +134,20 @@ When a user message includes a pasted image or file:
    ```
 5. Warn at 5+ attachments ("Consider culling"). Reject files > 20 MB. Remind: "If sensitive, crop/redact before committing — `.aihaus/` is git-tracked."
 
+## Capture, Don't Execute (intake discipline)
+During gathering, if the user describes an implementable change (e.g. "and also fix the login logo"), you MUST:
+1. Capture it to CONTEXT.md under "Proposed Stories" or "Open Items" — with a one-line description of what would be done.
+2. Acknowledge: "Captured — added to CONTEXT.md as a story/item."
+3. Continue gathering. Do NOT checkout a branch, edit code, or commit.
+
+The only exception is an explicit out-of-band execution signal ("fix this now", "just do it", "execute right away"). In that case:
+1. State clearly: "Switching out of gathering to execute — draft remains at `gathering`."
+2. Hand off to `/aih-quick` or `/aih-bugfix` (proper execution skill).
+3. Return to gathering context when done.
+
 ## Guardrails
 - NEVER execute the milestone. `/aih-run` is the only execution path.
 - NEVER delete CONTEXT.md — only append/update sections.
 - Archive on execution — draft moves to `.aihaus/milestones/drafts/.archive/[YYMMDD]-[slug]/` by `/aih-run`.
 - The `--execute` flag exists for backward compat; do not default to it.
+- Capture, don't execute — see section above.
