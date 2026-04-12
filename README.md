@@ -60,6 +60,44 @@ AIhaus is a workflow package for [Claude Code](https://claude.ai/code). It's not
 
 **Token usage is significant.** A full milestone with adversarial review, code review, security audit, and goal verification uses substantial context. This is by design — AIhaus trades tokens for quality and autonomy. The alternative is spending your own time reviewing, re-prompting, and re-checking.
 
+### Per-Agent Model Configuration
+
+Not every agent needs the most expensive model. Each of the 41 agents declares its own `model` in YAML frontmatter — Claude Code reads it automatically when spawning the agent. The current defaults:
+
+| Model | Agents | Rationale |
+|-------|--------|-----------|
+| **Opus** (32) | implementer, architect, reviewer, code-reviewer, debugger, verifier, planner, ... | Complex reasoning, code generation, adversarial review |
+| **Sonnet** (9) | test-writer, assumptions-analyzer, ux-designer, pattern-mapper, doc-verifier, ... | Structured output, lighter analysis, template-driven work |
+
+To change any agent's model, edit the `model:` field in its definition file:
+
+```yaml
+# .aihaus/agents/test-writer.md
+---
+name: test-writer
+model: opus      # was: sonnet — upgrade for harder test suites
+---
+```
+
+Valid values: `opus`, `sonnet`, `haiku`. Skills can also override per-call — a normally-opus agent can be downgraded to sonnet for a specific invocation without changing the definition.
+
+### Real-Time Progress Tracking
+
+Long autonomous runs aren't a black box. Every execution skill creates a visible task checklist in your terminal using Claude Code's native task tracking:
+
+```
+ [✓] Create feature branch
+ [→] Implement changes              ← spinner with active step
+ [ ] Run verification
+ [ ] Self-review changes
+ [ ] Commit changes
+ [ ] Write artifacts
+```
+
+Each step transitions from pending → in-progress (with spinner) → completed (with checkmark) as the skill executes. You always know what's happening, what's next, and what's done. Task events are also logged to `.claude/audit/` for post-session review.
+
+Available in `/aih-feature` (6 steps), `/aih-bugfix` (6 steps), and `/aih-milestone` (6 phases covering the full planning-to-completion pipeline).
+
 ### The Agent Catalog
 
 | Category | Agents | What They Do |

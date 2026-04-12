@@ -2,7 +2,7 @@
 name: aih-bugfix
 description: Triage and fix a bug — root cause analysis, branch, fix, test, commit. Use for defects and errors.
 disable-model-invocation: true
-allowed-tools: Read Write Edit Grep Glob Bash
+allowed-tools: Read Write Edit Grep Glob Bash TaskCreate TaskUpdate
 argument-hint: "[bug description, error message, or symptom]"
 ---
 
@@ -73,11 +73,21 @@ Present the triage summary. Ask:
 
 **Do NOT proceed to Phase 2 until the user approves.**
 
----
-
 ## Phase 2 — Autonomous Execution
 
 After the user approves:
+
+### Phase 2 Task Tracking
+Create all tasks as `pending` at the start of Phase 2 using TaskCreate:
+| Subject | activeForm |
+|---------|-----------|
+| Create fix branch | Creating fix branch |
+| Apply fix | Applying fix |
+| Add or update tests | Writing tests |
+| Run verification | Verifying fix |
+| Commit fix | Committing fix |
+| Write artifacts | Writing bugfix artifacts |
+Chain dependencies sequentially. Before each step, set its task to `in_progress`. After completion, set to `completed`.
 
 ### 7. Derive Slug
 From the bug description, create a slug: lowercase, hyphens for spaces, strip special characters, max 40 characters. Example: "500-error-null-user-id"

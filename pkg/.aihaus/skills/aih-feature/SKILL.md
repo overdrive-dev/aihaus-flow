@@ -2,7 +2,7 @@
 name: aih-feature
 description: Implement a scoped feature — plan, branch, build, test, commit. Use for changes that fit in one session.
 disable-model-invocation: true
-allowed-tools: Read Write Edit Grep Glob Bash
+allowed-tools: Read Write Edit Grep Glob Bash TaskCreate TaskUpdate
 argument-hint: "[feature description] [--plan slug]"
 ---
 
@@ -24,8 +24,6 @@ If `$ARGUMENTS` contains `--plan`, extract the word immediately after `--plan` a
 3. **If the file does not exist**, report this error and **stop**:
    > "Plan not found at `.aihaus/plans/[slug]/PLAN.md`. Run `/aih-plan` first to create it."
 4. **If no `--plan` flag is present**, proceed normally — all steps below apply in full.
-
----
 
 ## Phase 1: Understand & Plan (interactive — ask questions, then wait for approval)
 
@@ -69,9 +67,19 @@ Present a single message containing:
 
 **STOP HERE. Wait for the user to respond.**
 
----
-
 ## Phase 2: Autonomous Execution (zero human input after approval)
+
+### Phase 2 Task Tracking
+Create all tasks as `pending` at the start of Phase 2 using TaskCreate:
+| Subject | activeForm |
+|---------|-----------|
+| Create feature branch | Creating feature branch |
+| Implement changes | Implementing changes |
+| Run verification | Verifying build and tests |
+| Self-review changes | Reviewing changes for issues |
+| Commit changes | Committing changes |
+| Write artifacts | Writing feature artifacts |
+Chain dependencies sequentially. Before each step, set its task to `in_progress`. After completion, set to `completed`.
 
 ### Step 6: Create Branch
 - Derive `[slug]` from the feature description: lowercase, replace spaces with hyphens, truncate to 40 characters, strip trailing hyphens.

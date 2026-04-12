@@ -2,7 +2,7 @@
 name: aih-milestone
 description: "Full autonomous milestone — plan, architect, implement, test, ship. Use for large features that need multiple stories."
 disable-model-invocation: true
-allowed-tools: Read Grep Glob Bash Write Edit Agent
+allowed-tools: Read Grep Glob Bash Write Edit Agent TaskCreate TaskUpdate
 argument-hint: "[milestone description] [--plan slug]"
 ---
 
@@ -20,8 +20,6 @@ If `$ARGUMENTS` contains `--plan`, extract the word immediately after `--plan` a
 3. **If the file does not exist**, report this error and **stop**:
    > "Plan not found at `.aihaus/plans/[slug]/PLAN.md`. Run `/aih-plan` first to create it."
 4. **If no `--plan` flag is present**, proceed normally — all steps below apply in full.
-
----
 
 ## Phase 1: Question & Approval
 
@@ -74,11 +72,21 @@ Run `git status` to check for uncommitted changes. If the working tree is dirty:
 Wait for the user to approve, adjust, or reject the plan.
 Do NOT proceed to Phase 2 until the user explicitly approves.
 
----
-
 ## Phase 2: Autonomous Execution
 
 After human approval, execute everything autonomously. Do not ask further questions.
+
+### Phase 2 Task Tracking
+Create all tasks as `pending` at the start of Phase 2 using TaskCreate:
+| Subject | activeForm |
+|---------|-----------|
+| Run analysis brief | Analyzing milestone scope |
+| Write PRD and stories | Writing PRD and stories |
+| Design architecture | Designing architecture |
+| Verify plan coherence | Checking plan coherence |
+| Execute stories | Executing stories |
+| Run completion protocol | Running completion protocol |
+Chain dependencies sequentially. Before each step, set its task to `in_progress`. After completion, set to `completed`.
 
 ### 7. Determine Milestone ID
 Scan for existing milestone directories to determine the next ID:
