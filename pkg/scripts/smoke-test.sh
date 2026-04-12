@@ -219,7 +219,7 @@ check_installer_files_exist() {
 # ---- Check 9: shell scripts pass bash -n ------------------------------------
 check_installer_syntax() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: install.sh, uninstall.sh, and update.sh pass bash -n"
+  local label="Check ${CHECK_NUMBER}: install/uninstall/update scripts + hooks pass bash -n"
   local issues=()
   local -a shells=(
     "scripts/install.sh"
@@ -236,6 +236,12 @@ check_installer_syntax() {
       issues+=("$rel failed bash -n")
     fi
   done
+  # Also lint all hook scripts — catches regressions in jq-optional logic.
+  while IFS= read -r -d '' target; do
+    if ! bash -n "$target" 2>/dev/null; then
+      issues+=("${target#${PACKAGE_ROOT}/} failed bash -n")
+    fi
+  done < <(find "${PACKAGE_ROOT}/.aihaus/hooks" -type f -name '*.sh' -print0 2>/dev/null)
   if [[ ${#issues[@]} -eq 0 ]]; then
     _pass "$label"
   else

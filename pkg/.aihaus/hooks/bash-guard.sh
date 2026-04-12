@@ -2,7 +2,14 @@
 set -euo pipefail
 
 INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+
+# jq-optional: extract .tool_input.command with bash fallback.
+if command -v jq >/dev/null 2>&1; then
+  COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || echo "")
+else
+  # Fallback: grep for "command": "value" within tool_input. Handles flat JSON.
+  COMMAND=$(echo "$INPUT" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"command"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || echo "")
+fi
 
 # Hard-block catastrophic commands
 if echo "$COMMAND" | grep -qiE \
