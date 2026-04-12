@@ -131,7 +131,11 @@ If it fails, warn but don't rollback — the user can investigate.
 
 Before reporting, surface any migration-relevant state:
 
-- **In-flight milestones** — `Glob` `.aihaus/milestones/*/` for dirs without `execution/MILESTONE-SUMMARY.md`. If any exist, warn: "In-flight milestone detected: [slug]. Post-update, run `/aih-resume` to continue."
+- **In-flight milestones** — mirror `aih-resume` Phase 1 detection so warnings match what `/aih-resume` would pick up.
+  1. Skip `.aihaus/milestones/drafts/` — it is the draft container, not a run.
+  2. **Primary:** `Glob` `.aihaus/milestones/*/RUN-MANIFEST.md`. For each, read `Status:` (and `Phase:`). Warn iff `Status` is not `completed`.
+  3. **Legacy fallback:** for milestone dirs with no `RUN-MANIFEST.md` and no `execution/MILESTONE-SUMMARY.md`, warn only when execution visibly started — i.e., `stories/*.md` exists OR `execution/` contains `analysis-brief.md`, `PRD.md`, or `architecture.md`. Bare log files (`DECISIONS-LOG.md`, `KNOWLEDGE-LOG.md`) and empty `stories/` + `execution/reviews/` scaffolds do not qualify — skip silently.
+  4. **Message:** `In-flight milestone detected: <slug> (phase: <phase-or-unknown>). Post-update, run /aih-resume to continue.` Omit the parenthetical for legacy dirs where phase is unavailable.
 - **Legacy `aihaus:` prefix installs** — if `.claude/commands/aihaus:*.md` exists, warn: "Pre-rename installation detected — legacy `aihaus:` commands will be replaced by `aih-*`."
 
 ### 12. Migration Notice (version-gated)
