@@ -109,6 +109,13 @@ RUN-MANIFEST.md initial content:
 - [ts] — Run started
 ```
 
+If the draft has `attachments/`, copy them into the new milestone dir before archiving:
+```bash
+if [ -d .aihaus/milestones/drafts/[slug]/attachments ]; then
+  cp -R .aihaus/milestones/drafts/[slug]/attachments .aihaus/milestones/[M0XX]-[slug]/attachments
+fi
+```
+
 Archive the draft: `mv .aihaus/milestones/drafts/[slug] .aihaus/milestones/drafts/.archive/[YYMMDD]-[slug]`
 
 ### 9. Planning — Sequential Agent Subagents

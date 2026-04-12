@@ -79,6 +79,14 @@ _Seeded from plan .aihaus/plans/[slug]/PLAN.md on [date]._
 _Raw user messages appended during gathering below._
 ```
 
+## Step 3.5 — Copy Attachments
+If `.aihaus/plans/[slug]/attachments/` exists and has files, copy them to `.aihaus/milestones/drafts/[slug]/attachments/`:
+```bash
+mkdir -p .aihaus/milestones/drafts/[slug]/attachments
+cp -R .aihaus/plans/[slug]/attachments/. .aihaus/milestones/drafts/[slug]/attachments/
+```
+Copy the `## Attachments` section from PLAN.md into the new CONTEXT.md (paths stay relative and still resolve).
+
 ## Step 4 — Backlink from the Plan
 
 Append to `.aihaus/plans/[slug]/PLAN.md` (do not edit existing sections):
