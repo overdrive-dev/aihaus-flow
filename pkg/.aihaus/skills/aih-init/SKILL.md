@@ -69,18 +69,25 @@ Check whether `.aihaus/project.md` already exists.
     manually, then re-run `/aih-init`."
 
 ### 2.5. Migrate older project.md files
-If project.md exists and the top-level AUTO/MANUAL markers are present but the newer sub-markers (`ACTIVE-MILESTONES-START/END`, `RECENT-DECISIONS-START/END`, `RECENT-KNOWLEDGE-START/END`) are absent, inject them automatically:
+If top-level AUTO/MANUAL markers exist but newer sub-markers (`ACTIVE-MILESTONES-START/END`, `RECENT-DECISIONS-START/END`, `RECENT-KNOWLEDGE-START/END`) are absent, inject them: within MANUAL, wrap the body of `## Active Milestones`, `## Decisions`, and `## Knowledge` headings with the corresponding start/end markers. Preserve existing user content — markers just demarcate the auto-populated region. Back up to `project.md.bak` first. Skip if already present.
 
-1. Within the MANUAL block, find the `## Active Milestones` heading. Replace the section body with:
-   ```
-   <!-- AIHAUS:ACTIVE-MILESTONES-START -->
-   <existing body preserved>
-   <!-- AIHAUS:ACTIVE-MILESTONES-END -->
-   ```
-2. Same for `## Decisions` (wrap with `RECENT-DECISIONS-START/END`) and `## Knowledge` (wrap with `RECENT-KNOWLEDGE-START/END`). Preserve whatever the user had written — the markers just demarcate the auto-populated region for future refreshes.
-3. Back up to `.aihaus/project.md.bak` first. Report: "Migrated project.md — added sub-markers for living auto-population."
-
-Skip this step if sub-markers are already present.
+### 2.7. Offer .gitattributes on Windows (suppress CRLF warnings)
+If `uname -s` contains `MINGW`/`MSYS`/`CYGWIN` AND no `.gitattributes` at repo root, ask: *"Windows detected, no .gitattributes. Git prints 'LF will be replaced by CRLF' warnings during milestone execution. Create a minimal .gitattributes to suppress? [y/N]"*. If yes, write:
+```
+* text=auto eol=lf
+*.sh text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+```
+Report created; otherwise skip silently.
 
 ### 3. Validate marker order (re-run only)
 When both markers are present, verify `AUTO-GENERATED-START` appears BEFORE

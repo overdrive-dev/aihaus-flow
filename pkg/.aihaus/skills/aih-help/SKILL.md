@@ -117,6 +117,19 @@ Applied at these gates:
 - `/aih-quick` → single `code-reviewer` pass
 - `/aih-run` → always-on `verifier` + `integration-checker`, systematic `security-auditor` for sensitive work
 
+## Autonomous Execution — Troubleshooting Prompts
+
+If you see lots of permission prompts during autonomous execution:
+
+1. **Check you're on v0.4.1+.** Run `/aih-update --check`. The auto-approve hooks only work silently if `bash-guard.sh` and `file-guard.sh` have the jq-optional fallback (shipped in v0.4.0) AND `auto-approve-bash.sh` + `auto-approve-writes.sh` have it too (shipped in v0.4.1). Older installs prompt every command.
+
+2. **Some prompts are hardcoded in Claude Code — not AIhaus:**
+   - `cd <path> && git <cmd>` → "Compound commands with cd and git require approval to prevent bare repo attacks." Post-v0.4.1 agents use `git -C <path> <cmd>` instead, which sidesteps the guard. If you see this prompt, it means an older agent definition is still in play — run `/aih-update`.
+   - `rm -rf /`, `git push --force main`, drop table — blocked by AIhaus `deny` list (intentional).
+   - Writes to `.env`, credentials, `.pem`, `id_rsa` — blocked by file-guard (intentional).
+
+3. **Terminal noise from git CRLF warnings (Windows)** — not permission prompts, just stderr spam. `/aih-init` on Windows will offer to create a `.gitattributes` that suppresses them. Or manually: `git config core.safecrlf false` in the repo.
+
 ## Living project.md (v0.4.0+)
 
 `project.md` stays fresh without manual editing:
