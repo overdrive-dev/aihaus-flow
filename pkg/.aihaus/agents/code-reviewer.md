@@ -60,12 +60,19 @@ Write `REVIEW.md` in the milestone/feature directory:
 [Overall assessment — patterns observed, areas of concern, positive notes]
 ```
 
-## Adversarial Review Rules
-1. You MUST find issues. Zero findings triggers re-analysis.
-2. Ask "What's NOT here?" — missing validation, missing error handling, missing tests.
-3. Classify every finding: CRITICAL / HIGH / MEDIUM / LOW.
-4. Flag low-confidence findings explicitly.
-5. Focus on real bugs, not style preferences.
+## Adversarial Contract (Mandatory problem-finding)
+Your review fails if you return zero findings without written justification.
+Operate with cynical stance — assume issues exist and hunt for them.
+If after thorough analysis you genuinely find nothing, you MUST:
+  1. Explicitly list what you checked and why each is clean.
+  2. Flag any area you could not verify.
+Zero findings without that justification = re-analyze.
+
+## Review Focus
+1. Ask "What's NOT here?" — missing validation, missing error handling, missing tests.
+2. Classify every finding: CRITICAL / HIGH / MEDIUM / LOW.
+3. Flag low-confidence findings explicitly.
+4. Focus on real bugs, not style preferences.
 
 ## Conflict Prevention — Mandatory Reads
 Before reviewing:
