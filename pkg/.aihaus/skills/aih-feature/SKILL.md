@@ -33,6 +33,13 @@ If `$ARGUMENTS` contains `--plan`, extract the word immediately after `--plan` a
 3. Read `.aihaus/decisions.md` (if present) — do not contradict any ADR
 4. Read `.aihaus/knowledge.md` (if present) — avoid known pitfalls
 
+### Step 1.5: Persist Attachments
+If the user's feature request includes pasted images (mockups, screenshots, references) or files:
+1. Copy from source (e.g., `~/.claude/image-cache/[uuid]/[n].png`) to `.aihaus/features/[YYMMDD]-[slug]/attachments/[seq]-[desc].[ext]` via `cp`.
+2. Describe each via vision.
+3. List in PLAN.md `## Attachments` (Step 11 artifact). Reference in Approach when they inform decisions.
+4. When spawning `code-reviewer`, `verifier`, or `integration-checker` later, include attachment paths so they can Read if relevant.
+
 ### Step 2: Check Working Tree
 Run `git status` and `git branch --show-current`.
 - If there are uncommitted changes, **warn the user** in your plan summary: "Your working tree has uncommitted changes. I can stash them before branching, or work on the current branch — your call."
@@ -96,15 +103,13 @@ Chain dependencies sequentially. Before each step, set its task to `in_progress`
 ### Step 8: Verify
 Run the verification commands appropriate to the areas touched (build, typecheck, unit tests, smoke tests). Use whatever the project already defines in its README or CONTRIBUTING docs. Run all relevant checks for every subsystem you changed. If tests fail, fix them. Do not skip.
 
-### Step 9: Self-Review
-Before committing, review your own changes for:
-- [ ] Unhandled error cases
-- [ ] Missing null/undefined checks
-- [ ] Security issues (injection, XSS, auth bypass)
-- [ ] Missing test coverage for new code paths
-- [ ] Type safety (strict mode, type hints)
-- [ ] Consistency with existing patterns
-If issues are found, fix them before proceeding.
+### Step 9: Adversarial Review (delegate to code-reviewer, loop max 2)
+Spawn `code-reviewer` with `subagent_type: "code-reviewer"` on the staged diff. Adversarial contract — must produce findings or written justification. Writes `.aihaus/features/[YYMMDD]-[slug]/REVIEW.md`.
+
+- CRITICAL or HIGH findings → spawn `code-fixer` with `subagent_type: "code-fixer"` to apply fixes, then re-run reviewer.
+- MEDIUM findings → inform user inline; proceed unless they object.
+- LOW findings → note in SUMMARY.md.
+- Cap at 2 review+fix iterations.
 
 ### Step 10: Commit
 Create a single atomic commit:
@@ -157,6 +162,12 @@ Create these files:
 # Knowledge: [feature title]
 <!-- Append one entry per discovery made during implementation -->
 ```
+
+### Step 11.5: Goal-Backward Verification (delegate to verifier)
+Spawn `verifier` with `subagent_type: "verifier"`. Adversarial — must verify each acceptance criterion with evidence or FAIL. Writes `.aihaus/features/[YYMMDD]-[slug]/VERIFICATION.md`. If FAIL or PASS-WITH-GAPS: flag for user review before reporting completion.
+
+### Step 11.7: Integration Check (conditional, delegate to integration-checker)
+If the feature touches more than one subsystem (check changed paths against `project.md` Inventory directories, or common fallback patterns like `models/`, `routes/`, `components/`, `api/`), spawn `integration-checker` with `subagent_type: "integration-checker"`. Writes `INTEGRATION.md`. Broken connections raised for user review.
 
 ### Step 12: Update project.md if structural changes were made
 Runs AFTER the commit. If `.aihaus/project.md` does not exist, print

@@ -20,13 +20,20 @@ $ARGUMENTS
 - Read `.aihaus/decisions.md` (if present) — do not contradict any ADR
 - Read `.aihaus/knowledge.md` (if present) — avoid known pitfalls
 
-### 2. Triage
-- Parse the bug description, error message, or symptom from the arguments above
-- Search the codebase for the root cause:
-  - Grep for error messages, function names, keywords from the symptom
-  - Read the files that surface as likely culprits
-  - Trace the call chain to identify the actual defect
-- Identify all affected files (with full paths)
+### 1.5. Persist Attachments
+If the user's bug report includes a pasted image (screenshot of error UI, stack trace image) or file (log, crash dump):
+1. Copy from source path (usually `~/.claude/image-cache/[uuid]/[n].png`) to `.aihaus/bugfixes/[YYMMDD]-[slug]/attachments/[seq]-[desc].[ext]` via `cp`.
+2. Describe each via vision.
+3. List in TRIAGE.md `## Attachments` section.
+4. When spawning the `debugger` agent (Step 2), include the attachment paths in its prompt so it can `Read` them during root-cause analysis.
+
+### 2. Triage (delegate to debugger agent)
+Spawn the `debugger` agent with `subagent_type: "debugger"` and the instruction:
+> "Investigate this bug using scientific method. Symptom: [user's bug description]. Form 2-3 hypotheses, test each, trace from symptom to root cause. Write `.aihaus/debug/[session-id].md` with hypotheses, evidence, and root cause. Report back the root cause and all affected files."
+
+The debugger follows its protocol: observe → hypothesize → test → refine → root cause. Wait for it to return. Use its report as the triage data for Step 3.
+
+Do NOT grep/read/trace inline — that's the debugger's job.
 
 ### 3. Present Findings
 Provide a structured summary to the user:
@@ -105,14 +112,21 @@ Create `.aihaus/bugfixes/[YYMMDD]-[slug]/RUN-MANIFEST.md` with: Run ID, Command,
 - Follow existing code patterns in neighboring files
 - Keep changes minimal and focused on the defect
 
-### 10. Add or Update Tests
-- Write or update tests that reproduce the bug and verify the fix
-- Follow the project's existing test conventions — do not introduce mocking patterns the codebase avoids
-- Place tests in the appropriate test directory following existing conventions
+### 10. Add or Update Tests (delegate to test-writer)
+Spawn `test-writer` with `subagent_type: "test-writer"` and the instruction:
+> "Write tests that reproduce the bug and verify the fix. Root cause: [from debugger]. Acceptance criteria: [from Phase 1]. Follow the project's test conventions. Never mock the database."
+
+### 10.5. Adversarial Code Review (loop, max 2 iterations)
+Spawn `code-reviewer` with `subagent_type: "code-reviewer"` on the staged diff. Review is adversarial — it must produce findings or written justification. It writes `.aihaus/bugfixes/[YYMMDD]-[slug]/REVIEW.md`.
+
+- If CRITICAL or HIGH findings: spawn `code-fixer` with `subagent_type: "code-fixer"` to apply fixes.
+- If MEDIUM findings: inform user inline, proceed unless they object.
+- If LOW findings: note in SUMMARY.md.
+- After fixer runs, re-spawn code-reviewer for a second pass. Cap at 2 iterations — stop and escalate if issues persist.
 
 ### 11. Verify
 Run the verification commands appropriate to the area touched (build, typecheck, unit tests, smoke tests). Use whatever the project already defines in its README or CONTRIBUTING docs.
-If any verification fails, fix the issue and re-run. Do not skip failing tests.
+If any verification fails, spawn `debugger` again to diagnose. Max 3 debug cycles before escalating.
 
 ### 12. Commit Atomically
 Stage only the files you changed. Write a descriptive commit message:

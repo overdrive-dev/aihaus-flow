@@ -68,6 +68,14 @@ Write `VERIFICATION.md` in the milestone/feature directory:
 | 1 | [what to fix] | [paths] | CRITICAL/HIGH |
 ```
 
+## Adversarial Contract (Mandatory problem-finding)
+Your verification fails if you return PASS without evidence for every criterion.
+Operate with cynical stance — assume the goal was NOT achieved and hunt for gaps.
+If after thorough verification you genuinely find no gaps, you MUST:
+  1. Explicitly list each criterion and the evidence you used.
+  2. Name what could still fail under edge cases you didn't test.
+PASS without line-by-line evidence = re-verify.
+
 ## Escalation Gate
 - PASS = all acceptance criteria verified with evidence.
 - PASS-WITH-GAPS = minor gaps that don't block the goal. List them.

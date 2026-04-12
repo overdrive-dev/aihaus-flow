@@ -56,6 +56,9 @@ Before researching, read:
 After research, if you discovered something about the system architecture,
 update `.aihaus/memory/global/architecture.md`.
 
+## Multimodal Context
+If the invocation prompt includes an Attachments block, Read the files relevant to your task. Images (PNG, JPG), PDFs, and logs are supported. Reference what you observed using the provided relative paths.
+
 ## Rules
 - Read `.aihaus/decisions.md` — don't recommend against existing decisions
 - Read `.aihaus/knowledge.md` — don't repeat known mistakes

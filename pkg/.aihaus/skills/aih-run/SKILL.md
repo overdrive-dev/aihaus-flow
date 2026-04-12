@@ -109,10 +109,26 @@ RUN-MANIFEST.md initial content:
 - [ts] — Run started
 ```
 
+If the draft has `attachments/`, copy them into the new milestone dir before archiving:
+```bash
+if [ -d .aihaus/milestones/drafts/[slug]/attachments ]; then
+  cp -R .aihaus/milestones/drafts/[slug]/attachments .aihaus/milestones/[M0XX]-[slug]/attachments
+fi
+```
+
 Archive the draft: `mv .aihaus/milestones/drafts/[slug] .aihaus/milestones/drafts/.archive/[YYMMDD]-[slug]`
 
 ### 9. Planning — Sequential Agent Subagents
 Spawn planning agents sequentially, updating RUN-MANIFEST.md progress log after each.
+
+**Attachments handoff:** If `.aihaus/milestones/[M0XX]-[slug]/attachments/` has files, include this block in every agent spawn prompt:
+```
+## Attachments Available
+The following files may be relevant to your task. Read them as needed.
+- attachments/01-[desc].png — [one-line description]
+- attachments/02-[desc].pdf — [one-line description]
+Use the Read tool to view. Reference what you observed in your output using relative paths.
+```
 
 **analyst** → writes `analysis-brief.md` (uses CONTEXT.md as input).
 **product-manager** → reads analysis brief, writes `PRD.md` and `stories/`.
@@ -143,6 +159,14 @@ Chain by story dependency order. First story blocked by "Verify plan coherence";
 Update RUN-MANIFEST.md after each story: append `[ts] — Story [N] complete: [title]`.
 
 **CRITICAL:** You are the COORDINATOR. Never write code yourself. Delegate everything.
+
+### 12.5. Verify and Integrate (adversarial gates, always-on)
+After all stories are implemented and QA-passed, run in parallel:
+- Spawn `verifier` with `subagent_type: "verifier"` — goal-backward check, must produce evidence per acceptance criterion or FAIL. Writes `execution/VERIFICATION.md`.
+- Spawn `integration-checker` with `subagent_type: "integration-checker"` — checks E2E wiring across the committed stories. Writes `execution/INTEGRATION.md`.
+- If the milestone touches auth, payments, PII, sessions, or any stack-identified sensitive area: spawn `security-auditor` with `subagent_type: "security-auditor"`. Writes `execution/SECURITY.md`.
+
+Any FAIL verdict or unmitigated OPEN threat halts before completion protocol — surface to user.
 
 ### 13. Completion
 Read `completion-protocol.md` (co-located). Follow it: merge decisions, promote knowledge, write MILESTONE-SUMMARY.md, clean up the team, report to user.

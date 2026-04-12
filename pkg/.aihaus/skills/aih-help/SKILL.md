@@ -106,6 +106,21 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 
 All commands read `.aihaus/project.md` at the start so every agent shares the same project context — stack, conventions, verification commands — without you repeating them.
 
+## Adversarial Review (v0.3.0+)
+
+Review-role agents (`code-reviewer`, `verifier`, `integration-checker`, `security-auditor`, `plan-checker`) now operate under an adversarial contract: **zero findings without written justification triggers re-analysis**. Cynical stance by default — must prove the work is clean, not just assume it.
+
+Applied at these gates:
+- `/aih-plan` → `plan-checker` on the drafted plan
+- `/aih-bugfix` → `code-reviewer` + `code-fixer` loop (2 iterations) after fix
+- `/aih-feature` → `code-reviewer` + `code-fixer` + `verifier` + conditional `integration-checker`
+- `/aih-quick` → single `code-reviewer` pass
+- `/aih-run` → always-on `verifier` + `integration-checker`, systematic `security-auditor` for sensitive work
+
+## Multimodal Attachments (v0.3.0+)
+
+Paste images, screenshots, or drop files during any scoping or execution command. They persist under `.aihaus/[artifact-dir]/attachments/`, get referenced in the artifact's `## Attachments` section, and are passed to spawned agents so they can Read them via the Read tool. Survives sessions and `/aih-resume`.
+
 ## Artifacts
 
 All artifacts live under `.aihaus/`:

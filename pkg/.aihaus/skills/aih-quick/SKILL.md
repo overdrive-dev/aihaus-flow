@@ -16,8 +16,11 @@ $ARGUMENTS
 2. **Check decisions**: Read `.aihaus/decisions.md` (if present) — don't contradict ADRs. Also read `.aihaus/project.md` (if present) for project context.
 3. **Implement**: Make the change
 4. **Verify**: Run relevant tests and type checks
-5. **Self-review**: Check your own work for bugs, security, edge cases
+5. **Adversarial sanity check**: Spawn `code-reviewer` with `subagent_type: "code-reviewer"` for a single pass on the staged diff. No fix loop — reviewer reports findings inline, user decides whether to address before commit. Keeps `/aih-quick` fast while preventing trivial bugs from slipping through.
 6. **Commit**: Atomic commit with descriptive message
+
+## Attachment Handling
+If the user pastes an image/file, persist to `.aihaus/features/[YYMMDD]-[slug]/attachments/` (or a quick sibling dir) via `cp` from `~/.claude/image-cache/`. Pass the path to `code-reviewer` in Step 5. Reject > 20 MB.
 
 ## Guardrails
 - If the change touches more than 5 files, STOP and suggest using `/aih-feature` instead
