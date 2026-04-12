@@ -144,6 +144,14 @@ Update RUN-MANIFEST.md after each story: append `[ts] — Story [N] complete: [t
 
 **CRITICAL:** You are the COORDINATOR. Never write code yourself. Delegate everything.
 
+### 12.5. Verify and Integrate (adversarial gates, always-on)
+After all stories are implemented and QA-passed, run in parallel:
+- Spawn `verifier` with `subagent_type: "verifier"` — goal-backward check, must produce evidence per acceptance criterion or FAIL. Writes `execution/VERIFICATION.md`.
+- Spawn `integration-checker` with `subagent_type: "integration-checker"` — checks E2E wiring across the committed stories. Writes `execution/INTEGRATION.md`.
+- If the milestone touches auth, payments, PII, sessions, or any stack-identified sensitive area: spawn `security-auditor` with `subagent_type: "security-auditor"`. Writes `execution/SECURITY.md`.
+
+Any FAIL verdict or unmitigated OPEN threat halts before completion protocol — surface to user.
+
 ### 13. Completion
 Read `completion-protocol.md` (co-located). Follow it: merge decisions, promote knowledge, write MILESTONE-SUMMARY.md, clean up the team, report to user.
 
