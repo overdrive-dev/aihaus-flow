@@ -94,9 +94,20 @@ Long autonomous runs aren't a black box. Every execution skill creates a visible
  [ ] Write artifacts
 ```
 
-Each step transitions from pending → in-progress (with spinner) → completed (with checkmark) as the skill executes. You always know what's happening, what's next, and what's done. Task events are also logged to `.claude/audit/` for post-session review.
+Milestones go further — each story becomes its own tracked task. Planning tasks appear immediately, then per-story tasks are created dynamically once the Product Manager writes the stories:
 
-Available in `/aih-feature` (6 steps), `/aih-bugfix` (6 steps), and `/aih-milestone` (6 phases covering the full planning-to-completion pipeline).
+```
+ [✓] Run analysis brief
+ [✓] Write PRD and stories
+ [✓] Design architecture
+ [✓] Verify plan coherence
+ [→] Add user model and migrations    ← story 1 in progress
+ [ ] Build auth endpoints             ← story 2 pending
+ [ ] Create dashboard UI              ← story 3 pending
+ [ ] Run completion protocol
+```
+
+Each step transitions from pending → in-progress (with spinner) → completed (with checkmark) as the skill executes. You always know what's happening, what's next, and what's done. Task events are also logged to `.claude/audit/` for post-session review.
 
 ### The Agent Catalog
 

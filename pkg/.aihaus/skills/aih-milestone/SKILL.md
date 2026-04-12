@@ -76,17 +76,16 @@ Do NOT proceed to Phase 2 until the user explicitly approves.
 
 After human approval, execute everything autonomously. Do not ask further questions.
 
-### Phase 2 Task Tracking
-Create all tasks as `pending` at the start of Phase 2 using TaskCreate:
+### Phase 2 Task Tracking (two waves)
+**Wave 1** — create as `pending` at Phase 2 start using TaskCreate:
 | Subject | activeForm |
 |---------|-----------|
 | Run analysis brief | Analyzing milestone scope |
 | Write PRD and stories | Writing PRD and stories |
 | Design architecture | Designing architecture |
 | Verify plan coherence | Checking plan coherence |
-| Execute stories | Executing stories |
-| Run completion protocol | Running completion protocol |
-Chain dependencies sequentially. Before each step, set its task to `in_progress`. After completion, set to `completed`.
+Chain sequentially. **Wave 2** (per-story tasks + completion) is created in Step 12.
+Before each step, set its task to `in_progress`. After completion, set to `completed`.
 
 ### 7. Determine Milestone ID
 Scan for existing milestone directories to determine the next ID:
@@ -162,12 +161,16 @@ Additionally, spawn quality gate agents as needed:
 - **ux-designer** using the `aihaus-ux-designer` agent type (if frontend stories exist)
 - **security** review pass after implementation (if the milestone touches auth, payments, or user data)
 
-### 12. Execute Stories
-Create tasks from the stories in `.aihaus/milestones/[M0XX]-[slug]/stories/`:
-- One task per story, with dependencies matching story dependency chains
-- Each task description includes: story file path, summary output path,
-  review output path, owned files list, decision/knowledge log reminders
-- Approve plans, monitor progress, handle QA pass/fail cycles autonomously
+### 12. Execute Stories (Wave 2 task creation)
+Read story files from `.aihaus/milestones/[M0XX]-[slug]/stories/`.
+For each story, call TaskCreate with:
+- **subject**: the story title from the markdown heading
+- **activeForm**: `Implementing [story title]`
+- **description**: story file path, summary/review output paths, owned files, log reminders
+Chain story tasks by dependency order. First story blocked by "Verify plan coherence";
+last story blocks completion. After all story tasks, create one final task:
+subject "Run completion protocol", activeForm "Running completion protocol".
+Assign stories to teammates, monitor progress, handle QA pass/fail autonomously.
 
 **CRITICAL:** You are the COORDINATOR. Never write code or implementation
 files yourself. Delegate everything to teammates.
