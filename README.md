@@ -129,18 +129,32 @@ Each step transitions from pending → in-progress (with spinner) → completed 
 
 ---
 
-## Commands
+## Commands — Four-Pillar Model
+
+**Scope** context → **Promote** plan to milestone → **Execute** autonomously → **Resume** if interrupted.
 
 ```bash
-/aih-init          # Bootstrap project.md — AI learns your codebase
-/aih-plan          # Research and plan without writing code
-/aih-bugfix        # Triage → branch → fix → test → commit
-/aih-feature       # Plan → branch → implement → review → commit
-/aih-milestone     # Full lifecycle with agent team — the big one
-/aih-quick         # Fast-track for trivial changes
-/aih-help          # Show all commands
-/aih-update        # Pull latest AIhaus from remote
-/aih-sync-notion   # Notion Kanban sync (optional)
+# Scope
+/aih-init                     # Bootstrap project.md — AI learns your codebase
+/aih-plan                     # Research and produce a plan (no code changes)
+/aih-milestone                # Enter gathering mode — iterative milestone draft via conversation
+
+# Promote
+/aih-plan-to-milestone        # Hand off a plan into a milestone draft for refinement
+
+# Execute
+/aih-run                      # Run a ready draft or plan — no slug required, picks from available
+/aih-feature                  # Plan → branch → implement → review → commit (one-shot)
+/aih-bugfix                   # Triage → branch → fix → test → commit
+/aih-quick                    # Fast-track for trivial changes
+
+# Resume
+/aih-resume                   # Pick up an interrupted run — detects in-progress milestones/features/bugfixes
+
+# Admin
+/aih-help                     # Show all commands
+/aih-update                   # Pull latest AIhaus from remote
+/aih-sync-notion              # Notion Kanban sync (optional)
 ```
 
 Every command follows the same pattern: **ask questions → one approval → fully autonomous**. No babysitting. No mid-execution prompts.

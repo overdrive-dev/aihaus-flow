@@ -92,11 +92,13 @@ Chain dependencies sequentially. Before each step, set its task to `in_progress`
 ### 7. Derive Slug
 From the bug description, create a slug: lowercase, hyphens for spaces, strip special characters, max 40 characters. Example: "500-error-null-user-id"
 
-### 8. Branch (unless user said "stay on branch")
+### 8. Branch + RUN-MANIFEST (unless user said "stay on branch")
 ```bash
 git checkout -b fix/[slug]
 ```
 If branching fails (e.g., branch exists), append a short suffix: `fix/[slug]-2`.
+
+Create `.aihaus/bugfixes/[YYMMDD]-[slug]/RUN-MANIFEST.md` with: Run ID, Command, Started ISO, Phase `apply-fix`, Status `running`, Branch name. Update `Last updated` and append to Progress Log after each subsequent step.
 
 ### 9. Apply Fix
 - Edit the identified files to resolve the root cause
@@ -157,7 +159,7 @@ Runs AFTER the commit. If `.aihaus/project.md` does not exist, print
    `- [YYYY-MM-DD] fix/[slug] — [one-line summary]`.
 
 ### 16. Report Completion
-Summarize what was done:
+Update RUN-MANIFEST.md: set Status `completed`, Phase `completed`, append final timestamp. Summarize what was done:
 - Branch name (or "stayed on [branch]")
 - Files changed
 - Tests added/updated

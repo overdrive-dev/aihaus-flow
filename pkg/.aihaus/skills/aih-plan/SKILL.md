@@ -78,14 +78,16 @@ $ARGUMENTS
 
    ## Suggested Next Command
    [One of these, based on scope:]
-   - `Run /aih-feature --plan [slug]` (if scope is small, <10 files)
-   - `Run /aih-milestone --plan [slug]` (if scope is large or multi-story)
+   - `/aih-run [slug]` (executes directly — small scope: single-story feature, large scope: auto-promotes to milestone)
+   - `/aih-plan-to-milestone [slug]` (promote to milestone draft for conversational refinement before execution — recommended for multi-story work)
+   - `/aih-feature --plan [slug]` (legacy, one-shot feature path)
    ```
 
 6. **Report to the user:**
    - Summarize the plan in 3-5 bullet points
    - Print the plan path: `.aihaus/plans/[slug]/PLAN.md`
    - Print the suggested next command
+   - If scope is milestone-sized (>10 files or multi-story), explicitly recommend `/aih-plan-to-milestone [slug]` as the primary path (lets user refine context conversationally before commit).
 
 ## Guardrails
 - MUST NOT create git branches

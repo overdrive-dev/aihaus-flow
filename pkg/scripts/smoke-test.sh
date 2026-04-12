@@ -38,8 +38,8 @@ _start_check() {
 # ---- Check 1: 9 SKILL.md files in expected subdirectories -------------------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 9 SKILL.md files"
-  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 12 SKILL.md files"
+  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-run aih-resume aih-plan-to-milestone)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do

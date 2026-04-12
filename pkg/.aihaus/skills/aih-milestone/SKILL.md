@@ -1,184 +1,127 @@
 ---
 name: aih-milestone
-description: "Full autonomous milestone — plan, architect, implement, test, ship. Use for large features that need multiple stories."
+description: "Start or resume a milestone draft via conversational gathering. Iterate context across messages, then run /aih-run to execute."
 disable-model-invocation: true
-allowed-tools: Read Grep Glob Bash Write Edit Agent TaskCreate TaskUpdate
-argument-hint: "[milestone description] [--plan slug]"
+allowed-tools: Read Write Edit Grep Glob Bash
+argument-hint: "[description] [--execute] [--plan slug]"
 ---
 
-## --plan Flag (optional)
-
-If `$ARGUMENTS` contains `--plan`, extract the word immediately after `--plan` as the **slug**.
-
-1. **Attempt to read** `.aihaus/plans/[slug]/PLAN.md`.
-2. **If the file exists**, use its contents as the analysis input for this milestone:
-   - Skip the "Goal" scoping question (question 1) — the plan already defines it.
-   - Skip the "Existing plan?" scoping question (question 4) — you already have the plan.
-   - Skip codebase research that the plan already covers (e.g., if the plan lists affected models/endpoints, do not re-scan for them).
-   - Still ask about constraints, deadlines, scope, and additional context **not** addressed by the plan.
-   - In your plan summary (Step 4), note: "Using plan: `.aihaus/plans/[slug]/PLAN.md`"
-3. **If the file does not exist**, report this error and **stop**:
-   > "Plan not found at `.aihaus/plans/[slug]/PLAN.md`. Run `/aih-plan` first to create it."
-4. **If no `--plan` flag is present**, proceed normally — all steps below apply in full.
-
-## Phase 1: Question & Approval
-
-### 1. Load Context
-- Read `.aihaus/memory/MEMORY.md` and any relevant memory files
-- Read `.aihaus/project.md` (if present) for project-level context
-- Read `.aihaus/decisions.md` (if present) — follow all existing ADRs
-- Read `.aihaus/knowledge.md` (if present) — avoid known pitfalls
-
-### 2. Scoping Questions
-Ask 3-5 questions in a single batched turn (do NOT ask one-at-a-time):
-1. **Goal:** What is the end-user outcome? (summarize $ARGUMENTS back for confirmation)
-2. **Constraints/Deadlines:** Any hard constraints, target date, or dependencies?
-3. **Scope:** Frontend only, backend only, or full-stack?
-4. **Existing plan?** Is there a `.aihaus/plans/` research brief to reference?
-5. **Additional context:** Anything else the team should know?
-
-If `--plan` was provided and the plan file was loaded, skip questions 1 and 4 (the plan
-already answers them). Ask only questions 2, 3, and 5.
-
-### 3. Codebase Scan
-Scan for affected areas based on the milestone description. Use `Glob` and `Grep` to locate:
-- Data models and schemas relevant to the change
-- API endpoints or route handlers that would be touched
-- Frontend screens or components in scope
-- Shared services, utilities, or configuration
-
-### 4. Plan Summary
-Present a structured summary for approval:
-```
-Milestone: [title]
-Scope: [frontend | backend | full-stack]
-Complexity: [S | M | L | XL] — estimated stories
-High-Level Stories:
-  1. [story title] — [backend|frontend|full-stack]
-  2. ...
-Affected Areas:
-  [list affected directories/modules from .aihaus/project.md inventory,
-   or from codebase scan if project.md is not available]
-Branch: milestone/[M0XX]-[slug]
-```
-
-### 5. Git Status Check
-Run `git status` to check for uncommitted changes. If the working tree is dirty:
-- Warn the user: "You have uncommitted changes. Proceeding will branch from
-  current HEAD including dirty state."
-- Offer: "Would you like to stash first, commit first, or proceed as-is?"
-
-### 6. GATE — Human Approval
-Wait for the user to approve, adjust, or reject the plan.
-Do NOT proceed to Phase 2 until the user explicitly approves.
-
-## Phase 2: Autonomous Execution
-
-After human approval, execute everything autonomously. Do not ask further questions.
-
-### Phase 2 Task Tracking (two waves)
-**Wave 1** — create as `pending` at Phase 2 start using TaskCreate:
-| Subject | activeForm |
-|---------|-----------|
-| Run analysis brief | Analyzing milestone scope |
-| Write PRD and stories | Writing PRD and stories |
-| Design architecture | Designing architecture |
-| Verify plan coherence | Checking plan coherence |
-Chain sequentially. **Wave 2** (per-story tasks + completion) is created in Step 12.
-Before each step, set its task to `in_progress`. After completion, set to `completed`.
-
-### 7. Determine Milestone ID
-Scan for existing milestone directories to determine the next ID:
-- `Glob` for `M0*` directories in `.aihaus/milestones/`
-- Extract numeric IDs, find the maximum, increment by 1
-- Format: `M0XX` (pad with leading zeros; increment the highest existing ID)
-- Derive slug from milestone title: lowercase, hyphens, max 40 chars
-
-### 8. Create Directory Structure
-Create the milestone artifact tree under `.aihaus/milestones/[M0XX]-[slug]/`:
-```
-.aihaus/milestones/[M0XX]-[slug]/
-  stories/
-  execution/
-  execution/reviews/
-  execution/DECISIONS-LOG.md
-  execution/KNOWLEDGE-LOG.md
-```
-
-Initialize DECISIONS-LOG.md and KNOWLEDGE-LOG.md with headers so subsequent
-agents have a consistent place to append entries.
-
-### 9. Planning — Sequential Agent Subagents
-Use the `Agent` tool to spawn planning agents SEQUENTIALLY. Each agent
-receives the `.aihaus/milestones/[M0XX]-[slug]/` path as its output location.
-
-**Step 1 — Analyst:**
-Spawn an Agent with the `aihaus-analyst` type. Instruct it to:
-- Research the milestone scope based on the approved plan summary
-- Write output to `.aihaus/milestones/[M0XX]-[slug]/analysis-brief.md`
-
-**Step 2 — Product Manager:**
-Spawn an Agent with the `aihaus-product-manager` type. Instruct it to:
-- Read the analysis brief from Step 1
-- Write PRD to `.aihaus/milestones/[M0XX]-[slug]/PRD.md`
-- Write stories to `.aihaus/milestones/[M0XX]-[slug]/stories/`
-
-**Step 3 — Architect:**
-Spawn an Agent with the `aihaus-architect` type. Instruct it to:
-- Read the PRD and stories from Step 2
-- Write architecture to `.aihaus/milestones/[M0XX]-[slug]/architecture.md`
-- Append any new ADRs to `.aihaus/decisions.md`
-
-**Step 4 — Plan Checker:**
-Before proceeding to execution, verify plan coherence:
-- Every story references files that exist (or are explicitly new)
-- No two stories claim ownership of the same file without dependency ordering
-- Architecture ADRs cover all conflict-prone areas relevant to the milestone
-- Stories have clear acceptance criteria that can be verified programmatically
-If issues are found, send them back to the Architect for resolution.
-
-Wait for each agent to complete before spawning the next.
-
-### 10. Create Feature Branch
-Create the milestone branch:
-```bash
-git checkout -b milestone/[M0XX]-[slug]
-```
-Branch name: lowercase, hyphens, max 40 chars for the slug portion.
-
-### 11. Spawn Agent Team
-Read `.aihaus/skills/milestone/team-template.md` for Agent Team configuration.
-
-Create an agent team following the template with these roles:
-- **backend-dev** using the `aihaus-implementer` agent type
-- **frontend-dev** using the `aihaus-frontend-dev` agent type
-- **qa** using the `aihaus-reviewer` agent type
-
-If the milestone is backend-only, skip frontend-dev (and vice versa).
-If more than 8 stories, spawn a second dev for the heavier side.
-
-Additionally, spawn quality gate agents as needed:
-- **ux-designer** using the `aihaus-ux-designer` agent type (if frontend stories exist)
-- **security** review pass after implementation (if the milestone touches auth, payments, or user data)
-
-### 12. Execute Stories (Wave 2 task creation)
-Read story files from `.aihaus/milestones/[M0XX]-[slug]/stories/`.
-For each story, call TaskCreate with:
-- **subject**: the story title from the markdown heading
-- **activeForm**: `Implementing [story title]`
-- **description**: story file path, summary/review output paths, owned files, log reminders
-Chain story tasks by dependency order. First story blocked by "Verify plan coherence";
-last story blocks completion. After all story tasks, create one final task:
-subject "Run completion protocol", activeForm "Running completion protocol".
-Assign stories to teammates, monitor progress, handle QA pass/fail autonomously.
-
-**CRITICAL:** You are the COORDINATOR. Never write code or implementation
-files yourself. Delegate everything to teammates.
-
-### 13. Completion
-Read `.aihaus/skills/milestone/completion-protocol.md` for wrap-up steps.
-
-Follow the completion protocol: merge decisions, promote knowledge,
-write MILESTONE-SUMMARY.md, clean up the team, report to user.
+## Task
+Enter gathering mode for a milestone. Absorb user context iteratively into a draft. Never executes — use `/aih-run` to start execution.
 
 $ARGUMENTS
+
+## Flags
+- `--execute` — skip gathering, go straight to execution (backward-compat one-shot behavior).
+- `--plan [slug]` — DEPRECATED. Auto-routes to `/aih-plan-to-milestone [slug]` and enters gathering on the seeded draft.
+
+## Step 1 — Handle Flags
+
+**If `--execute` is present:** Skip Steps 2–5. Create a minimal draft from $ARGUMENTS, then immediately invoke the milestone execution flow from `/aih-run` (so `/aih-resume` can recover if interrupted). Print: "Executing directly (--execute flag). Use `/aih-milestone` without the flag for conversational gathering."
+
+**If `--plan [slug]` is present:** Print deprecation notice, then invoke `/aih-plan-to-milestone [slug]` logic and enter gathering on the resulting draft. Skip Step 2 (drafts listing) and jump to Step 4.
+
+## Step 2 — List Existing Drafts
+
+`Glob` `.aihaus/milestones/drafts/*/STATUS.md`. If any drafts exist (excluding the `.archive/` directory):
+
+```
+Active milestone drafts:
+
+# | Slug                      | Status    | Updated
+1 | 260412-user-auth          | gathering | [mtime]
+2 | 260411-billing-refactor   | ready     | [mtime]
+
+Options:
+  - Continue a draft: tell me which number or slug
+  - Start a new draft: say "new" or provide a description
+  - Execute a ready draft: /aih-run [slug]
+```
+
+Wait for the user's choice.
+
+- **User picks an existing slug** → go to Step 4 with that slug (load existing CONTEXT.md).
+- **User says "new" or provides description** → go to Step 3.
+
+If no drafts exist, go to Step 3 directly.
+
+## Step 3 — Create New Draft
+
+Derive a slug:
+- If $ARGUMENTS has a description → slug from description (lowercase, hyphens, max 40 chars, YYMMDD prefix).
+- Else → ask: "What's a short slug or working title for this milestone?"
+
+Create `.aihaus/milestones/drafts/[slug]/` with:
+
+**CONTEXT.md:**
+```markdown
+# Milestone Draft: [title]
+**Slug:** [slug]
+**Started:** [ISO date]
+
+## Goal
+[initial description or "pending"]
+
+## Constraints & Deadlines
+_None captured yet._
+
+## Scope
+_Pending._
+
+## Affected Areas
+_Pending._
+
+## References
+_Links, tickets, designs._
+
+## Decisions
+_Captured during gathering._
+
+## Open Questions
+_Things to resolve before execution._
+```
+
+**STATUS.md:** single line `gathering`
+
+**CONVERSATION.md:**
+```markdown
+# Conversation Log: [slug]
+_Raw user messages appended during gathering, most recent last._
+```
+
+## Step 4 — Enter Gathering Mode
+
+Print the initial prompt for the user:
+
+```
+Draft created at .aihaus/milestones/drafts/[slug]/CONTEXT.md
+
+Send context freely — goals, constraints, affected areas, links, stakeholders, deadlines. I'll absorb each message into CONTEXT.md and ask follow-up questions when gaps emerge.
+
+When ready to execute:
+  - Run /aih-run [slug]
+  - Or say "start", "go", "kick off" — I'll run it for you.
+```
+
+## Step 5 — Session Gathering Instructions (what to do after this skill returns)
+
+The main conversation continues after this skill exits. Follow these rules for the rest of the session (or until the user moves on):
+
+1. **On every user message that is not a slash command**:
+   - Append raw message to `.aihaus/milestones/drafts/[slug]/CONVERSATION.md` with timestamp.
+   - Update the relevant section(s) of `CONTEXT.md` with the distilled content.
+   - Ask up to 1 follow-up question if you detect a gap (missing constraint, unclear success criterion, ambiguous scope).
+2. **On start intent** ("start", "go", "kick off", "let's begin", "ready", etc.):
+   - Set `STATUS.md` to `ready`.
+   - Invoke `/aih-run [slug]`.
+3. **On slash command other than start intent**:
+   - Let the user run the other command. Leave `STATUS.md` at `gathering`.
+   - Draft is preserved — user can come back via `/aih-milestone` later.
+4. **On new `/aih-milestone` invocation in a later session**:
+   - The drafts listing (Step 2) will surface this draft for resumption.
+
+## Guardrails
+- NEVER execute the milestone. `/aih-run` is the only execution path.
+- NEVER delete CONTEXT.md — only append/update sections.
+- Archive on execution — draft moves to `.aihaus/milestones/drafts/.archive/[YYMMDD]-[slug]/` by `/aih-run`.
+- The `--execute` flag exists for backward compat; do not default to it.

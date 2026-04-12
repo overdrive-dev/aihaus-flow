@@ -81,11 +81,12 @@ Create all tasks as `pending` at the start of Phase 2 using TaskCreate:
 | Write artifacts | Writing feature artifacts |
 Chain dependencies sequentially. Before each step, set its task to `in_progress`. After completion, set to `completed`.
 
-### Step 6: Create Branch
+### Step 6: Create Branch + RUN-MANIFEST
 - Derive `[slug]` from the feature description: lowercase, replace spaces with hyphens, truncate to 40 characters, strip trailing hyphens.
 - If user said "stay on this branch" or "don't create a branch", skip branching.
 - Otherwise: `git checkout -b feature/[slug]`
 - If user approved stashing: `git stash` before branching, note to `git stash pop` after.
+- Create `.aihaus/features/[YYMMDD]-[slug]/RUN-MANIFEST.md` with: Run ID, Command, Started ISO, Phase `implement`, Status `running`, Branch name. Update `Last updated` and append to Progress Log after each subsequent step.
 
 ### Step 7: Implement
 - Make all changes identified in the plan.
@@ -178,7 +179,7 @@ Runs AFTER the commit. If `.aihaus/project.md` does not exist, print
    `- [YYYY-MM-DD] feature/[slug] — [one-line summary]`.
 
 ### Step 13: Report Completion
-Tell the user:
+Update RUN-MANIFEST.md: set Status `completed`, Phase `completed`, append final timestamp. Tell the user:
 - What was implemented
 - Branch name and commit hash
 - Test/verification results

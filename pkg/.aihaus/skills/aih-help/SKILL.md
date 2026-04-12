@@ -6,94 +6,102 @@ disable-model-invocation: true
 
 # AIhaus Workflow Commands
 
-AIhaus is an intent-based workflow package. Each command asks its questions upfront, gets your approval once, then runs autonomously.
+AIhaus is a four-pillar intent-based workflow package. **Scope** the work, optionally **promote** a plan into a milestone draft, **execute** autonomously, and **resume** if interrupted.
 
-## Commands
+## Four-Pillar Command Surface
+
+| Pillar | Commands | Purpose |
+|--------|----------|---------|
+| **Scope** | `/aih-plan`, `/aih-milestone` | Create plans / gather milestone context conversationally |
+| **Promote** | `/aih-plan-to-milestone` | Hand off a plan into a milestone draft for refinement |
+| **Execute** | `/aih-run`, `/aih-feature`, `/aih-bugfix`, `/aih-quick` | Start autonomous work |
+| **Continue** | `/aih-resume` | Pick up an interrupted run |
+
+## All Commands
 
 | Command | What It Does | Use When |
 |---------|-------------|----------|
 | `/aih-init` | Bootstrap AIhaus in a project — creates `.aihaus/` layout and seeds project memory | First time using AIhaus in a repo |
 | `/aih-plan [description]` | Research and write a plan without changing code | You want to think before building |
+| `/aih-plan-to-milestone [slug]` | Promote a plan to a milestone draft for conversational refinement | Plan is big enough to warrant milestone treatment |
+| `/aih-milestone [description]` | Enter gathering mode — iteratively build a milestone draft via conversation | You want to scope a milestone across multiple messages |
+| `/aih-run [slug]` | Execute a ready milestone draft or plan — no slug required, picks from available | You have a draft/plan ready to execute |
+| `/aih-resume [slug]` | Resume an interrupted run — detects in-progress work via RUN-MANIFEST.md | Session crashed, context reset, or you paused execution |
 | `/aih-bugfix [description or error]` | Triage root cause, branch, fix, test, commit | Known bug or error message |
 | `/aih-feature [description]` | Scoped feature: plan, branch, implement, test, commit — single agent | Change touching up to ~10 files |
-| `/aih-milestone [description]` | Full milestone lifecycle: plan, architect, implement, QA — all autonomous after approval | Large feature or multi-story work |
-| `/aih-help` | This help page | You forgot what's available |
 | `/aih-quick [description]` | Fast-track a known change without planning overhead | Trivial change you already know how to do |
+| `/aih-help` | This help page | You forgot what's available |
 | `/aih-sync-notion [action]` | Sync the Notion Kanban board with current execution state | You mirror work to Notion |
 | `/aih-update [--check\|--force]` | Update AIhaus to the latest version from the remote repo | New version available or agents need updating |
 
 ## Typical Flows
 
-### Plan first, then build
-
-```
-/aih-plan Add rate limiting to the public API
-  -> review plan, decide scope
-/aih-feature --plan 260410-rate-limiting
-  -> approve plan summary, walk away, come back to built code on a feature branch
-```
-
-### Straight to a milestone
+### Conversational milestone (recommended for large work)
 
 ```
 /aih-milestone Multi-tenant workspaces
-  -> answer scoping questions, approve plan
-  -> walk away, come back to fully built milestone with QA
+  -> draft created, gathering mode active
+(user sends more context messages)
+  -> each message absorbed into CONTEXT.md
+(user: "start" or /aih-run [slug])
+  -> autonomous execution from draft
+```
+
+### Plan first, then promote to milestone
+
+```
+/aih-plan Add billing subsystem with Stripe
+  -> PLAN.md created
+/aih-plan-to-milestone 260412-billing
+  -> milestone draft seeded from plan
+(iterate context conversationally)
+/aih-run 260412-billing
+  -> full milestone execution
+```
+
+### Quick feature from a plan
+
+```
+/aih-plan Add rate limiting to the public API
+/aih-run 260410-rate-limiting
+  -> small plan → feature-style single-branch execution
+```
+
+### Resume after interruption
+
+```
+(session crashes during milestone execution)
+(new session starts)
+/aih-resume
+  -> detects interrupted milestone, resumes from checkpoint
 ```
 
 ### Quick fixes
 
 ```
 /aih-bugfix "TypeError: cannot read property 'id' of undefined"
-  -> approve fix plan, walk away, come back to fix on a branch
-
 /aih-quick Add missing import for the Status enum
-  -> done immediately
 ```
+
+## Backward Compat
+
+- `/aih-milestone "desc" --execute` — one-shot behavior (pre-gathering-mode) preserved as escape hatch.
+- `/aih-milestone --plan [slug]` — auto-routes to `/aih-plan-to-milestone [slug]`, then enters gathering.
+- `/aih-feature --plan [slug]` — still works for feature-from-plan shortcuts.
 
 ## Project Memory
 
-AIhaus reads `.aihaus/project.md` at the start of every command so every agent
-shares the same project context — stack, conventions, verification commands, and
-team norms — without you having to repeat them.
+All commands read `.aihaus/project.md` at the start so every agent shares the same project context — stack, conventions, verification commands — without you repeating them.
 
-**What it contains:**
-- Project name, purpose, and current status
-- Tech stack and primary languages
-- Directory conventions (where models, endpoints, components, tests live)
-- Verification commands (build, typecheck, test, lint)
-- Team norms that aren't obvious from code (branch policy, commit style, review rules)
-- Links to `.aihaus/decisions.md` and `.aihaus/knowledge.md` if used
+## Artifacts
 
-**How it is used:**
-- `/aih-plan`, `/aih-feature`, `/aih-milestone`, `/aih-bugfix`, and
-  `/aih-quick` all load it before doing any work
-- Commands never print its contents to the user — it is silent context
-- When you run `/aih-init`, a starter `.aihaus/project.md` is scaffolded for
-  you to fill in
-
-**Keeping it current:**
-- Update it whenever the stack, conventions, or verification commands change
-- Milestone completion may append to it when durable team norms emerge
-
-## Artifacts Produced
-
-All AIhaus artifacts live under `.aihaus/`:
-
-- `.aihaus/project.md` — Project-level context loaded by every command
-- `.aihaus/milestones/[M0XX]-[slug]/` — Full milestone artifacts (analysis, PRD, architecture, stories, execution logs, reviews)
-- `.aihaus/features/[YYMMDD]-[slug]/` — Feature plan and summary
-- `.aihaus/bugfixes/[YYMMDD]-[slug]/` — Triage and fix summary
-- `.aihaus/plans/[slug]/` — Standalone plans from `/aih-plan`
-- `.aihaus/memory/` — Persistent agent memory across sessions
-- `.aihaus/decisions.md` — Optional project-wide ADR log
-- `.aihaus/knowledge.md` — Optional project-wide lessons-learned log
-
-## Tips
-
-- Start with `/aih-plan` to research before committing to a command
-- Use `/aih-feature` or `/aih-bugfix` for most day-to-day work
-- Use `/aih-milestone` for large, multi-story features
-- Use `/aih-quick` for trivial changes you already know how to do (< 5 files)
-- All commands are one-gate: answer questions once, then fully autonomous
-- Every artifact is git-tracked under `.aihaus/`
+All artifacts live under `.aihaus/`:
+- `.aihaus/project.md` — Project-level context
+- `.aihaus/plans/[slug]/` — Plans from `/aih-plan`
+- `.aihaus/milestones/drafts/[slug]/` — In-progress milestone drafts (CONTEXT.md, STATUS.md, CONVERSATION.md)
+- `.aihaus/milestones/drafts/.archive/` — Drafts that have been promoted to milestones
+- `.aihaus/milestones/[M0XX]-[slug]/` — Full milestone artifacts + RUN-MANIFEST.md checkpoint
+- `.aihaus/features/[YYMMDD]-[slug]/` — Feature summaries + RUN-MANIFEST.md
+- `.aihaus/bugfixes/[YYMMDD]-[slug]/` — Bugfix summaries + RUN-MANIFEST.md
+- `.aihaus/memory/` — Persistent agent memory
+- `.aihaus/decisions.md` / `.aihaus/knowledge.md` — Optional project-wide logs

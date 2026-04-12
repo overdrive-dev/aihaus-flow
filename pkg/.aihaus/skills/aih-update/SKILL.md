@@ -127,18 +127,46 @@ bash "$PKG_LOCAL/pkg/scripts/smoke-test.sh" 2>/dev/null
 
 If it fails, warn but don't rollback — the user can investigate.
 
-### 11. Report
+### 11. Pre-flight Warnings
+
+Before reporting, surface any migration-relevant state:
+
+- **In-flight milestones** — `Glob` `.aihaus/milestones/*/` for dirs without `execution/MILESTONE-SUMMARY.md`. If any exist, warn: "In-flight milestone detected: [slug]. Post-update, run `/aih-resume` to continue."
+- **Legacy `aihaus:` prefix installs** — if `.claude/commands/aihaus:*.md` exists, warn: "Pre-rename installation detected — legacy `aihaus:` commands will be replaced by `aih-*`."
+
+### 12. Migration Notice (version-gated)
+
+Read the previous version stored in `.aihaus/.version` (or treat as `0.0.0` if missing). If the new version crosses the boundary where gathering-mode milestones were introduced (v0.2.0 or first version shipping `aih-run`), print:
+
+```
+Migration notice — command surface changed:
+  /aih-milestone now enters gathering mode (conversational draft refinement).
+  New commands:
+    /aih-run                 — execute a ready draft or plan (no slug required)
+    /aih-resume              — pick up an interrupted run
+    /aih-plan-to-milestone   — promote a plan to a milestone draft
+
+  Backward compat:
+    /aih-milestone "desc" --execute    — preserves old one-shot behavior
+    /aih-milestone --plan [slug]       — auto-routes to /aih-plan-to-milestone
+
+  Restart Claude Code to discover the new skills.
+```
+
+### 13. Report
 
 ```
 AIhaus updated: 0.1.0 → 0.2.0
   Agents: [N] (was [M])
-  Skills: [N]
+  Skills: [N] (was [M])
   Hooks: [N]
   Changes: [N commits]
   Source: [remote URL]
 
 Run /aih-help to see available commands.
 ```
+
+If new skills appeared in the update diff, append: "⚠️  Restart Claude Code to load new skills."
 
 ---
 
