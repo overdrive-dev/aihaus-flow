@@ -158,6 +158,8 @@ Read story files from `stories/`. For each story, TaskCreate with:
 
 Chain by story dependency order. First story blocked by "Verify plan coherence"; last story blocks completion. After all story tasks, create final task `Run completion protocol`. Assign stories to teammates, monitor progress, handle QA cycles.
 
+**Story serialization (prevents commit attribution race):** complete each story's full cycle — implement → QA pass → merge-back → commit → `git status` clean — BEFORE spawning the next story's teammate. Between stories, verify `git status --porcelain` is empty. If unexpected files appear (orphans from a prior worktree merge-back), STOP and surface to user; do not sweep them into the next commit. Commits must use explicit file lists from the story's `Owned files` (never `git add <dir>/`, never `git add -A`). See `team-template.md` → Commit Discipline and Worktree Merge-Back Protocol.
+
 Update RUN-MANIFEST.md after each story: append `[ts] — Story [N] complete: [title]`.
 
 **Mid-story inventory refresh:** after each story's QA passes and commit lands, check if the committed paths fall within Inventory directories (same detection as completion-protocol Step 6). If yes, spawn `project-analyst` with `subagent_type: "project-analyst"` in `--refresh-inventory-only` mode and merge the AUTO block of `.aihaus/project.md`. Append `[ts] — project.md inventory refreshed after story [N]` to RUN-MANIFEST.md. Skip if the story was documentation-only. Also refresh Active Milestones (see Step 8 pattern) since phase may have changed.
