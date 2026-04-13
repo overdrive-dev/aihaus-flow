@@ -14,6 +14,31 @@ $ARGUMENTS
 ## Flags
 - `--execute` — skip gathering, go straight to execution (backward-compat one-shot behavior).
 - `--plan [slug]` — DEPRECATED. Auto-routes to `/aih-plan-to-milestone [slug]` and enters gathering on the seeded draft.
+- `--from-brainstorm [slug]` — seed CONTEXT.md from `.aihaus/brainstorm/[slug]/BRIEF.md` (see Step 0).
+
+## Step 0 — `--from-brainstorm <slug>` intake (conditional)
+
+If `$ARGUMENTS` contains `--from-brainstorm <slug>`, run before Step 1. Otherwise skip.
+
+1. Resolve `.aihaus/brainstorm/<slug>/BRIEF.md`. Emit the exact error string and abort if:
+   - Slug dir does not exist → `No brainstorm found at <slug>. Run /aih-brainstorm first or check the slug.`
+   - BRIEF.md missing → `Brainstorm at <slug> has no BRIEF.md — run was not completed. Re-run /aih-brainstorm <slug>.`
+   - BRIEF.md missing any required H2 header below → `BRIEF.md at <slug> is missing section(s): <list>. Cannot seed plan.` (string identical to `/aih-plan` — do not swap "plan" for "milestone"; `<list>` = comma-separated missing headers).
+
+   Required H2 headers: `Problem Statement`, `Perspectives Summary`, `Key Disagreements`, `Challenges`, `Research Evidence`, `Synthesis`, `Open Questions`, `Suggested Next Command`.
+
+2. **Read-only** on `.aihaus/brainstorm/<slug>/`.
+
+3. Skip Step 2 (drafts listing). Proceed to Step 3 and, after creating the draft directory, seed `CONTEXT.md` per the mapping below before entering Step 4 gathering:
+
+   | BRIEF.md section | CONTEXT.md destination |
+   |------------------|------------------------|
+   | Problem Statement | Goal |
+   | Synthesis | Proposed Scope (new section under Scope) |
+   | Challenges + Open Questions | Decisions (as items to resolve during gathering) |
+   | Research Evidence | References |
+
+4. Copy attachments if `.aihaus/brainstorm/<slug>/attachments/` exists → `.aihaus/milestones/drafts/[slug]/attachments/` (see Attachment Handling for naming).
 
 ## Step 1 — Handle Flags
 
