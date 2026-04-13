@@ -1,6 +1,6 @@
 # aihaus
 
-> **You think. ai builds.** Plan heavy, then let 41 autonomous agents execute — from research to deployment.
+> **You think. ai builds.** Plan heavy, then let 43 autonomous agents execute — from research to deployment.
 
 ```
     _    ___ _
@@ -20,7 +20,7 @@ You spend 80% of your time telling ai *how* to do things instead of *what* to do
 
 aihaus flips the ratio. **You invest in planning — ai handles everything else.**
 
-One approval gate. After that, a coordinated team of 41 specialized agents researches, plans, architects, implements, reviews, tests, verifies, and ships — autonomously. Every agent reads the same project context. Every decision is logged. Every lesson feeds back into the system. The more you use it, the smarter it gets.
+One approval gate. After that, a coordinated team of 43 specialized agents researches, plans, architects, implements, reviews, tests, verifies, and ships — autonomously. Every agent reads the same project context. Every decision is logged. Every lesson feeds back into the system. The more you use it, the smarter it gets.
 
 ---
 
@@ -56,7 +56,7 @@ Your project gets a memory. Future sessions start smarter.
 
 ## Built on Claude Code Multi-Agent
 
-aihaus is a workflow package for [Claude Code](https://claude.ai/code). It's not a wrapper or a framework — it's 9 intent-based skills, 41 agent definitions, and 12 lifecycle hooks that install directly into your repo. No runtime, no build step, no package manager. Just markdown and shell scripts that Claude Code reads natively.
+aihaus is a workflow package for [Claude Code](https://claude.ai/code). It's not a wrapper or a framework — it's 13 intent-based skills, 43 agent definitions, and 12 lifecycle hooks that install directly into your repo. No runtime, no build step, no package manager. Just markdown and shell scripts that Claude Code reads natively.
 
 **Token usage is significant.** A full milestone with adversarial review, code review, security audit, and goal verification uses substantial context. This is by design — aihaus trades tokens for quality and autonomy. The alternative is spending your own time reviewing, re-prompting, and re-checking.
 
@@ -85,6 +85,7 @@ aihaus is a workflow package for [Claude Code](https://claude.ai/code). It's not
 ```bash
 /aih-init          # Bootstrap project.md — ai learns your codebase
 /aih-plan          # Research and plan without writing code
+/aih-brainstorm    # Multi-specialist exploratory panel for fuzzy topics
 /aih-bugfix        # Triage → branch → fix → test → commit
 /aih-feature       # Plan → branch → implement → review → commit
 /aih-milestone     # Full lifecycle with agent team — the big one
@@ -95,6 +96,10 @@ aihaus is a workflow package for [Claude Code](https://claude.ai/code). It's not
 ```
 
 Every command follows the same pattern: **ask questions → one approval → fully autonomous**. No babysitting. No mid-execution prompts.
+
+### When to brainstorm vs plan
+
+`/aih-plan` takes a concrete task and produces an executable `PLAN.md`. Use it when you already know *what* you want to build. `/aih-brainstorm` runs an 8-phase panel of specialists (architect + domain experts + contrarian + optional researchers) against a fuzzy "how should we think about X" question, then synthesizes a `BRIEF.md`. Pipe that brief back in via `/aih-plan --from-brainstorm <slug>` or `/aih-milestone --from-brainstorm <slug>` once the shape of the problem is clear.
 
 ---
 
@@ -120,8 +125,8 @@ bash ~/tools/aihaus/pkg/scripts/install.sh
 ```
 your-project/
 ├── .aihaus/                    # aihaus workspace (git-tracked)
-│   ├── skills/                 # 9 intent-based commands
-│   ├── agents/                 # 41 specialized agent definitions
+│   ├── skills/                 # 13 intent-based commands
+│   ├── agents/                 # 43 specialized agent definitions
 │   ├── hooks/                  # 12 lifecycle hooks
 │   ├── templates/              # project.md + settings templates
 │   ├── memory/                 # Persistent agent memory (grows over time)

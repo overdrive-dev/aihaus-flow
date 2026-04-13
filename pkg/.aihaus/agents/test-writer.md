@@ -7,6 +7,7 @@ tools: Read, Write, Edit, Grep, Glob, Bash
 model: sonnet
 effort: high
 color: cyan
+memory: project
 ---
 
 You are a test engineer for this project.

@@ -35,11 +35,11 @@ _start_check() {
   CHECK_NUMBER=$((CHECK_NUMBER + 1))
 }
 
-# ---- Check 1: 9 SKILL.md files in expected subdirectories -------------------
+# ---- Check 1: 13 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 12 SKILL.md files"
-  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-run aih-resume aih-plan-to-milestone)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 13 expected SKILL.md files"
+  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-run aih-resume aih-plan-to-milestone aih-brainstorm)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -54,10 +54,10 @@ check_skills() {
   fi
 }
 
-# ---- Check 2: .aihaus/agents/ has 41 .md files ------------------------------
+# ---- Check 2: .aihaus/agents/ has 43 .md files ------------------------------
 check_agents() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 41 .md files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 43 .md files"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   if [[ ! -d "$agents_root" ]]; then
     _fail "$label" "directory not found: $agents_root"
@@ -65,10 +65,10 @@ check_agents() {
   fi
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 41 ]]; then
+  if [[ "$count" -eq 43 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 41 .md files, found $count"
+    _fail "$label" "expected 43 .md files, found $count"
   fi
 }
 
@@ -128,7 +128,48 @@ check_skill_length() {
   fi
 }
 
-# ---- Check 6: templates/project.md has both section markers -----------------
+# ---- Check 6: every agent frontmatter declares the six required fields ------
+check_agent_frontmatter() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: every agent declares name/tools/model/effort/color/memory"
+  local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
+  local offenders=()
+  while IFS= read -r -d '' file; do
+    local front
+    front=$(awk '/^---$/{c++; next} c==1' "$file")
+    for field in name tools model effort color memory; do
+      if ! printf '%s\n' "$front" | grep -q "^${field}:"; then
+        offenders+=("${file#${PACKAGE_ROOT}/} missing '$field'")
+      fi
+    done
+  done < <(find "$agents_root" -maxdepth 1 -type f -name '*.md' -print0)
+  if [[ ${#offenders[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${offenders[@]}"
+  fi
+}
+
+# ---- Check 7: CONVERSATION.md first-line header shape (future-proofing) -----
+check_conversation_header_shape() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: CONVERSATION.md files begin with '# Conversation:' or '# Conversation Log:'"
+  local offenders=()
+  while IFS= read -r -d '' file; do
+    local first
+    first=$(head -n1 "$file")
+    if [[ "$first" != "# Conversation:"* && "$first" != "# Conversation Log:"* ]]; then
+      offenders+=("${file#${PACKAGE_ROOT}/} first line: $first")
+    fi
+  done < <(find "${PACKAGE_ROOT}/.aihaus" -type f -name 'CONVERSATION.md' -print0 2>/dev/null)
+  if [[ ${#offenders[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${offenders[@]}"
+  fi
+}
+
+# ---- Check 8: templates/project.md has both section markers -----------------
 check_project_template() {
   _start_check
   local label="Check ${CHECK_NUMBER}: templates/project.md has required markers"
@@ -151,7 +192,7 @@ check_project_template() {
   fi
 }
 
-# ---- Check 7: settings.local.json is valid JSON with _aihaus_managed -------
+# ---- Check 9: settings.local.json is valid JSON with _aihaus_managed -------
 check_settings_template() {
   _start_check
   local label="Check ${CHECK_NUMBER}: templates/settings.local.json is valid JSON with required keys"
@@ -191,7 +232,7 @@ check_settings_template() {
   _pass "$label"
 }
 
-# ---- Check 8: install, uninstall, and update scripts exist ------------------
+# ---- Check 10: install, uninstall, and update scripts exist ----------------
 check_installer_files_exist() {
   _start_check
   local label="Check ${CHECK_NUMBER}: install/uninstall/update scripts exist"
@@ -216,7 +257,7 @@ check_installer_files_exist() {
   fi
 }
 
-# ---- Check 9: shell scripts pass bash -n ------------------------------------
+# ---- Check 11: shell scripts pass bash -n -----------------------------------
 check_installer_syntax() {
   _start_check
   local label="Check ${CHECK_NUMBER}: install/uninstall/update scripts + hooks pass bash -n"
@@ -249,7 +290,7 @@ check_installer_syntax() {
   fi
 }
 
-# ---- Check 10: README.md exists and is 100..500 lines -----------------------
+# ---- Check 12: README.md exists and is 100..500 lines -----------------------
 check_readme_length() {
   _start_check
   local label="Check ${CHECK_NUMBER}: README.md exists and is 100..500 lines"
@@ -267,7 +308,7 @@ check_readme_length() {
   fi
 }
 
-# ---- Check 11: LICENSE contains "MIT License" -------------------------------
+# ---- Check 13: LICENSE contains "MIT License" -------------------------------
 check_license() {
   _start_check
   local label="Check ${CHECK_NUMBER}: LICENSE contains 'MIT License'"
@@ -283,7 +324,7 @@ check_license() {
   fi
 }
 
-# ---- Check 12: VERSION contains a semver string -----------------------------
+# ---- Check 14: VERSION contains a semver string -----------------------------
 check_version() {
   _start_check
   local label="Check ${CHECK_NUMBER}: VERSION contains a semver string"
@@ -326,6 +367,8 @@ check_agents
 check_hooks
 check_skill_frontmatter
 check_skill_length
+check_agent_frontmatter
+check_conversation_header_shape
 check_project_template
 check_settings_template
 check_installer_files_exist

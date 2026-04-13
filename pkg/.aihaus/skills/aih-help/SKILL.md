@@ -25,7 +25,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 
 | Pillar | Commands | Purpose |
 |--------|----------|---------|
-| **Scope** | `/aih-plan`, `/aih-milestone` | Create plans / gather milestone context conversationally |
+| **Scope** | `/aih-plan`, `/aih-milestone`, `/aih-brainstorm` | Create plans / gather milestone context / explore fuzzy ideas |
 | **Promote** | `/aih-plan-to-milestone` | Hand off a plan into a milestone draft for refinement |
 | **Execute** | `/aih-run`, `/aih-feature`, `/aih-bugfix`, `/aih-quick` | Start autonomous work |
 | **Continue** | `/aih-resume` | Pick up an interrupted run |
@@ -35,7 +35,8 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 | Command | What It Does | Use When |
 |---------|-------------|----------|
 | `/aih-init` | Bootstrap aihaus in a project — creates `.aihaus/` layout and seeds project memory | First time using aihaus in a repo |
-| `/aih-plan [description]` | Research and write a plan without changing code | You want to think before building |
+| `/aih-plan [description]` | Research and write a concrete, implementable plan without changing code — produces `PLAN.md` | You have a concrete task and want to think before building |
+| `/aih-brainstorm "<topic>" [--panel <roles>] [--deep] [--research]` | Multi-specialist exploratory panel for fuzzy "how should we think about X" questions — produces `BRIEF.md` that feeds `/aih-plan --from-brainstorm` or `/aih-milestone --from-brainstorm` | The problem is open-ended and you want diverse perspectives before committing to an approach |
 | `/aih-plan-to-milestone [slug]` | Promote a plan to a milestone draft for conversational refinement | Plan is big enough to warrant milestone treatment |
 | `/aih-milestone [description]` | Enter gathering mode — iteratively build a milestone draft via conversation | You want to scope a milestone across multiple messages |
 | `/aih-run [slug]` | Execute a ready milestone draft or plan — no slug required, picks from available | You have a draft/plan ready to execute |
@@ -108,7 +109,7 @@ All commands read `.aihaus/project.md` at the start so every agent shares the sa
 
 ## Adversarial Review (v0.3.0+)
 
-Review-role agents (`code-reviewer`, `verifier`, `integration-checker`, `security-auditor`, `plan-checker`) now operate under an adversarial contract: **zero findings without written justification triggers re-analysis**. Cynical stance by default — must prove the work is clean, not just assume it.
+Review-role agents (`code-reviewer`, `verifier`, `integration-checker`, `security-auditor`, `plan-checker`, `contrarian`) now operate under an adversarial contract: **zero findings without written justification triggers re-analysis**. Cynical stance by default — must prove the work is clean, not just assume it.
 
 Applied at these gates:
 - `/aih-plan` → `plan-checker` on the drafted plan
@@ -116,6 +117,7 @@ Applied at these gates:
 - `/aih-feature` → `code-reviewer` + `code-fixer` + `verifier` + conditional `integration-checker`
 - `/aih-quick` → single `code-reviewer` pass
 - `/aih-run` → always-on `verifier` + `integration-checker`, systematic `security-auditor` for sensitive work
+- `/aih-brainstorm` → `contrarian` round on panelist perspectives; `brainstorm-synthesizer` fans in all artifacts into `BRIEF.md`.
 
 ## Inter-agent Conventions
 
