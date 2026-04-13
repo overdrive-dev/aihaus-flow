@@ -117,6 +117,30 @@ Applied at these gates:
 - `/aih-quick` → single `code-reviewer` pass
 - `/aih-run` → always-on `verifier` + `integration-checker`, systematic `security-auditor` for sensitive work
 
+## Inter-agent Conventions
+
+### CONVERSATION.md turn log
+
+Used by multi-round agent workflows (e.g. `/aih-brainstorm`). Append-only ordered log. **The parent skill is the sole writer — agents NEVER get `Write` access to `CONVERSATION.md`; the parent skill appends turn blocks via heredoc after subagents return.** For parallel rounds, the skill appends turns in alphabetical-by-role order after all subagents return — deterministic, no interleaving. Per-agent artifact files (`PERSPECTIVE-<role>.md`, `CHALLENGES.md`, `RESEARCH.md`) are the baseline; the turn log is an optional escalation when later rounds must read prior rounds.
+
+Two shapes share this filename, distinguished by the first line:
+
+| Shape | First line | Used by |
+|-------|-----------|---------|
+| User-message log | `# Conversation Log: [slug]` | `/aih-milestone`, `/aih-plan-to-milestone` |
+| Turn log | `# Conversation: [slug]` | `/aih-brainstorm` (and future panels) |
+
+Turn block format (most recent last, `---` separator between turns):
+
+```markdown
+## Turn N — <agent-or-user> — <ISO-8601 timestamp>
+<body>
+
+---
+```
+
+See ADR-001 in `pkg/.aihaus/decisions.md` for rationale.
+
 ## Autonomous Execution — Troubleshooting Prompts
 
 If you see lots of permission prompts during autonomous execution:
