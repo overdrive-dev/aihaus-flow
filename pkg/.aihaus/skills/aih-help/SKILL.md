@@ -25,7 +25,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 
 | Pillar | Commands | Purpose |
 |--------|----------|---------|
-| **Scope** | `/aih-plan`, `/aih-milestone` | Create plans / gather milestone context conversationally |
+| **Scope** | `/aih-plan`, `/aih-milestone`, `/aih-brainstorm` | Create plans / gather milestone context / explore fuzzy ideas |
 | **Promote** | `/aih-plan-to-milestone` | Hand off a plan into a milestone draft for refinement |
 | **Execute** | `/aih-run`, `/aih-feature`, `/aih-bugfix`, `/aih-quick` | Start autonomous work |
 | **Continue** | `/aih-resume` | Pick up an interrupted run |
@@ -35,7 +35,8 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 | Command | What It Does | Use When |
 |---------|-------------|----------|
 | `/aih-init` | Bootstrap aihaus in a project — creates `.aihaus/` layout and seeds project memory | First time using aihaus in a repo |
-| `/aih-plan [description]` | Research and write a plan without changing code | You want to think before building |
+| `/aih-plan [description]` | Research and write a concrete, implementable plan without changing code — produces `PLAN.md` | You have a concrete task and want to think before building |
+| `/aih-brainstorm "<topic>" [--panel <roles>] [--deep] [--research]` | Multi-specialist exploratory panel for fuzzy "how should we think about X" questions — produces `BRIEF.md` that feeds `/aih-plan --from-brainstorm` or `/aih-milestone --from-brainstorm` | The problem is open-ended and you want diverse perspectives before committing to an approach |
 | `/aih-plan-to-milestone [slug]` | Promote a plan to a milestone draft for conversational refinement | Plan is big enough to warrant milestone treatment |
 | `/aih-milestone [description]` | Enter gathering mode — iteratively build a milestone draft via conversation | You want to scope a milestone across multiple messages |
 | `/aih-run [slug]` | Execute a ready milestone draft or plan — no slug required, picks from available | You have a draft/plan ready to execute |
@@ -108,7 +109,7 @@ All commands read `.aihaus/project.md` at the start so every agent shares the sa
 
 ## Adversarial Review (v0.3.0+)
 
-Review-role agents (`code-reviewer`, `verifier`, `integration-checker`, `security-auditor`, `plan-checker`) now operate under an adversarial contract: **zero findings without written justification triggers re-analysis**. Cynical stance by default — must prove the work is clean, not just assume it.
+Review-role agents (`code-reviewer`, `verifier`, `integration-checker`, `security-auditor`, `plan-checker`, `contrarian`) now operate under an adversarial contract: **zero findings without written justification triggers re-analysis**. Cynical stance by default — must prove the work is clean, not just assume it.
 
 Applied at these gates:
 - `/aih-plan` → `plan-checker` on the drafted plan
@@ -116,6 +117,31 @@ Applied at these gates:
 - `/aih-feature` → `code-reviewer` + `code-fixer` + `verifier` + conditional `integration-checker`
 - `/aih-quick` → single `code-reviewer` pass
 - `/aih-run` → always-on `verifier` + `integration-checker`, systematic `security-auditor` for sensitive work
+- `/aih-brainstorm` → `contrarian` round on panelist perspectives; `brainstorm-synthesizer` fans in all artifacts into `BRIEF.md`.
+
+## Inter-agent Conventions
+
+### CONVERSATION.md turn log
+
+Used by multi-round agent workflows (e.g. `/aih-brainstorm`). Append-only ordered log. **The parent skill is the sole writer — agents NEVER get `Write` access to `CONVERSATION.md`; the parent skill appends turn blocks via heredoc after subagents return.** For parallel rounds, the skill appends turns in alphabetical-by-role order after all subagents return — deterministic, no interleaving. Per-agent artifact files (`PERSPECTIVE-<role>.md`, `CHALLENGES.md`, `RESEARCH.md`) are the baseline; the turn log is an optional escalation when later rounds must read prior rounds.
+
+Two shapes share this filename, distinguished by the first line:
+
+| Shape | First line | Used by |
+|-------|-----------|---------|
+| User-message log | `# Conversation Log: [slug]` | `/aih-milestone`, `/aih-plan-to-milestone` |
+| Turn log | `# Conversation: [slug]` | `/aih-brainstorm` (and future panels) |
+
+Turn block format (most recent last, `---` separator between turns):
+
+```markdown
+## Turn N — <agent-or-user> — <ISO-8601 timestamp>
+<body>
+
+---
+```
+
+See ADR-001 in `pkg/.aihaus/decisions.md` for rationale.
 
 ## Autonomous Execution — Troubleshooting Prompts
 
