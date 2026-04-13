@@ -4,9 +4,13 @@
 # See .aihaus/milestones/M001-aih-brainstorm/stories/08-dogfood-validation.md.
 #
 # USAGE:
-#   1. In Claude Code:  /aih-brainstorm "what makes a good morning routine?" --deep
-#   2. Note stdout:      Created brainstorm at .aihaus/brainstorm/<slug>/
-#   3. From repo root:   bash pkg/scripts/dogfood-brainstorm.sh --slug <slug>
+#   Panel mode (--deep regression, default):
+#     1. /aih-brainstorm "what makes a good morning routine?" --deep
+#     2. bash pkg/scripts/dogfood-brainstorm.sh --slug <slug>
+#   Conversational-default mode (v0.6.0+):
+#     1. /aih-brainstorm "some lightweight question"
+#        (no --deep; optionally end with synthesis-escalation consent)
+#     2. bash pkg/scripts/dogfood-brainstorm.sh --slug <slug> --mode conversational
 #
 # Slug is explicit (no mtime-fallback) because /aih-brainstorm is a slash
 # command and concurrent brainstorms would cause silent false passes.
@@ -24,24 +28,36 @@ _fail() {
 }
 usage() {
   cat <<'EOF'
-Usage: dogfood-brainstorm.sh --slug <slug>
+Usage: dogfood-brainstorm.sh --slug <slug> [--mode panel-deep|conversational]
 
-Assumes /aih-brainstorm has already been run. In Claude Code:
-    /aih-brainstorm "what makes a good morning routine?" --deep
-Then re-run this script with the emitted slug.
+Modes:
+  panel-deep (default)   Asserts full panel + --deep run (R1 == R2 >= 1,
+                         PERSPECTIVE files, CHALLENGES.md, BRIEF.md).
+  conversational         Asserts conversational-default run (zero panelists,
+                         no CHALLENGES.md; BRIEF.md optional — only if user
+                         consented to synthesis-escalation).
+
+Assumes /aih-brainstorm has already been run. Then re-run this script
+with the emitted slug and the matching mode.
 EOF
 }
 
 # ---- Args -------------------------------------------------------------------
 SLUG=""
+MODE="panel-deep"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --slug) SLUG="${2:-}"; shift 2 ;;
+    --mode) MODE="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) printf "unknown argument: %s\n" "$1" >&2; usage >&2; exit 2 ;;
   esac
 done
 if [[ -z "$SLUG" ]]; then usage >&2; exit 2; fi
+case "$MODE" in
+  panel-deep|conversational) ;;
+  *) printf "unknown mode: %s\n" "$MODE" >&2; usage >&2; exit 2 ;;
+esac
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -50,7 +66,7 @@ CONV="${BDIR}/CONVERSATION.md"
 BRIEF="${BDIR}/BRIEF.md"
 CHALL="${BDIR}/CHALLENGES.md"
 
-printf "aihaus dogfood regression: /aih-brainstorm\nSlug: %s\nDir:  %s\n\n" "$SLUG" "$BDIR"
+printf "aihaus dogfood regression: /aih-brainstorm\nSlug: %s\nMode: %s\nDir:  %s\n\n" "$SLUG" "$MODE" "$BDIR"
 
 # ---- 1: dir exists ----------------------------------------------------------
 if [[ -d "$BDIR" ]]; then
@@ -67,6 +83,47 @@ elif [[ -f "$CONV" ]]; then
   _fail "2. CONVERSATION.md first line" "got: $(head -1 "$CONV")" "file: $CONV"
 else
   _fail "2. CONVERSATION.md first line" "file missing: $CONV"
+fi
+
+# ---- conversational-mode early path ----------------------------------------
+if [[ "$MODE" == "conversational" ]]; then
+  R1=$(find "$BDIR" -maxdepth 1 -type f -name 'PERSPECTIVE-*.md' ! -name 'PERSPECTIVE-*-r2.md' | wc -l | tr -d ' ')
+  if [[ "$R1" -eq 0 ]]; then
+    _pass "3c. conversational mode: zero PERSPECTIVE-*.md files (no panel spawned)"
+  else
+    _fail "3c. conversational mode: PERSPECTIVE files present" "R1=$R1 (expected 0)" "dir: $BDIR"
+  fi
+  if [[ ! -f "$CHALL" ]]; then
+    _pass "4c. conversational mode: no CHALLENGES.md (no contrarian spawned)"
+  else
+    _fail "4c. conversational mode: CHALLENGES.md present" "file should not exist: $CHALL"
+  fi
+  if [[ -f "$BRIEF" ]]; then
+    # BRIEF.md is optional in conversational mode — only present if user consented to synthesis.
+    # If present, it MUST still pass the 8-header schema (Phase 7.5 runs in lightweight mode too).
+    REQ=(
+      "## Problem Statement" "## Perspectives Summary" "## Key Disagreements"
+      "## Challenges" "## Research Evidence" "## Synthesis"
+      "## Open Questions" "## Suggested Next Command"
+    )
+    miss=()
+    for h in "${REQ[@]}"; do
+      grep -Fxq "$h" "$BRIEF" || miss+=("$h")
+    done
+    if [[ ${#miss[@]} -eq 0 ]]; then
+      _pass "5c. BRIEF.md (optional in conversational mode) present and passes 8-header schema"
+    else
+      _fail "5c. BRIEF.md 8-header schema" "missing: ${miss[*]}" "file: $BRIEF"
+    fi
+  else
+    _pass "5c. BRIEF.md absent (no synthesis-escalation consent) — OK for conversational mode"
+  fi
+  printf "\n"
+  if [[ "$FAILURES" -eq 0 ]]; then
+    printf "DOGFOOD-BRAINSTORM: PASS (conversational mode)\n"; exit 0
+  else
+    printf "DOGFOOD-BRAINSTORM: FAIL (%d assertion(s) failed)\n" "$FAILURES"; exit 1
+  fi
 fi
 
 # ---- 4-prep: count panelist files (needed for assertion 3's expected turns) -

@@ -75,11 +75,19 @@ headers, in this exact order, spelling, and capitalization. All 8 are
 7. `## Open Questions`
 8. `## Suggested Next Command`
 
+### Lightweight Mode (conversational-default brainstorm)
+When `Glob PERSPECTIVE-*.md` returns ZERO matches, the brainstorm ran in conversational-default mode (no panel spawned). Emit the 8-header schema unchanged, but adapt these three section bodies **verbatim**:
+- `## Perspectives Summary` body: `(conversational mode — no panel spawned; see CONVERSATION.md for user/orchestrator exchange)`
+- `## Key Disagreements` body: `(none — no panel spawned)`
+- `## Challenges` body: `(none — no contrarian spawned)` (only if `CHALLENGES.md` is also absent)
+
+The other 5 sections (Problem Statement, Research Evidence, Synthesis, Open Questions, Suggested Next Command) fill as usual from `CONVERSATION.md` and `RESEARCH.md` (if present). Phase 7.5 schema validator still enforces header presence/order.
+
 ### Section-by-section sourcing rules
 - **Problem Statement** — 2-4 sentences. Your own framing after reading everything. Distill, don't quote.
-- **Perspectives Summary** — one paragraph per panelist, grounded in that panelist's `PERSPECTIVE-<role>.md` (and `-r2.md` if present). Cite by filename, e.g. "(from `PERSPECTIVE-architect.md`)".
-- **Key Disagreements** — where panelists contradicted each other. The signal-rich zone. If everyone agreed, say so and flag the consensus itself as a potential blind spot.
-- **Challenges** — pulled from `CHALLENGES.md`. Preserve the contrarian's severity and kind tags; summarize the challenge column; do not paraphrase away uncomfortable findings.
+- **Perspectives Summary** — one paragraph per panelist, grounded in that panelist's `PERSPECTIVE-<role>.md` (and `-r2.md` if present). Cite by filename, e.g. "(from `PERSPECTIVE-architect.md`)". Use the lightweight-mode body above if no perspectives exist.
+- **Key Disagreements** — where panelists contradicted each other. The signal-rich zone. If everyone agreed, say so and flag the consensus itself as a potential blind spot. Use the lightweight-mode body if no panel spawned.
+- **Challenges** — pulled from `CHALLENGES.md`. Preserve the contrarian's severity and kind tags; summarize the challenge column; do not paraphrase away uncomfortable findings. Use the lightweight-mode body if no contrarian spawned.
 - **Research Evidence — LOCKED behavior.** This header is ALWAYS emitted.
   - If `RESEARCH.md` exists (`--research` was used): distill its VERIFIED / CITED / ASSUMED claims. Preserve tags inline.
   - If `RESEARCH.md` does NOT exist: the body is exactly this one line, verbatim:

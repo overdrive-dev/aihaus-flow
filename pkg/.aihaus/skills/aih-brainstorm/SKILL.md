@@ -7,7 +7,7 @@ argument-hint: "\"<topic>\" [--panel <roles>] [--deep] [--research]"
 ---
 
 ## Task
-Run an 8-phase panel brainstorm on `$ARGUMENTS` and produce `BRIEF.md`. No code edits, no branches. Read-only exploration that hands off to `/aih-plan --from-brainstorm` or `/aih-milestone --from-brainstorm`.
+Run a brainstorm on `$ARGUMENTS`. **Default (no flags): conversational mode** — lightweight ping-pong between user and orchestrating assistant; zero agents spawned; escalations (research / panel / synthesis) proposed inline with cost transparency and consented to per step. **Flag-driven (`--panel` | `--deep` | `--research`): autonomous fan-out** — runs the full panel phases 2-7 as committed below. Either mode can produce a schema-compliant `BRIEF.md` that hands off to `/aih-plan --from-brainstorm` or `/aih-milestone --from-brainstorm`. No code edits, no branches. Read-only exploration.
 
 $ARGUMENTS
 
@@ -72,6 +72,18 @@ Hard ceilings regardless: 5 panelists, 2 rounds, 1 contrarian, 1 research agent.
    Forward slashes. Exactly one line. No variation.
 5. **Ask at most 1 clarifying question**. Skip entirely if the topic is already concrete. If asked and answered, distill the answer into Turn 1's body (do not create a second turn for it — Turn 1 is the single user turn that seeds Round 1).
 
+## Phase 1.5 — Conversational Default Mode (no flags)
+
+**Applies when `$ARGUMENTS` contains no `--panel`, `--deep`, or `--research`.** If any flag is present, skip and fall through to Phase 2.
+
+Enter a ping-pong loop with the user. The **orchestrating assistant** (not a spawned agent) reads loaded project context, asks focused questions, proposes framings, and riffs on the topic — zero agent spawns by default. Append each user reply to Turn 1's body; do not create Turn 2+ unless an escalation fires (ADR-001 unchanged). Watch for escalation signals per co-located `escalation.md`; propose escalations inline with **cost transparency** (state agent count + wall-clock estimate before asking consent); user consents per step. On consent, dispatch:
+- **research** → spawn one of `phase-researcher` / `advisor-researcher` / `domain-researcher`; writes `RESEARCH.md`; skill appends research turn; resume ping-pong.
+- **panel** → run Phases 2→5 (selection, Round 1, optional Round 2, contrarian); resume ping-pong.
+- **synthesis** → run Phases 7→8 (synthesizer in lightweight mode if no `PERSPECTIVE-*.md`, validator, handoff).
+- **abandon** ("not pursuing" / "nevermind") → leave artifacts, do NOT write `BRIEF.md`, print `Brainstorm ended without BRIEF.md — CONVERSATION.md preserved at <path>.`
+
+Agents are spawned only after the conversation earns them. This matches the brainstorm's purpose as a pre-project exploration step that might lead to nothing.
+
 ## Phase 2 — Panel Selection
 Default panel size: 3 agents. Pick by topic-pattern match against this table:
 
@@ -82,11 +94,6 @@ Default panel size: 3 agents. Pick by topic-pattern match against this table:
 | Domain / regulatory / "what are the rules for X" | `domain-researcher` + `analyst` + `advisor-researcher` |
 
 **No-keyword-match fallback — LOCKED.** If the topic matches no row (e.g., `"what makes a good morning routine?"`), default to the **technical-architecture row**: `architect` + `advisor-researcher` + `phase-researcher`. Deterministic, not implementer-choice.
-
-**Worked examples** (document the selection rationale):
-- `"how should we build the rate-limiter?"` → row 1 (architecture) → `architect + advisor-researcher + phase-researcher`.
-- `"how should users experience onboarding?"` → row 2 (product/UX) → `product-manager + ux-designer + analyst`.
-- `"what are GDPR rules for session tokens?"` → row 3 (domain) → `domain-researcher + analyst + advisor-researcher`.
 
 `--panel "a,b,c"` overrides the default (comma-separated, max 5, already whitelist-validated). **Print the panel and one-sentence rationale before spawning.**
 
