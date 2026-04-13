@@ -12,9 +12,9 @@
 
 **You think. ai builds.**
 
-**A markdown-only multi-agent workflow for Claude Code. Plan heavy once — let a coordinated team of 43 specialized agents research, plan, architect, implement, review, test, verify, and ship.**
+**An autonomous developer workflow for Claude Code. One approval gate, then 43 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
 
-**Solves prompt fatigue — the death-by-a-thousand-prompts that happens when you babysit ai through every step.**
+**Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.5.0-181717?style=for-the-badge&logo=github)](VERSION)
@@ -27,15 +27,15 @@ git clone https://github.com/overdrive-dev/aihaus-flow ~/tools/aihaus
 bash ~/tools/aihaus/pkg/scripts/install.sh --target .
 ```
 
-**Works on Mac, Windows, and Linux.**
+Runs anywhere Claude Code runs — macOS, Windows, Linux.
 
 <br>
 
-*"Plan once. Walk away. Come back to a verified milestone with clean git history."*
+*"Describe it once. Walk away. Come back to a verified milestone with clean git history."*
 
 <br>
 
-[The Problem](#the-problem) · [Getting Started](#getting-started) · [How It Works](#how-it-works) · [Why It Works](#why-it-works) · [Commands](#commands)
+[The Problem](#the-problem) · [Install](#install) · [How It Works](#how-it-works) · [The Design](#the-design) · [Commands](#commands)
 
 </div>
 
@@ -58,17 +58,17 @@ bash ~/tools/aihaus/pkg/scripts/install.sh --target .
 
 ## The Problem
 
-You spend 80% of your time telling ai *how* to do things instead of *what* to do. Every prompt requires context about your stack, conventions, and past decisions. When you finally get a plan right, execution drifts because there's no shared memory between sessions. And when something breaks, you start from scratch.
+Most of your time with ai-assisted coding gets spent describing *how* instead of deciding *what*. Every prompt re-teaches the model your stack, your conventions, the decisions you already made. Sessions don't share memory, so execution drifts. When something breaks you restart from nothing.
 
-## The Solution
+## The Trade
 
-aihaus flips the ratio. **You invest in planning — ai handles everything else.**
+aihaus inverts that loop. **Front-load the thinking once; the system runs the rest.**
 
-One approval gate. After that, a coordinated team of 43 specialized agents researches, plans, architects, implements, reviews, tests, verifies, and ships — autonomously. Every agent reads the same project context. Every decision is logged. Every lesson feeds back into the system. The more you use it, the smarter it gets.
+After a single approval, a coordinated team of 43 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
 
 ---
 
-## Getting Started
+## Install
 
 ```bash
 # 1. Clone the package somewhere stable
@@ -85,7 +85,7 @@ bash ~/tools/aihaus/pkg/scripts/install.sh --target .
 /aih-feature Add rate limiting to the public API
 ```
 
-The installer creates symlinks (or junctions on Windows) from `.claude/{skills,agents,hooks}` into `.aihaus/{skills,agents,hooks}`. Your existing `settings.local.json` is merged, not overwritten.
+The installer symlinks (or junctions on Windows) `.claude/{skills,agents,hooks}` into `.aihaus/{skills,agents,hooks}`. Your existing `settings.local.json` gets merged in, never clobbered.
 
 Verify with:
 
@@ -93,40 +93,25 @@ Verify with:
 /aih-help
 ```
 
-### Staying Updated
+### Keeping it current
 
-aihaus evolves fast. Update periodically:
+aihaus ships often. When you want the latest:
 
 ```bash
 /aih-update          # Pull latest from remote, re-link, re-run smoke-test
-/aih-update --check  # Just check if an update is available
+/aih-update --check  # Just check whether an update is available
 ```
 
 <details>
-<summary><strong>Alternative: copy-mode install (no symlinks)</strong></summary>
+<summary><strong>Filesystems without symlinks: <code>--copy</code> mode</strong></summary>
 
-If your filesystem doesn't support symlinks (some CI containers, network drives), use `--copy`:
+Some CI containers and network drives don't do symlinks. Fall back with:
 
 ```bash
 bash ~/tools/aihaus/pkg/scripts/install.sh --target . --copy
 ```
 
-`--copy` duplicates the package into `.claude/`. You lose live updates from the source — re-run the installer after every `/aih-update`.
-
-</details>
-
-<details>
-<summary><strong>Dogfooding aihaus on the aihaus repo</strong></summary>
-
-If you're contributing to aihaus itself:
-
-```bash
-git clone https://github.com/overdrive-dev/aihaus-flow
-cd aihaus-flow
-bash pkg/scripts/install.sh --target .
-```
-
-This creates `.aihaus/` (gitignored) with symlinks back to `pkg/.aihaus/`. Local artifacts accumulate in `.aihaus/`; package improvements go to `pkg/.aihaus/`.
+`--copy` duplicates the package into `.claude/`. Live updates are gone — re-run the installer after every `/aih-update`.
 
 </details>
 
@@ -204,54 +189,56 @@ Your project gets a memory. Future sessions start smarter.
 
 ---
 
-## Why It Works
+## The Design
 
-### Context Engineering
+Five ideas, each a file on disk. Together they're the reason the system works.
 
-Every agent reads the same project context. No per-prompt re-explaining your stack.
+### Shared project memory
 
-| File | What it does |
-|------|--------------|
-| `.aihaus/project.md` | Stack, conventions, architecture — loaded at runtime by every agent |
-| `.aihaus/decisions.md` | ADRs — binding; every code-writing agent reads before touching code |
-| `.aihaus/knowledge.md` | Accumulated lessons — avoids re-discovering pitfalls |
-| `.aihaus/memory/` | Persistent global + project memory across sessions |
-| `RUN-MANIFEST.md` | Per-milestone execution state — enables `/aih-resume` after interruptions |
-| `CONVERSATION.md` | Turn-log for multi-round agent workflows (ADR-001 single-writer discipline) |
+Every agent reads the same small set of files before it touches anything else. No prompt re-teaches the stack; no session starts from zero.
 
-### Multi-Agent Orchestration
+| File | Purpose |
+|------|---------|
+| `.aihaus/project.md` | Stack, conventions, architecture — read at runtime by every agent |
+| `.aihaus/decisions.md` | Architecture Decision Records. Binding. Every code-writing agent reads this before editing code |
+| `.aihaus/knowledge.md` | Lessons and gotchas carried forward across milestones so they stop repeating |
+| `.aihaus/memory/` | Persistent scoped memory (global + project) spanning sessions |
+| `RUN-MANIFEST.md` | Per-milestone execution state. Lets `/aih-resume` pick up exactly where a crashed run stopped |
+| `CONVERSATION.md` | Append-only turn log for multi-round agent workflows (see ADR-001 — single-writer discipline) |
 
-Every stage uses the same pattern: a thin orchestrator spawns specialized agents, collects results via files, routes to the next step.
+### Thin coordinator, specialist workforce
 
-| Stage | Orchestrator does | Agents do |
-|-------|-------------------|-----------|
-| Research | Coordinates, presents findings | analyst, project-researcher, domain-researcher, advisor-researcher, phase-researcher in parallel |
-| Brainstorm | Spawns panel + contrarian + synthesizer | Per-perspective panelists write `PERSPECTIVE-*.md`; contrarian writes `CHALLENGES.md`; synthesizer writes `BRIEF.md` |
-| Planning | Validates, manages iteration | planner, plan-checker (adversarial — must find issues), pattern-mapper, assumptions-analyzer |
+The skill running a command is a coordinator. It spawns the specialist, reads the artifact the specialist writes, picks the next specialist. Nothing big happens in the coordinator's own context.
+
+| Stage | Coordinator | Specialists |
+|-------|-------------|-------------|
+| Research | Gathers findings, presents brief | analyst, project-researcher, domain-researcher, advisor-researcher, phase-researcher — fan-out |
+| Brainstorm | Spawns panel, contrarian, synthesizer; serializes turn log | Panelists write `PERSPECTIVE-*.md`; contrarian writes `CHALLENGES.md`; synthesizer writes `BRIEF.md` |
+| Planning | Validates, runs up to 2 plan-checker iterations | planner, plan-checker (must produce findings or justify silence), pattern-mapper, assumptions-analyzer |
 | Architecture | Routes ADR decisions | architect, framework-selector |
-| Execution | Groups into waves, tracks progress, cherry-picks worktree commits | implementer, frontend-dev, executor — each in isolated worktree, fresh context |
-| Quality | Drives review-fix loop | code-reviewer (severity-classified), code-fixer (auto-patch), test-writer |
-| Verification | Presents results, blocks completion on FAIL | verifier (goal-backward), integration-checker (E2E wiring), security-auditor (threat-model anchored) |
-| Completion | Promotes decisions and knowledge | reviewer (evolution proposals), doc-writer/doc-verifier |
+| Execution | Groups work into waves, cherry-picks worktree commits | implementer, frontend-dev, executor — each in an isolated worktree with a fresh context window |
+| Quality | Runs the review → fix → re-review loop | code-reviewer (severity-classified), code-fixer (applies patches), test-writer |
+| Verification | Gates completion on FAIL verdicts | verifier (goal-backward), integration-checker (E2E wiring), security-auditor (threat-model anchored) |
+| Completion | Promotes decisions and knowledge, applies agent evolutions | reviewer, doc-writer, doc-verifier |
 
-The orchestrator never does heavy lifting. The work happens in fresh subagent contexts; your main session stays responsive.
+Because every step hands off via files, your main session window stays clean — the heavy lifting lives in subagent contexts and stays there.
 
-### Adversarial Contract
+### Reviewers that must push back
 
-Five reviewer agents operate under a **mandatory problem-finding** rule: zero findings without written justification triggers re-analysis. They cannot rubber-stamp.
+Six reviewer agents carry a contract: **find at least one real problem, or explain in writing why the artifact is actually clean.** A silent PASS is rejected and triggers re-analysis.
 
-| Agent | Adversarial scope |
-|-------|-------------------|
-| `plan-checker` | Plans must achieve their stated goal — gate before execution |
-| `contrarian` | Ideas must survive challenge — overlooked premises, missing framings, absent stakeholders (per invocation) |
-| `code-reviewer` | Implementations must clear severity-classified review |
-| `verifier` | Goal-backward — assume the goal was NOT achieved, hunt for gaps |
-| `integration-checker` | Components must actually wire together — "existence is not integration" |
-| `security-auditor` | Threat model mitigations must exist in implemented code |
+| Agent | Scope of skepticism |
+|-------|---------------------|
+| `plan-checker` | Does this plan actually achieve its stated goal? Gate before execution |
+| `contrarian` | What premises are unexamined? What framings got skipped? Whose perspective is missing? |
+| `code-reviewer` | Severity-classified findings on the implementation diff |
+| `verifier` | Goal-backward — start from "this did NOT work" and hunt for counter-evidence |
+| `integration-checker` | Do the pieces actually connect? Existence ≠ integration |
+| `security-auditor` | Do the threat-model mitigations exist as code, not promises |
 
-### Atomic Git Commits
+### One commit per story
 
-Each story gets its own commit immediately after implementation. Explicit `git add` with file lists from the story's Owned Files — never `git add -A`.
+Stories land one at a time. Each implementation commit uses an explicit file list drawn from that story's Owned Files — never `git add -A`, never a directory sweep. The history reads linearly:
 
 ```
 9ce646c feat(scripts): add dogfood-brainstorm.sh regression script (Story 8)
@@ -262,25 +249,25 @@ dc739c2 feat(adr): seed pkg/.aihaus/decisions.md with ADR-001 (files are state)
 ```
 
 > [!NOTE]
-> **Why atomic:** git bisect finds the exact failing story. Each story is independently revertable. Clear history for ai in future sessions. The completion protocol can promote decisions and knowledge with surgical traceability.
+> `git bisect` lands on the exact failing story. Each story is revertable on its own. And the completion protocol can promote decisions and knowledge back into `decisions.md` / `knowledge.md` with surgical traceability.
 
-### Files Are State
+### Files as the handoff protocol
 
-aihaus uses Claude Code's Agent tool plus file-based handoff. Per-agent artifact files (`REVIEW.md`, `CHALLENGES.md`, `VERIFICATION.md`) are the baseline; `CONVERSATION.md` turn logs are an optional shared shape for multi-round workflows. The parent skill is the sole writer on shared logs — agents never get `Write` access.
+aihaus never tries to have agents "talk to each other." Coordination happens through files. Every subagent writes its own artifact (`REVIEW.md`, `CHALLENGES.md`, `VERIFICATION.md`, etc.); for multi-round workflows an optional `CONVERSATION.md` turn log is kept, but the coordinator is the only writer — agents get `Read`, never `Write`.
 
-This means: no inter-agent messaging primitive, no shared mutable state, no race conditions. Every artifact is auditable. Every interrupted run is resumable. See **ADR-001** in `pkg/.aihaus/decisions.md`.
+What you get: full audit trail, mid-flight interruptions that resume cleanly, zero write races, and no dependency on an inter-agent messaging primitive that Claude Code doesn't actually offer. Details live in **ADR-001** at `pkg/.aihaus/decisions.md`.
 
-### Self-Evolution
+### Protocol that learns
 
-After each milestone, the system reviews its own effectiveness:
+Every completion protocol does one extra thing: reviews itself.
 
-1. **Reviewer** analyzes decisions and knowledge logs from the milestone.
-2. Proposes edits to agent definitions (new rules, new reads, protocol improvements).
-3. **Completion protocol** applies evidence-backed evolutions.
-4. Smoke test + purity check validate the changes.
-5. Next milestone starts with smarter agents.
+1. **Reviewer** inspects the milestone's decisions and knowledge logs.
+2. Drafts proposed edits to agent definitions — new read requirements, new protocol steps, new guardrails — backed by evidence from the milestone.
+3. The completion protocol applies evidence-backed proposals automatically.
+4. Smoke and purity checks validate the edits.
+5. The next milestone starts with agents that are slightly better-informed.
 
-This is not fine-tuning. It's protocol evolution — the markdown definitions that guide agents get refined through accumulated project experience.
+Nothing is fine-tuned and no weights move. What changes is the markdown that guides agents — refined against real project experience, one milestone at a time.
 
 ---
 
@@ -384,11 +371,11 @@ Multiple autonomous agents writing code simultaneously is a recipe for divergent
 
 ---
 
-## Token Usage
+## A note on token cost
 
-A full milestone with adversarial review, code review, security audit, and goal verification uses substantial context. **This is by design** — aihaus trades tokens for quality and autonomy. The alternative is spending your own time reviewing, re-prompting, and re-checking.
+A full milestone — adversarial review, code review, goal verification, and a security audit when relevant — is genuinely expensive. **That's the point of the trade.** You spend tokens to skip the parts of the job you used to do by hand: re-prompting, re-checking, re-reading diffs, re-explaining your stack every session.
 
-Cost-bound skills (like `/aih-brainstorm`) enforce hard caps pre-spawn so multi-specialist runs cannot explode. Default `/aih-brainstorm` flow: 5 subagent invocations. Maximum (5 panelists + `--deep` + `--research`): 13 invocations.
+Skills that could explode cost enforce hard caps *before* spawning. `/aih-brainstorm` runs 5 subagent invocations in its default flow; the maximum reachable run (5 panelists + `--deep` + `--research`) tops out at 13. Nothing hidden, nothing unbounded.
 
 ---
 
@@ -410,6 +397,6 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-**Claude Code is powerful. aihaus makes it autonomous.**
+**Think once. Approve once. Ship a milestone.**
 
 </div>
