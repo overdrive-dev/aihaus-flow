@@ -126,6 +126,41 @@ Spawn. The researcher writes `.aihaus/brainstorm/[slug]/RESEARCH.md` with VERIFI
 ## Phase 7 — Synthesis
 Spawn `brainstorm-synthesizer` (`subagent_type: "brainstorm-synthesizer"`). It reads every `PERSPECTIVE-*.md` + `CHALLENGES.md` + `RESEARCH.md` (if present) + `CONVERSATION.md` and writes `BRIEF.md`. The synthesizer fails closed if `CONVERSATION.md` has fewer than 3 `## Turn ` lines; surface its error verbatim and halt — no partial `BRIEF.md`.
 
+**Prompt-construction discipline — LOAD-BEARING.** The synthesizer's agent definition (`brainstorm-synthesizer.md`) owns the BRIEF.md 8-header schema as a Committed Contract. The operator MUST pass a minimal prompt that delegates schema entirely to the agent. Do NOT re-list section names, do NOT describe what to "cover," do NOT rename headers to fit the current topic. Re-specifying section names in the prompt is a contract violation — downstream `/aih-plan --from-brainstorm` and `/aih-milestone --from-brainstorm` consumers assert the exact 8 headers and will abort on drift.
+
+Use this minimal prompt template verbatim:
+
+```
+You are the synthesizer for the brainstorm at `.aihaus/brainstorm/<slug>/`.
+Read CONVERSATION.md, every PERSPECTIVE-*.md, CHALLENGES.md, and RESEARCH.md if present.
+Produce .aihaus/brainstorm/<slug>/BRIEF.md per your agent definition's committed 8-header schema.
+Return a one-line string after writing: the path to BRIEF.md and the Suggested Next Command line.
+```
+
+Additional context about panelist disagreements or contrarian findings belongs in the agent's *inputs* (the perspective files and CHALLENGES.md), not in the spawn prompt.
+
+## Phase 7.5 — BRIEF.md Schema Validation
+After the synthesizer returns, the skill (not the agent) reads `.aihaus/brainstorm/[slug]/BRIEF.md` and asserts the 8 H2 headers are present in exact order, spelling, and capitalization:
+
+1. `## Problem Statement`
+2. `## Perspectives Summary`
+3. `## Key Disagreements`
+4. `## Challenges`
+5. `## Research Evidence`
+6. `## Synthesis`
+7. `## Open Questions`
+8. `## Suggested Next Command`
+
+Validation command (bash): `grep -n "^## " .aihaus/brainstorm/[slug]/BRIEF.md` — compare against the canonical list.
+
+If any required header is missing or out-of-order, abort with this exact string and do NOT proceed to Phase 8:
+
+```
+BRIEF.md at <slug> failed schema validation — missing/out-of-order section(s): <list>. Re-run /aih-brainstorm <slug> or patch BRIEF.md manually before promoting.
+```
+
+Pass-through is silent — success emits no output and proceeds to Phase 8.
+
 ## Phase 8 — Handoff
 Print (to stdout):
 1. Absolute path to `BRIEF.md`.
