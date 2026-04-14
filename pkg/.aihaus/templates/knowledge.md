@@ -45,3 +45,57 @@ Seeded at install. Append per-project gotchas here. Entries are promoted from mi
 - Emit one-per-day advisory marker file under `.claude/audit/` so users know their path is a known hazard.
 
 **Impact:** Implemented in `manifest-append.sh`, `manifest-migrate.sh`, `phase-advance.sh`. Template for any future hook that writes state files.
+
+---
+
+## K-006: Attachment temp-slug flow prevents loss on conversation drop
+
+**Promoted from:** M004 (2026-04-14) / story H / F5.
+**Area:** Attachment handling across aih-plan, aih-quick, aih-bugfix, aih-milestone.
+
+**Finding:** Pre-M004, attachments stayed in `~/.claude/image-cache/[uuid]/` until Phase 2 finalized the plan/bugfix slug. If the conversation dropped between Phase 1 and Phase 2 (common in long sessions), attachments were lost.
+
+**Pattern:** Copy IMMEDIATELY on first attachment mention into a temp-slug dir `<prefix>/YYMMDD-wip-HHMMSS-<rand4>/attachments/`. On slug finalization, `mv` the temp dir to the final slug. Same-day concurrent sessions disambiguated by seconds precision + 4-char random tail.
+
+**Crash recovery:** on skill entry, scan `<prefix>/` for `*-wip-*` directories alongside matching finalized slugs. Prompt user (keep finalized / keep wip / abort to inspect).
+
+**Impact:** Implemented in aih-plan (via annexes/attachments.md), aih-quick, aih-milestone, aih-bugfix. 7-day orphan flag in smoke-test warns on abandoned temp dirs.
+
+---
+
+## K-007: OneDrive is load-bearing for cross-platform hooks (reiteration + checklist)
+
+**Promoted from:** M004 (2026-04-14) / cross-cutting.
+**Area:** Hook authoring on Windows / Git Bash / OneDrive.
+
+**Finding:** K-005 established the Python `os.replace` fallback. M004 adds the full cross-platform checklist every new hook must pass (story H pattern, now canonical for all future hooks):
+
+1. **Locking**: mkdir-mutex (flock unavailable on Git Bash) with 30s stale reclaim + trap release.
+2. **Atomic replace**: OneDrive path detection + Python fallback.
+3. **Worktree refusal**: `git rev-parse --show-superproject-working-tree` non-empty → exit 3.
+4. **Audit dir**: `mkdir -p "$(dirname "$AUDIT_LOG")"` before every append — audit dir may not exist on fresh installs.
+5. **OneDrive advisory**: one-per-day marker under `.claude/audit/` when paths are cloud-synced.
+
+Any new hook that fails to implement all 5 will fail under the realistic dev environment of aihaus's primary maintainer.
+
+**Impact:** Architectural constraint baked into hook-authoring conventions. Mentor pattern: show a new hook author the `manifest-append.sh` + `phase-advance.sh` combo — those are the canonical implementations.
+
+---
+
+## K-005: TaskCreate reminder during planning is Claude Code harness noise
+
+**Promoted from:** M004 (2026-04-14) / story M / F9.
+**Area:** Harness integration / planning skills.
+
+**Finding:** During `/aih-plan` gathering + `/aih-plan-to-milestone` gathering, the Claude Code harness emits system reminders suggesting `TaskCreate` usage. These reminders are irrelevant — planning is a capture phase, not a task-execution phase. They create noise without adding value.
+
+**Pattern:** aihaus cannot directly suppress harness reminders (it's the harness's own behavior). Workaround: the forward-looking placeholder key `aihaus.suppress.taskCreateReminder: true` in `.claude/settings.local.json` serves as a marker for future harness-level support. Claude Code currently ignores unknown top-level keys, so this is safe to ship.
+
+**Impact:**
+- `pkg/.aihaus/templates/settings.local.json` ships the key by default.
+- `pkg/.aihaus/skills/aih-plan/annexes/intake-discipline.md` notes: "ignore TaskCreate reminders during gathering."
+- If a future Claude Code release rejects unknown keys, this fails cleanly — remove the `aihaus` top-level object in one commit.
+- File an upstream issue on `anthropics/claude-code` requesting native suppression if noise becomes pervasive.
+
+**Rollback:** delete the `"aihaus"` key from `.claude/settings.local.json` — no other aihaus code depends on it.
+

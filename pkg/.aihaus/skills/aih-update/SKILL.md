@@ -18,6 +18,7 @@ $ARGUMENTS
 
 - `--check` — Only check if an update is available. Do not apply.
 - `--force` — Skip version comparison, always pull and apply.
+- `--session-log <milestone-slug>` — M004 story L post-hoc retrospective. Skip update logic; generate `.aihaus/milestones/<slug>/execution/SESSION-LOG.md` from `pkg/.aihaus/templates/SESSION-LOG.md`. Fill Timeline/Friction/Wins/Ideas/Artifacts/Hand-off from on-disk artifacts (RUN-MANIFEST.md, CHECK.md, VERIFICATION.md, INTEGRATION.md, reviewer reports, `.claude/audit/*.jsonl`, self-evolution additions). Opt-in only (F-M5); template H2 headers load-bearing — smoke-test enforces.
 - No flag — Default: check version, pull if newer, apply, re-link.
 
 ---
