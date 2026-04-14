@@ -152,7 +152,7 @@ The main conversation continues after this skill exits. Follow these rules for t
 ## Attachment Handling
 When a user message includes a pasted image or file:
 1. Detect source path. Pasted images land at `~/.claude/image-cache/[uuid]/[n].png`. Files referenced via absolute paths or drag-drop appear in the message text.
-2. Copy to `.aihaus/milestones/drafts/[slug]/attachments/[seq]-[short-desc].[ext]` using `cp`. Seq is 2-digit zero-padded (01, 02, ...). Short description derived from content (e.g., `login-error-screenshot`).
+2. Copy **immediately on first mention** via `cp`. If the draft's final slug is already set (Step 3 complete), copy to `.aihaus/milestones/drafts/[slug]/attachments/[seq]-[short-desc].[ext]`. If the slug is not yet set (Step 3 pending), copy to a temp-slug dir `.aihaus/milestones/drafts/YYMMDD-wip-HHMMSS-<rand4>/attachments/` and `mv` on Step 3 slug finalization (M004 story H — prevents loss if conversation drops before slug is decided). Seq is 2-digit zero-padded (01, 02, ...). Short description derived from content (e.g., `login-error-screenshot`). See `pkg/.aihaus/skills/aih-plan/annexes/attachments.md` for the canonical temp-slug + crash-recovery protocol.
 3. Describe the content in one sentence using your vision capability.
 4. Append to CONTEXT.md `## Attachments` section:
    ```

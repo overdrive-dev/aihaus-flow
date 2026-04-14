@@ -48,7 +48,7 @@ Hard ceilings regardless: 5 panelists, 2 rounds, 1 contrarian, 1 research agent.
 
 ## Phase 1 — Intake
 
-1. **Generate slug** — format `YYMMDD-lowercase-hyphen-topic`, max 40 chars total including the `YYMMDD` prefix (same format as `aih-plan/SKILL.md:48-51`).
+1. **Generate slug** — format `YYMMDD-lowercase-hyphen-topic`, max 40 chars total including the `YYMMDD` prefix (same format as `aih-plan/SKILL.md` Phase 2 step 8).
 2. **Create the brainstorm dir**: `mkdir -p .aihaus/brainstorm/[slug]/`.
 3. **Seed `CONVERSATION.md`** via heredoc with exactly this shape:
 
