@@ -75,10 +75,10 @@ check_agents() {
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 12 .sh files -------------------------------
+# ---- Check 3: .aihaus/hooks/ has 16 .sh files (post-M003) -------------------
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 12 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 16 .sh files"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
@@ -86,10 +86,10 @@ check_hooks() {
   fi
   local count
   count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 12 ]]; then
+  if [[ "$count" -eq 16 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 12 .sh files, found $count"
+    _fail "$label" "expected 16 .sh files, found $count"
   fi
 }
 

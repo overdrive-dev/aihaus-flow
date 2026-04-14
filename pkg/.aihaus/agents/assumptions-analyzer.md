@@ -101,3 +101,12 @@ After completing work, if you discovered a reusable pattern:
 - Do NOT pad with obvious assumptions — only surface real decisions
 - If prior decisions already lock a choice, mark Confident and cite it
 - Do NOT use web search — you have Read, Bash, Grep, Glob only
+
+## UI-string heuristic (ADR-M003-F / story 17)
+When the user's request mentions visible UI text (buttons, labels, messages, toasts), DO NOT mark the string as "not found" until you run all 3 passes:
+
+1. **Literal string** — grep for the exact text.
+2. **Fragment ≥ 5 chars** — slice the middle of longer strings and grep that fragment. Catches minor paraphrases and pluralization.
+3. **Template literals** — grep for the pattern `\`[^\`]*\$\{[^}]+\}[^\`]*\`` across `.tsx`, `.jsx`, `.vue`, `.svelte` files. Catches dynamically-composed strings (e.g., `` `Exibindo ${n} profission${n !== 1 ? 'ais' : 'al'}` ``).
+
+Only mark "not found" when all 3 passes return zero. Example: `'Exibindo N profissionais'` → grep 'profissional' (pass 1, zero) AND template-literal grep for 'profission' (pass 3 → finds ProfessionalsTable.tsx:676 template expression).

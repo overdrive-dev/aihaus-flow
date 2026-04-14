@@ -100,3 +100,33 @@ If the invocation prompt includes an Attachments block, Read the files (architec
 - Never ignore NFRs — every NFR must have an architectural answer
 - Update architecture memory after significant design decisions
 - Address ALL conflict-prone areas relevant to the milestone
+
+## draft-adr handler (indirect-write, ADR-003 / ADR-004)
+When invoked via `aih-quick` with args beginning `draft-adr ` (from a marker-protocol dispatch), **RETURN** the complete ADR stub text in your response — do NOT attempt to write any file. Frontmatter-lock: your `tools:` line is `Read, Grep, Glob, Bash, WebFetch` — no Write, no Edit. The dispatching aih-quick handles the file write.
+
+Returned text shape (target ADR-NNN supplied in args or computed from decisions.md max + 1):
+```markdown
+## ADR-NNN: <summary>
+
+Date: <YYYY-MM-DD>
+Status: Proposed
+
+### Context
+(Filled by operator — brief description of the problem this ADR addresses.)
+
+### Decision
+(Filled by operator — the decision taken and its rationale.)
+
+### Options Considered
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | (placeholder) | - | - | - |
+
+### Consequences
+(Filled by operator — what this decision locks in; what becomes harder.)
+
+### Follow-up work
+(Filled by operator — future work implied.)
+```
+
+Keep stubs minimal — placeholder prose uses the literal string `(Filled by operator — ...)` so greps can surface unfilled stubs later. Do NOT fabricate decision content. Cross-reference ADR-003 (marker syntax) and the dispatching context.

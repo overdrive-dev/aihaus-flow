@@ -20,7 +20,9 @@ $ARGUMENTS
 - `.aihaus/features/*/RUN-MANIFEST.md`
 - `.aihaus/bugfixes/*/RUN-MANIFEST.md`
 
-For each, read `Status:` line. Collect those where Status is `running`, `paused`, or any value that is NOT `completed`.
+**For each, FIRST call `bash .aihaus/hooks/manifest-migrate.sh` with `MANIFEST_PATH=<path>`** (ADR-004 / story B.3). Migrates v1 → v2 in place (backup to `.v1.bak`); no-op if already v2. Required before parsing — v2 uses `Metadata` block not `**Status:**` bullets.
+
+Then read Metadata `status:` field (v2) or fallback to `**Status:**` line (legacy, pre-migration). Collect those where status is `running`, `paused`, or any value that is NOT `completed`.
 
 ### 2. Legacy fallback (pre-manifest milestones)
 

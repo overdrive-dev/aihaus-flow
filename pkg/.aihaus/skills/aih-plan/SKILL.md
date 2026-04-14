@@ -123,7 +123,7 @@ If the plan involves new technical territory (unfamiliar framework, new service 
    ```
 
 5.5. **Adversarial plan-checker gate (delegate to plan-checker)**
-After PLAN.md is drafted, spawn `plan-checker` with `subagent_type: "plan-checker"`. Adversarial — must produce findings or written justification. Writes `.aihaus/plans/[slug]/CHECK.md`. If findings: update PLAN.md to address them. Cap at 2 iterations.
+After PLAN.md is drafted, spawn `plan-checker` with `subagent_type: "plan-checker"`. Adversarial — must produce findings or written justification. Writes `.aihaus/plans/[slug]/CHECK.md`. Pipe agent return through `bash .aihaus/hooks/invoke-guard.sh` (ADR-003) — on `INVOKE_OK` for `aih-quick draft-adr`, prompt user before dispatching. **Disposition-based verdict (ADR-M003-E):** if CHECK.md findings table has `Disposition` column → APPROVED = zero BLOCKER; else fall back to zero CRITICAL + zero HIGH. If not APPROVED: update PLAN.md. Cap at 2 iterations.
 
 6. **Report to the user:**
    - Summarize the plan in 3-5 bullet points

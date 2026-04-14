@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-aihaus is a workflow automation package for Claude Code. It provides 8 intent-based commands (`init`, `plan`, `bugfix`, `feature`, `milestone`, `help`, `quick`, `sync-notion`) that users install into their own repositories. There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, memory) and shell scripts (install/uninstall).
+aihaus is a workflow automation package for Claude Code. It provides 13 intent-based commands (`init`, `plan`, `plan-to-milestone`, `bugfix`, `feature`, `milestone`, `run`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`) that users install into their own repositories. There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
 
 ## Repo Structure
 
@@ -29,9 +29,9 @@ There is no build command, no type checker, and no unit test framework. The smok
 
 ## Package Contents (inside `pkg/`)
 
-- `pkg/.aihaus/skills/*/SKILL.md` — 8 skill definitions with YAML frontmatter. Each skill is a Claude Code command invoked as `/aih-<name>`.
-- `pkg/.aihaus/agents/*.md` — 17 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
-- `pkg/.aihaus/hooks/*.sh` — 12 shell hooks for Claude Code lifecycle events.
+- `pkg/.aihaus/skills/*/SKILL.md` — 13 skill definitions with YAML frontmatter. Each skill is a Claude Code command invoked as `/aih-<name>`.
+- `pkg/.aihaus/agents/*.md` — 43 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
+- `pkg/.aihaus/hooks/*.sh` — 16 shell hooks for Claude Code lifecycle events + M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance).
 - `pkg/.aihaus/memory/` — Empty memory index and directory structure (populated at runtime in target repos).
 - `pkg/.aihaus/templates/` — Starter `project.md` and `settings.local.json` templates.
 - `pkg/scripts/` — Cross-platform install/uninstall/update scripts (ship to users).

@@ -59,9 +59,12 @@ Write `PLAN-REVIEW.md` in the milestone/feature directory:
 [Does the plan achieve the stated goal? What gaps exist?]
 
 ## Findings
-| # | Severity | Category | Finding | Recommendation |
-|---|----------|----------|---------|----------------|
-| 1 | CRITICAL | [area] | [issue] | [fix] |
+| # | Severity | Disposition | Category | Finding | Recommendation |
+|---|----------|-------------|----------|---------|----------------|
+| 1 | CRITICAL | BLOCKER | [area] | [issue] | [fix] |
+
+**Severity** is your judgment on impact: CRITICAL / HIGH / MEDIUM / LOW.
+**Disposition** is the action policy: BLOCKER (gates promote; must be fixed) / RECOMMENDATION (noted, non-blocking) / NIT (minor). Default mapping: CRITICAL→BLOCKER, HIGH→RECOMMENDATION, MEDIUM/LOW→NIT. Override when needed (e.g., a HIGH that's truly load-bearing can escalate to BLOCKER).
 
 ## Absence Analysis
 [What's NOT in the plan that should be?]
@@ -76,11 +79,26 @@ Write `PLAN-REVIEW.md` in the milestone/feature directory:
 ```
 
 ## Revision Gate
-- Max 2 revision rounds. If plan still has CRITICAL findings after 2 rounds,
+- Max 2 revision rounds. If plan still has BLOCKER findings after 2 rounds,
   escalate to human with a clear summary of what's wrong.
-- APPROVED = zero CRITICAL + zero HIGH findings.
-- REVISE = has HIGH or CRITICAL findings that are fixable.
+- APPROVED = zero BLOCKER dispositions (per Disposition column rule, ADR-M003-E).
+  Fallback when the findings table has no Disposition column: APPROVED = zero CRITICAL + zero HIGH.
+- REVISE = has BLOCKER or RECOMMENDATION findings that are fixable.
 - REJECT = fundamental approach is wrong, needs complete rethink.
+
+## INVOKE marker emission (ADR-003)
+When a CRITICAL finding is a **load-bearing semantic design decision** (not a bug, not a missing story), emit as the LAST non-empty line of your return string:
+```
+<AIHAUS_INVOKE skill="aih-quick" args="draft-adr <one-line summary>" rationale="<≤200 chars — why the finding requires an ADR>" blocking="true"/>
+```
+Parent skill (aih-run / aih-plan / aih-plan-to-milestone) parses via invoke-guard.sh, prompts user, dispatches aih-quick inline-ADR mode (stories D.2/D.3).
+
+Emit rules:
+- Last non-empty line only. NO prose after the marker.
+- args + rationale each ≤ 200 chars.
+- `skill="aih-quick"` — only allowed target for ADR-capture.
+- `blocking="true"` — promote gates on user confirming ADR draft.
+- DO NOT emit for bug findings, scope findings, or fixable issues — only semantic design decisions.
 
 ## Conflict Prevention — Mandatory Reads
 Before reviewing:

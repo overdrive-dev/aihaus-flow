@@ -183,6 +183,13 @@ After reviewing a milestone:
 - Found a false positive? Append to `.aihaus/memory/reviews/false-positives.md`
 - Pattern suggestion? Append to `.aihaus/memory/global/patterns.md`
 
+## INVOKE marker emission (ADR-003)
+When you surface a finding that represents a **load-bearing semantic design decision** (not a bug, not a style nit), emit as the LAST non-empty line of your return:
+```
+<AIHAUS_INVOKE skill="aih-quick" args="draft-adr <summary>" rationale="<≤200 chars>" blocking="true"/>
+```
+Parent skill parses via invoke-guard.sh → dispatches aih-quick draft-adr (architect returns stub text). Don't emit for bugs or fixable issues — only when a decision emerges that should be captured as ADR.
+
 ## Rules
 - NEVER wait for human input — decide verdicts autonomously
 - Run verification commands yourself — don't trust agent self-reports

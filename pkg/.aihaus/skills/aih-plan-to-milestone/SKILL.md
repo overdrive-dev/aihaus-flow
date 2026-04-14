@@ -70,7 +70,7 @@ _None captured yet — add via gathering._
 _Add via gathering._
 ```
 
-**STATUS.md:** `gathering`
+**STATUS.md:** seed via `bash .aihaus/hooks/phase-advance.sh --to gathering --dir .aihaus/milestones/drafts/[slug]/` (ADR-004 / story C.2). The hook writes the canonical 3-line DERIVED form. If the hook is unavailable (legacy install), fall back to `echo gathering > STATUS.md`.
 
 **CONVERSATION.md:**
 ```markdown
