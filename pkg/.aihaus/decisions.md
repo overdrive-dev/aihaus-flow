@@ -155,7 +155,7 @@ remain Claude-Code-only and are documented as such in
 ## ADR-003: Agent→Skill invocation via last-line marker protocol (partial supersession of ADR-001)
 
 Date: 2026-04-14
-Status: Proposed
+Status: Accepted
 
 ### Context
 
@@ -276,7 +276,7 @@ agents to request mid-flight skill re-dispatch.
   consumer: `aih-quick draft-adr <summary>` runs INLINE on the
   orchestrator branch (no new worktree, no new commit) and invokes
   `architect` with the `draft-adr` handler (story 20) to write a stub
-  with `Status: Proposed`.
+  with `Status: Accepted`.
 
 ### Follow-up work
 
@@ -303,7 +303,7 @@ agents to request mid-flight skill re-dispatch.
 ## ADR-004: Single-writer discipline for RUN-MANIFEST.md + STATUS.md projection (amendment to ADR-001)
 
 Date: 2026-04-14
-Status: Proposed
+Status: Accepted
 
 ### Context
 
