@@ -99,3 +99,23 @@ Any new hook that fails to implement all 5 will fail under the realistic dev env
 
 **Rollback:** delete the `"aihaus"` key from `.claude/settings.local.json` — no other aihaus code depends on it.
 
+---
+
+## K-008: Dispatcher-only skills absorb into their destination skills
+
+**Promoted from:** v0.11.0 (2026-04-14) / ADR-006 retirement of `/aih-run` + `/aih-plan-to-milestone`.
+**Area:** Skill lifecycle / command-surface consolidation.
+
+**Finding:** A skill whose sole job is to route between two other skills (e.g., `/aih-run` routing small→feature-inline / large→milestone-execution) adds no unique capability. It can be retired cleanly by (a) porting each branch to its natural-home skill, (b) updating invoke-guard ALLOWLIST in the same story that retires the name (never prematurely — the old name must stay live while its last caller still depends on it), (c) shipping a new migration-notice block in `/aih-update` gated to the bump version, (d) accepting dangling symlinks as benign (update.sh bulk-replaces per dir via `rm -rf ${dst}; cp -R ${src}` — targets auto-clean on next update).
+
+**Anti-pattern:** alias-forwarding (`/aih-run` prints "use /aih-milestone" and dispatches). Aliases rot, smoke-test + COMPAT-MATRIX still need updates, users never learn the new commands. Hard-delete + migration notice is cleaner.
+
+**Anti-pattern 2:** directory-level tombstone stubs (keep skill dir with redirect notice for 1 release, hard delete later). Zero prior art in this repo; creates new surface (stubs, sunset timer, allow-list churn) for a one-shot deletion. `/aih-update` migration notice delivers the same muscle-memory safety with less complexity.
+
+**Pattern for subsequent absorb stories:**
+1. Mandatory annex split if absorbing skill crosses 200 lines (M004 story G pattern — commit `c49c845`). Smoke-test Check 5 enforces line limit; add a new Check for annex presence in the same commit.
+2. Port load-bearing invariants verbatim + add grep-based smoke-test check catching drift (Check 20 precedent — greps 3 M005 canonical phrases in the annex).
+3. Hook-call orchestration must be documented in a verbatim table (source line → `--field <X>` → destination step). Paraphrasing breaks ADR-004 phase-advance contract.
+4. Status-line supersession on affected ADRs (existing pattern — do not invent `## Amendment` subsections).
+
+**Impact:** Template for any future skill consolidation. The archived plan at `.aihaus/plans/.archive/260414-autonomy-reduce-interrupts/` documents the full multi-epic reduction roadmap; Epics E3 + E4 landed in v0.11.0; F (slug-less default) + G (Haiku inter-step validators) remain deferred pending production pain signal.

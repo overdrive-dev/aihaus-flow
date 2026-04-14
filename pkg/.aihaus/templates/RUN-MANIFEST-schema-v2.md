@@ -117,14 +117,14 @@ story_id|status|started_at|commit_sha|verified|notes
 
 ## Backward compatibility
 
-v1 manifests are detected by the ABSENCE of `schema: v2` in Metadata (or absence of `## Metadata` section entirely). `manifest-migrate.sh` (story 07) converts v1 → v2 in place, preserving a `.v1.bak` backup. `aih-resume` calls `manifest-migrate.sh` on entry; `aih-run` calls it once before the first `manifest-append.sh` operation. After migration, the `.v1.bak` file remains until the milestone completes (cleanup during completion protocol).
+v1 manifests are detected by the ABSENCE of `schema: v2` in Metadata (or absence of `## Metadata` section entirely). `manifest-migrate.sh` (story 07) converts v1 → v2 in place, preserving a `.v1.bak` backup. `aih-resume` calls `manifest-migrate.sh` on entry; `aih-milestone` (via `annexes/execution.md` Step E2) calls it once before the first `manifest-append.sh` operation. After migration, the `.v1.bak` file remains until the milestone completes (cleanup during completion protocol).
 
 ## Consumers
 
 | Consumer | Operation | Fields read |
 |----------|-----------|-------------|
 | `aih-resume/SKILL.md` | recovery | Metadata.status, Metadata.phase, Story Records (most recent per story_id) |
-| `aih-run/SKILL.md` | execution | Metadata, Story Records (append), Invoke stack (push/pop) |
+| `aih-milestone/annexes/execution.md` | execution | Metadata, Story Records (append), Invoke stack (push/pop) |
 | `manifest-append.sh` | mutation | all three sections |
 | `manifest-migrate.sh` | conversion | all three sections (from v1 shape) |
 | `phase-advance.sh` | STATUS projection | Metadata.phase, Invoke stack (non-empty refusal) |

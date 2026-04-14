@@ -142,22 +142,22 @@ Before reporting, surface any migration-relevant state:
 
 ### 12. Migration Notice (version-gated)
 
-Read the previous version stored in `.aihaus/.version` (or treat as `0.0.0` if missing). If the new version crosses the boundary where gathering-mode milestones were introduced (v0.2.0 or first version shipping `aih-run`), print:
+Read the previous version from `.aihaus/.version` (or treat as `0.0.0` if missing). Print the blocks whose boundary `prev_version` crosses (both may fire on a multi-version skip):
 
-```
-Migration notice — command surface changed:
-  /aih-milestone now enters gathering mode (conversational draft refinement).
-  New commands:
-    /aih-run                 — execute a ready draft or plan (no slug required)
-    /aih-resume              — pick up an interrupted run
-    /aih-plan-to-milestone   — promote a plan to a milestone draft
+- **`prev_version < 0.2.0`** — gathering-mode boundary:
+  ```
+  Migration (v0.2.0): /aih-milestone now enters gathering mode. /aih-resume added.
+  Backward-compat: /aih-milestone "desc" --execute preserves old one-shot behavior.
+  ```
+- **`prev_version < 0.11.0`** — command-retirement boundary:
+  ```
+  Migration (v0.11.0) — commands retired:
+    /aih-run                → /aih-milestone + "start" (or --execute), /aih-feature --plan <slug>
+    /aih-plan-to-milestone  → /aih-milestone --plan <slug> (first-class, no longer DEPRECATED)
+  Update muscle memory / CI scripts / keyboard snippets accordingly.
+  ```
 
-  Backward compat:
-    /aih-milestone "desc" --execute    — preserves old one-shot behavior
-    /aih-milestone --plan [slug]       — auto-routes to /aih-plan-to-milestone
-
-  Restart Claude Code to discover the new skills.
-```
+Append: "Restart Claude Code to pick up reshuffled skills." when any block fires.
 
 ### 13. Report
 

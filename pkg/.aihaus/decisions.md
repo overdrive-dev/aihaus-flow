@@ -3,7 +3,7 @@
 ## ADR-001: Files are state — no inter-agent messaging primitive
 
 Date: 2026-04-13
-Status: Superseded (partial) by ADR-003 (2026-04-14); amended by ADR-004 (2026-04-14)
+Status: Superseded (partial) by ADR-003 (2026-04-14); amended by ADR-004 (2026-04-14); further superseded (partial) by ADR-006 (2026-04-14 — RUN-MANIFEST.md ownership transferred from aih-run/SKILL.md to aih-milestone/SKILL.md + annexes/execution.md)
 
 ### Context
 aihaus needs a way for agents to read prior specialists' output during multi-step workflows. Claude Code offers two primitives: (1) Agent tool subagents (isolated, one-shot, return string), (2) Teammates with SendMessage (persistent, addressable).
@@ -155,7 +155,7 @@ remain Claude-Code-only and are documented as such in
 ## ADR-003: Agent→Skill invocation via last-line marker protocol (partial supersession of ADR-001)
 
 Date: 2026-04-14
-Status: Accepted
+Status: Accepted — Superseded (partial) by ADR-006 (2026-04-14 — ALLOWLIST + parent-dispatcher list updated; aih-run and aih-plan-to-milestone removed; aih-milestone + aih-feature added as dispatchers)
 
 ### Context
 
@@ -303,7 +303,7 @@ agents to request mid-flight skill re-dispatch.
 ## ADR-004: Single-writer discipline for RUN-MANIFEST.md + STATUS.md projection (amendment to ADR-001)
 
 Date: 2026-04-14
-Status: Accepted
+Status: Accepted — Superseded (partial) by ADR-006 (2026-04-14 — single-writer site for RUN-MANIFEST.md moves from aih-run/SKILL.md to aih-milestone/SKILL.md + annexes/execution.md; all hook-call pairings preserved verbatim)
 
 ### Context
 
@@ -534,3 +534,65 @@ ADR-002 was written before the Cursor plugin format was verified. It treated Cur
 - Marketplace submission (future milestone).
 - Live hot-reload verification once a maintainer with Cursor installed can run a sandbox.
 - Per-platform smoke test (install → verify plugin loads → uninstall).
+
+## ADR-006: Command surface consolidation — `/aih-run` and `/aih-plan-to-milestone` retired
+
+Date: 2026-04-14
+Status: Accepted
+
+### Context
+
+Running aihaus in production (post-M005 + M006 v0.10.0) surfaced a user report: the command surface has two structurally redundant skills that don't add unique capability over their siblings.
+
+- **`/aih-run`** is a scope-router. It scans `.aihaus/plans/` + `.aihaus/milestones/drafts/`, picks a candidate, then dispatches to either feature-inline logic (small scope, `feature/[slug]` branch, `.aihaus/features/[YYMMDD]-[slug]/` artifacts) or milestone-execution logic (large scope, agent team, RUN-MANIFEST lifecycle). The two branches have natural homes in sibling skills: `/aih-feature` (which already owns the `feature/[slug]` branch + artifact contract) and `/aih-milestone` (which already owns milestone drafts).
+- **`/aih-plan-to-milestone`** pre-flights milestone creation from a plan (M### auto-proposal, force-split gate, PLAN→CONTEXT mapping, backlink footer). `/aih-milestone` already exposed a DEPRECATED `--plan [slug]` flag that forwarded here — the pattern was half-done.
+
+M005 autonomy work (threshold gate, single-candidate skip, tiered git-dirty, autonomy-protocol annex) stabilized the execution primitives. The remaining friction is surface-level: users hit the redundant skills and lose time reasoning about why they exist.
+
+### Decision
+
+Retire both skills. Consolidate their functionality into the sibling skills whose contracts already fit the absorbed logic:
+
+1. **`/aih-plan-to-milestone` → `/aih-milestone --plan [slug]`.** The `--plan` flag moves from DEPRECATED to first-class, delegating to `pkg/.aihaus/skills/aih-milestone/annexes/promotion.md` for the 5-step promotion logic. `/aih-plan`'s large-scope threshold dispatch retargets from `aih-plan-to-milestone [slug]` to `aih-milestone --plan [slug]`.
+2. **`/aih-run` milestone-execution path → `/aih-milestone` via `annexes/execution.md`.** Triggered by `--execute` flag or start-intent ("start"/"go"/"kick off") on a ready draft. Ports the full Phase 3 execution pipeline (agent team, RUN-MANIFEST lifecycle, hook orchestration, completion protocol) verbatim, including the three M005 canonical invariants (tiered git-dirty auto-decide with renamed `aih-milestone pre-run stash` label, single-candidate silent proceed, 3-bullet pre-flight). `completion-protocol.md` and `team-template.md` relocated from `aih-run/` to `aih-milestone/` via `git mv`.
+3. **`/aih-run` feature-inline path → `/aih-feature --plan [slug]`.** `/aih-feature` already has the `--plan` flag, `feature/[slug]` branch, and `.aihaus/features/[YYMMDD]-[slug]/` artifact contract. `/aih-plan`'s small-scope threshold dispatch retargets from `aih-run [slug]` to `aih-feature --plan [slug]`.
+
+`invoke-guard.sh` ALLOWLIST updated: removes `aih-run` and `aih-plan-to-milestone`; retains `aih-feature` and `aih-milestone` as valid dispatch targets (alongside `aih-plan`, `aih-quick`, `aih-bugfix`).
+
+`/aih-update` Step 12 migration notice gains a new block gated `prev_version < v0.11.0` announcing the retirements and naming the new homes.
+
+### Rationale
+
+- **Contract fit.** `/aih-run`'s two code paths map cleanly to existing siblings — no new skill needed, no functionality lost. Absorbing into the correct target (not `/aih-quick`, which has a 5-file cap and no branch creation) preserves each skill's semantic identity.
+- **M005 invariants survive.** The three canonical phrases from M005 S04/S05/S08 are ported verbatim into `annexes/execution.md`. Smoke-test Check 20 greps for them — any drift fails CI.
+- **Hook orchestration integrity.** ADR-004's phase-advance contract depends on exact `--field invoke-push` / `--field invoke-pop` pairings. `annexes/execution.md` documents the hook-call table verbatim; implementer ports word-for-word rather than paraphrasing.
+- **Migration channel.** `/aih-update`'s new notice block fires for any v0.10.x → v0.11.0+ upgrade. Users with muscle memory or CI scripts referencing `/aih-run` or `/aih-plan-to-milestone` see the replacement commands on next update.
+- **No new convention invented.** Status-line supersession follows the existing ADR-001 → ADR-003 / ADR-002 → ADR-005 pattern. No `## Amendment` subsection added. Prior ADRs amended via single status-line change.
+- **Breaking change accepted.** `invoke-guard.sh` rejects markers naming the retired skills (`INVOKE_REJECT allowlist`). Users on v0.10.x who keep typing `/aih-run [slug]` get "skill not found" with migration-notice guidance on next update.
+
+### Options Considered
+
+| # | Option | Why Not |
+|---|--------|---------|
+| 1 | Keep both skills — refactor prose only | Preserves redundancy; user explicitly asked for removal |
+| 2 | Fold `/aih-run` into `/aih-quick` (literal archived Epic E3) | `/aih-quick` has 5-file cap, no branch creation; milestone-execution (130+ lines of hook orchestration) doesn't fit its semantic |
+| 3 | Directory-level tombstone stubs for 1 release, hard delete later | Zero prior art (`git log --diff-filter=D` on skills/ is empty); `/aih-update` migration notice delivers same muscle-memory safety with less surface area |
+| 4 | Alias `aih-run` → `aih-milestone --execute` | Aliases rot; users never learn new commands; ALLOWLIST + smoke-test still need updates |
+| 5 | Ship all remaining archived Epics E/F/G at once | No production pain signal for Haiku validators (G) or slug-less default (F); user explicitly deferred pending real usage evidence |
+
+### Consequences
+
+- **Version bump v0.11.0** (breaking command-surface change; minor since pre-1.0).
+- **Skill count 13 → 11.** `pkg/.aihaus/skills/aih-run/` and `pkg/.aihaus/skills/aih-plan-to-milestone/` deleted; `pkg/.aihaus/skills/aih-milestone/annexes/{promotion,execution}.md` created (mandatory annex split per M004 story G pattern).
+- **Two new smoke-test checks** (Check 19, Check 20) enforce annex presence and M005 canonical-phrase preservation. Regression-proof against silent drift.
+- **COMPAT-MATRIX delta.** `aih-run` row deleted. `aih-milestone` flipped from WORKS-WITH-CAVEAT to NOT-SUPPORTED on Cursor (the skill now runs `Agent` + worktree-isolated subagents, violating Cursor's primitive model). Skill totals: 11 rows = 2 WORKS + 5 WORKS-WITH-CAVEAT + 4 NOT-SUPPORTED.
+- **`/aih-update` persistence.** New migration-notice block fires on any upgrade from v0.10.x, preserved through the v0.11.0 → v1.0 window.
+- **Hook ALLOWLIST shrinks** from 6 entries to 5 (retains aih-quick, aih-bugfix, aih-feature, aih-plan, aih-milestone).
+- **Dangling symlinks on upgrade are benign.** `pkg/scripts/update.sh` bulk-replaces `.aihaus/skills/` per dir (`rm -rf ${dst}; cp -R ${src}`), so stale `aih-run/` and `aih-plan-to-milestone/` symlinks in target repos auto-cleanup on next `/aih-update`.
+- **Rollback path: `git revert` the 3 story commits (S01/S02/S03).** No database, no external state, no persistent user-visible artifacts beyond the migration-notice text. Version bump reverses by editing `VERSION` back to `0.10.0` in the revert commit.
+- **Self-referential bootstrap paradox documented.** The plan that retires these skills was written via `/aih-plan` and initially suggested promoting via `/aih-plan-to-milestone`. Resolved by running as inline 3-story plan (no milestone draft promotion) — a one-time exception for a self-referential retirement.
+
+### Follow-up work
+
+- Future milestone may revisit archived Epics F (slug-less default auto-detect) and G (Haiku inter-step validators) once production usage produces pain signal for either area.
+- `pkg/scripts/install.sh` could be extended to prune retired skill symlinks explicitly (rather than relying on the per-dir bulk replace). Low priority — current behavior is correct, just leaves brief dangling state between script steps.
