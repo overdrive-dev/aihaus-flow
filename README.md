@@ -98,7 +98,7 @@ Verify with:
 aihaus ships often. When you want the latest:
 
 ```bash
-/aih-update          # Pull latest from remote, re-link, re-run smoke-test
+/aih-update          # Pull latest from remote, re-link, re-run validation
 /aih-update --check  # Just check whether an update is available
 ```
 

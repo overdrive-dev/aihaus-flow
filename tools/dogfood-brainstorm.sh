@@ -6,11 +6,11 @@
 # USAGE:
 #   Panel mode (--deep regression, default):
 #     1. /aih-brainstorm "what makes a good morning routine?" --deep
-#     2. bash pkg/scripts/dogfood-brainstorm.sh --slug <slug>
+#     2. bash tools/dogfood-brainstorm.sh --slug <slug>
 #   Conversational-default mode (v0.6.0+):
 #     1. /aih-brainstorm "some lightweight question"
 #        (no --deep; optionally end with synthesis-escalation consent)
-#     2. bash pkg/scripts/dogfood-brainstorm.sh --slug <slug> --mode conversational
+#     2. bash tools/dogfood-brainstorm.sh --slug <slug> --mode conversational
 #
 # Slug is explicit (no mtime-fallback) because /aih-brainstorm is a slash
 # command and concurrent brainstorms would cause silent false passes.
@@ -60,7 +60,7 @@ case "$MODE" in
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BDIR="${REPO_ROOT}/.aihaus/brainstorm/${SLUG}"
 CONV="${BDIR}/CONVERSATION.md"
 BRIEF="${BDIR}/BRIEF.md"

@@ -122,7 +122,8 @@ echo "$PKG_REMOTE" > .aihaus/.install-source
 ### 10. Run smoke test (if available)
 
 ```bash
-bash "$PKG_LOCAL/pkg/scripts/smoke-test.sh" 2>/dev/null
+[[ -f "$PKG_LOCAL/tools/smoke-test.sh" ]] || { echo "tools/smoke-test.sh missing in $PKG_LOCAL — migration notice: older clone layout. Re-run /aih-update after a clean clone."; return 0; }
+bash "$PKG_LOCAL/tools/smoke-test.sh" 2>/dev/null
 ```
 
 If it fails, warn but don't rollback — the user can investigate.

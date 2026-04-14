@@ -8,8 +8,11 @@
 set -u
 
 # ---- Resolve package root relative to this script ---------------------------
+# Pin to pkg/ explicitly so all check paths (Check 10/11 arrays, .aihaus/...,
+# templates/..., README.md, LICENSE, VERSION) keep resolving inside the
+# shipped package even though this script now lives in repo-root/tools/.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PACKAGE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PACKAGE_ROOT="$(cd "$SCRIPT_DIR/../pkg" && pwd)"
 
 FAILURES=0
 CHECK_NUMBER=0

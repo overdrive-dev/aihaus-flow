@@ -19,10 +19,10 @@ Self-evolution: when agents improve their own definitions during milestone execu
 
 ```bash
 # Smoke test — validates package structure, file counts, frontmatter, templates
-bash pkg/scripts/smoke-test.sh
+bash tools/smoke-test.sh
 
 # Purity check — ensures no references to foreign framework names
-bash pkg/scripts/purity-check.sh
+bash tools/purity-check.sh
 ```
 
 There is no build command, no type checker, and no unit test framework. The smoke test is the primary validation gate.
@@ -34,14 +34,15 @@ There is no build command, no type checker, and no unit test framework. The smok
 - `pkg/.aihaus/hooks/*.sh` — 12 shell hooks for Claude Code lifecycle events.
 - `pkg/.aihaus/memory/` — Empty memory index and directory structure (populated at runtime in target repos).
 - `pkg/.aihaus/templates/` — Starter `project.md` and `settings.local.json` templates.
-- `pkg/scripts/` — Cross-platform installers and validation scripts.
+- `pkg/scripts/` — Cross-platform install/uninstall/update scripts (ship to users).
+- `tools/` — Maintainer-only scripts (validation, purity, regression, release-notes generator; never ship to users).
 
 ## Key Conventions
 
 - **Skills must declare `name: aih-<slug>`** in YAML frontmatter and stay under 200 lines. The smoke test enforces both.
 - **Agents declare** `name`, `tools`, `model`, and `memory` in YAML frontmatter. `implementer`, `frontend-dev`, and `code-fixer` use `isolation: worktree` and `permissionMode: bypassPermissions`.
 - **Agents are stack-agnostic.** They read `.aihaus/project.md` at runtime for stack details. Never hardcode languages, frameworks, or directory structures in agent definitions.
-- **The purity check** scans all shipped files for references to foreign framework names. Any match fails the check. See the `FORBIDDEN_TERMS` array in `pkg/scripts/purity-check.sh` for the full denylist.
+- **The purity check** scans all shipped files for references to foreign framework names. Any match fails the check. See the `FORBIDDEN_TERMS` array in `tools/purity-check.sh` for the full denylist.
 - **`project.md`** uses marker comments (`<!-- AIHAUS:AUTO-GENERATED-START -->` / `<!-- AIHAUS:MANUAL-START -->`) to separate machine-owned and human-owned sections.
 - **Conflict prevention:** All code-writing agents must read `.aihaus/decisions.md` (ADRs) and `.aihaus/knowledge.md` before implementation.
 - **Self-evolution:** After milestones, the reviewer proposes agent definition improvements based on accumulated decisions and knowledge. The completion protocol applies approved evolutions.
@@ -52,7 +53,7 @@ When modifying a skill, preserve the two-phase pattern: (1) ask scoping question
 
 When modifying an agent, keep it read-only unless it's `implementer`, `frontend-dev`, or `code-fixer` (those have write tools). The `reviewer` and `code-reviewer` agents must never modify code.
 
-After any change to skills, agents, or hooks, run `bash pkg/scripts/smoke-test.sh` to validate counts and frontmatter.
+After any change to skills, agents, or hooks, run `bash tools/smoke-test.sh` to validate counts and frontmatter.
 
 ## Installer Behavior
 
@@ -65,3 +66,17 @@ To use aihaus on this repo itself:
 bash pkg/scripts/install.sh --target .
 ```
 This creates `.aihaus/` (gitignored) with symlinks back to `pkg/.aihaus/`. Local artifacts accumulate in `.aihaus/` while package improvements go to `pkg/.aihaus/`.
+
+## Releasing
+
+After a milestone merges, generate a user-facing release-note draft:
+
+```bash
+bash tools/generate-release-notes.sh M0XX > tools/.out/release-notes-M0XX.md
+```
+
+The generator filters maintainer-only `tools/` paths and omits any Validation section, so `smoke-test`, `purity-check`, and `dogfood-brainstorm` changes don't bleed into user-visible notes. Review the draft, then publish:
+
+```bash
+gh release create vX.Y.Z --title "vX.Y.Z — <milestone title>" --notes-file tools/.out/release-notes-M0XX.md
+```

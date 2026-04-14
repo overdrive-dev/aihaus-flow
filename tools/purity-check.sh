@@ -22,8 +22,10 @@ FORBIDDEN_TERMS=("gsd" "bmad" "sparc" "claude-flow" "ruv-swarm" "agentic-flow" "
 set -u
 
 # ---- Resolve package root relative to this script --------------------------
+# Pin to pkg/ explicitly. Purity is a "what ships" check — its scope is the
+# publishable package only, not the whole repo and not tools/ itself.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PACKAGE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PACKAGE_ROOT="$(cd "$SCRIPT_DIR/../pkg" && pwd)"
 SELF_NAME="$(basename "$0")"
 
 # ---- Build the regex -------------------------------------------------------
