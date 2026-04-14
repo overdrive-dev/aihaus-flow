@@ -22,15 +22,38 @@ $ARGUMENTS
 - **Multiple** → present a table (slug, created, estimated scope summary), ask user to pick.
 - **Zero** → "No plans found. Run `/aih-plan` first."
 
+## Step 1.5 — Auto-propose milestone number (M004 story J)
+
+Before drafting CONTEXT.md, scan for the next M### slot:
+```bash
+find .aihaus/milestones/ -maxdepth 2 -name 'M[0-9][0-9][0-9]*' -type d | sort -V | tail -1
+```
+Extract the numeric ID, increment by 1, zero-pad to 3 digits. Display:
+`Suggested milestone number: M0XX. Use this? (y/n/<custom>)`
+
+If user supplies a custom number that already exists, re-prompt. `aih-run` remains authoritative at execute time (it also re-numbers) — this proposal is informational.
+
+## Step 1.6 — Force-split decision gate (M004 story K)
+
+Inspect PLAN.md:
+- Story count > 12 (count by scanning Estimated Scope table or Proposed Approach sub-milestones), OR
+- Any Risk row with Likelihood=High AND Impact=High
+→ emit a split-decision prompt listing stories grouped by sub-milestone. Ask user which subset to promote now vs defer.
+
+On **defer** choice: create `.aihaus/milestones/drafts/<next-M>-<deferred-theme>/DRAFT.md` with only the deferred stories + a backlink to the main draft. User runs `/aih-plan-to-milestone` separately when ready.
+
+Override: `--no-split` bypasses the prompt (flag documented; do not use silently).
+
 ## Step 2 — Load Plan
 
 Parse PLAN.md sections:
 - `## Problem Statement` → becomes the draft's Goal.
-- `## Proposed Approach` → becomes the draft's Scope (may need light summarization for fit).
-- `## Affected Files` → becomes the draft's Affected Areas (extract file paths + descriptions).
-- `## Risk Assessment` → copied verbatim into a References/Risks subsection.
-- `## Alternatives Considered` → copied verbatim under Decisions (keeps reasoning trail).
-- `## Estimated Scope` → copied verbatim under Scope as a sub-block.
+- `## Proposed Approach` → **summarized** in the draft's Scope (1 paragraph per sub-section + an explicit `See: ../../../plans/[slug]/PLAN.md#proposed-approach` link). Do NOT verbatim-copy — PLAN.md stays canonical. (M004 story I — F4.)
+- `## Affected Files` → **summarized** as a list of top-level paths + link `See: ../../../plans/[slug]/PLAN.md#affected-files`.
+- `## Risk Assessment` → copied verbatim into a References/Risks subsection (risks are short; full content in draft is more readable than a link).
+- `## Alternatives Considered` → copied verbatim under Decisions (keeps reasoning trail; short tables).
+- `## Estimated Scope` → copied verbatim under Scope as a sub-block (short; numbers change based on user decisions).
+- `## Attachments` (if present): **referenced** (do not re-copy files — draft links back to plan's attachments dir via relative path).
 
 ## Step 3 — Create Draft
 
@@ -50,13 +73,17 @@ Create `.aihaus/milestones/drafts/[slug]/`:
 _None captured yet — add via gathering._
 
 ## Scope
-[Proposed Approach content]
+[1-paragraph summary of Proposed Approach]
+
+See: `../../../plans/[slug]/PLAN.md#proposed-approach` for full detail.
 
 ### Estimated Scope (from plan)
-[Estimated Scope block]
+[Estimated Scope block — verbatim]
 
 ## Affected Areas
-[Affected Files content, reformatted as a list with paths]
+[List of top-level paths — 1 line each]
+
+See: `../../../plans/[slug]/PLAN.md#affected-files` for full table.
 
 ## References
 ### Risks (from plan)
@@ -79,13 +106,13 @@ _Seeded from plan .aihaus/plans/[slug]/PLAN.md on [date]._
 _Raw user messages appended during gathering below._
 ```
 
-## Step 3.5 — Copy Attachments
-If `.aihaus/plans/[slug]/attachments/` exists and has files, copy them to `.aihaus/milestones/drafts/[slug]/attachments/`:
-```bash
-mkdir -p .aihaus/milestones/drafts/[slug]/attachments
-cp -R .aihaus/plans/[slug]/attachments/. .aihaus/milestones/drafts/[slug]/attachments/
+## Step 3.5 — Reference Attachments (do NOT re-copy; M004 story I / F4)
+If `.aihaus/plans/[slug]/attachments/` exists, reference it from CONTEXT.md via a relative-path link rather than duplicating files:
+```markdown
+## Attachments
+See: `../../../plans/[slug]/attachments/` (N files — see PLAN.md Attachments section for descriptions).
 ```
-Copy the `## Attachments` section from PLAN.md into the new CONTEXT.md (paths stay relative and still resolve).
+PLAN.md stays canonical; the draft stays thin. If PLAN.md is later archived, the backlink-broken smoke-test check flags it.
 
 ## Step 4 — Backlink from the Plan
 
