@@ -195,3 +195,5 @@ Summarize:
 - Stories completed, decisions promoted, knowledge added
 - Artifact path: `.aihaus/milestones/[M0XX]-[slug]/`
 - Next: "Merge or push the branch."
+
+**Autonomy:** See `_shared/autonomy-protocol.md` — binding rules; overrides contradictory prose above.

@@ -194,3 +194,6 @@ When running inside the aihaus-flow repo itself (detected by `pkg/` existing):
 - If git fetch fails, report the error and stop gracefully.
 - If the smoke test fails after update, warn but don't rollback.
 - Write `.aihaus/.version` and `.aihaus/.install-source` for future updates.
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.

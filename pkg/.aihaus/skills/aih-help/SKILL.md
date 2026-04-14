@@ -184,3 +184,6 @@ All artifacts live under `.aihaus/`:
 - `.aihaus/bugfixes/[YYMMDD]-[slug]/` — Bugfix summaries + RUN-MANIFEST.md
 - `.aihaus/memory/` — Persistent agent memory
 - `.aihaus/decisions.md` / `.aihaus/knowledge.md` — Optional project-wide logs
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.

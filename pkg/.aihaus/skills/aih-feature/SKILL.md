@@ -151,16 +151,10 @@ Create these files:
 [What tests passed, what checks ran]
 ```
 
-**decisions.md** — Any decisions made during implementation (if any):
+**decisions.md / knowledge.md** — Optional per-feature notes (if any decisions or discoveries were made):
 ```markdown
-# Decisions: [feature title]
-<!-- Append one entry per decision made during implementation -->
-```
-
-**knowledge.md** — Anything discovered (if any):
-```markdown
-# Knowledge: [feature title]
-<!-- Append one entry per discovery made during implementation -->
+# Decisions / Knowledge: [feature title]
+<!-- Append one entry per decision or discovery during implementation -->
 ```
 
 ### Step 11.5: Goal-Backward Verification (delegate to verifier)
@@ -197,3 +191,5 @@ Update RUN-MANIFEST.md: set Status `completed`, Phase `completed`, append final 
 - Test/verification results
 - Path to artifacts
 - Any decisions or discoveries worth noting
+
+**Autonomy:** See `_shared/autonomy-protocol.md` — binding rules; overrides contradictory prose above.

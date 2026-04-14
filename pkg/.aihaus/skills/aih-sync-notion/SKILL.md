@@ -75,3 +75,6 @@ During card triage and intake sync, if the user describes an implementable chang
 - Read `.aihaus/milestones/[M0XX]-[slug]/execution/` for the latest implementation state
 - Read `.aihaus/project.md` for project-level context
 - Requires `NOTION_TOKEN` in the environment
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.

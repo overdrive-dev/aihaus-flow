@@ -180,3 +180,6 @@ Update RUN-MANIFEST.md: set Status `completed`, Phase `completed`, append final 
 - Tests added/updated
 - Verification results
 - Artifact location: `.aihaus/bugfixes/[YYMMDD]-[slug]/`
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.

@@ -179,3 +179,6 @@ The only exception is an explicit out-of-band execution signal ("fix this now", 
 - Archive on execution — draft moves to `.aihaus/milestones/drafts/.archive/[YYMMDD]-[slug]/` by `/aih-run`.
 - The `--execute` flag exists for backward compat; do not default to it.
 - Capture, don't execute — see section above.
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.

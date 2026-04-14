@@ -40,3 +40,6 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, follow `annexes/from-brains
 ## Guardrails (short form — full list in `annexes/guardrails.md`)
 - No git branches, no source edits, no writes outside `.aihaus/plans/`.
 - Capture, don't execute — explicit override hands off to `/aih-quick` or `/aih-bugfix`.
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.

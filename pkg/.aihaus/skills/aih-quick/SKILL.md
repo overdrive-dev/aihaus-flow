@@ -48,3 +48,6 @@ If the user pastes an image/file, copy **immediately on first mention** to a tem
 - If the change touches more than 5 files, STOP and suggest using `/aih-feature` instead
 - If the change requires a database migration or schema change (and the project uses a database), STOP and suggest `/aih-plan` or `/aih-milestone` first
 - If the change affects user-facing behavior in a meaningful way, STOP and suggest `/aih-feature` first so it gets a plan and review
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.

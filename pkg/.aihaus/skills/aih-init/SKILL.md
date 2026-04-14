@@ -192,3 +192,6 @@ expected — they live inside the MANUAL region and are the user's to fill).
 - If anything fails, surface the error and leave `.aihaus/project.md`
   untouched (first-run mode) or restore from `.aihaus/project.md.bak`
   (re-run mode) before exiting.
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.

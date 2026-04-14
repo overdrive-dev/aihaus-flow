@@ -148,3 +148,6 @@ After the draft is seeded and during subsequent gathering messages, if the user 
 - NEVER execute the milestone — hand off to `/aih-run`.
 - If a draft already exists for the slug, ask the user: "Draft exists. Overwrite or pick a new slug?"
 - Capture, don't execute — see section above.
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.

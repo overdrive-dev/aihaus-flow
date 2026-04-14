@@ -194,3 +194,6 @@ If during intake or panelist turns the user raises an implementable aside ("whil
 - `/aih-resume` does NOT pick up brainstorms — brainstorm is interactive exploration, not interruptible execution.
 - `/aih-sync-notion` does NOT sync brainstorms — research artifacts stay local; only promoted plans/milestones sync.
 - Skill is sole writer on `CONVERSATION.md` (ADR-001). Panelists write only their own `PERSPECTIVE-<role>.md`. Contrarian writes nothing. Synthesizer writes only `BRIEF.md`.
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
