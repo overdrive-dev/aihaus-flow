@@ -57,7 +57,7 @@ If `{milestone_dir}/execution/AGENT-EVOLUTION.md` exists and has proposals:
    - Do NOT remove Conflict Prevention reads or Self-Evolution sections
    - Log the change: "Agent [name] evolved: [one-line summary]"
 3. Skip proposals that are speculative or lack evidence
-4. Run `bash scripts/purity-check.sh` — revert any evolution that fails
+4. Run `[[ -f tools/purity-check.sh ]] && bash tools/purity-check.sh || echo "purity-check unavailable (maintainer-only) — skipping"` — revert any evolution that fails
 5. Report: "[N] agent evolutions applied, [M] deferred"
 
 ## Step 4.6: Update Living Architecture

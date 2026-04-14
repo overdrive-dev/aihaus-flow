@@ -18,9 +18,6 @@ desktop.ini
 # The publishable package source is in pkg/.aihaus/ (committed separately).
 /.aihaus/
 
-# Old top-level scripts dir (moved to pkg/scripts/)
-/scripts/
-
 # Temp files
 *.tmp
 *.bak
