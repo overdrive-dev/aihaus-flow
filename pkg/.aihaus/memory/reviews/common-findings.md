@@ -78,4 +78,22 @@ Recurring patterns observed across reviews. Each entry is a pattern that appeare
 
 ---
 
+## CF-007: Meta-milestones ship schema + consumers across stories without a reconciliation gate
+
+**First observed:** 2026-04-14 review of `M003-260414-workflow-core-atomicity-invoke` (findings F-C1, F-M4)
+
+**Pattern:** When a milestone introduces BOTH a new data schema AND multiple downstream consumers of that schema across different stories, the schema-author story (story N) and the consumer stories (N+K) can drift from each other silently. Examples from M003: story 03 (schema v2) defines columns that stories 05/06/11/19 consume — but a column required by story 19's pass-through logic (parent_pid / correlation-id) is hand-waved across those consumer stories and never mandated in the schema spec. The plan is internally consistent per-story but cross-story-broken. Similarly, story 20 asks `architect.md` to write a new ADR stub, but architect's existing `tools:` line lacks Write — a constraint the story claims is already satisfied, but that constraint was never verified against the actual agent file.
+
+**Detection:** When a milestone introduces a new schema + multiple consumers:
+1. Enumerate every field/column/key the downstream stories reference.
+2. Cross-check: is each one declared in the schema-author story's Acceptance Criteria?
+3. For every agent the plan amends with new behavior: grep that agent's current `tools:` line. Is the capability assumed by the new behavior actually present?
+4. If either (2) or (3) fails → CRITICAL. The plan will either ship broken or one story will silently under-spec.
+
+**Recommended remediation:** Add a "schema consumers reconciliation" story (or an explicit acceptance-criteria bullet in the schema-author story) that enumerates EVERY consumer story and EVERY field each one reads. Require that list to match 1:1 to the schema grammar. For agent tools: add a pre-flight check in every story that modifies an agent that the existing `tools:` line contains the capabilities the new prose assumes.
+
+**Process feedback for `/aih-plan`:** Cross-story schema drift is invisible to linear reviews. Consider a "shape graph" artifact in the plan phase that lists every novel data structure + every story that reads/writes it, so reviewers can trace consistency.
+
+---
+
 _Appended by plan-checker during self-evolution. Future passes: promote patterns that recur across 3+ reviews into the reviewer's evolution-pass queue._
