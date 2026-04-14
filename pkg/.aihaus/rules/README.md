@@ -1,21 +1,19 @@
-# aihaus on Cursor — PREVIEW
+# aihaus on Cursor
 
-> Preview, not production. Feedback: https://github.com/overdrive-dev/aihaus-flow/discussions
-
-aihaus is Claude-Code-primary. This `cursor-preview/` directory documents
-the extent to which aihaus coexists with Cursor via Cursor's `.claude/*`
-compatibility paths. It is documentation — no Cursor-specific code, no
-installer changes, no changes to anything Claude Code users see.
+aihaus is multi-platform — Cursor and Claude Code are both first-class install targets.
+This directory holds the Cursor-facing rules file and compatibility matrix that travel
+with the aihaus plugin when installed into a Cursor workspace (see ADR-005 in
+`pkg/.aihaus/decisions.md`).
 
 ## How aihaus and Cursor coexist
 
 Cursor's Skills and Subagents subsystems natively read `.claude/skills/`
 and `.claude/agents/` as legacy-compatibility paths (verified 2026-04-14,
 see `.aihaus/research/cursor-primitives-verification.md`). aihaus's
-standard installer symlinks these paths to `.aihaus/skills` and
-`.aihaus/agents`. The result: on any machine with both tools installed,
-aihaus skills and agents that do not depend on Cursor-contradicted
-primitives are visible to Cursor without any port or adaptation.
+installer can target either `.claude/` (for Claude Code) or the Cursor
+plugin root, so after `install.sh --target .` all aihaus skills and
+agents that do not depend on Cursor-contradicted primitives are visible
+to Cursor without any port or adaptation.
 
 Two primitives aihaus relies on are CONTRADICTED on Cursor:
 
@@ -29,36 +27,27 @@ Two primitives aihaus relies on are CONTRADICTED on Cursor:
 Any skill that depends on those primitives is NOT-SUPPORTED on Cursor.
 For the per-skill and per-agent verdict, see `COMPAT-MATRIX.md`.
 
-## How to adopt the preview
-
-**Step 1 — install aihaus normally.** Nothing Cursor-specific here; the
-installer is unchanged:
+## Install on Cursor
 
 ```bash
 git clone https://github.com/overdrive-dev/aihaus-flow ~/tools/aihaus
 cd your-project
-bash ~/tools/aihaus/pkg/scripts/install.sh --target .
+bash ~/tools/aihaus/pkg/scripts/install.sh --target . --platform cursor
 ```
 
-This creates `.claude/skills` and `.claude/agents` as symlinks to
-`.aihaus/skills` and `.aihaus/agents`. Cursor reads these automatically.
+The installer detects `--platform cursor` and symlinks (or copies, with
+`--copy`) `~/.cursor/plugins/local/aihaus` → `pkg/.aihaus/`. Cursor's
+plugin subsystem reads the manifest at `pkg/.aihaus/.cursor-plugin/plugin.json`
+and discovers rules/, skills/, agents/, and hooks/ as siblings.
 
-**Step 2 — copy the Cursor rules file into your project.** One file, one
-command:
+**After install, restart Cursor** to pick up the new plugin. Hot-reload
+of `~/.cursor/plugins/local/` additions is not confirmed in the docs
+(see Story 1 research notes); restart is the safe default.
 
-```bash
-cp ~/tools/aihaus/cursor-preview/aihaus.mdc .cursor/rules/
-```
-
-The rules file documents tool-name translation
-(`Agent` + `subagent_type:` → `Task` + `/name` mention), the hook event
-rename (`userPromptSubmit` → `beforeSubmitPrompt`), and explicitly lists
-flows that are NOT-SUPPORTED so Cursor's agent does not try to run them.
-
-**Step 3 — consult the compatibility matrix.** Before invoking any skill
-or agent from Cursor, check `COMPAT-MATRIX.md` for its status. The
-matrix is hand-authored and dated; row status reflects a 2026-04-14
-verification pass against the Cursor docs.
+Default `--platform` is auto-detected from the environment
+(`CURSOR_*` env vars → cursor; `CLAUDE_*` → claude; both/neither → claude
+with a warning). `--platform both` installs to both targets when the
+machine runs both tools.
 
 ## What you get — and what you don't
 
@@ -84,27 +73,19 @@ verification pass against the Cursor docs.
 - Any subagent declaring `isolation: worktree` or
   `permissionMode: bypassPermissions`.
 
-If you want `/aih-run` milestone execution, use Claude Code. Cursor
-preview is compat-only.
+If you need `/aih-run` milestone execution, use Claude Code. Cursor
+coverage is intentionally partial while Cursor's primitives differ.
 
-## Reversibility
-
-This preview is designed to be reversed in one commit. To uninstall:
+## Uninstall
 
 ```bash
-rm -rf ~/your-project/.cursor/rules/aihaus.mdc
+bash ~/tools/aihaus/pkg/scripts/uninstall.sh --platform cursor
 ```
 
-On the aihaus side, deleting `cursor-preview/` + removing the README
-subsection + removing the smoke-test lint + reverting ADR-002 restores
-pre-preview state. No `pkg/` changes were made.
+Removes `~/.cursor/plugins/local/aihaus`. Your project's `.aihaus/` runtime
+state is preserved.
 
 ## Feedback
 
-This is a preview. Report mismatches, missing matrix rows, breakage, or
-ideas at https://github.com/overdrive-dev/aihaus-flow/discussions.
-
-Signal threshold for continued investment: ≥3 distinct engagements
-(issues, discussions, PRs — not stars) by 2026-06-01. Below that, the
-preview will be sunset. See
-`.aihaus/milestones/drafts/.pending/260601-cursor-preview-decision.md`.
+Report mismatches, missing matrix rows, or breakage at
+https://github.com/overdrive-dev/aihaus-flow/discussions.

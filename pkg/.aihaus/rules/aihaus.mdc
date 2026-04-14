@@ -1,15 +1,14 @@
 ---
-description: "aihaus compat for Cursor — preview"
+description: "aihaus on Cursor — supported surface and primitive differences"
 globs: ["**/*"]
 alwaysApply: false
 ---
 
-# aihaus on Cursor — PREVIEW
-> Preview, not production. File bugs: https://github.com/overdrive-dev/aihaus-flow/discussions
+# aihaus on Cursor
 
-aihaus is Claude-Code-primary. This rules file documents which pieces of
-aihaus can run on Cursor via its `.claude/*` compatibility paths and which
-cannot. The installer is unchanged — no Cursor-specific install step.
+aihaus is multi-platform: Cursor and Claude Code are both first-class install targets
+(see `pkg/.aihaus/decisions.md` ADR-005). This rules file documents which parts of aihaus
+run on Cursor today and which stay Claude-Code-only because of primitive gaps.
 
 ## What works unmodified
 
@@ -82,10 +81,10 @@ Cursor documentation (see `.aihaus/research/cursor-primitives-verification.md`).
   but the read-only discipline becomes prompt-level rather than tool-level.
   Listed as WORKS-WITH-CAVEAT in the matrix.
 
-See `cursor-preview/COMPAT-MATRIX.md` for the per-skill and per-agent verdict
+See `COMPAT-MATRIX.md` (sibling file) for the per-skill and per-agent verdict
 with reasons and a last-verified date.
 
 ## Feedback
 
-This is a preview. Report mismatches, missing rows, or breakage at
+Report mismatches, missing rows, or breakage at
 https://github.com/overdrive-dev/aihaus-flow/discussions.
