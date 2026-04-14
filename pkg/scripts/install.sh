@@ -10,16 +10,20 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--target <path>] [--copy] [--update]
+Usage: install.sh [--target <path>] [--copy] [--update] [--platform <target>]
 
 Installs aihaus into a target git repository.
 
 Options:
-  --target <path>   Target directory (default: current working directory)
-  --copy            Copy files instead of symlinking (fallback for
-                    locked-down environments)
-  --update          Re-sync package dirs only; preserve local data
-  -h, --help        Show this message
+  --target <path>      Target directory (default: current working directory)
+  --copy               Copy files instead of symlinking (fallback for
+                       locked-down environments)
+  --update             Re-sync package dirs only; preserve local data
+  --platform <name>    Install target: claude | cursor | both
+                       Default: claude (preserves pre-v0.10.0 behavior).
+                       cursor: also link ~/.cursor/plugins/local/aihaus.
+                       both:   install for Claude Code AND Cursor.
+  -h, --help           Show this message
 EOF
 }
 
@@ -32,6 +36,7 @@ PKG_TEMPLATES="${PKG_ROOT}/templates"
 TARGET="${PWD}"
 MODE="link"
 UPDATE="0"
+PLATFORM="claude"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -47,6 +52,14 @@ while [[ $# -gt 0 ]]; do
     --update)
       UPDATE="1"
       shift
+      ;;
+    --platform)
+      [[ $# -ge 2 ]] || { echo "ERROR: --platform requires a value (claude|cursor|both)" >&2; exit 2; }
+      case "$2" in
+        claude|cursor|both) PLATFORM="$2" ;;
+        *) echo "ERROR: --platform must be one of: claude, cursor, both" >&2; exit 2 ;;
+      esac
+      shift 2
       ;;
     -h|--help)
       usage; exit 0
@@ -70,9 +83,10 @@ if [[ "${UPDATE}" == "1" ]]; then
 else
   echo "aihaus installer"
 fi
-echo "  package: ${PKG_ROOT}"
-echo "  target:  ${TARGET}"
-echo "  mode:    ${MODE}"
+echo "  package:  ${PKG_ROOT}"
+echo "  target:   ${TARGET}"
+echo "  mode:     ${MODE}"
+echo "  platform: ${PLATFORM}"
 
 # Step 2: require a git repo
 if [[ ! -d "${TARGET}/.git" ]] && ! git -C "${TARGET}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -125,9 +139,7 @@ else
   cp -R "${PKG_AIHAUS}/." "${TARGET}/.aihaus/"
 fi
 
-# Step 5+6: create .claude/{skills,agents,hooks} as links or copies
-mkdir -p "${TARGET}/.claude"
-
+# Step 5+6: create .claude/{skills,agents,hooks} as links or copies (Claude Code target)
 link_or_copy() {
   local name="$1"
   local src="${TARGET}/.aihaus/${name}"
@@ -155,15 +167,20 @@ link_or_copy() {
   echo "  copy: .claude/${name}"
 }
 
-for name in skills agents hooks; do
-  link_or_copy "${name}"
-done
+if [[ "${PLATFORM}" == "claude" || "${PLATFORM}" == "both" ]]; then
+  mkdir -p "${TARGET}/.claude"
+  for name in skills agents hooks; do
+    link_or_copy "${name}"
+  done
+fi
 
-# Step 7: merge settings template into .claude/settings.local.json
+# Step 7: merge settings template into .claude/settings.local.json (Claude target only)
 SETTINGS_SRC="${PKG_TEMPLATES}/settings.local.json"
 SETTINGS_DST="${TARGET}/.claude/settings.local.json"
 
-if [[ ! -f "${SETTINGS_SRC}" ]]; then
+if [[ "${PLATFORM}" == "cursor" ]]; then
+  : # skip settings merge on Cursor-only install
+elif [[ ! -f "${SETTINGS_SRC}" ]]; then
   echo "  warn: settings template missing at ${SETTINGS_SRC}, skipping merge"
 else
   if [[ ! -f "${SETTINGS_DST}" ]]; then
@@ -206,14 +223,41 @@ PY
   fi
 fi
 
+# Step 7.5: Cursor plugin setup (platform in {cursor, both})
+if [[ "${PLATFORM}" == "cursor" || "${PLATFORM}" == "both" ]]; then
+  CURSOR_PLUGINS_DIR="${HOME}/.cursor/plugins/local"
+  CURSOR_LINK="${CURSOR_PLUGINS_DIR}/aihaus"
+  PLUGIN_ROOT="${TARGET}/.aihaus"
+  mkdir -p "${CURSOR_PLUGINS_DIR}"
+  if [[ -L "${CURSOR_LINK}" || -e "${CURSOR_LINK}" ]]; then
+    rm -rf "${CURSOR_LINK}"
+  fi
+  if [[ "${MODE}" == "link" ]]; then
+    if ln -s "${PLUGIN_ROOT}" "${CURSOR_LINK}" 2>/dev/null; then
+      echo "  link: ~/.cursor/plugins/local/aihaus -> ${PLUGIN_ROOT}"
+    else
+      echo "  warn: cursor symlink failed, falling back to copy"
+      cp -R "${PLUGIN_ROOT}" "${CURSOR_LINK}"
+      echo "  copy: ~/.cursor/plugins/local/aihaus"
+    fi
+  else
+    cp -R "${PLUGIN_ROOT}" "${CURSOR_LINK}"
+    echo "  copy: ~/.cursor/plugins/local/aihaus"
+  fi
+fi
+
 # Step 8: write install mode marker
 echo "${MODE}" > "${TARGET}/.aihaus/.install-mode"
+echo "${PLATFORM}" > "${TARGET}/.aihaus/.install-platform"
 
 # Step 9: success message
 echo ""
 if [[ "${UPDATE}" == "1" ]]; then
-  echo "aihaus updated (${MODE} mode)."
+  echo "aihaus updated (${MODE} mode, platform: ${PLATFORM})."
 else
-  echo "aihaus installed (${MODE} mode)."
+  echo "aihaus installed (${MODE} mode, platform: ${PLATFORM})."
+  if [[ "${PLATFORM}" == "cursor" || "${PLATFORM}" == "both" ]]; then
+    echo "Restart Cursor to pick up the aihaus plugin."
+  fi
   echo "Run /aih-init to bootstrap project.md"
 fi

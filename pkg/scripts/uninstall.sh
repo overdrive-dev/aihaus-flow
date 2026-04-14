@@ -9,19 +9,21 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: uninstall.sh [--target <path>] [--purge]
+Usage: uninstall.sh [--target <path>] [--purge] [--platform <target>]
 
 Removes aihaus files from a target repository while preserving user data.
 
 Options:
-  --target <path>   Target directory (default: current working directory)
-  --purge           Delete ALL .aihaus/ data including project.md (prompts)
-  -h, --help        Show this message
+  --target <path>      Target directory (default: current working directory)
+  --purge              Delete ALL .aihaus/ data including project.md (prompts)
+  --platform <name>    Uninstall from: claude | cursor | both (default: both)
+  -h, --help           Show this message
 EOF
 }
 
 TARGET="${PWD}"
 PURGE="0"
+PLATFORM="both"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,6 +31,13 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { echo "ERROR: --target requires a path" >&2; exit 2; }
       TARGET="$2"; shift 2 ;;
     --purge) PURGE="1"; shift ;;
+    --platform)
+      [[ $# -ge 2 ]] || { echo "ERROR: --platform requires a value" >&2; exit 2; }
+      case "$2" in
+        claude|cursor|both) PLATFORM="$2" ;;
+        *) echo "ERROR: --platform must be one of: claude, cursor, both" >&2; exit 2 ;;
+      esac
+      shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -73,17 +82,34 @@ if [[ "${PURGE}" == "1" ]]; then
     echo "Aborted."
     exit 0
   fi
-  for name in skills agents hooks; do remove_claude_entry "${name}"; done
+  if [[ "${PLATFORM}" == "claude" || "${PLATFORM}" == "both" ]]; then
+    for name in skills agents hooks; do remove_claude_entry "${name}"; done
+  fi
   if [[ -e "${AIHAUS}" ]]; then
     rm -rf "${AIHAUS}"; echo "  removed:      .aihaus/ (purged)"; touched="1"
   fi
 else
   # Normal mode: remove package-installed parts only
-  for name in skills agents hooks; do remove_claude_entry "${name}"; done
+  if [[ "${PLATFORM}" == "claude" || "${PLATFORM}" == "both" ]]; then
+    for name in skills agents hooks; do remove_claude_entry "${name}"; done
+  fi
   for name in skills agents hooks memory; do remove_aihaus_sub "${name}"; done
-  # Remove install-mode marker (created by installer)
+  # Remove install-mode markers (created by installer)
   if [[ -f "${AIHAUS}/.install-mode" ]]; then
     rm -f "${AIHAUS}/.install-mode"; touched="1"
+  fi
+  if [[ -f "${AIHAUS}/.install-platform" ]]; then
+    rm -f "${AIHAUS}/.install-platform"; touched="1"
+  fi
+fi
+
+# Cursor plugin cleanup (platform in {cursor, both})
+if [[ "${PLATFORM}" == "cursor" || "${PLATFORM}" == "both" ]]; then
+  CURSOR_LINK="${HOME}/.cursor/plugins/local/aihaus"
+  if [[ -L "${CURSOR_LINK}" || -e "${CURSOR_LINK}" ]]; then
+    rm -rf "${CURSOR_LINK}"
+    echo "  removed:      ~/.cursor/plugins/local/aihaus"
+    touched="1"
   fi
 fi
 
