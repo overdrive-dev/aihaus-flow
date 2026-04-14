@@ -38,7 +38,7 @@ Not every multi-agent workflow needs a CONVERSATION.md. Simple fan-out + synthes
 ## ADR-002: aihaus is Claude-Code-primary with Cursor compat-only support
 
 Date: 2026-04-14
-Status: Accepted
+Status: Superseded by ADR-005 on 2026-04-14 (multi-platform stance — both Cursor and Claude Code are first-class install targets)
 
 ### Context
 A user question about porting aihaus to Cursor surfaced a brainstorm at
@@ -485,3 +485,52 @@ milestones).
   emitter/parser/dispatcher separation keeps agents away from this
   file entirely — only parent skills ever write via
   `manifest-append.sh`.
+
+---
+
+## ADR-005: aihaus is multi-platform — Cursor and Claude Code are both first-class install targets
+
+Date: 2026-04-14
+Status: Accepted
+
+Supersedes ADR-002 (2026-04-14) which framed aihaus as Claude-Code-primary with Cursor as preview/compat-only.
+
+### Context
+
+ADR-002 was written before the Cursor plugin format was verified. It treated Cursor as a compat-only environment reachable via `.claude/` legacy paths, with a `cursor-preview/` scaffolding directory and a sunset-by-signal review clause. The v0.8.0 verification report (`.aihaus/research/cursor-primitives-verification.md`) and the 2026-04-14 plugin-format refresh (`.aihaus/research/cursor-plugin-format.md`) together produced enough evidence to elevate Cursor to a first-class target:
+
+- Cursor ships a documented plugin format (`.cursor-plugin/plugin.json`) that bundles rules, skills, agents, hooks, commands, and MCP servers — the same conceptual surface aihaus already ships.
+- Local install is a git-backed directory at `~/.cursor/plugins/local/<name>` — the same symlink pattern aihaus already uses for `.claude/`.
+- Two primitives stay contradicted on Cursor (`isolation: worktree`, `permissionMode: bypassPermissions`) and their dependents remain NOT-SUPPORTED — but this is now a documented partial-coverage matrix, not a reason to gate out the entire plugin surface.
+
+### Decision
+
+1. **Cursor is a first-class install target.** Users run `install.sh --platform cursor` (or `--platform both`) and get a functional aihaus plugin on Cursor. The `--platform claude` default preserves pre-v0.10.0 behavior (byte-identical install path).
+2. **File layout (Strategy B).** `.cursor-plugin/plugin.json` lives at `pkg/.aihaus/.cursor-plugin/plugin.json`. `pkg/.aihaus/` is the plugin root. `rules/`, `skills/`, `agents/`, `hooks/` sit as siblings of `.cursor-plugin/` — matching Cursor's documented example layout. No repo-root symlinks into `pkg/`. See `.aihaus/milestones/M006-cursor-native-install/execution/S1-DECISION.md` for the Strategy A vs B trade-off.
+3. **Cursor rules file is shipped, not preview.** `cursor-preview/` is deleted; its contents live at `pkg/.aihaus/rules/` with PREVIEW framing removed. The compatibility matrix stays authoritative for per-skill verdicts.
+4. **Authoring convention.** New skills and agents are authored platform-aware. If a skill or agent depends on a Cursor-contradicted primitive, the COMPAT-MATRIX.md row is updated in the same commit (NOT-SUPPORTED). CLAUDE.md documents this expectation.
+5. **Marketplace submission out of scope** for M006. Local install is the deliverable. A future milestone may cover marketplace packaging, signing, and submission.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | Keep ADR-002 preview stance | No churn; conservative | Cursor users stay second-class; signal threshold in ADR-002 is arbitrary | Evidence (plugin format verified) removes the rationale for preview framing |
+| 2 | Strategy A — plugin.json at repo root with path-override field | Single manifest location | No documented path-override field; risks silent breakage on Cursor updates | Strategy B aligns with documented pattern |
+| 3 | Multi-platform via environment auto-detect (implicit) | No user-facing flag | Opaque; users can't force a target on dual-tool machines | `--platform` is explicit and reversible |
+
+### Consequences
+
+- Version bump v0.10.0 (M006).
+- `cursor-preview/` directory removed from repo.
+- `pkg/.aihaus/.cursor-plugin/plugin.json`, `pkg/.aihaus/.cursor-plugin/README.md` created.
+- `pkg/.aihaus/rules/` created with migrated content (PREVIEW framing dropped).
+- `pkg/scripts/install.sh` + `uninstall.sh` gain `--platform` flag.
+- `CLAUDE.md` Package Contents updated; authoring convention documented.
+- Two unresolved sub-questions tracked as UNVERIFIED (hot-reload, strict JSON validation) — non-blocking; documented in install README and re-checked on quarterly Cursor-doc cadence.
+
+### Follow-up work
+
+- Marketplace submission (future milestone).
+- Live hot-reload verification once a maintainer with Cursor installed can run a sandbox.
+- Per-platform smoke test (install → verify plugin loads → uninstall).

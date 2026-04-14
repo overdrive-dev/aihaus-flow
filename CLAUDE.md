@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-aihaus is a workflow automation package for Claude Code. It provides 13 intent-based commands (`init`, `plan`, `plan-to-milestone`, `bugfix`, `feature`, `milestone`, `run`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`) that users install into their own repositories. There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
+aihaus is a workflow automation package for Claude Code **and** Cursor (multi-platform since v0.10.0 / M006 — see ADR-005). It provides 13 intent-based commands (`init`, `plan`, `plan-to-milestone`, `bugfix`, `feature`, `milestone`, `run`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`) that users install into their own repositories via `install.sh --platform <claude|cursor|both>`. There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, rules, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
 
 ## Repo Structure
 
@@ -29,9 +29,12 @@ There is no build command, no type checker, and no unit test framework. The smok
 
 ## Package Contents (inside `pkg/`)
 
-- `pkg/.aihaus/skills/*/SKILL.md` — 13 skill definitions with YAML frontmatter. Each skill is a Claude Code command invoked as `/aih-<name>`.
+- `pkg/.aihaus/skills/*/SKILL.md` — 13 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code (or as a `Task` mention on Cursor).
+- `pkg/.aihaus/skills/_shared/autonomy-protocol.md` — binding execution-autonomy rules (M005 / ADR-bound-to-all-skills): 3-phase rule, TRUE blocker definition, no option menus, no delegated typing. Every SKILL.md references it.
 - `pkg/.aihaus/agents/*.md` — 43 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
 - `pkg/.aihaus/hooks/*.sh` — 16 shell hooks for Claude Code lifecycle events + M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance).
+- `pkg/.aihaus/rules/` — Cursor plugin rules and compatibility matrix (M006; `aihaus.mdc`, `COMPAT-MATRIX.md`, `README.md`). Consumed by Cursor's plugin subsystem when installed with `--platform cursor` or `--platform both`.
+- `pkg/.aihaus/.cursor-plugin/plugin.json` — Cursor plugin manifest (M006; Strategy B per ADR-005). `pkg/.aihaus/` is the plugin root when installed on Cursor.
 - `pkg/.aihaus/skills/aih-plan/annexes/*.md` — 4 annex files (attachments, intake-discipline, from-brainstorm, guardrails) — M004 enxugamento of the aih-plan core SKILL.md.
 - `pkg/.aihaus/templates/SESSION-LOG.md` — template for `/aih-update --session-log <slug>` post-hoc retrospective (M004 story L).
 - `pkg/.aihaus/memory/` — Empty memory index and directory structure (populated at runtime in target repos).
@@ -57,9 +60,17 @@ When modifying an agent, keep it read-only unless it's `implementer`, `frontend-
 
 After any change to skills, agents, or hooks, run `bash tools/smoke-test.sh` to validate counts and frontmatter.
 
+**Multi-platform authoring (since M006 / ADR-005).** aihaus ships to both Claude Code and Cursor. When adding a new skill or agent, consider cross-platform behavior:
+
+- If the skill/agent relies on `isolation: worktree` or `permissionMode: bypassPermissions`, it cannot run on Cursor (Cursor lacks both primitives). Update `pkg/.aihaus/rules/COMPAT-MATRIX.md` with a NOT-SUPPORTED row in the same commit.
+- If it uses the `Agent` tool for subagent spawning, Cursor users invoke the same surface via `Task` + `/<name>` mentions — the rules file handles tool-name translation, no skill-side change needed.
+- Prefer per-agent `tools:` whitelists even though Cursor inherits parent tools (the read-only discipline is documented in COMPAT-MATRIX.md and still enforced on Claude Code).
+
 ## Installer Behavior
 
 The install scripts create symlinks (Unix) or directory junctions (Windows) from `.claude/{skills,agents,hooks}` to `.aihaus/{skills,agents,hooks}` in the target repo. The `--copy` flag forces file copies instead. Settings are merged (not overwritten) using `jq` or Python as a fallback.
+
+Since M006, both install.sh and uninstall.sh accept `--platform <claude|cursor|both>`. Default is `claude` (preserves pre-v0.10.0 behavior byte-identical). `cursor` additionally symlinks `~/.cursor/plugins/local/aihaus` → `<target>/.aihaus`. `both` does both. A `.aihaus/.install-platform` marker records the choice for update.sh.
 
 ## Dogfooding
 
