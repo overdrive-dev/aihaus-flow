@@ -15,7 +15,7 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, follow `annexes/from-brains
 ## Phase 1 — Capture + clarify
 1. **Silent context load:** `.aihaus/memory/MEMORY.md`, `.aihaus/project.md`, `.aihaus/decisions.md`, `.aihaus/knowledge.md`.
 2. **Assumptions** (delegate): spawn `assumptions-analyzer` → writes `.aihaus/plans/[slug]/ASSUMPTIONS.md` with evidence-tagged findings. Surface blockers before asking.
-3. **Clarify** in one batch (1-3 questions): goal, constraints/deadlines, scope size (bugfix / feature / milestone), + any high-confidence blocker from assumptions-analyzer. Wait for answer.
+3. **Clarify (conditional)** — default position is **proceed**. Ask only when ≥2 dimensions are genuinely missing AND the missing info materially changes the plan. Dimensions: (i) goal/intent, (ii) constraint/deadline, (iii) scope hint (bugfix vs feature vs milestone), (iv) attachment context. Heuristic: if `$ARGUMENTS` includes a specific file/function/path OR references an attachment OR is a well-formed "I want X because Y", **skip the question step entirely** and proceed to Phase 2. When asking is justified, ask **at most 1** question — the highest-leverage one informed by assumptions-analyzer evidence (not hypothetical). Wait only on that one. See `_shared/autonomy-protocol.md` — questions are evidence-driven, not ritual.
 4. **Intake discipline:** see `annexes/intake-discipline.md`. Capture, don't execute.
 
 ## Phase 2 — Research + write plan
