@@ -5,7 +5,7 @@
 # Exit codes: 0 (INVOKE_OK / NO_INVOKE), 2 (INVOKE_REJECT *).
 set -euo pipefail
 
-ALLOWLIST="aih-quick aih-bugfix aih-feature aih-plan aih-plan-to-milestone aih-run"
+ALLOWLIST="aih-quick aih-bugfix aih-feature aih-plan aih-milestone aih-run"
 MAX_LEN=200
 MAX_DEPTH=3
 AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/invoke.jsonl}"

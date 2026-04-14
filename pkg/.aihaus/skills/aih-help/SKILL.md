@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # aihaus Workflow Commands
 
-aihaus is a four-pillar intent-based workflow package. **Scope** the work, optionally **promote** a plan into a milestone draft, **execute** autonomously, and **resume** if interrupted.
+aihaus is a four-pillar intent-based workflow package. **Scope** the work, optionally **promote** a plan into a milestone draft (via `/aih-milestone --plan`), **execute** autonomously, and **resume** if interrupted.
 
 ## ⚠️ Upgrading from v0.1.x? Read this first
 
@@ -26,7 +26,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 | Pillar | Commands | Purpose |
 |--------|----------|---------|
 | **Scope** | `/aih-plan`, `/aih-milestone`, `/aih-brainstorm` | Create plans / gather milestone context / explore fuzzy ideas |
-| **Promote** | `/aih-plan-to-milestone` | Hand off a plan into a milestone draft for refinement |
+| **Promote** | `/aih-milestone --plan [slug]` | Seed a milestone draft from a `PLAN.md` (absorbed from the retired `/aih-plan-to-milestone` in v0.11.0) |
 | **Execute** | `/aih-run`, `/aih-feature`, `/aih-bugfix`, `/aih-quick` | Start autonomous work |
 | **Continue** | `/aih-resume` | Pick up an interrupted run |
 
@@ -37,8 +37,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 | `/aih-init` | Bootstrap aihaus in a project — creates `.aihaus/` layout and seeds project memory | First time using aihaus in a repo |
 | `/aih-plan [description]` | Research and write a concrete, implementable plan without changing code — produces `PLAN.md` | You have a concrete task and want to think before building |
 | `/aih-brainstorm "<topic>" [--panel <roles>] [--deep] [--research]` | Multi-specialist exploratory panel for fuzzy "how should we think about X" questions — produces `BRIEF.md` that feeds `/aih-plan --from-brainstorm` or `/aih-milestone --from-brainstorm` | The problem is open-ended and you want diverse perspectives before committing to an approach |
-| `/aih-plan-to-milestone [slug]` | Promote a plan to a milestone draft for conversational refinement | Plan is big enough to warrant milestone treatment |
-| `/aih-milestone [description]` | Enter gathering mode — iteratively build a milestone draft via conversation | You want to scope a milestone across multiple messages |
+| `/aih-milestone [description]` | Enter gathering mode — iteratively build a milestone draft via conversation. Use `--plan [slug]` to seed from an existing `PLAN.md` | You want to scope a milestone across multiple messages, or promote a plan |
 | `/aih-run [slug]` | Execute a ready milestone draft or plan — no slug required, picks from available | You have a draft/plan ready to execute |
 | `/aih-resume [slug]` | Resume an interrupted run — detects in-progress work via RUN-MANIFEST.md | Session crashed, context reset, or you paused execution |
 | `/aih-bugfix [description or error]` | Triage root cause, branch, fix, test, commit | Known bug or error message |
@@ -66,7 +65,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 ```
 /aih-plan Add billing subsystem with Stripe
   -> PLAN.md created
-/aih-plan-to-milestone 260412-billing
+/aih-milestone --plan 260412-billing
   -> milestone draft seeded from plan
 (iterate context conversationally)
 /aih-run 260412-billing
@@ -100,7 +99,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 ## Backward Compat
 
 - `/aih-milestone "desc" --execute` — one-shot behavior (pre-gathering-mode) preserved as escape hatch.
-- `/aih-milestone --plan [slug]` — auto-routes to `/aih-plan-to-milestone [slug]`, then enters gathering.
+- `/aih-milestone --plan [slug]` — first-class plan-promotion flag. Seeds draft from `PLAN.md` + enters gathering. Absorbed from the retired `/aih-plan-to-milestone` (v0.11.0).
 - `/aih-feature --plan [slug]` — still works for feature-from-plan shortcuts.
 
 ## Project Memory
@@ -129,7 +128,7 @@ Two shapes share this filename, distinguished by the first line:
 
 | Shape | First line | Used by |
 |-------|-----------|---------|
-| User-message log | `# Conversation Log: [slug]` | `/aih-milestone`, `/aih-plan-to-milestone` |
+| User-message log | `# Conversation Log: [slug]` | `/aih-milestone` (including `--plan` promotion) |
 | Turn log | `# Conversation: [slug]` | `/aih-brainstorm` (and future panels) |
 
 Turn block format (most recent last, `---` separator between turns):
@@ -166,7 +165,7 @@ If you see lots of permission prompts during autonomous execution:
 
 ## Intake Discipline (v0.4.0+)
 
-During `/aih-milestone` gathering, `/aih-plan` research, `/aih-plan-to-milestone` handoff, and `/aih-sync-notion` triage, implementable mid-conversation requests are **captured** into the artifact's task list — never executed inline. Explicit execution signals ("fix this now", "just do it") hand off to `/aih-quick` or `/aih-bugfix` with an acknowledged context switch.
+During `/aih-milestone` gathering (including `--plan` handoff), `/aih-plan` research, and `/aih-sync-notion` triage, implementable mid-conversation requests are **captured** into the artifact's task list — never executed inline. Explicit execution signals ("fix this now", "just do it") hand off to `/aih-quick` or `/aih-bugfix` with an acknowledged context switch.
 
 ## Multimodal Attachments (v0.3.0+)
 

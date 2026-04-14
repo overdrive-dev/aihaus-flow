@@ -58,8 +58,8 @@ machine runs both tools.
   `codebase-mapper`, `pattern-mapper`, `user-profiler`, `contrarian`).
 - `/aih-help` — pure reference.
 - `/aih-init` — bootstraps `project.md` (one write prompt).
-- `/aih-plan`, `/aih-plan-to-milestone` — authoring flows that stop at a
-  `PLAN.md` or milestone draft; no autonomous build.
+- `/aih-plan`, `/aih-milestone --plan [slug]` — authoring flows that stop
+  at a `PLAN.md` or milestone draft; no autonomous build.
 - `/aih-brainstorm` in default conversational mode — ping-pong
   exploration, no agents spawned.
 - `/aih-quick` — parent-agent implementation; Cursor prompts per write.

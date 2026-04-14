@@ -87,7 +87,7 @@ Any new hook that fails to implement all 5 will fail under the realistic dev env
 **Promoted from:** M004 (2026-04-14) / story M / F9.
 **Area:** Harness integration / planning skills.
 
-**Finding:** During `/aih-plan` gathering + `/aih-plan-to-milestone` gathering, the Claude Code harness emits system reminders suggesting `TaskCreate` usage. These reminders are irrelevant — planning is a capture phase, not a task-execution phase. They create noise without adding value.
+**Finding:** During `/aih-plan` gathering + `/aih-milestone --plan` promotion, the Claude Code harness emits system reminders suggesting `TaskCreate` usage. These reminders are irrelevant — planning is a capture phase, not a task-execution phase. They create noise without adding value.
 
 **Pattern:** aihaus cannot directly suppress harness reminders (it's the harness's own behavior). Workaround: the forward-looking placeholder key `aihaus.suppress.taskCreateReminder: true` in `.claude/settings.local.json` serves as a marker for future harness-level support. Claude Code currently ignores unknown top-level keys, so this is safe to ship.
 

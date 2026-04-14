@@ -41,8 +41,8 @@ _start_check() {
 # ---- Check 1: 13 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 13 expected SKILL.md files"
-  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-run aih-resume aih-plan-to-milestone aih-brainstorm)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 12 expected SKILL.md files"
+  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-run aih-resume aih-brainstorm)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -361,6 +361,22 @@ check_aih_plan_annexes() {
   fi
 }
 
+# ---- Check 19: aih-milestone annexes present (M007 — absorbed p2m/run) -----
+check_aih_milestone_annexes() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aih-milestone annexes present"
+  local ann_root="${PACKAGE_ROOT}/.aihaus/skills/aih-milestone/annexes"
+  local missing=()
+  for a in promotion.md; do
+    [[ -f "$ann_root/$a" ]] || missing+=("$a")
+  done
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "missing: ${missing[*]}"
+  fi
+}
+
 # ---- Check 18: SESSION-LOG.md template has required H2 headers (M004 story L)
 check_session_log_template() {
   _start_check
@@ -470,6 +486,7 @@ check_version
 check_purity
 check_cursor_plugin
 check_aih_plan_annexes
+check_aih_milestone_annexes
 check_session_log_template
 
 printf "\n"

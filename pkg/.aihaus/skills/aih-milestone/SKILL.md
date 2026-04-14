@@ -13,8 +13,9 @@ $ARGUMENTS
 
 ## Flags
 - `--execute` — skip gathering, go straight to execution (backward-compat one-shot behavior).
-- `--plan [slug]` — DEPRECATED. Auto-routes to `/aih-plan-to-milestone [slug]` and enters gathering on the seeded draft.
+- `--plan [slug]` — seed a milestone draft from an existing `PLAN.md`, then enter gathering. See `annexes/promotion.md`.
 - `--from-brainstorm [slug]` — seed CONTEXT.md from `.aihaus/brainstorm/[slug]/BRIEF.md` (see Step 0).
+- `--no-split` — bypass the force-split decision gate (see `annexes/promotion.md` Step P1.6).
 
 ## Step 0 — `--from-brainstorm <slug>` intake (conditional)
 
@@ -44,7 +45,7 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, run before Step 1. Otherwis
 
 **If `--execute` is present:** Skip Steps 2–5. Create a minimal draft from $ARGUMENTS, then immediately invoke the milestone execution flow from `/aih-run` (so `/aih-resume` can recover if interrupted). Print: "Executing directly (--execute flag). Use `/aih-milestone` without the flag for conversational gathering."
 
-**If `--plan [slug]` is present:** Print deprecation notice, then invoke `/aih-plan-to-milestone [slug]` logic and enter gathering on the resulting draft. Skip Step 2 (drafts listing) and jump to Step 4.
+**If `--plan [slug]` is present:** Follow `annexes/promotion.md` Steps P1–P5 to seed a milestone draft from the plan (M### auto-propose, force-split gate, PLAN→CONTEXT mapping, attachment reference, backlink footer, threshold gate). Skip Step 2 (drafts listing). Threshold gate in P5 either dispatches execution or hands back to Step 5 gathering here.
 
 ## Step 2 — List Existing Drafts
 

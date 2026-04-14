@@ -21,9 +21,8 @@ Rows are sorted by type (skill first, then agent), name ascending.
 | aih-feature | skill | NOT-SUPPORTED | Spawns `implementer` / `frontend-dev` (worktree-isolated) for the build step. Same primitive gap as aih-bugfix. | 2026-04-14 |
 | aih-help | skill | WORKS | Pure read — prints command list. No subagents, no writes. | 2026-04-14 |
 | aih-init | skill | WORKS-WITH-CAVEAT | Reads codebase, writes `project.md`. Cursor will surface a permission prompt on the write; accept to proceed. No worktree dependency. | 2026-04-14 |
-| aih-milestone | skill | WORKS-WITH-CAVEAT | Conversational gathering phase works. Promotion/execution step routes into `/aih-run` which is NOT-SUPPORTED — stop at promotion if running on Cursor. | 2026-04-14 |
+| aih-milestone | skill | WORKS-WITH-CAVEAT | Conversational gathering phase works, including `--plan [slug]` promotion (pure file authoring). Execution step routes into `/aih-run` which is NOT-SUPPORTED — stop at promotion if running on Cursor. | 2026-04-14 |
 | aih-plan | skill | WORKS | Research + plan authoring. Writes `PLAN.md` only; no worktree, no autonomous implementation. Subagent fan-out uses `Task` vehicle on Cursor. | 2026-04-14 |
-| aih-plan-to-milestone | skill | WORKS | Promotes a `PLAN.md` into a milestone draft — pure file authoring. | 2026-04-14 |
 | aih-quick | skill | WORKS-WITH-CAVEAT | Parent-agent implementation — Cursor prompts per write (aihaus users on Claude Code autoapprove via `bypassPermissions`; Cursor has no equivalent). Final `code-reviewer` pass is read-only and works. | 2026-04-14 |
 | aih-resume | skill | NOT-SUPPORTED | Resumes in-progress `/aih-run` milestone or feature/bugfix flows, all of which depend on worktree-isolated implementer agents. | 2026-04-14 |
 | aih-run | skill | NOT-SUPPORTED | Autonomous milestone execution. Core dependency on `implementer` / `frontend-dev` / `code-fixer` with `isolation: worktree` + `bypassPermissions`. Primary flow that is gated out on Cursor. | 2026-04-14 |
@@ -80,7 +79,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 
 ## Summary
 
-- **Skills:** 13 rows — 3 WORKS, 6 WORKS-WITH-CAVEAT, 4 NOT-SUPPORTED.
+- **Skills:** 12 rows — 2 WORKS, 6 WORKS-WITH-CAVEAT, 4 NOT-SUPPORTED.
 - **Agents:** 43 rows — 25 WORKS, 13 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
 
 ## Maintenance

@@ -62,7 +62,7 @@ Hard ceilings regardless: 5 panelists, 2 rounds, 1 contrarian, 1 research agent.
    ---
    ```
 
-   First-line header is `# Conversation: [slug]` — NOT `# Conversation Log:`, which is reserved for the user-message log shape in `/aih-milestone` and `/aih-plan-to-milestone`.
+   First-line header is `# Conversation: [slug]` — NOT `# Conversation Log:`, which is reserved for the user-message log shape in `/aih-milestone` (including `--plan` promotion).
 4. **Print the stdout contract line — LOAD-BEARING, LOCKED PREFIX** (consumed by Story 8 dogfood via `grep '^Created brainstorm at \.aihaus/brainstorm/'`):
 
    ```
