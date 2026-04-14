@@ -379,39 +379,53 @@ check_session_log_template() {
   fi
 }
 
-# ---- Check 16: optional cursor-preview rules file lint ---------------------
-# Resolves brainstorm CHECK.md F-M2 (machine-enforced preview marker).
-# Does NOT require Cursor to be installed; just lints the file if it exists.
-check_cursor_preview() {
+# ---- Check 16: Cursor plugin manifest + rules (M006 / ADR-005) --------------
+# Validates:
+#   (a) pkg/.aihaus/.cursor-plugin/plugin.json — exists, valid JSON, has "name"
+#   (b) pkg/.aihaus/rules/aihaus.mdc — exists, has frontmatter, NO "PREVIEW" marker
+#   (c) pkg/.aihaus/rules/COMPAT-MATRIX.md — exists (authoritative per-skill verdict)
+# Replaces the pre-v0.10.0 cursor-preview linter (cursor-preview/ is gone).
+check_cursor_plugin() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: cursor-preview/aihaus.mdc lint (optional file)"
-  local repo_root="$(cd "$SCRIPT_DIR/.." && pwd)"
-  local mdc="${repo_root}/cursor-preview/aihaus.mdc"
-  if [[ ! -f "$mdc" ]]; then
-    _pass "$label (file absent — skip)"
-    return
-  fi
+  local label="Check ${CHECK_NUMBER}: Cursor plugin manifest + rules (M006)"
+  local manifest="${PACKAGE_ROOT}/.aihaus/.cursor-plugin/plugin.json"
+  local mdc="${PACKAGE_ROOT}/.aihaus/rules/aihaus.mdc"
+  local matrix="${PACKAGE_ROOT}/.aihaus/rules/COMPAT-MATRIX.md"
   local problems=()
-  # (a) file length cap — mirrors the SKILL.md 200-line discipline.
-  local lines
-  lines=$(wc -l < "$mdc" | tr -d ' ')
-  if [[ "$lines" -gt 200 ]]; then
-    problems+=("exceeds 200 lines ($lines)")
-  fi
-  # (b) PREVIEW marker must appear in first 10 lines (first content line
-  # after the 5-line frontmatter). The marker is the load-bearing "this is
-  # not production" signal — must be visible above the fold.
-  if ! head -n10 "$mdc" | grep -Fq '# aihaus on Cursor — PREVIEW'; then
-    problems+=("missing '# aihaus on Cursor — PREVIEW' in first 10 lines")
-  fi
-  # (c) frontmatter fields — scan between the first two '---' markers.
-  local front
-  front=$(awk '/^---$/{c++; next} c==1' "$mdc")
-  for field in description globs alwaysApply; do
-    if ! printf '%s\n' "$front" | grep -q "^${field}:"; then
-      problems+=("frontmatter missing '$field:'")
+  # (a) manifest exists, is valid JSON, has required "name" field
+  if [[ ! -f "$manifest" ]]; then
+    problems+=("plugin.json missing at .aihaus/.cursor-plugin/plugin.json")
+  else
+    local py_bin=""
+    if command -v python3 >/dev/null 2>&1; then py_bin="$(command -v python3)"
+    elif command -v python  >/dev/null 2>&1; then py_bin="$(command -v python)"
+    elif command -v py      >/dev/null 2>&1; then py_bin="$(command -v py)"
     fi
-  done
+    if [[ -n "$py_bin" ]]; then
+      "$py_bin" -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); sys.exit(0 if isinstance(d.get('name'),str) and d['name'] else 1)" "$manifest" 2>/dev/null || problems+=("plugin.json invalid JSON or missing 'name'")
+    elif command -v jq >/dev/null 2>&1; then
+      jq -e 'has("name") and (.name | type == "string") and (.name | length > 0)' "$manifest" >/dev/null 2>&1 || problems+=("plugin.json invalid JSON or missing 'name'")
+    else
+      problems+=("cannot validate plugin.json — neither python nor jq available")
+    fi
+  fi
+  # (b) rules/aihaus.mdc exists, has frontmatter, NO PREVIEW marker
+  if [[ ! -f "$mdc" ]]; then
+    problems+=("rules/aihaus.mdc missing")
+  else
+    local front
+    front=$(awk '/^---$/{c++; next} c==1' "$mdc")
+    for field in description globs alwaysApply; do
+      if ! printf '%s\n' "$front" | grep -q "^${field}:"; then
+        problems+=("rules/aihaus.mdc frontmatter missing '$field:'")
+      fi
+    done
+    if head -n20 "$mdc" | grep -Fq 'PREVIEW'; then
+      problems+=("rules/aihaus.mdc still contains 'PREVIEW' marker — dropped in M006")
+    fi
+  fi
+  # (c) COMPAT-MATRIX.md exists
+  [[ -f "$matrix" ]] || problems+=("rules/COMPAT-MATRIX.md missing")
   if [[ ${#problems[@]} -eq 0 ]]; then
     _pass "$label"
   else
@@ -454,7 +468,7 @@ check_readme_length
 check_license
 check_version
 check_purity
-check_cursor_preview
+check_cursor_plugin
 check_aih_plan_annexes
 check_session_log_template
 
