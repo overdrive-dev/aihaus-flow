@@ -42,7 +42,7 @@ If phase ∈ {gathering, complete} → refuse: `aih-quick draft-adr: refused —
 6. **Commit**: Atomic commit with descriptive message
 
 ## Attachment Handling
-If the user pastes an image/file, persist to `.aihaus/features/[YYMMDD]-[slug]/attachments/` (or a quick sibling dir) via `cp` from `~/.claude/image-cache/`. Pass the path to `code-reviewer` in Step 5. Reject > 20 MB.
+If the user pastes an image/file, copy **immediately on first mention** to a temp-slug dir `.aihaus/features/YYMMDD-wip-HHMMSS-<rand4>/attachments/` via `cp` from `~/.claude/image-cache/` (M004 story H — prevents loss if conversation drops before slug is finalized). On final slug determination, `mv` the temp dir to the final slug. Pass the path to `code-reviewer` in Step 5. Reject > 20 MB. See `pkg/.aihaus/skills/aih-plan/annexes/attachments.md` for the canonical temp-slug + crash-recovery protocol.
 
 ## Guardrails
 - If the change touches more than 5 files, STOP and suggest using `/aih-feature` instead

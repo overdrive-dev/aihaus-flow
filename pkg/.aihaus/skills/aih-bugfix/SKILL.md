@@ -22,7 +22,7 @@ $ARGUMENTS
 
 ### 1.5. Persist Attachments
 If the user's bug report includes a pasted image (screenshot of error UI, stack trace image) or file (log, crash dump):
-1. Copy from source path (usually `~/.claude/image-cache/[uuid]/[n].png`) to `.aihaus/bugfixes/[YYMMDD]-[slug]/attachments/[seq]-[desc].[ext]` via `cp`.
+1. Copy **immediately on first mention** via `cp`. If slug is known, target `.aihaus/bugfixes/[YYMMDD]-[slug]/attachments/[seq]-[desc].[ext]`. If slug is not yet determined, target temp dir `.aihaus/bugfixes/YYMMDD-wip-HHMMSS-<rand4>/attachments/` and `mv` on slug finalization (M004 story H — prevents loss if conversation drops). Source usually `~/.claude/image-cache/[uuid]/[n].png`. See `pkg/.aihaus/skills/aih-plan/annexes/attachments.md` for canonical temp-slug + crash-recovery protocol.
 2. Describe each via vision.
 3. List in TRIAGE.md `## Attachments` section.
 4. When spawning the `debugger` agent (Step 2), include the attachment paths in its prompt so it can `Read` them during root-cause analysis.
