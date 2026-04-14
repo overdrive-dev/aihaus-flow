@@ -95,19 +95,24 @@ execution/KNOWLEDGE-LOG.md
 RUN-MANIFEST.md       ← new checkpoint file
 ```
 
-RUN-MANIFEST.md initial content:
+RUN-MANIFEST.md initial content (schema v2 per ADR-004 — see `pkg/.aihaus/templates/RUN-MANIFEST-schema-v2.md`):
 ```markdown
-# Run Manifest: [M0XX]-[slug]
-**Run ID:** [uuid-or-timestamp]
-**Command:** /aih-run [slug]
-**Started:** [ISO timestamp]
-**Phase:** planning
-**Status:** running
-**Branch:** milestone/[M0XX]-[slug]
-**Last updated:** [ISO timestamp]
-## Progress Log
-- [ts] — Run started
+## Metadata
+milestone: M0XX-[slug]
+branch: milestone/M0XX-[slug]
+started: [ISO]
+schema: v2
+phase: planning
+status: running
+last_updated: [ISO]
+
+## Invoke stack
+
+## Story Records
+story_id|status|started_at|commit_sha|verified|notes
 ```
+
+All subsequent RUN-MANIFEST.md mutations go via `bash .aihaus/hooks/manifest-append.sh --field <story-record|invoke-push|invoke-pop|progress-log|phase|status> --payload "..."`. STATUS.md mutations go via `bash .aihaus/hooks/phase-advance.sh --to <phase> --dir <dir>`. Never edit either file inline post-M003.
 
 If the draft has `attachments/`, copy them into the new milestone dir before archiving:
 ```bash
@@ -137,7 +142,9 @@ Use the Read tool to view. Reference what you observed in your output using rela
 **architect** → reads PRD/stories, writes `architecture.md`, appends ADRs to `.aihaus/decisions.md`.
 **plan-checker** → verifies story coherence, file ownership, ADR coverage.
 
-Wait for each to complete before spawning the next. After plan-checker, set RUN-MANIFEST.md `Phase: execute-stories`.
+Wait for each to complete before spawning the next. After plan-checker, advance phase via `bash .aihaus/hooks/phase-advance.sh --to running --dir <milestone-dir>` AND `manifest-append.sh --field phase --payload execute-stories`.
+
+**Agent return post-processing (ADR-003 marker protocol, stories A.2/A.3):** after each agent spawn, pipe the agent's return through `bash .aihaus/hooks/invoke-guard.sh`. On `INVOKE_OK skill|args|rationale|blocking`: if manifest is v1, first `manifest-migrate.sh`; then prompt user (or auto-dispatch if `aihaus.autoInvoke: true`); `manifest-append.sh --field invoke-push --payload "..."`; dispatch via Skill tool; `manifest-append.sh --field invoke-pop`. On `INVOKE_REJECT <reason>` or `NO_INVOKE`: log + proceed normally.
 
 ### 10. Create Feature Branch
 ```bash
@@ -160,7 +167,7 @@ Chain by story dependency order. First story blocked by "Verify plan coherence";
 
 **Story serialization (prevents commit attribution race):** complete each story's full cycle — implement → QA pass → merge-back → commit → `git status` clean — BEFORE spawning the next story's teammate. Between stories, verify `git status --porcelain` is empty. If unexpected files appear (orphans from a prior worktree merge-back), STOP and surface to user; do not sweep them into the next commit. Commits must use explicit file lists from the story's `Owned files` (never `git add <dir>/`, never `git add -A`). See `team-template.md` → Commit Discipline and Worktree Merge-Back Protocol.
 
-Update RUN-MANIFEST.md after each story: append `[ts] — Story [N] complete: [title]`.
+Update RUN-MANIFEST.md after each story: `manifest-append.sh --field story-record --payload "<story_id>|complete|<started>|<sha>|<verified>|<notes>"` + `manifest-append.sh --field progress-log --payload "Story [N] complete: [title]"`.
 
 **Mid-story inventory refresh:** after each story's QA passes and commit lands, check if the committed paths fall within Inventory directories (same detection as completion-protocol Step 6). If yes, spawn `project-analyst` with `subagent_type: "project-analyst"` in `--refresh-inventory-only` mode and merge the AUTO block of `.aihaus/project.md`. Append `[ts] — project.md inventory refreshed after story [N]` to RUN-MANIFEST.md. Skip if the story was documentation-only. Also refresh Active Milestones (see Step 8 pattern) since phase may have changed.
 
@@ -180,7 +187,7 @@ Read `completion-protocol.md` (co-located). Follow it: merge decisions, promote 
 ## Phase 4 — Finalize
 
 ### 14. Update RUN-MANIFEST.md
-Set `Status: completed`, `Phase: completed`, append final timestamp to progress log.
+`manifest-append.sh --field status --payload completed` + `--field phase --payload completed` + `phase-advance.sh --to complete --dir <milestone-dir>`.
 
 ### 15. Report
 Summarize:
