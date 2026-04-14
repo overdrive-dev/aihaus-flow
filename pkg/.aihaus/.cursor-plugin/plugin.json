@@ -1,0 +1,9 @@
+{
+  "name": "aihaus",
+  "description": "Workflow automation: plan, execute, and ship milestones autonomously. Intent-based skills with adversarial review and audit trails.",
+  "version": "0.10.0",
+  "author": {
+    "name": "overdrive-dev",
+    "url": "https://github.com/overdrive-dev/aihaus-flow"
+  }
+}
