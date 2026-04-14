@@ -32,7 +32,7 @@ Build a table and present it:
 3 | plan            | 260410-rate-limiting    | —         | [mtime]
 ```
 
-- **One candidate** → confirm ("Run [slug]? Y/n") and proceed.
+- **One candidate** → proceed silently; log one line: *"Running [slug]."* (No Y/n — see `_shared/autonomy-protocol.md`.)
 - **Multiple** → ask user to pick by number or slug.
 - **Zero** → "No ready work. Run `/aih-plan` or `/aih-milestone` first." Stop.
 

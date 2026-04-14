@@ -18,7 +18,7 @@ $ARGUMENTS
 **If no slug given:**
 - `Glob` `.aihaus/plans/*/PLAN.md`.
 - Exclude slugs that already have a corresponding draft at `.aihaus/milestones/drafts/[slug]/`.
-- **One candidate** → confirm ("Promote plan [slug] to milestone draft? Y/n").
+- **One candidate** → proceed silently; log one line: *"Promoting [slug] to milestone draft."* (No Y/n — see `_shared/autonomy-protocol.md`.)
 - **Multiple** → present a table (slug, created, estimated scope summary), ask user to pick.
 - **Zero** → "No plans found. Run `/aih-plan` first."
 

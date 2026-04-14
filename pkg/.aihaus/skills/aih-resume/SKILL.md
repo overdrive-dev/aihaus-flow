@@ -33,7 +33,7 @@ For milestone dirs WITHOUT a RUN-MANIFEST.md, check for presence of `execution/M
 **When slug is given:** look up directly, error if not found or already completed.
 
 **When no slug given:**
-- **One interrupted run** → confirm ("Resume [slug] at [phase]? Y/n") and continue.
+- **One interrupted run** → proceed silently; log one line: *"Resuming [slug] at [phase]."* (No Y/n — see `_shared/autonomy-protocol.md`.)
 - **Multiple** → present a table:
   ```
   # | Type      | Slug                 | Phase            | Status   | Last updated
@@ -58,7 +58,7 @@ For legacy milestones without a manifest, inspect artifact files to infer phase:
 - `architecture.md` exists? → past architect
 - `stories/` has files AND execution/*-SUMMARY.md exists? → mid-execution
 - No MILESTONE-SUMMARY.md? → not done
-Ask the user to confirm: "Looks like milestone paused at [phase]. Resume from there?"
+If the inferred phase is unambiguous (only one plausible stopping point) proceed silently and log *"Resuming at [phase]."*. Only ask when genuinely ambiguous (e.g., analyst output exists but incomplete and stories also partially written — unclear whether to re-spawn PM or resume implementation). See `_shared/autonomy-protocol.md`.
 
 ### 5. Cross-check with Claude Code tasks
 
