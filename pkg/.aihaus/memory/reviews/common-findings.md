@@ -97,3 +97,20 @@ Recurring patterns observed across reviews. Each entry is a pattern that appeare
 ---
 
 _Appended by plan-checker during self-evolution. Future passes: promote patterns that recur across 3+ reviews into the reviewer's evolution-pass queue._
+
+---
+
+## CF-008: Option menus and "honest checkpoints" masquerading as safety
+
+**First observed:** 2026-04-14 (M005 / evidencias.txt retrospective — cross-project runs including aihaus-flow M003).
+
+**Pattern:** Mid-execution, orchestrator agents emit lettered/numbered option menus ("(a) ship 2a in sequence (b) start with S01 (c) pause..." or "Option 1 / Option 2 / Option 3") and "Honest checkpoint" prose with scope renegotiation, even after the user has explicitly approved autonomous execution. User then has to type unblock signals ("vai", "d", "3", "continue") repeatedly in the same run. The agent treats each wave/story/phase boundary as a natural permission checkpoint despite no contract requiring it.
+
+**Detection:** Scan agent outputs for: `Option [0-9]`, `\([a-d]\)`, `"Honest checkpoint"`, `"Realidade check"`, `"reality check"`, `"surface honest scope"`, `"pausing to surface"`. Any of these emitted after an execution-phase commit == a violation.
+
+**Recommended remediation:** Three layers of defense (M005 Epic C + Epic G in upcoming M006):
+1. Skill-level prose ban in `_shared/autonomy-protocol.md` (M005/S06) — this file is authoritative.
+2. Explicit one-line reference in every SKILL.md (M005/S07).
+3. Planned Haiku `drift-detector` agent (M006) runs after each agent return and strips/flags these patterns automatically.
+
+**Process feedback:** Memory entries alone (e.g., `feedback_execute_dont_ask.md`) were insufficient — the drift reappeared. The annex codifies the rule *inside the skill contract itself*, not just in user memory.
