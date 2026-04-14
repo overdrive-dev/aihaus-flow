@@ -27,9 +27,9 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, follow `annexes/from-brains
 ## Phase 3 — Plan-checker gate
 10. Spawn `plan-checker` — adversarial, must produce findings or written justification. Writes CHECK.md. Pipe return through `bash .aihaus/hooks/invoke-guard.sh` (ADR-003); on `INVOKE_OK` for `aih-quick draft-adr`, prompt user. **Disposition-based verdict (ADR-M003-E):** if CHECK.md has `Disposition` column → APPROVED = zero BLOCKER; else fall back to zero CRITICAL + zero HIGH. Revise PLAN.md on not-APPROVED. **Iteration policy (default 1):** a single plan-checker pass covers ~80% of findings in practice; a 2nd iteration runs ONLY when the 1st iteration emits ≥3 CRITICAL findings that cannot be addressed via surgical inline edits (i.e., they require structural plan revision). Otherwise, apply inline fixes to PLAN.md and exit Phase 3. **Escape hatch:** `$ARGUMENTS` containing `--deep-check` forces 2 iterations regardless. Hard cap remains 2.
 
-## Phase 4 — Report
-11. **Summarize** the plan in 3-5 bullets. Print: PLAN.md path; auxiliary artifacts (ASSUMPTIONS.md, PATTERNS.md, CHECK.md, RESEARCH.md); Suggested Next Command.
-12. **Scope-based recommendation:** if > 10 files or multi-story, primary path = `/aih-plan-to-milestone [slug]` (conversational refinement before commit).
+## Phase 4 — Report + threshold gate
+11. **Summarize** the plan in 3-5 bullets. Print: PLAN.md path; auxiliary artifacts (ASSUMPTIONS.md, PATTERNS.md, CHECK.md, RESEARCH.md).
+12. **Threshold gate (see `_shared/autonomy-protocol.md`):** planning is complete → ask ONE natural-language question in the conversation. Small scope: *"Posso executar agora?"* Large scope (>10 files or multi-story): *"Posso promover para milestone draft e seguir até execução?"* On affirmative (y/sim/vai/go/enter), dispatch the appropriate skill via the Skill tool (`aih-plan-to-milestone [slug]` for large, `aih-run [slug]` for small). On negative, plan stays standalone — user retoma quando quiser. **Never print "Suggested Next Command: /aih-xxx" as an instruction for the user to type** — that delegates keyboard work. Opt-out: `--no-chain` in `$ARGUMENTS` reverts to print-suggestion behavior.
 
 ## Annexes (referenced, not duplicated)
 - `annexes/attachments.md` — temp-slug flow, crash recovery, limits

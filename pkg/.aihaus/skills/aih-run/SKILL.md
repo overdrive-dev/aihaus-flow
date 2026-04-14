@@ -62,8 +62,8 @@ Run `git status --porcelain`. Policy: clean OR all-untracked → proceed silentl
   - Run `/aih-plan-to-milestone [slug]` logic inline (seed a draft from the plan)
   - Continue with Milestone Execution on the new draft
 
-### 6. Confirm execution
-Present the final summary from CONTEXT.md (or PLAN.md) and ask for approval before spawning agents.
+### 6. Emit 3-bullet pre-flight summary, then proceed
+Print a 3-bullet summary of what's about to run (slug, scope, estimated story count). **Do not ask for approval** — the user invoked `/aih-run` already; that is the threshold gate per `_shared/autonomy-protocol.md`. Dispatch the agent team immediately after the summary line.
 
 ## Phase 3 — Milestone Execution
 

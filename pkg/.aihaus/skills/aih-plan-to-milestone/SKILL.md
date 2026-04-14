@@ -126,22 +126,11 @@ Append to `.aihaus/plans/[slug]/PLAN.md` (do not edit existing sections):
 - **Status:** gathering — run `/aih-milestone` to continue refinement, then `/aih-run` to execute.
 ```
 
-## Step 5 — Report and Hand Off
+## Step 5 — Report, threshold gate, and hand off
 
-Tell the user:
+Print one-line summary: *"Milestone draft created at .aihaus/milestones/drafts/[slug]/ (seeded from plan)."*
 
-```
-Milestone draft created at .aihaus/milestones/drafts/[slug]/
-
-Seeded from plan. Review the draft and add more context as needed.
-
-When ready:
-  - Run /aih-milestone to continue adding context (it will surface this draft)
-  - Run /aih-run [slug] when ready to execute
-  - Or say "start"/"go" to execute now
-```
-
-Then, in the ongoing conversation, follow the same gathering instructions used by `/aih-milestone` Step 5 — absorb subsequent user messages into CONTEXT.md, ask follow-ups, recognize start intent.
+**Threshold gate (see `_shared/autonomy-protocol.md`):** ask ONE natural-language question — *"Executar agora ou continuar em gathering para refinar contexto?"* On "executar"/"vai"/"go", dispatch `/aih-run [slug]` via Skill tool. On "gathering"/"continuar"/"refine" or any continuation signal, enter conversational gathering mode (same instructions as `/aih-milestone` Step 5: absorb subsequent user messages into CONTEXT.md, ask follow-ups, recognize start intent). **Never** print "Run /aih-run [slug] when ready" as typing instructions — either ask and dispatch, or enter gathering silently. Opt-out: `--no-chain` preserves legacy print-suggestion behavior.
 
 ## Agent Invocation
 
