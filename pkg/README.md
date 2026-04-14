@@ -156,10 +156,12 @@ Both feed forward via `--from-brainstorm <slug>` into `/aih-plan` or `/aih-miles
 ### 3. Execute
 
 ```
-/aih-run <slug>          # any plan or milestone draft
+/aih-milestone <slug> + say "start"    # any ready milestone draft (executes via annexes/execution.md)
+/aih-milestone --execute "desc"         # one-shot direct execution
+/aih-feature --plan <slug>              # small-plan inline execution (single branch)
 ```
 
-Routes by scope. Small plan → feature execution inline (branch, implement, review, commit). Large or multi-story → auto-promotes to a milestone with full agent team.
+Milestone execution routes multi-story work through the `annexes/execution.md` pipeline. Small plans go through `/aih-feature --plan` for single-branch execution. (Pre-v0.11.0 `/aih-run` handled both paths; absorbed into `/aih-milestone` + `/aih-feature` respectively.)
 
 For milestones, the orchestrator:
 
@@ -295,9 +297,10 @@ aihaus ships 13 intent-based skills. Every command follows the same pattern: **a
 
 | Command | What it does |
 |---------|--------------|
-| `/aih-run [slug]` | Execute any ready plan or milestone draft — full agent team |
+| `/aih-milestone [slug]` + start-intent / `--execute` | Execute a ready milestone draft — full agent team (via `annexes/execution.md`) |
+| `/aih-feature --plan [slug]` | Execute a small plan inline on a single `feature/[slug]` branch |
 | `/aih-resume [slug]` | Pick up an interrupted run from `RUN-MANIFEST.md` |
-| `/aih-plan-to-milestone [slug]` | Promote a plan to a milestone draft for conversational refinement |
+| `/aih-milestone --plan [slug]` | Promote a plan to a milestone draft for conversational refinement (absorbs retired `/aih-plan-to-milestone`) |
 
 ### Brainstorm intake
 

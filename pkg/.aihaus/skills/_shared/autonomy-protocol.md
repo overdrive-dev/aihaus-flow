@@ -94,9 +94,8 @@ When a skill finishes its primary work and the next skill is implied by the plan
 Chain example for the primary flow:
 ```
 /aih-plan (approves at threshold)
-  → /aih-plan-to-milestone (runs silently, auto-dispatches)
-    → /aih-run (runs silently through stories + completion)
-      → report final status
+  → /aih-milestone --plan [slug] (runs silently through promotion + execution via annexes)
+    → report final status
 ```
 
 At each arrow, the skill calls the next one via Skill tool inside its own final step. No user prompt between arrows.

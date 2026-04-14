@@ -41,8 +41,8 @@ _start_check() {
 # ---- Check 1: 13 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 12 expected SKILL.md files"
-  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-run aih-resume aih-brainstorm)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 11 expected SKILL.md files"
+  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-resume aih-brainstorm)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -361,19 +361,42 @@ check_aih_plan_annexes() {
   fi
 }
 
-# ---- Check 19: aih-milestone annexes present (M007 — absorbed p2m/run) -----
+# ---- Check 19: aih-milestone annexes present (v0.11.0 — absorbed p2m + run) -
 check_aih_milestone_annexes() {
   _start_check
   local label="Check ${CHECK_NUMBER}: aih-milestone annexes present"
   local ann_root="${PACKAGE_ROOT}/.aihaus/skills/aih-milestone/annexes"
   local missing=()
-  for a in promotion.md; do
+  for a in promotion.md execution.md; do
     [[ -f "$ann_root/$a" ]] || missing+=("$a")
   done
   if [[ ${#missing[@]} -eq 0 ]]; then
     _pass "$label"
   else
     _fail "$label" "missing: ${missing[*]}"
+  fi
+}
+
+# ---- Check 20: M005 canonical phrases preserved in aih-milestone exec path --
+# Porting aih-run's M005 invariants must land verbatim. Any phrase drift fails CI.
+check_m005_canonical_phrases() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: M005 canonical phrases present in aih-milestone"
+  local search_root="${PACKAGE_ROOT}/.aihaus/skills/aih-milestone"
+  local missing=()
+  # Phrase 1: single-candidate silent proceed (M005 S05/B3)
+  grep -rq 'One candidate.*proceed silently.*Running \[slug\]' "$search_root" 2>/dev/null \
+    || missing+=("single-candidate phrase (M005 S05)")
+  # Phrase 2: 3-bullet pre-flight preflight (M005 S08/B1)
+  grep -rq 'Emit 3-bullet pre-flight summary' "$search_root" 2>/dev/null \
+    || missing+=("3-bullet pre-flight phrase (M005 S08)")
+  # Phrase 3: tiered git-dirty auto-stash label (M005 S04/B2 — renamed from aih-run)
+  grep -rq 'aih-milestone pre-run stash' "$search_root" 2>/dev/null \
+    || missing+=("auto-stash label (M005 S04)")
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "missing phrases: ${missing[*]}"
   fi
 }
 
@@ -487,6 +510,7 @@ check_purity
 check_cursor_plugin
 check_aih_plan_annexes
 check_aih_milestone_annexes
+check_m005_canonical_phrases
 check_session_log_template
 
 printf "\n"

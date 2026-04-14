@@ -1,13 +1,13 @@
 ---
 name: aih-milestone
-description: "Start or resume a milestone draft via conversational gathering. Iterate context across messages, then run /aih-run to execute."
+description: "Start, resume, or execute a milestone. Conversational gathering mode by default; --execute or start-intent triggers the milestone-execution pipeline (annexes/execution.md)."
 disable-model-invocation: true
-allowed-tools: Read Write Edit Grep Glob Bash
+allowed-tools: Read Write Edit Grep Glob Bash Agent TaskCreate TaskUpdate
 argument-hint: "[description] [--execute] [--plan slug]"
 ---
 
 ## Task
-Enter gathering mode for a milestone. Absorb user context iteratively into a draft. Never executes — use `/aih-run` to start execution.
+Manage a milestone end-to-end: gathering (default), plan-promotion (`--plan`), or direct execution (`--execute` or start-intent). Execution pipeline lives in `annexes/execution.md`; plan-promotion in `annexes/promotion.md`.
 
 $ARGUMENTS
 
@@ -43,7 +43,7 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, run before Step 1. Otherwis
 
 ## Step 1 — Handle Flags
 
-**If `--execute` is present:** Skip Steps 2–5. Create a minimal draft from $ARGUMENTS, then immediately invoke the milestone execution flow from `/aih-run` (so `/aih-resume` can recover if interrupted). Print: "Executing directly (--execute flag). Use `/aih-milestone` without the flag for conversational gathering."
+**If `--execute` is present:** Skip Steps 2–5. Create a minimal draft from $ARGUMENTS, then follow `annexes/execution.md` (milestone execution pipeline — so `/aih-resume` can recover if interrupted). Print: "Executing directly (--execute flag). Use `/aih-milestone` without the flag for conversational gathering."
 
 **If `--plan [slug]` is present:** Follow `annexes/promotion.md` Steps P1–P5 to seed a milestone draft from the plan (M### auto-propose, force-split gate, PLAN→CONTEXT mapping, attachment reference, backlink footer, threshold gate). Skip Step 2 (drafts listing). Threshold gate in P5 either dispatches execution or hands back to Step 5 gathering here.
 
@@ -61,7 +61,7 @@ Active milestone drafts:
 Options:
   - Continue a draft: tell me which number or slug
   - Start a new draft: say "new" or provide a description
-  - Execute a ready draft: /aih-run [slug]
+  - Execute a ready draft: pick its number/slug and say "start"/"go" — triggers annexes/execution.md
 ```
 
 Wait for the user's choice.
@@ -128,8 +128,7 @@ Draft created at .aihaus/milestones/drafts/[slug]/CONTEXT.md
 Send context freely — goals, constraints, affected areas, links, stakeholders, deadlines. I'll absorb each message into CONTEXT.md and ask follow-up questions when gaps emerge.
 
 When ready to execute:
-  - Run /aih-run [slug]
-  - Or say "start", "go", "kick off" — I'll run it for you.
+  - Say "start", "go", "kick off" — I'll run execution via annexes/execution.md.
 ```
 
 ## Step 5 — Session Gathering Instructions (what to do after this skill returns)
@@ -142,8 +141,8 @@ The main conversation continues after this skill exits. Follow these rules for t
    - **Persist attachments** if the message includes pasted images or files (see Attachment Handling below).
    - Ask up to 1 follow-up question if you detect a gap (missing constraint, unclear success criterion, ambiguous scope).
 2. **On start intent** ("start", "go", "kick off", "let's begin", "ready", etc.):
-   - Set `STATUS.md` to `ready`.
-   - Invoke `/aih-run [slug]`.
+   - Set `STATUS.md` to `ready` via `bash .aihaus/hooks/phase-advance.sh --to ready --dir .aihaus/milestones/drafts/[slug]/`.
+   - Follow `annexes/execution.md` to execute the draft (milestone execution pipeline).
 3. **On slash command other than start intent**:
    - Let the user run the other command. Leave `STATUS.md` at `gathering`.
    - Draft is preserved — user can come back via `/aih-milestone` later.
@@ -175,11 +174,11 @@ The only exception is an explicit out-of-band execution signal ("fix this now", 
 3. Return to gathering context when done.
 
 ## Guardrails
-- NEVER execute the milestone. `/aih-run` is the only execution path.
+- Gathering mode NEVER auto-executes without start-intent or `--execute`. Default posture is capture, not run.
 - NEVER delete CONTEXT.md — only append/update sections.
-- Archive on execution — draft moves to `.aihaus/milestones/drafts/.archive/[YYMMDD]-[slug]/` by `/aih-run`.
-- The `--execute` flag exists for backward compat; do not default to it.
-- Capture, don't execute — see section above.
+- Archive on execution — draft moves to `.aihaus/milestones/drafts/.archive/[YYMMDD]-[slug]/` by `annexes/execution.md` Step E2.
+- The `--execute` flag bypasses gathering for one-shot runs; do not default to it.
+- Capture, don't execute — see section above. Execution path is `annexes/execution.md`; promotion path is `annexes/promotion.md`.
 
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.

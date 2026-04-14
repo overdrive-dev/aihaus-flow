@@ -21,7 +21,7 @@ Two primitives aihaus relies on are CONTRADICTED on Cursor:
    `frontend-dev`, `code-fixer`, `executor`, `nyquist-auditor`) — Cursor
    subagent frontmatter does not accept an `isolation` field.
 2. `permissionMode: bypassPermissions` (used by the same worktree agents
-   to run autonomously under `/aih-run`) — Cursor's only subagent
+   to run autonomously under `/aih-milestone` execution) — Cursor's only subagent
    permission field is `readonly: true`, which is the opposite of bypass.
 
 Any skill that depends on those primitives is NOT-SUPPORTED on Cursor.
@@ -65,15 +65,16 @@ machine runs both tools.
 - `/aih-quick` — parent-agent implementation; Cursor prompts per write.
 
 **You do NOT get on Cursor:**
-- `/aih-run` — autonomous milestone execution. The load-bearing autonomy
-  flow. Stays on Claude Code.
+- `/aih-milestone --execute` or start-intent — autonomous milestone
+  execution (via `annexes/execution.md`). The load-bearing autonomy flow.
+  Stays on Claude Code.
 - `/aih-feature` and `/aih-bugfix` — both spawn worktree-isolated
   implementer agents.
 - `/aih-resume` — resumes the above.
 - Any subagent declaring `isolation: worktree` or
   `permissionMode: bypassPermissions`.
 
-If you need `/aih-run` milestone execution, use Claude Code. Cursor
+If you need `/aih-milestone` execution, use Claude Code. Cursor
 coverage is intentionally partial while Cursor's primitives differ.
 
 ## Uninstall

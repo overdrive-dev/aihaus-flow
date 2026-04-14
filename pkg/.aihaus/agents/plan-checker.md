@@ -91,7 +91,7 @@ When a CRITICAL finding is a **load-bearing semantic design decision** (not a bu
 ```
 <AIHAUS_INVOKE skill="aih-quick" args="draft-adr <one-line summary>" rationale="<≤200 chars — why the finding requires an ADR>" blocking="true"/>
 ```
-Parent skill (aih-run / aih-plan / aih-plan-to-milestone) parses via invoke-guard.sh, prompts user, dispatches aih-quick inline-ADR mode (stories D.2/D.3).
+Parent skill (aih-plan / aih-milestone / aih-feature) parses via invoke-guard.sh, prompts user, dispatches aih-quick inline-ADR mode (stories D.2/D.3).
 
 Emit rules:
 - Last non-empty line only. NO prose after the marker.

@@ -54,7 +54,7 @@ cat > "$MANIFEST_3DEEP" <<'EOF'
 schema: v2
 
 ## Invoke stack
-aih-run|slug|why|false|1
+aih-milestone|slug|why|false|1
 aih-plan|slug|why|false|2
 aih-quick|fix|why|true|3
 

@@ -99,7 +99,7 @@ Default panel size: 3 agents. Pick by topic-pattern match against this table:
 
 ## Phase 3 — Round 1 (PARALLEL)
 
-**No prior precedent in the repo for this specific fan-out mechanic.** `aih-run/SKILL.md:169-173` describes end-gate parallelism in prose but does not document the single-turn multi-Agent-call pattern. Story 4 (this skill) authors it first.
+**No prior precedent in the repo for this specific fan-out mechanic.** `aih-milestone/annexes/execution.md` (Step E7) describes end-gate parallelism in prose but does not document the single-turn multi-Agent-call pattern. Story 4 (this skill) authors it first.
 
 **Mechanic — instruction to the operating assistant (binding):**
 
@@ -181,7 +181,7 @@ If the user pastes images or drags files during intake or clarification:
 2. Copy to `.aihaus/brainstorm/[slug]/attachments/[seq]-[short-desc].[ext]` via `cp`. Seq is 2-digit zero-padded.
 3. Describe each in one sentence using vision.
 4. Reject files > 20 MB. Remind: crop/redact if sensitive — `.aihaus/` is git-tracked.
-5. Forward attachment paths into every panelist prompt (mirrors `aih-run/SKILL.md:126-133` attachment-handoff block).
+5. Forward attachment paths into every panelist prompt (mirrors `aih-milestone/annexes/execution.md` Step E3 attachment-handoff block).
 
 ## Capture, Don't Execute (intake discipline)
 If during intake or panelist turns the user raises an implementable aside ("while you're at it, fix X"), capture it into the synthesizer's `BRIEF.md` under **Open Questions**. Do NOT branch, edit, or commit — brainstorms are exploration, not execution. Explicit override only: "fix this now" / "just do it" → hand off to `/aih-quick` or `/aih-bugfix`; do not inline.

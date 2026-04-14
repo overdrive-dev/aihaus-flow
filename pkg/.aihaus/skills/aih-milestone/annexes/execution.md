@@ -1,26 +1,18 @@
----
-name: aih-run
-description: "Execute a ready milestone draft or plan autonomously. No slug required — picks from available drafts/plans. Writes RUN-MANIFEST.md checkpoints."
-disable-model-invocation: true
-allowed-tools: Read Grep Glob Bash Write Edit Agent TaskCreate TaskUpdate
-argument-hint: "[slug (optional)]"
+# aih-milestone annex: Milestone Execution
+
+Triggered when `/aih-milestone --execute [description]` runs, when a ready draft is dispatched, or when `/aih-plan --plan [slug]` threshold gate confirms execution. Pre-v0.11.0 this lived in `/aih-run` (since retired — split between `/aih-milestone` execution here and `/aih-feature` for single-plan small-scope execution).
+
 ---
 
-## Task
-Pick a ready milestone draft or plan and execute it autonomously, start to finish.
+## Pre-flight (M005 behavioral invariants — port verbatim, do not paraphrase)
 
-$ARGUMENTS
+### Git status tiered auto-decide (M005 S04/B2)
 
-## Phase 1 — Candidate Selection
+Run `git status --porcelain`. Policy: clean OR all-untracked → proceed silently. 1-5 modified, no staged → auto-stash as `aih-milestone pre-run stash [slug] [iso-ts]`, log to RUN-MANIFEST.md, proceed; mention stash in final report. >5 modified OR any staged → TRUE blocker, pause and ask "Commit, stash, or abort?"
 
-### 1. If a slug is given
-Look up the slug in this order. Stop at the first match:
-1. `.aihaus/milestones/drafts/[slug]/CONTEXT.md` → type: `milestone-draft`
-2. `.aihaus/plans/[slug]/PLAN.md` → type: `plan`
-If neither exists, stop and tell the user.
+### Candidate discovery — single-candidate silent proceed (M005 S05/B3)
 
-### 2. If no slug is given — discover candidates
-Scan:
+When no slug is given, scan:
 - `Glob` `.aihaus/milestones/drafts/*/STATUS.md` — drafts with status `ready` or `gathering`
 - `Glob` `.aihaus/plans/*/PLAN.md` — plans whose slug does NOT already have a milestone dir under `.aihaus/milestones/`
 
@@ -36,55 +28,48 @@ Build a table and present it:
 - **Multiple** → ask user to pick by number or slug.
 - **Zero** → "No ready work. Run `/aih-plan` or `/aih-milestone` first." Stop.
 
-### 3. Load Context
-- Read `.aihaus/memory/MEMORY.md` and any relevant memory files
-- Read `.aihaus/project.md` (if present) for project-level context
-- Read `.aihaus/decisions.md` (if present) — follow all existing ADRs
-- Read `.aihaus/knowledge.md` (if present) — avoid known pitfalls
+### 3-bullet pre-flight summary (M005 S08/B1)
 
-### 4. Git Status Check (tiered auto-decide — see `_shared/autonomy-protocol.md`)
-Run `git status --porcelain`. Policy: clean OR all-untracked → proceed silently. 1-5 modified, no staged → auto-stash as `aih-run pre-run stash [slug] [iso-ts]`, log to RUN-MANIFEST.md, proceed; mention stash in final report. >5 modified OR any staged → TRUE blocker, pause and ask "Commit, stash, or abort?"
+Emit 3-bullet pre-flight summary, then proceed. Do not ask for approval — the user invoked the skill already; that is the threshold gate per `_shared/autonomy-protocol.md`. Dispatch the agent team immediately after the summary line.
 
-## Phase 2 — Routing
+---
 
-### 5. Route by candidate type
+## Routing (for plan candidates only)
 
-**If `milestone-draft`:** go to Milestone Execution (Phase 3).
+If the candidate is a `milestone-draft`, skip to **Milestone Execution** below.
 
-**If `plan`:** read the plan's "Estimated Scope" section.
-- **Small scope** (< 10 files, single-story) → feature execution inline:
-  - Create `feature/[slug]` branch
-  - Implement per plan's Proposed Approach
-  - Run verification (project-specific)
-  - Commit + write artifacts to `.aihaus/features/[YYMMDD]-[slug]/`
-  - Skip to Phase 4 (reporting)
-- **Large scope** (multi-story or > 10 files) → auto-promote to milestone draft:
-  - Run `/aih-plan-to-milestone [slug]` logic inline (seed a draft from the plan)
-  - Continue with Milestone Execution on the new draft
+If the candidate is a `plan`: read the plan's "Estimated Scope" section.
+- **Small scope** (< 10 files, single-story) → hand off to `/aih-feature [slug]` (feature execution inline: `feature/[slug]` branch, `.aihaus/features/[YYMMDD]-[slug]/` artifacts). Do NOT run milestone execution here.
+- **Large scope** (multi-story or > 10 files) → auto-promote to milestone draft by running `annexes/promotion.md` Steps P1-P4 inline (seed a draft from the plan), then continue with **Milestone Execution** below on the new draft.
 
-### 6. Emit 3-bullet pre-flight summary, then proceed
-Print a 3-bullet summary of what's about to run (slug, scope, estimated story count). **Do not ask for approval** — the user invoked `/aih-run` already; that is the threshold gate per `_shared/autonomy-protocol.md`. Dispatch the agent team immediately after the summary line.
+---
 
-## Phase 3 — Milestone Execution
+## Milestone Execution
 
-### Phase 3 Task Tracking (two waves)
-**Wave 1** — create as `pending` at Phase 3 start using TaskCreate:
+### Task tracking (two waves)
+
+**Wave 1** — create as `pending` at Phase-start using TaskCreate:
+
 | Subject | activeForm |
 |---------|-----------|
 | Run analysis brief | Analyzing milestone scope |
 | Write PRD and stories | Writing PRD and stories |
 | Design architecture | Designing architecture |
 | Verify plan coherence | Checking plan coherence |
-Chain sequentially. **Wave 2** (per-story tasks + completion) is created in Step 12.
+
+Chain sequentially. **Wave 2** (per-story tasks + completion) is created after planning completes.
+
 Before each step, set its task to `in_progress`. After completion, set to `completed`.
 
-### 7. Determine Milestone ID
+### Step E1 — Determine Milestone ID
+
 Scan for existing milestone directories to determine the next ID:
 - `Glob` for `M0*` directories in `.aihaus/milestones/`
 - Extract numeric IDs, find the maximum, increment by 1
 - Format: `M0XX` (pad with leading zeros)
 
-### 8. Create Directory + RUN-MANIFEST
+### Step E2 — Create directory + RUN-MANIFEST
+
 Create `.aihaus/milestones/[M0XX]-[slug]/`:
 ```
 stories/
@@ -125,7 +110,8 @@ Archive the draft: `mv .aihaus/milestones/drafts/[slug] .aihaus/milestones/draft
 
 **Refresh Active Milestones** (if `.aihaus/project.md` exists): spawn `project-analyst` with `--refresh-active-milestones`, then merge the content of `.aihaus/.active-milestones-scratch.md` into `project.md` between `<!-- AIHAUS:ACTIVE-MILESTONES-START -->` and `<!-- AIHAUS:ACTIVE-MILESTONES-END -->` markers. Preserve everything outside those markers. Do the same refresh whenever RUN-MANIFEST.md status changes (running → paused, paused → running, etc.).
 
-### 9. Planning — Sequential Agent Subagents
+### Step E3 — Planning (sequential subagents)
+
 Spawn planning agents sequentially, updating RUN-MANIFEST.md progress log after each.
 
 **Attachments handoff:** If `.aihaus/milestones/[M0XX]-[slug]/attachments/` has files, include this block in every agent spawn prompt:
@@ -137,27 +123,30 @@ The following files may be relevant to your task. Read them as needed.
 Use the Read tool to view. Reference what you observed in your output using relative paths.
 ```
 
-**analyst** → writes `analysis-brief.md` (uses CONTEXT.md as input).
-**product-manager** → reads analysis brief, writes `PRD.md` and `stories/`.
-**architect** → reads PRD/stories, writes `architecture.md`, appends ADRs to `.aihaus/decisions.md`.
-**plan-checker** → verifies story coherence, file ownership, ADR coverage.
+- **analyst** → writes `analysis-brief.md` (uses CONTEXT.md as input).
+- **product-manager** → reads analysis brief, writes `PRD.md` and `stories/`.
+- **architect** → reads PRD/stories, writes `architecture.md`, appends ADRs to `.aihaus/decisions.md`.
+- **plan-checker** → verifies story coherence, file ownership, ADR coverage.
 
 Wait for each to complete before spawning the next. After plan-checker, advance phase via `bash .aihaus/hooks/phase-advance.sh --to running --dir <milestone-dir>` AND `manifest-append.sh --field phase --payload execute-stories`.
 
-**Agent return post-processing (ADR-003 marker protocol, stories A.2/A.3):** after each agent spawn, pipe the agent's return through `bash .aihaus/hooks/invoke-guard.sh`. On `INVOKE_OK skill|args|rationale|blocking`: if manifest is v1, first `manifest-migrate.sh`; then prompt user (or auto-dispatch if `aihaus.autoInvoke: true`); `manifest-append.sh --field invoke-push --payload "..."`; dispatch via Skill tool; `manifest-append.sh --field invoke-pop`. On `INVOKE_REJECT <reason>` or `NO_INVOKE`: log + proceed normally.
+**Agent return post-processing (ADR-003 marker protocol):** after each agent spawn, pipe the agent's return through `bash .aihaus/hooks/invoke-guard.sh`. On `INVOKE_OK skill|args|rationale|blocking`: if manifest is v1, first `manifest-migrate.sh`; then prompt user (or auto-dispatch if `aihaus.autoInvoke: true`); `manifest-append.sh --field invoke-push --payload "..."`; dispatch via Skill tool; `manifest-append.sh --field invoke-pop`. On `INVOKE_REJECT <reason>` or `NO_INVOKE`: log + proceed normally.
 
-### 10. Create Feature Branch
+### Step E4 — Create feature branch
+
 ```bash
 git checkout -b milestone/[M0XX]-[slug]
 ```
 
-### 11. Spawn Agent Team
-Read `team-template.md` (co-located with this SKILL.md). Spawn:
+### Step E5 — Spawn agent team
+
+Read `team-template.md` (co-located with this annex's SKILL.md). Spawn:
 - **backend-dev** (implementer), **frontend-dev** (frontend-dev), **qa** (reviewer)
 - Skip frontend-dev if backend-only, vice versa. Second dev if >8 stories.
 - Quality gates: **ux-designer** if frontend stories exist; **security** pass if auth/payments/user-data touched.
 
-### 12. Execute Stories (Wave 2 task creation)
+### Step E6 — Execute stories (Wave 2 task creation)
+
 Read story files from `stories/`. For each story, TaskCreate with:
 - **subject**: story title
 - **activeForm**: `Implementing [story title]`
@@ -169,11 +158,12 @@ Chain by story dependency order. First story blocked by "Verify plan coherence";
 
 Update RUN-MANIFEST.md after each story: `manifest-append.sh --field story-record --payload "<story_id>|complete|<started>|<sha>|<verified>|<notes>"` + `manifest-append.sh --field progress-log --payload "Story [N] complete: [title]"`.
 
-**Mid-story inventory refresh:** after each story's QA passes and commit lands, check if the committed paths fall within Inventory directories (same detection as completion-protocol Step 6). If yes, spawn `project-analyst` with `subagent_type: "project-analyst"` in `--refresh-inventory-only` mode and merge the AUTO block of `.aihaus/project.md`. Append `[ts] — project.md inventory refreshed after story [N]` to RUN-MANIFEST.md. Skip if the story was documentation-only. Also refresh Active Milestones (see Step 8 pattern) since phase may have changed.
+**Mid-story inventory refresh:** after each story's QA passes and commit lands, check if the committed paths fall within Inventory directories (same detection as `completion-protocol.md` Step 6). If yes, spawn `project-analyst` with `subagent_type: "project-analyst"` in `--refresh-inventory-only` mode and merge the AUTO block of `.aihaus/project.md`. Append `[ts] — project.md inventory refreshed after story [N]` to RUN-MANIFEST.md. Skip if the story was documentation-only. Also refresh Active Milestones since phase may have changed.
 
-**CRITICAL:** You are the COORDINATOR. Never write code yourself. Delegate everything.
+**CRITICAL:** The coordinating skill is the COORDINATOR. Never write code in the coordinator itself. Delegate everything.
 
-### 12.5. Verify and Integrate (adversarial gates, always-on)
+### Step E7 — Verify and integrate (adversarial gates, always-on)
+
 After all stories are implemented and QA-passed, run in parallel:
 - Spawn `verifier` with `subagent_type: "verifier"` — goal-backward check, must produce evidence per acceptance criterion or FAIL. Writes `execution/VERIFICATION.md`.
 - Spawn `integration-checker` with `subagent_type: "integration-checker"` — checks E2E wiring across the committed stories. Writes `execution/INTEGRATION.md`.
@@ -181,19 +171,50 @@ After all stories are implemented and QA-passed, run in parallel:
 
 Any FAIL verdict or unmitigated OPEN threat halts before completion protocol — surface to user.
 
-### 13. Completion
-Read `completion-protocol.md` (co-located). Follow it: merge decisions, promote knowledge, write MILESTONE-SUMMARY.md, clean up the team, report to user.
+### Step E8 — Completion
 
-## Phase 4 — Finalize
+Read `completion-protocol.md` (co-located with SKILL.md). Follow it: merge decisions, promote knowledge, write MILESTONE-SUMMARY.md, clean up the team, report to user.
 
-### 14. Update RUN-MANIFEST.md
+---
+
+## Finalize
+
+### Step F1 — Update RUN-MANIFEST.md
+
 `manifest-append.sh --field status --payload completed` + `--field phase --payload completed` + `phase-advance.sh --to complete --dir <milestone-dir>`.
 
-### 15. Report
+### Step F2 — Report
+
 Summarize:
 - Command that ran, slug, branch, commit range
 - Stories completed, decisions promoted, knowledge added
 - Artifact path: `.aihaus/milestones/[M0XX]-[slug]/`
 - Next: "Merge or push the branch."
 
-**Autonomy:** See `_shared/autonomy-protocol.md` — binding rules; overrides contradictory prose above.
+---
+
+## Hook-call reference table (port verbatim)
+
+Each hook invocation below MUST land in the annex with the `--field` / `--payload` args exactly as shown. Silent paraphrase breaks ADR-004's phase-advance contract (which refuses advance when the Invoke stack is non-empty — the stack rows are written by the `invoke-push`/`invoke-pop` calls below).
+
+| Call site | Hook | Args |
+|-----------|------|------|
+| Story start (Step E6) | `manifest-append.sh` | `--field story-record --payload "<story_id>|<status>|<started>|<sha>|<verified>|<notes>"` |
+| Phase transition (Step E3 end) | `manifest-append.sh` | `--field phase --payload <phase>` |
+| Phase transition (Step E3 end) | `phase-advance.sh` | `--to <phase> --dir <milestone-dir>` |
+| Before Agent spawn (dispatcher mode, ADR-003) | `manifest-append.sh` | `--field invoke-push --payload "<skill>|<args>|<rationale>|<blocking>|<depth>"` |
+| After Agent returns | `manifest-append.sh` | `--field invoke-pop --payload "<skill>"` |
+| Per-story progress (Step E6) | `manifest-append.sh` | `--field progress-log --payload "<1-line msg>"` |
+| End of milestone loop (Step F1) | `manifest-append.sh` | `--field status --payload completed` |
+| End of milestone loop (Step F1) | `manifest-append.sh` | `--field phase --payload completed` |
+| End of milestone loop (Step F1) | `phase-advance.sh` | `--to complete --dir <milestone-dir>` |
+| Agent-return parsing (Step E3) | `invoke-guard.sh` | stdin = agent return text; consumed by parent skill for dispatch decision |
+
+---
+
+## Guardrails
+
+- NEVER execute story code in the coordinator. Delegate everything via Agent tool to `implementer` / `frontend-dev` / `code-fixer` (worktree-isolated).
+- NEVER use `git add -A` or `git add <dir>/` during story commits. Always explicit file list from `Owned files`.
+- NEVER edit RUN-MANIFEST.md or STATUS.md inline. Use `manifest-append.sh` + `phase-advance.sh` hooks (ADR-004).
+- Pause ONLY on TRUE blockers (see `_shared/autonomy-protocol.md`). "Estimate was wrong" is not a blocker.

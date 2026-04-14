@@ -54,7 +54,7 @@ _A short prose description of how the codebase is organized will appear here aft
 ## Active Milestones
 
 <!-- AIHAUS:ACTIVE-MILESTONES-START -->
-<!-- Auto-populated by /aih-milestone, /aih-run, /aih-resume. Do not edit by hand — content between these markers is overwritten. -->
+<!-- Auto-populated by /aih-milestone, /aih-resume. Do not edit by hand — content between these markers is overwritten. -->
 
 - _No active milestones yet._
 

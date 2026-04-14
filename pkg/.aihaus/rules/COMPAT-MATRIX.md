@@ -21,11 +21,10 @@ Rows are sorted by type (skill first, then agent), name ascending.
 | aih-feature | skill | NOT-SUPPORTED | Spawns `implementer` / `frontend-dev` (worktree-isolated) for the build step. Same primitive gap as aih-bugfix. | 2026-04-14 |
 | aih-help | skill | WORKS | Pure read — prints command list. No subagents, no writes. | 2026-04-14 |
 | aih-init | skill | WORKS-WITH-CAVEAT | Reads codebase, writes `project.md`. Cursor will surface a permission prompt on the write; accept to proceed. No worktree dependency. | 2026-04-14 |
-| aih-milestone | skill | WORKS-WITH-CAVEAT | Conversational gathering phase works, including `--plan [slug]` promotion (pure file authoring). Execution step routes into `/aih-run` which is NOT-SUPPORTED — stop at promotion if running on Cursor. | 2026-04-14 |
+| aih-milestone | skill | NOT-SUPPORTED | Gathering mode + `--plan` promotion work on Cursor, but `--execute` and start-intent trigger `annexes/execution.md` which spawns worktree-isolated `implementer`/`frontend-dev`/`code-fixer` agents — primitives absent on Cursor. Entire skill marked NOT-SUPPORTED to avoid partial-execution footgun. | 2026-04-14 |
 | aih-plan | skill | WORKS | Research + plan authoring. Writes `PLAN.md` only; no worktree, no autonomous implementation. Subagent fan-out uses `Task` vehicle on Cursor. | 2026-04-14 |
 | aih-quick | skill | WORKS-WITH-CAVEAT | Parent-agent implementation — Cursor prompts per write (aihaus users on Claude Code autoapprove via `bypassPermissions`; Cursor has no equivalent). Final `code-reviewer` pass is read-only and works. | 2026-04-14 |
-| aih-resume | skill | NOT-SUPPORTED | Resumes in-progress `/aih-run` milestone or feature/bugfix flows, all of which depend on worktree-isolated implementer agents. | 2026-04-14 |
-| aih-run | skill | NOT-SUPPORTED | Autonomous milestone execution. Core dependency on `implementer` / `frontend-dev` / `code-fixer` with `isolation: worktree` + `bypassPermissions`. Primary flow that is gated out on Cursor. | 2026-04-14 |
+| aih-resume | skill | NOT-SUPPORTED | Resumes in-progress milestone / feature / bugfix flows, all of which depend on worktree-isolated implementer agents. | 2026-04-14 |
 | aih-sync-notion | skill | WORKS-WITH-CAVEAT | Spawns `notion-sync` agent which has `tools: Read, Write, Edit, Grep, Glob, Bash`. No worktree dependency — works, but Cursor will prompt per write to milestone files and/or Notion MCP calls. | 2026-04-14 |
 | aih-update | skill | WORKS-WITH-CAVEAT | Fetches and applies package updates from the aihaus remote. Runs `git` / `bash` commands the user must approve under Cursor's permission model. | 2026-04-14 |
 
@@ -53,7 +52,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 | executor | agent | NOT-SUPPORTED | Declares `isolation: worktree` + `permissionMode: bypassPermissions`. Same primitive gap as implementer. | 2026-04-14 |
 | framework-selector | agent | WORKS | Tools: Read, Bash, Grep, Glob, WebSearch. Read-only. | 2026-04-14 |
 | frontend-dev | agent | NOT-SUPPORTED | Declares `isolation: worktree` + `permissionMode: bypassPermissions`. | 2026-04-14 |
-| implementer | agent | NOT-SUPPORTED | Declares `isolation: worktree` + `permissionMode: bypassPermissions`. The load-bearing write agent for `/aih-run`. | 2026-04-14 |
+| implementer | agent | NOT-SUPPORTED | Declares `isolation: worktree` + `permissionMode: bypassPermissions`. The load-bearing write agent for `/aih-milestone` execution path. | 2026-04-14 |
 | integration-checker | agent | WORKS | Tools: Read, Bash, Grep, Glob. Read-only audit. | 2026-04-14 |
 | intel-updater | agent | WORKS | Tools: Read, Write, Bash, Glob, Grep. No worktree dependency. | 2026-04-14 |
 | notion-sync | agent | WORKS-WITH-CAVEAT | Tools: Read, Write, Edit, Grep, Glob, Bash. No worktree dependency but talks to Notion MCP — Cursor prompts per write and per MCP call. | 2026-04-14 |
@@ -69,7 +68,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 | reviewer | agent | WORKS-WITH-CAVEAT | Tools: Read, Grep, Glob, Bash. Read-only whitelist — Cursor weakens this. Also: Cursor ships built-in `/agent-review`; relationship with aihaus `reviewer` is untested. | 2026-04-14 |
 | roadmapper | agent | WORKS | Tools: Read, Write, Bash, Glob, Grep. No worktree dependency. | 2026-04-14 |
 | security-auditor | agent | WORKS | Tools: Read, Write, Bash, Grep, Glob. No worktree dependency. | 2026-04-14 |
-| test-writer | agent | WORKS-WITH-CAVEAT | Tools: Read, Write, Edit, Grep, Glob, Bash. Writes tests directly — Cursor prompts per write. Under `/aih-run` normally called inside an implementer worktree; outside that context on Cursor, still functional with permission prompts. | 2026-04-14 |
+| test-writer | agent | WORKS-WITH-CAVEAT | Tools: Read, Write, Edit, Grep, Glob, Bash. Writes tests directly — Cursor prompts per write. Under `/aih-milestone` execution normally called inside an implementer worktree; outside that context on Cursor, still functional with permission prompts. | 2026-04-14 |
 | ui-auditor | agent | WORKS | Tools: Read, Write, Bash, Grep, Glob. No worktree dependency. | 2026-04-14 |
 | ui-checker | agent | WORKS-WITH-CAVEAT | Tools: Read, Bash, Glob, Grep. Read-only whitelist — Cursor inheritance weakens. | 2026-04-14 |
 | ui-researcher | agent | WORKS | Tools: Read, Write, Bash, Grep, Glob, WebSearch, WebFetch. No worktree dependency. | 2026-04-14 |
@@ -79,7 +78,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 
 ## Summary
 
-- **Skills:** 12 rows — 2 WORKS, 6 WORKS-WITH-CAVEAT, 4 NOT-SUPPORTED.
+- **Skills:** 11 rows — 2 WORKS, 5 WORKS-WITH-CAVEAT, 4 NOT-SUPPORTED.
 - **Agents:** 43 rows — 25 WORKS, 13 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
 
 ## Maintenance

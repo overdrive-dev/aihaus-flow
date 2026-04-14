@@ -57,10 +57,12 @@ The following flows are Claude-Code-only and should NOT be invoked from
 Cursor. Reasons cite specific primitive gaps verified 2026-04-14 against
 Cursor documentation (see `.aihaus/research/cursor-primitives-verification.md`).
 
-- **`/aih-run` milestone execution** — Drives the autonomous-commit machinery.
+- **`/aih-milestone` execution path (`--execute` flag or start-intent)** —
+  Drives the autonomous-commit machinery via `annexes/execution.md`.
   Depends on `implementer` / `frontend-dev` / `code-fixer` subagents whose
   safety model requires `isolation: worktree` + `permissionMode:
-  bypassPermissions`. Neither primitive exists on Cursor.
+  bypassPermissions`. Neither primitive exists on Cursor. Gathering mode
+  (default `/aih-milestone`) and promotion (`--plan` flag) still work.
 
 - **`implementer`, `frontend-dev`, `code-fixer`, `executor`, `nyquist-auditor`
   agents** — Declare `isolation: worktree` in frontmatter. Cursor subagent

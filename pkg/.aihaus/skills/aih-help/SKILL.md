@@ -8,18 +8,18 @@ disable-model-invocation: true
 
 aihaus is a four-pillar intent-based workflow package. **Scope** the work, optionally **promote** a plan into a milestone draft (via `/aih-milestone --plan`), **execute** autonomously, and **resume** if interrupted.
 
-## ⚠️ Upgrading from v0.1.x? Read this first
+## ⚠️ Upgrading from pre-v0.11.0? Read this first
 
-**`/aih-run` is NOT a rename of `/aih-milestone`.** They are distinct commands with different jobs:
+**`/aih-run` and `/aih-plan-to-milestone` were retired in v0.11.0.** Their functionality was absorbed into `/aih-milestone`:
 
-| Command | Job | Produces |
-|---------|-----|----------|
-| `/aih-milestone` | **Scope** — conversational gathering mode. You send context across multiple messages; each one is absorbed into a draft. Never executes. | Draft at `.aihaus/milestones/drafts/[slug]/` |
-| `/aih-run` | **Execute** — runs whatever ready draft or plan you point at. Full autonomous pipeline (planning agents → team → stories → completion). | Milestone at `.aihaus/milestones/[M0XX]-[slug]/` |
+| Pre-v0.11.0 command | v0.11.0+ replacement |
+|---------------------|----------------------|
+| `/aih-run [slug]` on a milestone draft | `/aih-milestone [slug]` + say "start" / "go" — triggers the execution pipeline (`annexes/execution.md`) |
+| `/aih-run [slug]` on a small plan | `/aih-feature --plan [slug]` — inline execution, single branch |
+| `/aih-plan-to-milestone [slug]` | `/aih-milestone --plan [slug]` — first-class flag |
+| `/aih-milestone "desc" --execute` | unchanged — still available |
 
-The old `/aih-milestone "description"` one-shot flow was **split in two**. If you want the old behavior, pass `--execute`: `/aih-milestone "desc" --execute`.
-
-`team-template.md` and `completion-protocol.md` moved from `aih-milestone/` to `aih-run/` because that's where the execution logic now lives. `/aih-milestone` only deals with drafts.
+`team-template.md` and `completion-protocol.md` live at `aih-milestone/` (moved from retired `aih-run/` in v0.11.0).
 
 ## Four-Pillar Command Surface
 
@@ -27,7 +27,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 |--------|----------|---------|
 | **Scope** | `/aih-plan`, `/aih-milestone`, `/aih-brainstorm` | Create plans / gather milestone context / explore fuzzy ideas |
 | **Promote** | `/aih-milestone --plan [slug]` | Seed a milestone draft from a `PLAN.md` (absorbed from the retired `/aih-plan-to-milestone` in v0.11.0) |
-| **Execute** | `/aih-run`, `/aih-feature`, `/aih-bugfix`, `/aih-quick` | Start autonomous work |
+| **Execute** | `/aih-milestone --execute`, `/aih-feature`, `/aih-bugfix`, `/aih-quick` | Start autonomous work |
 | **Continue** | `/aih-resume` | Pick up an interrupted run |
 
 ## All Commands
@@ -37,8 +37,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 | `/aih-init` | Bootstrap aihaus in a project — creates `.aihaus/` layout and seeds project memory | First time using aihaus in a repo |
 | `/aih-plan [description]` | Research and write a concrete, implementable plan without changing code — produces `PLAN.md` | You have a concrete task and want to think before building |
 | `/aih-brainstorm "<topic>" [--panel <roles>] [--deep] [--research]` | Multi-specialist exploratory panel for fuzzy "how should we think about X" questions — produces `BRIEF.md` that feeds `/aih-plan --from-brainstorm` or `/aih-milestone --from-brainstorm` | The problem is open-ended and you want diverse perspectives before committing to an approach |
-| `/aih-milestone [description]` | Enter gathering mode — iteratively build a milestone draft via conversation. Use `--plan [slug]` to seed from an existing `PLAN.md` | You want to scope a milestone across multiple messages, or promote a plan |
-| `/aih-run [slug]` | Execute a ready milestone draft or plan — no slug required, picks from available | You have a draft/plan ready to execute |
+| `/aih-milestone [description]` | Conversational gathering, plan-promotion (`--plan [slug]`), or direct execution (`--execute` or start-intent on a ready draft). Absorbs the retired `/aih-run` + `/aih-plan-to-milestone` | You want to scope, promote, or execute a multi-story milestone |
 | `/aih-resume [slug]` | Resume an interrupted run — detects in-progress work via RUN-MANIFEST.md | Session crashed, context reset, or you paused execution |
 | `/aih-bugfix [description or error]` | Triage root cause, branch, fix, test, commit | Known bug or error message |
 | `/aih-feature [description]` | Scoped feature: plan, branch, implement, test, commit — single agent | Change touching up to ~10 files |
@@ -56,8 +55,8 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
   -> draft created, gathering mode active
 (user sends more context messages)
   -> each message absorbed into CONTEXT.md
-(user: "start" or /aih-run [slug])
-  -> autonomous execution from draft
+(user: "start" / "go" / "kick off")
+  -> autonomous execution via annexes/execution.md
 ```
 
 ### Plan first, then promote to milestone
@@ -67,8 +66,7 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
   -> PLAN.md created
 /aih-milestone --plan 260412-billing
   -> milestone draft seeded from plan
-(iterate context conversationally)
-/aih-run 260412-billing
+(iterate context conversationally, then say "go")
   -> full milestone execution
 ```
 
@@ -76,8 +74,8 @@ The old `/aih-milestone "description"` one-shot flow was **split in two**. If yo
 
 ```
 /aih-plan Add rate limiting to the public API
-/aih-run 260410-rate-limiting
-  -> small plan → feature-style single-branch execution
+/aih-feature --plan 260410-rate-limiting
+  -> single-branch feature execution seeded from plan
 ```
 
 ### Resume after interruption
@@ -115,7 +113,7 @@ Applied at these gates:
 - `/aih-bugfix` → `code-reviewer` + `code-fixer` loop (2 iterations) after fix
 - `/aih-feature` → `code-reviewer` + `code-fixer` + `verifier` + conditional `integration-checker`
 - `/aih-quick` → single `code-reviewer` pass
-- `/aih-run` → always-on `verifier` + `integration-checker`, systematic `security-auditor` for sensitive work
+- `/aih-milestone` execution path (`--execute` or start-intent) → always-on `verifier` + `integration-checker`, systematic `security-auditor` for sensitive work
 - `/aih-brainstorm` → `contrarian` round on panelist perspectives; `brainstorm-synthesizer` fans in all artifacts into `BRIEF.md`.
 
 ## Inter-agent Conventions

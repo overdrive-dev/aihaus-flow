@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-aihaus is a workflow automation package for Claude Code **and** Cursor (multi-platform since v0.10.0 / M006 — see ADR-005). It provides 13 intent-based commands (`init`, `plan`, `plan-to-milestone`, `bugfix`, `feature`, `milestone`, `run`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`) that users install into their own repositories via `install.sh --platform <claude|cursor|both>`. There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, rules, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
+aihaus is a workflow automation package for Claude Code **and** Cursor (multi-platform since v0.10.0 / M006 — see ADR-005). It provides 11 intent-based commands (`init`, `plan`, `bugfix`, `feature`, `milestone`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`) that users install into their own repositories via `install.sh --platform <claude|cursor|both>`. `/aih-run` and `/aih-plan-to-milestone` were retired in v0.11.0 — their behavior lives in `/aih-milestone` (execution + `--plan` promotion) and `/aih-feature --plan` (inline small-plan execution). There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, rules, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
 
 ## Repo Structure
 

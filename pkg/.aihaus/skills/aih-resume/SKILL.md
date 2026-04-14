@@ -82,7 +82,7 @@ If `.aihaus/project.md` exists, spawn `project-analyst` with `--refresh-active-m
 
 ### 8. Continue to completion
 
-Follow the normal execution flow from the checkpoint forward (see `/aih-run` for milestone execution steps, or the respective skill for feature/bugfix).
+Follow the normal execution flow from the checkpoint forward (see `aih-milestone/annexes/execution.md` for milestone execution steps, or the respective skill for feature/bugfix).
 
 ### 9. Report
 
