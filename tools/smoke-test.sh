@@ -345,7 +345,47 @@ check_version() {
   fi
 }
 
-# ---- Optional: framework purity check ---------------------------------------
+# ---- Check 16: optional cursor-preview rules file lint ---------------------
+# Resolves brainstorm CHECK.md F-M2 (machine-enforced preview marker).
+# Does NOT require Cursor to be installed; just lints the file if it exists.
+check_cursor_preview() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: cursor-preview/aihaus.mdc lint (optional file)"
+  local repo_root="$(cd "$SCRIPT_DIR/.." && pwd)"
+  local mdc="${repo_root}/cursor-preview/aihaus.mdc"
+  if [[ ! -f "$mdc" ]]; then
+    _pass "$label (file absent — skip)"
+    return
+  fi
+  local problems=()
+  # (a) file length cap — mirrors the SKILL.md 200-line discipline.
+  local lines
+  lines=$(wc -l < "$mdc" | tr -d ' ')
+  if [[ "$lines" -gt 200 ]]; then
+    problems+=("exceeds 200 lines ($lines)")
+  fi
+  # (b) PREVIEW marker must appear in first 10 lines (first content line
+  # after the 5-line frontmatter). The marker is the load-bearing "this is
+  # not production" signal — must be visible above the fold.
+  if ! head -n10 "$mdc" | grep -Fq '# aihaus on Cursor — PREVIEW'; then
+    problems+=("missing '# aihaus on Cursor — PREVIEW' in first 10 lines")
+  fi
+  # (c) frontmatter fields — scan between the first two '---' markers.
+  local front
+  front=$(awk '/^---$/{c++; next} c==1' "$mdc")
+  for field in description globs alwaysApply; do
+    if ! printf '%s\n' "$front" | grep -q "^${field}:"; then
+      problems+=("frontmatter missing '$field:'")
+    fi
+  done
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- Check 15: framework purity check --------------------------------------
 check_purity() {
   _start_check
   local label="Check ${CHECK_NUMBER}: framework purity (delegates to purity-check.sh)"
@@ -380,6 +420,7 @@ check_readme_length
 check_license
 check_version
 check_purity
+check_cursor_preview
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

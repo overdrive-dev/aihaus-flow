@@ -54,6 +54,10 @@ Runs anywhere Claude Code runs — macOS, Windows, Linux.
 >
 > Flag-driven mode (`--panel`, `--deep`, `--research`) runs the original 8-phase autonomous flow unchanged — no breaking changes.
 
+### Cursor support (preview)
+
+aihaus coexists with Cursor: Cursor natively reads `.claude/skills/` and `.claude/agents/`, so read-only skills work unmodified after the standard install. See [`cursor-preview/`](../cursor-preview/) for the compat matrix and caveats. Preview — feedback welcomed at [GitHub Discussions](https://github.com/overdrive-dev/aihaus-flow/discussions).
+
 ---
 
 ## The Problem
