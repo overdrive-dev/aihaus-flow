@@ -42,8 +42,8 @@ Build a table and present it:
 - Read `.aihaus/decisions.md` (if present) — follow all existing ADRs
 - Read `.aihaus/knowledge.md` (if present) — avoid known pitfalls
 
-### 4. Git Status Check
-Run `git status`. If the working tree is dirty, warn and ask: "Stash, commit, or proceed as-is?"
+### 4. Git Status Check (tiered auto-decide — see `_shared/autonomy-protocol.md`)
+Run `git status --porcelain`. Policy: clean OR all-untracked → proceed silently. 1-5 modified, no staged → auto-stash as `aih-run pre-run stash [slug] [iso-ts]`, log to RUN-MANIFEST.md, proceed; mention stash in final report. >5 modified OR any staged → TRUE blocker, pause and ask "Commit, stash, or abort?"
 
 ## Phase 2 — Routing
 
