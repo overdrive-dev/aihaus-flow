@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.5.0-181717?style=for-the-badge&logo=github)](VERSION)
+[![Version](https://img.shields.io/badge/version-0.7.0-181717?style=for-the-badge&logo=github)](VERSION)
 [![Built for Claude Code](https://img.shields.io/badge/built%20for-Claude%20Code-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -42,17 +42,17 @@ Runs anywhere Claude Code runs — macOS, Windows, Linux.
 ---
 
 > [!IMPORTANT]
-> ### v0.5.0 — `/aih-brainstorm` is here
+> ### v0.6.0 — `/aih-brainstorm` goes conversational
 >
-> A new 8-phase exploratory skill for fuzzy "how should we think about X" questions. Spawns a multi-specialist panel, runs an adversarial `contrarian` agent, optionally pulls web research, and synthesizes a `BRIEF.md`. Pipe the brief straight into planning:
+> `/aih-brainstorm` now defaults to lightweight ping-pong between you and the orchestrator — zero agents spawned unless you approve. Escalations to research, a specialist panel, or full synthesis are proposed inline with cost transparency (`~N min + M agents, spawn?`) and consented to per step. Matches the skill's purpose as pre-project exploration that might lead to nothing.
 >
 > ```bash
-> /aih-brainstorm "how should we model multi-tenancy"
-> /aih-plan --from-brainstorm <slug>      # or
-> /aih-milestone --from-brainstorm <slug>
+> /aih-brainstorm "how should we model multi-tenancy"   # conversational by default
+> /aih-brainstorm --panel "architect,analyst" --deep    # full autonomous panel if you want it
+> /aih-plan --from-brainstorm <slug>                     # promote when ready
 > ```
 >
-> Also new in 0.5.0: the **CONVERSATION.md turn-log convention** for multi-round agent workflows (ADR-001, single-writer discipline) and the **`brainstorm-synthesizer`** fan-in agent. See `pkg/.aihaus/decisions.md` for the architectural rationale.
+> Flag-driven mode (`--panel`, `--deep`, `--research`) runs the original 8-phase autonomous flow unchanged — no breaking changes.
 
 ---
 
