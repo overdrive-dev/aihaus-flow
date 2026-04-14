@@ -345,6 +345,40 @@ check_version() {
   fi
 }
 
+# ---- Check 17: aih-plan annexes present (M004 story G) ----------------------
+check_aih_plan_annexes() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aih-plan annexes present"
+  local ann_root="${PACKAGE_ROOT}/.aihaus/skills/aih-plan/annexes"
+  local missing=()
+  for a in attachments.md intake-discipline.md from-brainstorm.md guardrails.md; do
+    [[ -f "$ann_root/$a" ]] || missing+=("$a")
+  done
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "missing: ${missing[*]}"
+  fi
+}
+
+# ---- Check 18: SESSION-LOG.md template has required H2 headers (M004 story L)
+check_session_log_template() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: SESSION-LOG.md template has required H2 headers"
+  local tmpl="${PACKAGE_ROOT}/.aihaus/templates/SESSION-LOG.md"
+  [[ -f "$tmpl" ]] || { _fail "$label" "template missing: $tmpl"; return; }
+  local required=("Timeline" "Friction" "Wins" "Ideas for package" "Artifacts" "Hand-off")
+  local missing=()
+  for h in "${required[@]}"; do
+    grep -qE "^## ${h}$" "$tmpl" || missing+=("$h")
+  done
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "missing H2 headers: ${missing[*]}"
+  fi
+}
+
 # ---- Check 16: optional cursor-preview rules file lint ---------------------
 # Resolves brainstorm CHECK.md F-M2 (machine-enforced preview marker).
 # Does NOT require Cursor to be installed; just lints the file if it exists.
@@ -421,6 +455,8 @@ check_license
 check_version
 check_purity
 check_cursor_preview
+check_aih_plan_annexes
+check_session_log_template
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

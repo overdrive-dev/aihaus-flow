@@ -32,6 +32,8 @@ There is no build command, no type checker, and no unit test framework. The smok
 - `pkg/.aihaus/skills/*/SKILL.md` — 13 skill definitions with YAML frontmatter. Each skill is a Claude Code command invoked as `/aih-<name>`.
 - `pkg/.aihaus/agents/*.md` — 43 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
 - `pkg/.aihaus/hooks/*.sh` — 16 shell hooks for Claude Code lifecycle events + M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance).
+- `pkg/.aihaus/skills/aih-plan/annexes/*.md` — 4 annex files (attachments, intake-discipline, from-brainstorm, guardrails) — M004 enxugamento of the aih-plan core SKILL.md.
+- `pkg/.aihaus/templates/SESSION-LOG.md` — template for `/aih-update --session-log <slug>` post-hoc retrospective (M004 story L).
 - `pkg/.aihaus/memory/` — Empty memory index and directory structure (populated at runtime in target repos).
 - `pkg/.aihaus/templates/` — Starter `project.md` and `settings.local.json` templates.
 - `pkg/scripts/` — Cross-platform install/uninstall/update scripts (ship to users).
