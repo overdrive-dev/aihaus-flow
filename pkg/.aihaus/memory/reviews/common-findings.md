@@ -40,4 +40,42 @@ Recurring patterns observed across reviews. Each entry is a pattern that appeare
 
 ---
 
+## CF-004: Load-bearing claims unverified against target platform
+
+**First observed:** 2026-04-14 review of `260414-workflow-polish-agent-invoke/PLAN.md` (findings F-C2, F-C3, F-H3)
+
+**Pattern:** Plans that span BOTH protocol design AND hook/tool implementation tend to make platform-dependent assumptions that are never empirically tested. Examples: (a) env var propagation across Agent tool boundaries, (b) `flock` availability on Git Bash, (c) atomic `mv` semantics on cloud-synced filesystems (OneDrive, Dropbox, iCloud), (d) Windows NTFS case-insensitivity, (e) "Claude Code ignores unknown settings keys." Each assumption is plausible, none are verified. Hooks that rely on them silently no-op or race.
+
+**Detection:** When reviewing a plan that introduces shell-level primitives (hooks, lock files, env vars, atomic renames), extract every platform-specific claim and ask: "Was this empirically tested on the actual target platform, or cited from ASSUMED training data?" Cross-reference with existing hooks in `pkg/.aihaus/hooks/` to see how similar concerns were handled before (e.g., `session-start.sh`'s `CLAUDE_ENV_FILE` pattern).
+
+**Recommended remediation:** Require platform-verification pre-stories before any cross-platform hook lands. Write a throwaway harness test for each load-bearing assumption, attach output, THEN design the hook. If `flock` is missing, design around it explicitly; don't fallback-handwave. Document confirmed platform behaviors in `.aihaus/knowledge.md` so future plans inherit the verification.
+
+**Process feedback for `/aih-plan`:** When the plan adds hooks that rely on `flock`, env vars, atomic mv, or any filesystem primitive, the plan-checker's absence analysis should add one row per claim: "Did the plan verify X on Git Bash / Windows / OneDrive?" Unverified = CRITICAL by default.
+
+---
+
+## CF-005: Internal contradictions between tables and prose ("Not touched" paradox)
+
+**First observed:** 2026-04-14 review of `260414-workflow-polish-agent-invoke/PLAN.md` (finding F-C4)
+
+**Pattern:** Plans with both an "Affected Files" table and a "Not touched" exclusion block sometimes list the same file in both — usually because the file is "not touched" in one dimension (e.g., tools frontmatter unchanged) but "modified" in another (prose added). The contradictory framing confuses implementers and reviewers, and creates merge-conflict risk when two stories race on the same file with different mental models of what's off-limits.
+
+**Detection:** Grep the plan for every file path in the Affected Files table. If the same path appears in a "Not touched" or "stay read-only" block, the plan has a contradiction — flag it.
+
+**Recommended remediation:** Replace "not touched" prose with an explicit contract: "These fields stay byte-for-byte identical: [list]. New prose may be added elsewhere in the file." Avoid overloaded vocabulary like "read-only" when ADR-001 already owns that term for a different concept.
+
+---
+
+## CF-006: Self-applying rules the plan itself violates
+
+**First observed:** 2026-04-14 review of `260414-workflow-polish-agent-invoke/PLAN.md` (finding F-H1)
+
+**Pattern:** Plans that introduce a new guardrail (e.g., "force-split on >12 stories", "reject plans with >N open questions") occasionally violate the guardrail on the plan that introduces it. Author acknowledges the violation in prose but defers the rule to a subsequent invocation. This makes the guardrail's first enforcement the plan AFTER the guardrail ships — skipping the load-bearing case.
+
+**Detection:** For any plan that introduces a new threshold or gate, measure the plan itself against the proposed rule. If the plan would fail the rule, the plan must either (a) apply the rule to itself before promoting, or (b) drop the rule (it's not load-bearing enough to enforce on the introducing plan).
+
+**Recommended remediation:** Apply the rule self-reflexively. Split the plan, trim the scope, or abandon the rule. "We'll apply it to the NEXT plan" is a tell that the author doesn't actually believe the rule is necessary.
+
+---
+
 _Appended by plan-checker during self-evolution. Future passes: promote patterns that recur across 3+ reviews into the reviewer's evolution-pass queue._
