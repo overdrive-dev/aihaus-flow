@@ -700,3 +700,243 @@ future edits or missing-flag contributions.
   (excluded in v0.11.1 for security) once `bash-guard.sh` extends
   its regex to catch `awk 'BEGIN{system(...)}'` and `sed -i` on
   system paths.
+
+## ADR-008: Claude Code 3-layer permission surface and aihaus's defense stance
+
+Date: 2026-04-15
+Status: Accepted — Supersedes the follow-up work entry at
+`pkg/.aihaus/decisions.md:699-702` (ADR-007 Follow-up: "extend
+bash-guard.sh to catch `awk 'BEGIN{system(...)}'` and `sed -i`").
+That follow-up is now closed at layer 2 by `auto-approve-bash.sh`
+DANGEROUS_PATTERNS (see §3 below), not by extending bash-guard's
+regex.
+
+### Context
+
+Between milestones M001 and M006, aihaus accumulated tactical fixes
+for individual permission prompts on Claude Code. M007's triage
+revealed that the prompts were not a single pattern — they were
+four distinct classes driven by three independent permission
+layers. The reactive fixes had been targeting the wrong layer each
+time.
+
+#### The four prompt classes (observed 2026-04-15 on Git Bash / Windows)
+
+1. **Bash allowlist miss on quoted-path + redirect shapes** —
+   `dir "C:\Users\..." 2>&1`. `Bash(dir *)` in `permissions.allow`
+   failed to prefix-match; escalated to PermissionRequest hook
+   which had no `^dir\b` entry in SAFE_PATTERNS.
+2. **Bash matcher miss on env-var-prefixed commands** —
+   `MANIFEST_PATH=foo.md bash hook.sh`. `^bash\b` anchoring in
+   SAFE_PATTERNS never fired because the first token was not
+   `bash`.
+3. **Bash matcher miss on compound-no-spaces shapes** —
+   `ls;rm -rf /`. The compound-splitter at
+   `auto-approve-bash.sh:78-82` only split on ` && ` / ` ; ` with
+   surrounding spaces.
+4. **Filesystem-sandbox directory authorization** —
+   `echo x > .aihaus/milestones/drafts/M037-polish-v5/STATUS.md`
+   surfaced the Claude Code dialog "always allow access to `X\`
+   from this project". Per-session path-authorization cache, fires
+   BEFORE PermissionRequest hooks (see RESEARCH.md in milestone
+   plan dir, citing [Configure permissions → Working
+   directories](https://code.claude.com/docs/en/permissions#working-directories)
+   and [Issue
+   #7472](https://github.com/anthropics/claude-code/issues/7472)).
+
+#### The broken-gate discovery
+
+Plan-checker review (CHECK.md Finding #1) surfaced a pre-existing
+regex bug in `pkg/.aihaus/hooks/bash-guard.sh:15-22`. Seven
+`'pattern'` tokens were passed as separate positional arguments to
+`grep -qiE`; grep treats args 2..N as FILENAMES. End-to-end test
+`echo '{"tool_input":{"command":"rm -rf /"}}' | bash bash-guard.sh`
+exited 0 (NOT BLOCKED) — the defense-in-depth for catastrophic
+commands was a silent illusion. M007 fixes this (S01) so that
+M007's S02 deny-list flip inherits a genuine first-line gate.
+
+### Decision
+
+aihaus addresses the permission surface as three distinct layers
+with separate mitigations.
+
+#### Layer 1 — Bash command allowlist
+
+`permissions.allow` in `.claude/settings.local.json`. The template
+ships `"Bash(*)"` (at `pkg/.aihaus/templates/settings.local.json:14`)
+to widen the allowlist to a universal matcher. Granular entries
+(`Bash(dir *)`, `Bash(kubectl *)`, etc.) are explicitly
+discouraged: they create whack-a-mole churn every time a new tool
+enters the workflow, and user preference memory
+(`feedback_bash_permissions.md`) documents the `Bash(*)` policy.
+
+**How M007 addresses it:** `Bash(*)` remains in the template. S02
+does NOT touch `permissions.allow`.
+
+#### Layer 2 — PermissionRequest hooks (Bash matcher + write matcher)
+
+When layer-1 does not match directly, Claude Code escalates via
+the `PermissionRequest` hook chain. Two hooks participate:
+
+- **`auto-approve-bash.sh`** — matcher `Bash`. Inverted in M007 S02
+  from fail-closed SAFE_PATTERNS allow-list (~45 entries) to
+  fail-open compact DANGEROUS_PATTERNS deny-list (~24 entries).
+  Pre-compiled single `-E` regex (R-NEW-7 latency mitigation).
+  Compound-splitter tightened (CHECK.md Finding #5) to split on
+  bare `;` / `&&` / `||`, inclusive-OR semantics (any dangerous
+  segment → fall through).
+- **`auto-approve-writes.sh`** — matcher `Write|Edit`. Unchanged in
+  M007. Auto-approves writes inside `$CLAUDE_PROJECT_DIR`; denies
+  writes outside.
+
+`bash-guard.sh` (PreToolUse matcher `Bash`) is the CATASTROPHIC-
+command layer — fixed in M007 S01 to consolidate its 7 patterns
+into a single `-E` argument. Exits 2 on match, blocking the tool
+invocation before PermissionRequest is even consulted. This is
+belt-and-braces: bash-guard catches the canonical destructive set
+(`rm -rf /`, `git push --force` to prod, `mkfs.`, `dd if=`, `drop
+table`, `truncate`, `git clean -fd`) via PreToolUse; S02's
+DANGEROUS_PATTERNS extends the deny surface to sandbox-escape
+shapes (`awk 'BEGIN{system(...)}'`, `sed -i`, `curl | bash`),
+supply-chain destructives (`npm/pnpm/yarn/pip/cargo publish`),
+privilege escalation, Windows destructive `del /F /S /Q`, and the
+fork bomb. **Each catches what the other misses by design.**
+
+**How M007 addresses it:** S01 restores bash-guard; S02 flips
+auto-approve-bash.
+
+#### Layer 3 — Filesystem-sandbox directory authorization
+
+A per-session path-authorization cache populated at session start.
+When Bash redirects or Write/Edit touch a subdirectory NOT in the
+cache, Claude Code fires the dialog "Yes, and always allow access
+to `X\` from this project". This layer is **separate** from
+`permissions.allow` (per-tool) and PermissionRequest hooks
+(per-tool-event): it runs FIRST for filesystem writes to unseen
+subdirs, so hooks cannot intercept it.
+
+Per docs ([Configure permissions → Working
+directories](https://code.claude.com/docs/en/permissions#working-directories)),
+the ONLY documented suppression mechanism is the top-level
+`additionalDirectories` array in `settings.local.json`. Paths
+inside listed roots "become readable without prompts, and file
+editing permissions follow the current permission mode".
+
+**How M007 addresses it:** S03 adds
+`"additionalDirectories": [".aihaus", ".claude"]` to the template.
+S04 live-tests that dynamic subdirs under `.aihaus/` and `.claude/`
+no longer prompt, with a negative control at `/tmp/` to confirm
+narrow preauth. `permissions.deny` entries (e.g., `Read(//**/.env)`)
+still win — they are evaluated per-tool AFTER the sandbox check.
+
+### Defense-in-depth reasoning (ADR-007 Follow-up supersession)
+
+The follow-up work entry at `pkg/.aihaus/decisions.md:699-702`
+suggested extending `bash-guard.sh`'s regex to catch
+`awk 'BEGIN{system(...)}'` and `sed -i` on system paths. That
+proposal is **superseded** by layer-2's DANGEROUS_PATTERNS
+(S02) for these reasons:
+
+1. **One curation surface, not two.** DANGEROUS_PATTERNS already
+   enumerates the destructive class. Duplicating the list in
+   bash-guard would create two regex sources to keep in sync —
+   maintenance tax with no safety gain.
+2. **bash-guard is narrowly-scoped by design.** The original
+   bash-guard regex covers catastrophic whole-command intent
+   (`rm -rf /`, `dd if=...`). Sandbox-escape shapes
+   (`awk 'BEGIN{system}'`) are layer-2 concerns because they can
+   be embedded in otherwise-legitimate command wrappers; bash-guard's
+   anchored patterns are the wrong tool for them.
+3. **Defense-in-depth preserved.** bash-guard hard-blocks the
+   canonical set at PreToolUse (exit 2, before PermissionRequest
+   even fires). DANGEROUS_PATTERNS catches the extended sandbox-
+   escape set at PermissionRequest (fall-through to user prompt,
+   not auto-block). Each layer operates at the right granularity;
+   together they cover both "must never run" and "requires user
+   review" classes.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** Three layers, three mitigations (S01+S02+S03) | Matches documented Claude Code permission model; each layer independently owned; bisect-ready; defense-in-depth between bash-guard and DANGEROUS_PATTERNS | Four commits to land vs. two for narrower scopes | Directly addresses the 4 observed prompt classes; no layer left unaddressed |
+| 2 | Hook-only: fix bash-guard + flip auto-approve-bash; skip `additionalDirectories` | Narrower blast radius; simpler to review | Leaves layer-3 prompt firing on every dynamic subdir under `.aihaus/` — this is the MOST FREQUENT class in user's M037-polish-v5 workflow | Rejected — doesn't solve the user's actual pain |
+| 3 | Settings-only: add `additionalDirectories`, keep SAFE_PATTERNS allow-list | Zero hook changes; fewest moving parts | Layer-2 whack-a-mole continues; `dir`, `findstr`, env-var-prefixed, compound-no-spaces all still prompt | Rejected — the user's stated preference (`Bash(*)` + deny-list) is the opposite |
+| 4 | Extend bash-guard to catch awk/sed (per ADR-007 Follow-up) + keep SAFE_PATTERNS | Layered deny in bash-guard preserves single-file simplicity | Two regex sources; SAFE_PATTERNS allow-list growth continues; deny-list is the load-bearing policy either way | Rejected — duplicate curation surface |
+| 5 | Full shell-parser AST for `auto-approve-bash.sh` compound-splitter | Eliminates quoted-`;` false-positives | Heavy dependency (node/python parser); breaks zero-runtime package invariant | Rejected — chose sed-regex tightening in §4.6 of architecture doc; acceptable limitation documented |
+
+### Cursor compatibility caveat
+
+aihaus is multi-platform since ADR-005 (M006). Cursor's rule
+surface at `pkg/.aihaus/rules/aihaus.mdc:46-52` documents
+`preToolUse` / `postToolUse` parity but says nothing about
+`PermissionRequest` or `additionalDirectories`. Both are
+Claude-Code-specific primitives as of 2026-04-15; their behavior
+on Cursor is **UNVERIFIED**. Users running aihaus under Cursor may
+still encounter prompts for shapes that M007 suppresses on Claude
+Code.
+
+This ADR is therefore **Claude-Code-primary**. The four
+permission-surface hooks (`bash-guard.sh`, `auto-approve-bash.sh`,
+`auto-approve-writes.sh`, `permission-debug.sh`) are candidates
+for NOT-SUPPORTED / UNVERIFIED rows in
+`pkg/.aihaus/rules/COMPAT-MATRIX.md`. Architect recommends adding
+those rows in S05's commit (trivial cost, prevents future
+surprise); alternatively, file as M008 item (already captured in
+`.aihaus/milestones/M007-260415-autoapprove-windows-cmds/BACKLOG.md`
+under "Cursor COMPAT-MATRIX row for S01/S02 hooks").
+
+### Consequences
+
+- **Positive:** all four observed prompt classes closed on Claude
+  Code. Triage model documented; next contributor can locate the
+  right layer in minutes.
+- **Positive:** bash-guard + DANGEROUS_PATTERNS defense-in-depth is
+  now intentional and bidirectional. Neither layer is redundant.
+- **Negative:** DANGEROUS_PATTERNS is opinionated. Novel
+  catastrophic commands not covered by the list would auto-approve
+  — this is the inherent trade-off the user has accepted via
+  `Bash(*)` preference. Mitigation: quarterly DANGEROUS_PATTERNS
+  review (deferred to ADR-009 P2 follow-up).
+- **Negative:** Layer 3's `additionalDirectories` preauthorizes ALL
+  Read/Write/Edit inside `.aihaus/**` and `.claude/**`.
+  `permissions.deny` still gates sensitive-file patterns
+  (`Read(//**/.env)` etc.), so the effective risk is low — BUT
+  S04 step 7 audits that no `secrets*`, `credentials*`, `*.pem`,
+  `.env*` files live inside the newly-preauthorized trees before
+  declaring M007 clean.
+- **Neutral:** Claude-Code-primary. Cursor surface unchanged.
+
+### Follow-up
+
+- **PowerShell parity.** DANGEROUS_PATTERNS is Git-Bash-shaped.
+  `Remove-Item -Recurse -Force`, `Get-ChildItem`, etc. not covered.
+  User evidence (HA-9) says Git Bash is primary; file for future
+  only.
+- **Cursor empirical test.** Run a dogfood Cursor session against
+  the post-M007 settings to verify whether `additionalDirectories`
+  and `PermissionRequest` intercept behave identically. Captured in
+  `.aihaus/milestones/M007-260415-autoapprove-windows-cmds/BACKLOG.md`
+  (M008-S04 candidate).
+- **COMPAT-MATRIX rows** for the 4 permission-surface hooks per
+  §Cursor caveat above. Architect recommends S05 commit;
+  implementer may defer.
+- **Systemic mitigations catalog** — see ADR-009 (the sibling ADR
+  landed in S06). ADR-009 catalogs all known and latent prompt
+  classes, RCA hypotheses, and ranked P0/P1/P2 mitigations. It also
+  ships the observability keystone `permission-debug.sh` hook.
+
+### Related ADRs
+
+- **ADR-001** (Files are state) — unaffected; M007 changes do not
+  alter cross-agent communication primitives.
+- **ADR-003** (Agent→Skill invocation marker protocol) — unaffected.
+- **ADR-005** (Claude Code + Cursor first-class) — THIS ADR
+  inherits the Claude-Code-primary caveat from ADR-005 §4
+  authoring convention.
+- **ADR-007** (`disable-model-invocation` removal) — Follow-up
+  work entry at `pkg/.aihaus/decisions.md:699-702` is **SUPERSEDED**
+  by this ADR's §Defense-in-depth reasoning (S02 DANGEROUS_PATTERNS
+  closes the awk/sed gap at layer 2).
+- **ADR-009** (this decision's systemic-mitigations sibling — lands
+  in S06).
