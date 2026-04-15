@@ -180,47 +180,10 @@ SETTINGS_DST="${TARGET}/.claude/settings.local.json"
 
 if [[ "${PLATFORM}" == "cursor" ]]; then
   : # skip settings merge on Cursor-only install
-elif [[ ! -f "${SETTINGS_SRC}" ]]; then
-  echo "  warn: settings template missing at ${SETTINGS_SRC}, skipping merge"
 else
-  if [[ ! -f "${SETTINGS_DST}" ]]; then
-    cp "${SETTINGS_SRC}" "${SETTINGS_DST}"
-    echo "  settings: copied template"
-  else
-    # Merge: preserve user keys, add package required keys
-    if command -v jq >/dev/null 2>&1; then
-      tmp="$(mktemp)"
-      jq -s '.[0] * .[1]' "${SETTINGS_DST}" "${SETTINGS_SRC}" > "${tmp}"
-      mv "${tmp}" "${SETTINGS_DST}"
-      echo "  settings: merged via jq"
-    elif command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || command -v py >/dev/null 2>&1; then
-      py_bin="$(command -v python3 || command -v python || command -v py)"
-      "${py_bin}" - "${SETTINGS_DST}" "${SETTINGS_SRC}" <<'PY'
-import json, sys
-
-dst_path, src_path = sys.argv[1], sys.argv[2]
-with open(dst_path, "r", encoding="utf-8") as fh:
-    dst = json.load(fh)
-with open(src_path, "r", encoding="utf-8") as fh:
-    src = json.load(fh)
-
-def deep_merge(base, overlay):
-    if isinstance(base, dict) and isinstance(overlay, dict):
-        out = dict(base)
-        for k, v in overlay.items():
-            out[k] = deep_merge(base.get(k), v) if k in base else v
-        return out
-    return overlay if overlay is not None else base
-
-merged = deep_merge(dst, src)
-with open(dst_path, "w", encoding="utf-8") as fh:
-    json.dump(merged, fh, indent=2)
-PY
-      echo "  settings: merged via python"
-    else
-      echo "  warn: neither jq nor python available; leaving settings.local.json untouched"
-    fi
-  fi
+  # shellcheck source=lib/merge-settings.sh
+  source "$(dirname "$0")/lib/merge-settings.sh"
+  merge_settings "${SETTINGS_DST}" "${SETTINGS_SRC}"
 fi
 
 # Step 7.5: Cursor plugin setup (platform in {cursor, both})

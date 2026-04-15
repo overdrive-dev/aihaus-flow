@@ -80,6 +80,8 @@ bash pkg/scripts/install.sh --target .
 ```
 This creates `.aihaus/` (gitignored) with symlinks back to `pkg/.aihaus/`. Local artifacts accumulate in `.aihaus/` while package improvements go to `pkg/.aihaus/`.
 
+After modifying `pkg/.aihaus/templates/settings.local.json`, re-run `bash pkg/scripts/update.sh --target .` to keep the local install aligned with the template.
+
 ## Releasing
 
 After a milestone merges, generate a user-facing release-note draft:

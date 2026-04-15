@@ -75,10 +75,10 @@ check_agents() {
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 16 .sh files (post-M003) -------------------
+# ---- Check 3: .aihaus/hooks/ has 17 .sh files (post-M003 + autonomy-guard) --
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 16 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 17 .sh files"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
@@ -86,10 +86,10 @@ check_hooks() {
   fi
   local count
   count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 16 ]]; then
+  if [[ "$count" -eq 17 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 16 .sh files, found $count"
+    _fail "$label" "expected 17 .sh files, found $count"
   fi
 }
 
@@ -418,6 +418,163 @@ check_session_log_template() {
   fi
 }
 
+# ---- Template permissions.allow has a wildcard Bash entry -------------------
+# Locks in the autonomy contract: template must ship with wildcard-capable
+# permissions so execution phase doesn't fall through to interactive prompts.
+# Regex match (Bash\(.*\)) accepts "Bash(*)", "Bash(.*)", or future
+# normalizations — not brittle on the literal string.
+check_template_bash_wildcard() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: template permissions.allow has a wildcard Bash entry"
+  local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
+  [[ -f "$tpl" ]] || { _fail "$label" "template missing: $tpl"; return; }
+  if grep -Eq '"Bash\(.*\)"' "$tpl"; then
+    _pass "$label"
+  else
+    _fail "$label" "no Bash(<wildcard>) entry found in $tpl permissions.allow"
+  fi
+}
+
+# ---- autonomy-guard.sh blocks violations in execution phase -----------------
+# Feeds 5 canonical violation fixtures through the hook with
+# AIHAUS_EXEC_PHASE=1 set; asserts block JSON. Also asserts NO block
+# outside execution phase (planning-phase prose containing forbidden
+# patterns must pass through).
+check_autonomy_guard_detects_violations() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: autonomy-guard blocks forbidden patterns in execution phase"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/autonomy-guard.sh"
+  local fixtures="${PACKAGE_ROOT}/../tools/fixtures/autonomy-violations"
+  [[ -f "$hook" ]] || { _fail "$label" "hook missing: $hook"; return; }
+  [[ -d "$fixtures" ]] || { _fail "$label" "fixtures dir missing: $fixtures"; return; }
+
+  local failed=()
+  for f in "$fixtures"/*.txt; do
+    [ -f "$f" ] || continue
+    # In execution phase: expect block.
+    local out_exec
+    out_exec=$(AIHAUS_EXEC_PHASE=1 bash "$hook" < "$f" 2>/dev/null || true)
+    if ! echo "$out_exec" | grep -q '"decision":[[:space:]]*"block"'; then
+      failed+=("no-block-on-exec:$(basename "$f")")
+    fi
+    # Outside execution phase: expect no block (silent; logs only).
+    local out_plan
+    out_plan=$(unset AIHAUS_EXEC_PHASE MANIFEST_PATH; bash "$hook" < "$f" 2>/dev/null || true)
+    if echo "$out_plan" | grep -q '"decision":[[:space:]]*"block"'; then
+      failed+=("spurious-block-on-planning:$(basename "$f")")
+    fi
+  done
+
+  if [[ ${#failed[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${failed[*]}"
+  fi
+}
+
+# ---- merge-settings.sh produces replacement semantics for arrays ------------
+# Verifies that the shared merge helper, regardless of jq vs python path,
+# REPLACES the permissions.allow array (overlay wins). Catches silent
+# cross-platform divergence (jq's * operator on arrays may concatenate;
+# Python's deep_merge replaces). Uses fixture pair under tools/fixtures/.
+check_merge_semantics_convergence() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: merge-settings.sh produces replacement semantics for arrays"
+  local helper="${PACKAGE_ROOT}/scripts/lib/merge-settings.sh"
+  local base="${PACKAGE_ROOT}/../tools/fixtures/settings-merge/base.json"
+  local overlay="${PACKAGE_ROOT}/../tools/fixtures/settings-merge/overlay.json"
+  # If invoked from repo root, PACKAGE_ROOT may already include tools/.
+  [[ -f "$base" ]] || base="tools/fixtures/settings-merge/base.json"
+  [[ -f "$overlay" ]] || overlay="tools/fixtures/settings-merge/overlay.json"
+  [[ -f "$helper" && -f "$base" && -f "$overlay" ]] || { _fail "$label" "missing helper or fixtures"; return; }
+
+  # Stage fixtures into a temp dir under PACKAGE_ROOT/../tools/.out/ so the
+  # path is readable by both bash (Git Bash) and Python (Windows-native) —
+  # system /tmp doesn't resolve for Windows Python interpreters.
+  local repo_root="${PACKAGE_ROOT}/.."
+  local tmpdir="${repo_root}/tools/.out/merge-test-$$"
+  mkdir -p "$tmpdir"
+  local tmpdst="${tmpdir}/dst.json"
+  local tmpsrc="${tmpdir}/src.json"
+  cp "$base" "$tmpdst"
+  cp "$overlay" "$tmpsrc"
+
+  # shellcheck disable=SC1090
+  ( source "$helper" && merge_settings "$tmpdst" "$tmpsrc" ) >/dev/null 2>&1
+
+  # Inspect result: permissions.allow length must equal overlay's length (3),
+  # not the union (5). Use python (always required per README) for parsing.
+  local py_bin
+  py_bin="$(command -v python3 || command -v python || command -v py)"
+  if [[ -z "$py_bin" ]]; then
+    _fail "$label" "python required to parse merge result"
+    rm -rf "$tmpdir"
+    return
+  fi
+
+  # Convert path for Windows Python if cygpath is available (Git Bash).
+  local py_path="$tmpdst"
+  if command -v cygpath >/dev/null 2>&1; then
+    py_path="$(cygpath -w "$tmpdst" 2>/dev/null || echo "$tmpdst")"
+  fi
+
+  local result_len
+  result_len=$("$py_bin" -c "
+import json, sys
+with open(sys.argv[1]) as f: data = json.load(f)
+print(len(data.get('permissions', {}).get('allow', [])))
+" "$py_path" 2>/dev/null || echo "0")
+
+  rm -rf "$tmpdir"
+
+  if [[ "$result_len" = "3" ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "expected replacement (3 entries from overlay), got $result_len entries (likely concatenation/union)"
+  fi
+}
+
+# ---- auto-approve-bash.sh allows expected safe patterns ---------------------
+# Feeds each expanded SAFE_PATTERN through the hook with a synthetic JSON
+# input and asserts allow-decision JSON comes back. Regression gate against
+# accidental SAFE_PATTERNS removal.
+check_auto_approve_patterns() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: auto-approve-bash allows expected safe patterns"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/auto-approve-bash.sh"
+  [[ -f "$hook" ]] || { _fail "$label" "hook missing: $hook"; return; }
+  local patterns=("printf hello" "env" "tree ." "type ls" "tee file" "cut -f1 file" "tr a b" "seq 1 3")
+  local failed=()
+  for cmd in "${patterns[@]}"; do
+    local out
+    out=$(printf '{"tool_input":{"command":"%s"}}' "$cmd" | bash "$hook" 2>/dev/null || true)
+    if ! echo "$out" | grep -q '"behavior":[[:space:]]*"allow"'; then
+      failed+=("$cmd")
+    fi
+  done
+  if [[ ${#failed[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "did not approve: ${failed[*]}"
+  fi
+}
+
+# ---- Template PermissionRequest hooks reference auto-approve scripts --------
+check_template_permission_hooks() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: template PermissionRequest hooks reference auto-approve scripts"
+  local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
+  [[ -f "$tpl" ]] || { _fail "$label" "template missing: $tpl"; return; }
+  local missing=()
+  grep -q 'auto-approve-bash.sh' "$tpl" || missing+=("auto-approve-bash.sh")
+  grep -q 'auto-approve-writes.sh' "$tpl" || missing+=("auto-approve-writes.sh")
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "template missing hook references: ${missing[*]}"
+  fi
+}
+
 # ---- Check 16: Cursor plugin manifest + rules (M006 / ADR-005) --------------
 # Validates:
 #   (a) pkg/.aihaus/.cursor-plugin/plugin.json — exists, valid JSON, has "name"
@@ -512,6 +669,11 @@ check_aih_plan_annexes
 check_aih_milestone_annexes
 check_m005_canonical_phrases
 check_session_log_template
+check_template_bash_wildcard
+check_template_permission_hooks
+check_auto_approve_patterns
+check_merge_semantics_convergence
+check_autonomy_guard_detects_violations
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

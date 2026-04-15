@@ -46,6 +46,16 @@ If the candidate is a `plan`: read the plan's "Estimated Scope" section.
 
 ## Milestone Execution
 
+> **Execution-phase autonomy reminder** (enforced at runtime via
+> `autonomy-guard.sh` Stop hook): during the Wave 2 per-story loop
+> and every step below, NEVER emit `Checkpoint honesto`, `Opção
+> sua`, `Qual prefere?`, lettered menus `(a)/(b)/(c)`, numbered
+> menus `1. → / 2. → / 3. →`, `Pausing to...`, `Three realistic
+> forks`, `Realista: 4-6h+`, or `retoma com /aih-...`. Pick safer
+> default per `_shared/autonomy-protocol.md` TRUE blocker test
+> (L15-31), log the choice in RUN-MANIFEST progress log, proceed
+> silently. The Stop hook blocks the turn on forbidden patterns.
+
 ### Task tracking (two waves)
 
 **Wave 1** — create as `pending` at Phase-start using TaskCreate:

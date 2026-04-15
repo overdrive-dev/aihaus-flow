@@ -55,6 +55,13 @@ SAFE_PATTERNS=(
   '^chmod\b' '^date\b' '^curl\s+'
   # Mobile
   '^expo\s+' '^react-native\s+'
+  # Read-only / benign transforms (Story 4 of plan 260414-exec-auto-approve).
+  # NOTE: awk and sed deliberately EXCLUDED — both can invoke arbitrary
+  # destructive code (awk 'BEGIN{system(...)}', sed -i on system paths)
+  # that bash-guard.sh's whole-string regex does NOT catch. Adding them
+  # here without a compensating guard would widen the approve surface.
+  '^printf\b' '^env\b' '^tree\b' '^type\b'
+  '^tee\b' '^cut\b' '^tr\b' '^seq\b'
 )
 
 SAFE_REGEX=$(IFS='|'; echo "${SAFE_PATTERNS[*]}")

@@ -1,0 +1,2 @@
+Commit final pushed. Você retoma depois com /aih-resume [slug] quando quiser.
+Or type the command /aih-feature --plan next-slug manually.
