@@ -1,8 +1,7 @@
 ---
 name: aih-quick
 description: Fast-track for small, well-understood changes. Skips full planning — analyze, implement, and review in one shot.
-disable-model-invocation: true
-allowed-tools: Read Write Edit Grep Glob Bash
+allowed-tools: Read Write Edit Grep Glob Bash Skill
 argument-hint: "[what to fix or change]"
 ---
 

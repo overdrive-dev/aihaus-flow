@@ -1,8 +1,7 @@
 ---
 name: aih-feature
 description: Implement a scoped feature — plan, branch, build, test, commit. Use for changes that fit in one session.
-disable-model-invocation: true
-allowed-tools: Read Write Edit Grep Glob Bash TaskCreate TaskUpdate
+allowed-tools: Read Write Edit Grep Glob Bash TaskCreate TaskUpdate Skill
 argument-hint: "[feature description] [--plan slug]"
 ---
 

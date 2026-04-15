@@ -1,8 +1,7 @@
 ---
 name: aih-plan
 description: Research a problem and produce a plan without writing code. Use when you want to think before building.
-disable-model-invocation: true
-allowed-tools: Read Grep Glob Bash WebFetch
+allowed-tools: Read Grep Glob Bash WebFetch Skill
 argument-hint: "[what you want to plan — feature, migration, refactor, etc.]"
 ---
 
