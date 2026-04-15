@@ -104,12 +104,37 @@ PY
 # Bash(X *) entries without Bash(*).
 _autonomy_post_merge_hint() {
   local bak="$1"
-  command -v jq >/dev/null 2>&1 || return 0
   [[ -f "$bak" ]] || return 0
 
-  local had_wildcard had_granular
-  had_wildcard=$(jq -r '.permissions.allow // [] | any(. ; test("^Bash\\(.*\\)$"))' "$bak" 2>/dev/null || echo "true")
-  had_granular=$(jq -r '.permissions.allow // [] | any(. ; test("^Bash\\([^)]+\\*\\)$"))' "$bak" 2>/dev/null || echo "false")
+  local had_wildcard="" had_granular=""
+
+  # Prefer jq; fall back to python so the hint works on jq-less machines.
+  if command -v jq >/dev/null 2>&1; then
+    had_wildcard=$(jq -r '.permissions.allow // [] | any(. == "Bash(*)")' "$bak" 2>/dev/null || echo "")
+    had_granular=$(jq -r '.permissions.allow // [] | any(. ; test("^Bash\\([^)]+\\*\\)$"))' "$bak" 2>/dev/null || echo "")
+  elif command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || command -v py >/dev/null 2>&1; then
+    local py_bin
+    py_bin="$(command -v python3 || command -v python || command -v py)"
+    local bak_path="$bak"
+    if command -v cygpath >/dev/null 2>&1; then
+      bak_path="$(cygpath -w "$bak" 2>/dev/null || echo "$bak")"
+    fi
+    local py_out
+    py_out=$("$py_bin" -c "
+import json, re, sys
+with open(sys.argv[1]) as f:
+    d = json.load(f)
+allow = d.get('permissions', {}).get('allow', [])
+has_wildcard = any(x == 'Bash(*)' for x in allow)
+has_granular = any(re.match(r'^Bash\([^)]+\*\)$', x) for x in allow)
+print('wildcard:' + ('true' if has_wildcard else 'false'))
+print('granular:' + ('true' if has_granular else 'false'))
+" "$bak_path" 2>/dev/null) || return 0
+    had_wildcard=$(echo "$py_out" | grep '^wildcard:' | cut -d: -f2)
+    had_granular=$(echo "$py_out" | grep '^granular:' | cut -d: -f2)
+  else
+    return 0
+  fi
 
   if [[ "$had_wildcard" = "false" && "$had_granular" = "true" ]]; then
     echo ""
