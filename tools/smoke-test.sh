@@ -435,6 +435,31 @@ check_template_bash_wildcard() {
   fi
 }
 
+# ---- auto-approve-bash.sh allows expected safe patterns ---------------------
+# Feeds each expanded SAFE_PATTERN through the hook with a synthetic JSON
+# input and asserts allow-decision JSON comes back. Regression gate against
+# accidental SAFE_PATTERNS removal.
+check_auto_approve_patterns() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: auto-approve-bash allows expected safe patterns"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/auto-approve-bash.sh"
+  [[ -f "$hook" ]] || { _fail "$label" "hook missing: $hook"; return; }
+  local patterns=("printf hello" "env" "tree ." "type ls" "tee file" "cut -f1 file" "tr a b" "seq 1 3")
+  local failed=()
+  for cmd in "${patterns[@]}"; do
+    local out
+    out=$(printf '{"tool_input":{"command":"%s"}}' "$cmd" | bash "$hook" 2>/dev/null || true)
+    if ! echo "$out" | grep -q '"behavior":[[:space:]]*"allow"'; then
+      failed+=("$cmd")
+    fi
+  done
+  if [[ ${#failed[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "did not approve: ${failed[*]}"
+  fi
+}
+
 # ---- Template PermissionRequest hooks reference auto-approve scripts --------
 check_template_permission_hooks() {
   _start_check
@@ -547,6 +572,7 @@ check_m005_canonical_phrases
 check_session_log_template
 check_template_bash_wildcard
 check_template_permission_hooks
+check_auto_approve_patterns
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
