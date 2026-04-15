@@ -406,6 +406,31 @@ your-project/
 
 ---
 
+## Upgrading
+
+After `bash pkg/scripts/update.sh` (or `install.sh --update`):
+
+- `permissions.allow` is replaced by the template's default
+  (includes `Bash(*)`). Your prior file is saved at
+  `.claude/settings.local.json.bak.<timestamp>`.
+- `hooks` blocks are deep-merged — custom user hooks survive.
+- If you prefer narrow Bash permissions, edit
+  `.claude/settings.local.json` and replace `"Bash(*)"` with the
+  granular entries you want. Re-apply after each update.
+
+**Why `Bash(*)`?** The `auto-approve-bash.sh` + `bash-guard.sh` hook
+pair provides sandboxing; granular `Bash()` entries force interactive
+prompts for any command that isn't exact-matched, which breaks the
+autonomy-protocol execution-phase contract.
+
+**Cursor users (installed with `--platform cursor`):** the settings
+merge is skipped on Cursor installs — Cursor has its own permission
+UI. The `Bash(*)` template entry has no effect on Cursor.
+
+**Uninstall preserves settings:** `uninstall.sh` removes symlinks
+and hook scripts but leaves `.claude/settings.local.json` intact,
+so re-install doesn't wipe user prefs.
+
 ## Stack Agnostic
 
 aihaus works with **any** language, framework, or toolchain. Agents read `project.md` at runtime — they never assume Python, Node, Go, or anything else. Settings ship with `Bash(*)` permissions so every dev tool works without prompts. Install in a Rust project, a Rails app, or a Go microservice — it adapts.
