@@ -940,3 +940,267 @@ under "Cursor COMPAT-MATRIX row for S01/S02 hooks").
   closes the awk/sed gap at layer 2).
 - **ADR-009** (this decision's systemic-mitigations sibling — lands
   in S06).
+
+## ADR-009: Prompt-prevention systemic mitigations catalog
+
+Date: 2026-04-15
+Status: Proposed — P0 and one P1 item (permission-debug.sh) land
+in M007 alongside this ADR; remaining P1 + all P2 items deferred to
+`M008-permission-observability` (captured in
+`.aihaus/milestones/M007-260415-autoapprove-windows-cmds/BACKLOG.md`).
+This ADR stays Proposed until M008 lands — at which point a
+supplementary ADR may promote to Accepted.
+
+### Context
+
+M007's triage (ADR-008) closed four observed Claude Code prompt
+classes. That is necessary but not sufficient. The pattern that
+keeps recurring across aihaus milestones is **reactive whack-a-mole**:
+a user hits a prompt → a granular allow-list entry is added → the
+cycle repeats on the next shape. This pattern failed spectacularly
+in M007 — the SAFE_PATTERNS list in `auto-approve-bash.sh` had
+grown to ~45 entries without catching `dir`, `findstr`, env-var-
+prefixed commands, or compound-no-spaces shapes; meanwhile
+`bash-guard.sh` silently returned 0 on `rm -rf /` for ~weeks
+because a grep-invocation bug (CHECK.md Finding #1) had never been
+end-to-end tested.
+
+The user's directive for M007 ("pesquisa de causa raiz") demands
+systemic answers, not more patches. Analysis-brief §8 Q1 and
+CONVERSATION.md L22-28 asked:
+
+- Why does this class keep surfacing?
+- What observability do we have to catch the NEXT class faster?
+- What forward-work would make the problem domain well-understood
+  instead of continually rediscovered?
+
+This ADR answers those questions with a catalog, a root-cause
+analysis, and a ranked mitigation table.
+
+### Prompt-class catalog
+
+Classes 1-4 are **observed on Git Bash / Windows** during M007.
+Classes 5-10 are **latent** — plausible per the 3-layer model
+(ADR-008) and Claude Code docs, but not yet empirically triggered.
+
+| # | Class | Fired-by layer | Reproduction | Mitigation |
+|---|-------|----------------|--------------|------------|
+| 1 | Bash allowlist miss on quoted-path + redirect | L1 → L2 | `dir "C:\foo" 2>&1` | M007 S02 DANGEROUS_PATTERNS deny-list (`dir` auto-approves via fall-through) |
+| 2 | Bash matcher miss on env-var-prefixed | L1 → L2 | `MANIFEST_PATH=foo.md bash hook.sh` | M007 S02 (`^bash\b` anchoring no longer required; `bash` segment is safe and auto-approves) |
+| 3 | Bash matcher miss on compound-no-spaces | L1 → L2 | `ls;rm -rf /` | M007 S02 compound-splitter tightening (inclusive-OR segment semantics) |
+| 4 | Filesystem-sandbox first-time-seen subdir | L3 | `echo x > .aihaus/milestones/drafts/M037-polish-v5/STATUS.md` | M007 S03 `additionalDirectories: [".aihaus", ".claude"]` |
+| 5 | Write-tool prompt on paths outside `additionalDirectories` | L3 + L2 | `Write(/tmp/out.md)` | Intended behavior. Document; do not mitigate. `auto-approve-writes.sh` denies writes outside project by design. |
+| 6 | Read-tool prompt on sensitive-file patterns | L2 | `Read(/c/Users/X/.env)` | Intended behavior. `permissions.deny` owns this class; ADR-008 §Layer 3 Consequences confirms deny still wins. |
+| 7 | MCP tool prompts | L2 (matcher extension) | Hit MCP server with stored-auth needed | Out of M007 scope; investigate when first MCP server ships. File as M008+ |
+| 8 | WebFetch / WebSearch domain prompts | L2 | `WebFetch(<new-domain>)` | Intended behavior on first access. Deferred: domain allowlist investigation. |
+| 9 | Agent / Task spawn prompts | L2 | Spawn unknown subagent | Intended. `Agent` tool is in `permissions.allow` (template L13), so this is Cursor-surface territory (ADR-005). |
+| 10 | Skill invocation prompts (ADR-003 territory) | L2 | Programmatic Skill dispatch | ADR-003 invoke-guard + ADR-007 removal of `disable-model-invocation` closed this for allowlist skills. Cross-reference ADR-007. |
+
+**Note on classes 5-6.** These are listed with the explicit
+decision "document, do NOT mitigate" because they represent
+intended Claude Code security behavior. Users who want to suppress
+them are doing the wrong thing; the prompt IS the feature.
+
+### Root-cause analysis — why this pattern recurs
+
+Five hypotheses, annotated with evidence and mitigation:
+
+#### Hypothesis 1 — Claude Code permission docs are layered but not unified
+
+Each layer's escape hatch is documented separately. RESEARCH.md
+L65-66 notes the layer-3 mechanism is buried at "Configure
+permissions → Working directories", while PermissionRequest
+semantics live in the "Hooks guide → Decision rules" page. No
+single doc maps all three layers.
+
+**Mitigation:** ADR-008 IS the unified doc (for aihaus users and
+contributors). P2 follow-up: file an upstream issue on
+anthropics/claude-code requesting a consolidated permission-surface
+page.
+
+#### Hypothesis 2 — No observability into which layer fired a prompt
+
+When a prompt fires, the user sees the UI dialog but has no record
+of which hook fired (or no hook fired). Triage starts from scratch
+each time: re-read the hook source, re-read the settings, re-read
+the docs, guess.
+
+**Mitigation:** `permission-debug.sh` (P1, **IN-SCOPE this
+milestone**, S06 Part 2). Writes one JSONL record per
+PermissionRequest event to `.aihaus/audit/permission-log.jsonl`
+when `AIHAUS_DEBUG_PERMISSIONS=1`. Silent no-op when disabled.
+
+#### Hypothesis 3 — aihaus's historical approach has been reactive allowlist growth
+
+Every prior prompt → SAFE_PATTERNS entry added. Never a step back
+to ask "are we using the right model?" Result: ~45 allow entries
+that still miss `dir`, `findstr`, env-var-prefixed commands.
+
+**Mitigation:** M007 S02 flips to fail-open deny-list. Future
+additions curate ~24 DANGEROUS_PATTERNS (stable) instead of
+N hundred SAFE_PATTERNS (growing).
+
+#### Hypothesis 4 — No regression test validates "stock install prompts zero"
+
+There is no automated test that simulates common aihaus flows
+(milestone seed, plan write, hook append) and asserts zero
+PermissionRequest events. New contributions can accidentally
+reintroduce a class without CI catching it.
+
+**Mitigation:** "Stock install prompts zero" regression fixture
+(P1, **DEFERRED** to `M008-permission-observability`). Offline mock
+— pipe payloads through hooks directly, no live Claude Code
+session required. Estimated ~60 LOC shell.
+
+#### Hypothesis 5 — Template drift from documented-sufficient settings
+
+Users on old installs may have granular `Bash(...)` entries that
+`update.sh` template-wins-replaces on next update. The migration
+hint at `pkg/scripts/lib/merge-settings.sh:139-146` is advisory;
+users can miss or ignore it. Settings drift in the other direction
+(user installs have fewer safety features than template) is
+undetected today.
+
+**Mitigation:** `tools/settings-audit.sh` CLI (P1, **DEFERRED** to
+`M008-permission-observability`). Compares installed
+`.claude/settings.local.json` against template + "minimum
+competent settings" manifest, flags gaps.
+
+### Mitigation catalog — ranked P0 / P1 / P2
+
+Each row annotated with M007 status per PRD §4.3 locked decisions.
+
+| Mitigation | Class addressed | Cost | Impact | Priority | M007 status |
+|------------|-----------------|------|--------|----------|-------------|
+| Flatten 3-layer doc into ADR | Discoverability (all classes) | XS | M | P0 | **LANDED** in S05 / ADR-008 |
+| Permission-debug hook (permission-log) | Diagnostics (classes 1-3, 5-10) | XS | M | P1 | **IN-SCOPE** — S06 Part 2 (this ADR's sibling story) |
+| "Stock install prompts zero" regression test | All classes; regression gate | S (~60 LOC) | H | P1 | **DEFERRED** → `M008-permission-observability` |
+| `tools/settings-audit.sh` CLI | Drift (existing installs) | S (~80 LOC) | H | P1 | **DEFERRED** → `M008-permission-observability` |
+| Prompt-diagnostic CLI (explain which layer would prompt for `<cmd>`) | Triage speed | M | M | P2 | **DEFERRED** — M008+ |
+| Upstream issue to anthropics/claude-code for unified permission docs | Ecosystem | S | L-M (depends on Anthropic) | P2 | **DEFERRED** — file GH issue separately, not in milestone |
+| Version-compat matrix (which Claude Code version introduces/removes prompts) | Forward-compat | M | M | P2 | **DEFERRED** |
+| Deny-list hardening loop (quarterly review of new Claude Code versions + DANGEROUS_PATTERNS) | Forward-compat | S (recurring) | M | P2 | **DEFERRED** — process work, not code |
+| PowerShell parity for DANGEROUS_PATTERNS | Windows prompt class (latent) | S | M | P2 | **DEFERRED** — HA-9 evidence says Git Bash is primary |
+| Cursor empirical `additionalDirectories` + `PermissionRequest` test | Cursor parity | M | M | P2 | **DEFERRED** → M008+ |
+
+### M007 in-scope lock (per PRD §4.3)
+
+Explicitly:
+
+- **IN-SCOPE:** ADR-008 (P0), ADR-009 (this P0 catalog), and
+  `permission-debug.sh` (P1 observability keystone).
+- **DEFERRED to `M008-permission-observability`:** "Stock install
+  prompts zero" regression test (P1), `tools/settings-audit.sh`
+  CLI (P1). Estimated total ~140 LOC.
+- **DEFERRED indefinitely (P2):** prompt-diagnostic CLI, upstream
+  docs issue, version-compat matrix, deny-list hardening loop,
+  PowerShell parity, Cursor empirical test.
+
+Rationale per PRD §4.3: the debug hook alone gives the next
+triage a full audit trail — which is what was MISSING for M007
+itself (HA-6 scope uncertainty). Regression test + settings-audit
+are useful but not load-bearing for the NEXT triage cycle (the
+debug hook is). Shipping all three here would bust M007's
+120-180 LOC envelope.
+
+### Systemic vs tactical split
+
+- **Tactical (M007):** S01 bash-guard fix, S02 auto-approve-bash
+  flip, S03 additionalDirectories, S04 validate + propagate.
+  These are **layer-specific** fixes.
+- **Documentation keystone (M007):** ADR-008 — the unified 3-layer
+  model.
+- **Systemic catalog (M007):** ADR-009 — this ADR.
+- **Systemic tooling (M007):** `permission-debug.sh` — ships in
+  S06 Part 2.
+- **Forward-work (M008+):** regression test + settings-audit CLI.
+- **Process work (P2):** quarterly DANGEROUS_PATTERNS review,
+  upstream docs issue, version-compat matrix.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** Land ADR + debug hook now; defer regression test + settings-audit to M008 | Fits M007 envelope; debug hook unblocks the next triage | Takes one more milestone to close P1 | Rational scope-budgeting per PRD §4.3 |
+| 2 | Ship nothing systemic — leave as future work | Zero M007 scope increase; all tactical fixes already land | Next triage repeats this milestone's research tax; ADR knowledge decays quickly | Rejected — the user's root-cause directive is explicit |
+| 3 | Bundle regression test + settings-audit into M007 too | Closes all P1 in one shot | ~140 extra LOC; stretches milestone past HA-6 scope estimate; delays S01-S04 merge | Rejected — load-bearing fixes come first |
+| 4 | Skip debug hook; just write the ADR | Paperwork-only M007 systemic surface | No observability; the hypothesis-2 gap persists | Rejected — debug hook is the load-bearing diagnostic for the NEXT triage |
+
+### Consequences
+
+#### Positive
+
+- **Observability without noise.** `permission-debug.sh` ships
+  disabled (`AIHAUS_DEBUG_PERMISSIONS=0` default). Triage-active
+  operators enable it, reproduce, tail the log, triage in minutes.
+  Silent for everyone else.
+- **Forward work is scoped.** `M008-permission-observability` has
+  concrete story seeds (BACKLOG.md entries M008-S01, M008-S02,
+  M008-S03, M008-S04). Not vague TODOs.
+- **The catalog becomes a living artifact.** When the next prompt
+  class is reported, the first step is to locate it in classes
+  1-10 above (or add class 11). This ADR supplants the "guess and
+  grep" triage mode.
+
+#### Negative
+
+- **Proposed status means partial commitment.** If
+  `M008-permission-observability` never ships, two P1 items remain
+  open indefinitely. Mitigation: M008 is already named and seeded
+  in BACKLOG.md; the planning work is done.
+- **Observability via log file, not structured telemetry.**
+  `.aihaus/audit/permission-log.jsonl` is grep-able but not
+  queryable. Good enough for triage, poor for dashboards. Future
+  work if telemetry ever becomes a need.
+- **The debug hook runs for every PermissionRequest event (even
+  when disabled, it pays the fork cost of ~5-10ms).** Hot-path
+  impact is negligible on Git Bash; on slower or restricted
+  environments, operators can remove the matcher `""` entry from
+  their settings. Documented as an opt-out route.
+
+#### Neutral
+
+- Claude-Code-primary, same as ADR-008. Cursor users do not see
+  `permission-debug.sh` effects (the hook registers via
+  `PermissionRequest` matcher, which Cursor may or may not
+  support). Cursor empirical test captured as deferred work.
+
+### Related ADRs
+
+- **ADR-007** (remove `disable-model-invocation`) — its Follow-up
+  work entry at `pkg/.aihaus/decisions.md:699-702` is superseded
+  by ADR-008 §Defense-in-depth reasoning. This ADR files the
+  supersession as a prompt-class inventory observation (class 10).
+- **ADR-008** (the 3-layer model this catalog lives atop) — each
+  catalog row's "Fired-by layer" column maps to ADR-008's layer
+  enumeration.
+- **ADR-003** (marker protocol) — class 10 cross-references ADR-003
+  for skill-invocation prompts.
+- **ADR-005** (Claude Code + Cursor parity) — Cursor caveat in
+  Consequences §Neutral inherits ADR-005 §4 authoring convention.
+
+### Follow-up work
+
+- **M008-permission-observability** milestone (seeded): regression
+  test fixture + settings-audit CLI. Two stories, estimated S + S,
+  total ~140 LOC. File upstream issue in parallel. See
+  `.aihaus/milestones/M007-260415-autoapprove-windows-cmds/BACKLOG.md`
+  for seed entries.
+- **Upstream GH issue** to anthropics/claude-code requesting a
+  unified permission-surface docs page. Estimated XS (file issue,
+  link ADR-008). Do separately from M008.
+- **Quarterly DANGEROUS_PATTERNS review** (process item). Schedule
+  a recurring 30-min review: any new Claude Code versions shipped?
+  Any new catastrophic command shapes emerged in the ecosystem?
+  Any false-positives reported on current patterns?
+- **PowerShell parity** for DANGEROUS_PATTERNS. Trigger on first
+  user report of a PowerShell-specific prompt. Evidence today
+  says Git Bash is primary (HA-9 strong).
+- **Cursor empirical test** — run dogfood Cursor session against
+  post-M007 settings, document whether `additionalDirectories` and
+  `PermissionRequest` behave identically. File findings into
+  COMPAT-MATRIX.md.
+- **Promote to Accepted** — when `M008-permission-observability`
+  lands, write a supplementary ADR (or an amendment to this one)
+  recording that the deferred P1 items have shipped and promoting
+  this ADR's Status to Accepted.

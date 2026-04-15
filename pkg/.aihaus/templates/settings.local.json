@@ -83,6 +83,17 @@
             "statusMessage": "Evaluating write permission..."
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/permission-debug.sh",
+            "timeout": 5,
+            "async": true
+          }
+        ]
       }
     ],
     "PostToolUse": [
