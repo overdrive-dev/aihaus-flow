@@ -1,0 +1,6 @@
+Opção sua:
+1. "continua" → sigo Grupo B→C→D autonomamente (longo).
+2. "só B" / "só C" / "só D" → executo um grupo e pauso.
+3. pause aqui → commit final, push branch, eu encerro.
+
+Qual prefere?

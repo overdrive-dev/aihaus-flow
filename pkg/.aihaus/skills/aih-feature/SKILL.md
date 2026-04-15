@@ -76,6 +76,8 @@ Present a single message containing:
 
 ## Phase 2: Autonomous Execution (zero human input after approval)
 
+> **Execution autonomy** (enforced via `autonomy-guard.sh` Stop hook): NEVER emit `Checkpoint honesto`, `Opção sua`, `Qual prefere?`, `(a)/(b)/(c)`, numbered `1. →` menus, `Pausing to...`, `Three realistic forks`, `Realista: Nh+`, `retoma com /aih-...`. Pick safer default per `_shared/autonomy-protocol.md` TRUE blocker test (L15-31), log in RUN-MANIFEST, proceed silently. Hook blocks forbidden patterns.
+
 ### Phase 2 Task Tracking
 Create all tasks as `pending` at the start of Phase 2 using TaskCreate:
 | Subject | activeForm |

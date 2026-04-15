@@ -75,10 +75,10 @@ check_agents() {
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 16 .sh files (post-M003) -------------------
+# ---- Check 3: .aihaus/hooks/ has 17 .sh files (post-M003 + autonomy-guard) --
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 16 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 17 .sh files"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
@@ -86,10 +86,10 @@ check_hooks() {
   fi
   local count
   count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 16 ]]; then
+  if [[ "$count" -eq 17 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 16 .sh files, found $count"
+    _fail "$label" "expected 17 .sh files, found $count"
   fi
 }
 
@@ -435,6 +435,43 @@ check_template_bash_wildcard() {
   fi
 }
 
+# ---- autonomy-guard.sh blocks violations in execution phase -----------------
+# Feeds 5 canonical violation fixtures through the hook with
+# AIHAUS_EXEC_PHASE=1 set; asserts block JSON. Also asserts NO block
+# outside execution phase (planning-phase prose containing forbidden
+# patterns must pass through).
+check_autonomy_guard_detects_violations() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: autonomy-guard blocks forbidden patterns in execution phase"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/autonomy-guard.sh"
+  local fixtures="${PACKAGE_ROOT}/../tools/fixtures/autonomy-violations"
+  [[ -f "$hook" ]] || { _fail "$label" "hook missing: $hook"; return; }
+  [[ -d "$fixtures" ]] || { _fail "$label" "fixtures dir missing: $fixtures"; return; }
+
+  local failed=()
+  for f in "$fixtures"/*.txt; do
+    [ -f "$f" ] || continue
+    # In execution phase: expect block.
+    local out_exec
+    out_exec=$(AIHAUS_EXEC_PHASE=1 bash "$hook" < "$f" 2>/dev/null || true)
+    if ! echo "$out_exec" | grep -q '"decision":[[:space:]]*"block"'; then
+      failed+=("no-block-on-exec:$(basename "$f")")
+    fi
+    # Outside execution phase: expect no block (silent; logs only).
+    local out_plan
+    out_plan=$(unset AIHAUS_EXEC_PHASE MANIFEST_PATH; bash "$hook" < "$f" 2>/dev/null || true)
+    if echo "$out_plan" | grep -q '"decision":[[:space:]]*"block"'; then
+      failed+=("spurious-block-on-planning:$(basename "$f")")
+    fi
+  done
+
+  if [[ ${#failed[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${failed[*]}"
+  fi
+}
+
 # ---- merge-settings.sh produces replacement semantics for arrays ------------
 # Verifies that the shared merge helper, regardless of jq vs python path,
 # REPLACES the permissions.allow array (overlay wins). Catches silent
@@ -636,6 +673,7 @@ check_template_bash_wildcard
 check_template_permission_hooks
 check_auto_approve_patterns
 check_merge_semantics_convergence
+check_autonomy_guard_detects_violations
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
