@@ -15,14 +15,14 @@ $ARGUMENTS
 If `$ARGUMENTS` contains `--plan`, extract the word immediately after `--plan` as the **slug**.
 
 1. **Attempt to read** `.aihaus/plans/[slug]/PLAN.md`.
-2. **If the file exists**, use its contents as the analysis input for this feature:
-   - Skip the "what's the goal?" clarifying question — the plan already defines it.
-   - Skip codebase research that the plan already covers (e.g., if the plan lists affected files, do not re-scan for them).
-   - Still ask about constraints or preferences **not** addressed by the plan.
-   - In your plan summary (Step 5), note: "Using plan: `.aihaus/plans/[slug]/PLAN.md`"
-3. **If the file does not exist**, report this error and **stop**:
+2. **If the file exists** AND has no unresolved `## Open Questions` section (or the section is empty): **skip Phase 1 entirely** — do NOT re-ask scoping questions, do NOT issue Step 5 "STOP HERE". The plan contains the approved analysis. Dispatch to Phase 2 immediately.
+   - Emit a single 3-bullet pre-flight summary before Phase 2: (PLAN.md slug, Affected Files count, Estimated Scope). No interactive acknowledgment needed.
+   - Carry the plan's "Affected Files" list as the authoritative scope for Phase 2. Do not re-scan the codebase.
+   - In the Phase 2 RUN-MANIFEST progress log, note: "Using plan: `.aihaus/plans/[slug]/PLAN.md` — Phase 1 short-circuited."
+3. **If the file exists** BUT contains an `## Open Questions` section with unresolved items: fall back to the full Phase 1 below — the plan is incomplete and needs scoping input before execution.
+4. **If the file does not exist**, report this error and **stop**:
    > "Plan not found at `.aihaus/plans/[slug]/PLAN.md`. Run `/aih-plan` first to create it."
-4. **If no `--plan` flag is present**, proceed normally — all steps below apply in full.
+5. **If no `--plan` flag is present**, proceed normally — all Phase 1 steps below apply in full.
 
 ## Phase 1: Understand & Plan (interactive — ask questions, then wait for approval)
 
