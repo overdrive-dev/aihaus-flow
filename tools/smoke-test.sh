@@ -435,6 +435,68 @@ check_template_bash_wildcard() {
   fi
 }
 
+# ---- merge-settings.sh produces replacement semantics for arrays ------------
+# Verifies that the shared merge helper, regardless of jq vs python path,
+# REPLACES the permissions.allow array (overlay wins). Catches silent
+# cross-platform divergence (jq's * operator on arrays may concatenate;
+# Python's deep_merge replaces). Uses fixture pair under tools/fixtures/.
+check_merge_semantics_convergence() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: merge-settings.sh produces replacement semantics for arrays"
+  local helper="${PACKAGE_ROOT}/scripts/lib/merge-settings.sh"
+  local base="${PACKAGE_ROOT}/../tools/fixtures/settings-merge/base.json"
+  local overlay="${PACKAGE_ROOT}/../tools/fixtures/settings-merge/overlay.json"
+  # If invoked from repo root, PACKAGE_ROOT may already include tools/.
+  [[ -f "$base" ]] || base="tools/fixtures/settings-merge/base.json"
+  [[ -f "$overlay" ]] || overlay="tools/fixtures/settings-merge/overlay.json"
+  [[ -f "$helper" && -f "$base" && -f "$overlay" ]] || { _fail "$label" "missing helper or fixtures"; return; }
+
+  # Stage fixtures into a temp dir under PACKAGE_ROOT/../tools/.out/ so the
+  # path is readable by both bash (Git Bash) and Python (Windows-native) —
+  # system /tmp doesn't resolve for Windows Python interpreters.
+  local repo_root="${PACKAGE_ROOT}/.."
+  local tmpdir="${repo_root}/tools/.out/merge-test-$$"
+  mkdir -p "$tmpdir"
+  local tmpdst="${tmpdir}/dst.json"
+  local tmpsrc="${tmpdir}/src.json"
+  cp "$base" "$tmpdst"
+  cp "$overlay" "$tmpsrc"
+
+  # shellcheck disable=SC1090
+  ( source "$helper" && merge_settings "$tmpdst" "$tmpsrc" ) >/dev/null 2>&1
+
+  # Inspect result: permissions.allow length must equal overlay's length (3),
+  # not the union (5). Use python (always required per README) for parsing.
+  local py_bin
+  py_bin="$(command -v python3 || command -v python || command -v py)"
+  if [[ -z "$py_bin" ]]; then
+    _fail "$label" "python required to parse merge result"
+    rm -rf "$tmpdir"
+    return
+  fi
+
+  # Convert path for Windows Python if cygpath is available (Git Bash).
+  local py_path="$tmpdst"
+  if command -v cygpath >/dev/null 2>&1; then
+    py_path="$(cygpath -w "$tmpdst" 2>/dev/null || echo "$tmpdst")"
+  fi
+
+  local result_len
+  result_len=$("$py_bin" -c "
+import json, sys
+with open(sys.argv[1]) as f: data = json.load(f)
+print(len(data.get('permissions', {}).get('allow', [])))
+" "$py_path" 2>/dev/null || echo "0")
+
+  rm -rf "$tmpdir"
+
+  if [[ "$result_len" = "3" ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "expected replacement (3 entries from overlay), got $result_len entries (likely concatenation/union)"
+  fi
+}
+
 # ---- auto-approve-bash.sh allows expected safe patterns ---------------------
 # Feeds each expanded SAFE_PATTERN through the hook with a synthetic JSON
 # input and asserts allow-decision JSON comes back. Regression gate against
@@ -573,6 +635,7 @@ check_session_log_template
 check_template_bash_wildcard
 check_template_permission_hooks
 check_auto_approve_patterns
+check_merge_semantics_convergence
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
