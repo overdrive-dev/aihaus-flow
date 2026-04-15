@@ -155,7 +155,7 @@ remain Claude-Code-only and are documented as such in
 ## ADR-003: Agent→Skill invocation via last-line marker protocol (partial supersession of ADR-001)
 
 Date: 2026-04-14
-Status: Accepted — Superseded (partial) by ADR-006 (2026-04-14 — ALLOWLIST + parent-dispatcher list updated; aih-run and aih-plan-to-milestone removed; aih-milestone + aih-feature added as dispatchers)
+Status: Accepted — Superseded (partial) by ADR-006 (2026-04-14 — ALLOWLIST + parent-dispatcher list updated; aih-run and aih-plan-to-milestone removed; aih-milestone + aih-feature added as dispatchers); amended by ADR-007 (2026-04-14 — disable-model-invocation removed from the 5 allowlist skills to make Skill-tool dispatch operational; Skill added to allowed-tools as defense-in-depth)
 
 ### Context
 
@@ -596,3 +596,107 @@ Retire both skills. Consolidate their functionality into the sibling skills whos
 
 - Future milestone may revisit archived Epics F (slug-less default auto-detect) and G (Haiku inter-step validators) once production usage produces pain signal for either area.
 - `pkg/scripts/install.sh` could be extended to prune retired skill symlinks explicitly (rather than relying on the per-dir bulk replace). Low priority — current behavior is correct, just leaves brief dangling state between script steps.
+
+## ADR-007: Remove `disable-model-invocation` from ADR-003 allowlist skills
+
+Date: 2026-04-14
+Status: Accepted — Amends ADR-003 (skill chaining via Skill tool is now directly operational, not merely prose-prescribed)
+
+### Context
+
+ADR-003 designed parent-skill → child-skill dispatch via the Skill
+tool. Every `aih-*` SKILL.md shipped with `disable-model-invocation:
+true` since v0.1.0. The flag blocks both NL-auto-trigger AND
+programmatic Skill-tool invocation (empirically confirmed by user
+error: *"Skill aih-milestone cannot be used with Skill tool due to
+disable-model-invocation"*). ADR-006 updated the invoke-guard
+allowlist to add `aih-milestone` + `aih-feature` but left the flag
+in place — breaking the chain whose success ADR-003 assumed.
+
+ADR-006's Decision text (L552-562) and Consequences (L584-593) are
+silent on `disable-model-invocation`. We treat that silence as
+oversight (no decision text in ADR-006 rejects the flag removal)
+and frame this ADR as an amendment, not a supersession. If a future
+researcher finds intent-preserving text we missed, escalate to
+supersession.
+
+### Decision
+
+Remove `disable-model-invocation: true` from the five ADR-003
+allowlist skills: `aih-plan`, `aih-milestone`, `aih-feature`,
+`aih-bugfix`, `aih-quick`. Keep the flag on the six non-allowlist
+skills: `aih-init`, `aih-help`, `aih-resume`, `aih-brainstorm`,
+`aih-update`, `aih-sync-notion`.
+
+The allowlist IS the policy perimeter: skills that can be dispatched
+programmatically are the same skills that can be NL-triggered. The
+two are coupled on purpose — any skill reachable from parent skills
+must be reachable by user prose without platform protection.
+
+**Defense-in-depth:** add `Skill` to `allowed-tools:` on the same 5
+skills. Platform auto-injection of the `Skill` tool into skill
+contexts is HIGH-confidence-but-unverified per ASSUMPTIONS.md Area
+2. Explicit whitelisting protects against version drift: if the
+auto-injection assumption proves wrong, the chain no-ops instead of
+silently failing.
+
+**Monitoring:** codify "allowlist = NL-policy boundary" as a
+smoke-test check — assert the 6 excluded skills retain
+`disable-model-invocation: true`. Regression-proof against sloppy
+future edits or missing-flag contributions.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** Remove flag from 5 allowlist skills + add `Skill` to `allowed-tools:` (defense-in-depth) | Minimum blast radius; allowlist = NL-match policy boundary; no prose edits to shared protocol; explicit whitelisting closes unverified platform-injection gap | Two NL-match surfaces may collide in edge cases | Least disruption; mirrors invoke-guard.sh allowlist; addresses F-3 defense |
+| 2 | Remove flag from all 11 skills | Simplest mental model | Opens NL-trigger on init/brainstorm/sync-notion (high blast radius) | Violates ADR-003 §L205–209 exclusion intent |
+| 3 | Keep flag; replace Skill-tool dispatch with marker-protocol emission from parent skills | Preserves all flags | Rewrites autonomy-protocol + 4 skills' Phase 4 prose; duplicates invoke-guard logic | High churn; contradicts ADR-003 design |
+| 4 | Introduce narrower custom flag (e.g., `disable-natural-language-trigger: true`) | Theoretical perfect gate | Not a documented Claude Code platform field; requires upstream platform change | Out of scope — revisit via follow-up ADR if platform ships such a flag |
+| 5 | Remove flag from 5 callees ONLY (no `allowed-tools:` edit) | Cleanest frontmatter diff | Relies on HIGH-confidence-but-unverified "Skill is platform-injected" assumption; fails silently on platform version drift | Defense-in-depth won; Chosen Option 1 absorbs this as a cheaper-together-than-apart edit |
+
+### Consequences
+
+- `/aih-plan` Phase 4 Step 12 threshold gate now executes: `y`/`sim`/
+  `go` dispatches `aih-milestone --plan [slug]` or `aih-feature
+  --plan [slug]` via Skill tool with no intermediate keyboard step.
+  (Silent `aih-feature --plan` chain requires the Phase 1
+  short-circuit shipped alongside this ADR in plan
+  `260414-enable-skill-chaining` Story 2.)
+- The five dispatch-participant skills are now model-invocable.
+  Casual NL mentions of "milestone", "bugfix", "plan", "quick fix"
+  may surface skill auto-matching; the intent-specific `description:`
+  fields mitigate but do not eliminate this.
+- The ADR-003 marker-protocol path (invoke-guard → parent dispatches
+  via Skill tool) becomes functional end-to-end — was previously
+  blocked at the final Skill-tool call.
+- COMPAT-MATRIX rows for all five skills gain NL-trigger widening
+  notes on Cursor — Cursor honors the flag identically per
+  `.aihaus/research/cursor-primitives-verification.md:106-109`.
+  `--no-chain` opt-out (autonomy-protocol L103-106) remains the
+  Cursor escape when chaining to NOT-SUPPORTED targets.
+- **Quantitative rollback trigger:** if ≥3 NL-auto-trigger false
+  positives are reported via user issues within 7 days post-merge,
+  the fix is reverted and re-architected toward Option 3
+  (marker-protocol only). Note: NL-auto-trigger events are not
+  currently captured in `.claude/audit/invoke.jsonl`; the rollback
+  trigger is therefore conditioned on user reports. A follow-up
+  story may add NL-match telemetry if false positives materialize.
+- Version bump `0.11.1 → 0.12.0` (minor — widens NL-trigger surface
+  on Cursor, amends an Accepted ADR).
+
+### Follow-up work
+
+- Monitor NL-auto-trigger false positives via user reports. If
+  casual conversation auto-invokes a skill, tighten `description:`
+  copy (low-cost mitigation) or revisit Option 3
+  (marker-protocol only).
+- Cursor chain degradation: `--no-chain` already exists
+  (autonomy-protocol L103-106). Document prominently in COMPAT-
+  MATRIX notes (done alongside this ADR).
+- NL-match telemetry: if needed, add a hook to log NL-initiated
+  skill invocations to `.claude/audit/invoke.jsonl`.
+- Re-evaluate awk/sed for `auto-approve-bash.sh` SAFE_PATTERNS
+  (excluded in v0.11.1 for security) once `bash-guard.sh` extends
+  its regex to catch `awk 'BEGIN{system(...)}'` and `sed -i` on
+  system paths.

@@ -1,8 +1,7 @@
 ---
 name: aih-bugfix
 description: Triage and fix a bug — root cause analysis, branch, fix, test, commit. Use for defects and errors.
-disable-model-invocation: true
-allowed-tools: Read Write Edit Grep Glob Bash TaskCreate TaskUpdate
+allowed-tools: Read Write Edit Grep Glob Bash TaskCreate TaskUpdate Skill
 argument-hint: "[bug description, error message, or symptom]"
 ---
 

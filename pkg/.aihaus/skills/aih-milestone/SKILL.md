@@ -1,8 +1,7 @@
 ---
 name: aih-milestone
 description: "Start, resume, or execute a milestone. Conversational gathering mode by default; --execute or start-intent triggers the milestone-execution pipeline (annexes/execution.md)."
-disable-model-invocation: true
-allowed-tools: Read Write Edit Grep Glob Bash Agent TaskCreate TaskUpdate
+allowed-tools: Read Write Edit Grep Glob Bash Agent TaskCreate TaskUpdate Skill
 argument-hint: "[description] [--execute] [--plan slug]"
 ---
 

@@ -435,6 +435,32 @@ check_template_bash_wildcard() {
   fi
 }
 
+# ---- Excluded skills retain disable-model-invocation -----------------------
+# Codifies ADR-007 "allowlist = NL-policy boundary" claim. The 6 excluded
+# skills (aih-init, aih-help, aih-resume, aih-brainstorm, aih-update,
+# aih-sync-notion) must NEVER auto-trigger from casual NL — their
+# behaviors have high blast radius (init overwrites project.md;
+# brainstorm fan-outs; sync-notion hits external API).
+check_excluded_skills_keep_flag() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: excluded skills retain disable-model-invocation"
+  local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
+  local excluded=(aih-init aih-help aih-resume aih-brainstorm aih-update aih-sync-notion)
+  local missing=()
+  for skill in "${excluded[@]}"; do
+    local file="${skills_root}/${skill}/SKILL.md"
+    [[ -f "$file" ]] || { missing+=("$skill(file missing)"); continue; }
+    if ! head -10 "$file" | grep -q '^disable-model-invocation:[[:space:]]*true'; then
+      missing+=("$skill")
+    fi
+  done
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "missing flag on: ${missing[*]}"
+  fi
+}
+
 # ---- autonomy-guard.sh blocks violations in execution phase -----------------
 # Feeds 5 canonical violation fixtures through the hook with
 # AIHAUS_EXEC_PHASE=1 set; asserts block JSON. Also asserts NO block
@@ -674,6 +700,7 @@ check_template_permission_hooks
 check_auto_approve_patterns
 check_merge_semantics_convergence
 check_autonomy_guard_detects_violations
+check_excluded_skills_keep_flag
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
