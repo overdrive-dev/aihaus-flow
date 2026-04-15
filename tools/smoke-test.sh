@@ -418,6 +418,39 @@ check_session_log_template() {
   fi
 }
 
+# ---- Template permissions.allow has a wildcard Bash entry -------------------
+# Locks in the autonomy contract: template must ship with wildcard-capable
+# permissions so execution phase doesn't fall through to interactive prompts.
+# Regex match (Bash\(.*\)) accepts "Bash(*)", "Bash(.*)", or future
+# normalizations — not brittle on the literal string.
+check_template_bash_wildcard() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: template permissions.allow has a wildcard Bash entry"
+  local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
+  [[ -f "$tpl" ]] || { _fail "$label" "template missing: $tpl"; return; }
+  if grep -Eq '"Bash\(.*\)"' "$tpl"; then
+    _pass "$label"
+  else
+    _fail "$label" "no Bash(<wildcard>) entry found in $tpl permissions.allow"
+  fi
+}
+
+# ---- Template PermissionRequest hooks reference auto-approve scripts --------
+check_template_permission_hooks() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: template PermissionRequest hooks reference auto-approve scripts"
+  local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
+  [[ -f "$tpl" ]] || { _fail "$label" "template missing: $tpl"; return; }
+  local missing=()
+  grep -q 'auto-approve-bash.sh' "$tpl" || missing+=("auto-approve-bash.sh")
+  grep -q 'auto-approve-writes.sh' "$tpl" || missing+=("auto-approve-writes.sh")
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "template missing hook references: ${missing[*]}"
+  fi
+}
+
 # ---- Check 16: Cursor plugin manifest + rules (M006 / ADR-005) --------------
 # Validates:
 #   (a) pkg/.aihaus/.cursor-plugin/plugin.json — exists, valid JSON, has "name"
@@ -512,6 +545,8 @@ check_aih_plan_annexes
 check_aih_milestone_annexes
 check_m005_canonical_phrases
 check_session_log_template
+check_template_bash_wildcard
+check_template_permission_hooks
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
