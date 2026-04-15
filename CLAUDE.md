@@ -29,10 +29,10 @@ There is no build command, no type checker, and no unit test framework. The smok
 
 ## Package Contents (inside `pkg/`)
 
-- `pkg/.aihaus/skills/*/SKILL.md` — 13 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code (or as a `Task` mention on Cursor).
+- `pkg/.aihaus/skills/*/SKILL.md` — 11 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code (or as a `Task` mention on Cursor).
 - `pkg/.aihaus/skills/_shared/autonomy-protocol.md` — binding execution-autonomy rules (M005 / ADR-bound-to-all-skills): 3-phase rule, TRUE blocker definition, no option menus, no delegated typing. Every SKILL.md references it.
 - `pkg/.aihaus/agents/*.md` — 43 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
-- `pkg/.aihaus/hooks/*.sh` — 16 shell hooks for Claude Code lifecycle events + M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance).
+- `pkg/.aihaus/hooks/*.sh` — 17 shell hooks for Claude Code lifecycle events: M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance) plus v0.12.0 runtime autonomy enforcement (autonomy-guard blocks forbidden execution-phase patterns).
 - `pkg/.aihaus/rules/` — Cursor plugin rules and compatibility matrix (M006; `aihaus.mdc`, `COMPAT-MATRIX.md`, `README.md`). Consumed by Cursor's plugin subsystem when installed with `--platform cursor` or `--platform both`.
 - `pkg/.aihaus/.cursor-plugin/plugin.json` — Cursor plugin manifest (M006; Strategy B per ADR-005). `pkg/.aihaus/` is the plugin root when installed on Cursor.
 - `pkg/.aihaus/skills/aih-plan/annexes/*.md` — 4 annex files (attachments, intake-discipline, from-brainstorm, guardrails) — M004 enxugamento of the aih-plan core SKILL.md.

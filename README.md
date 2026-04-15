@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.10.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.12.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 [![Cursor](https://img.shields.io/badge/Cursor-first--class-000000?style=for-the-badge)](https://cursor.com)
 
@@ -50,11 +50,11 @@ Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and s
 ---
 
 > [!NOTE]
-> ### v0.10.0 — Cursor is a first-class install target
+> ### v0.12.0 — Skill chaining + exec-phase autonomy
 >
-> aihaus now ships as a native Cursor plugin alongside Claude Code. `install.sh --platform cursor` sets up the plugin at `~/.cursor/plugins/local/aihaus`. Most read-only and single-turn skills work on both platforms; flows that rely on worktree isolation stay Claude-Code-only and are called out in the [compatibility matrix](pkg/.aihaus/rules/COMPAT-MATRIX.md).
+> Skills can now invoke other skills directly (ADR-007), unlocking silent chains like `/aih-feature --plan <slug>` that skip re-prompting. The `autonomy-guard` hook enforces `autonomy-protocol.md` at runtime — option menus and honest checkpoints are blocked during execution. Cursor remains a first-class install target (since v0.10.0); see the [compatibility matrix](pkg/.aihaus/rules/COMPAT-MATRIX.md) for per-skill support.
 >
-> See [ADR-005](pkg/.aihaus/decisions.md) for the multi-platform decision record.
+> See [ADR-007](pkg/.aihaus/decisions.md) for the skill-chaining decision record.
 
 ---
 
@@ -307,7 +307,7 @@ Nothing is fine-tuned and no weights move. What changes is the markdown that gui
 
 ## Commands
 
-aihaus ships 13 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**. Since v0.9.0 the autonomy contract is codified in a shared annex (`pkg/.aihaus/skills/_shared/autonomy-protocol.md`) that every skill references — no mid-execution option menus, no honest checkpoints, no delegated typing.
+aihaus ships 11 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**. Since v0.9.0 the autonomy contract is codified in a shared annex (`pkg/.aihaus/skills/_shared/autonomy-protocol.md`) that every skill references — no mid-execution option menus, no honest checkpoints, no delegated typing.
 
 ### Core workflow
 
@@ -373,7 +373,7 @@ aihaus ships 13 intent-based skills. Every command follows the same pattern: **a
 ```
 your-project/
 ├── .aihaus/                          # aihaus workspace (gitignored by default — your call)
-│   ├── skills/                       # 13 intent-based commands
+│   ├── skills/                       # 11 intent-based commands
 │   │   └── _shared/
 │   │       └── autonomy-protocol.md  # Binding execution-autonomy rules (M005)
 │   ├── agents/                       # 43 specialized agent definitions
