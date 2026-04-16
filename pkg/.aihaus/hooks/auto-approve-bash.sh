@@ -19,6 +19,38 @@ emit_allow() {
   fi
 }
 
+# SAFE_PATTERNS — narrow pre-allow allowlist (M008 auto-mode compensation).
+#
+# These patterns are explicitly auto-approved BEFORE the DANGEROUS_PATTERNS
+# scan runs. Under the post-M007 deny-list semantics they would be
+# auto-approved anyway (no match against DANGEROUS_PATTERNS), but listing
+# them explicitly gives users on auto mode (`/aih-calibrate --preset
+# auto-mode-safe`) a narrow rule surface that survives when `Bash(*)` is
+# silently dropped by the classifier. Additive-only: NEVER remove entries
+# here — smoke-test Check 22 asserts auto-approve behavior on a subset.
+#
+# The story spec and PLAN.md Rev. 3 (R6 mitigation) explicitly call these
+# out as the safe-pattern widening for auto-mode compensation. Extend the
+# array (never contract it) when new idempotent read/validation idioms are
+# established in aihaus.
+SAFE_PATTERNS=(
+  'bash tools/smoke-test\.sh'
+  'bash tools/purity-check\.sh'
+  '^git status$'
+  '^git diff($|[[:space:]])'
+  '^git log($|[[:space:]])'
+  '^git status --porcelain$'
+  '^git -C [^;&|]* status'
+  '^wc -l '
+)
+
+SAFE_REGEX=$(IFS='|'; echo "${SAFE_PATTERNS[*]}")
+
+if [[ -n "$COMMAND" ]] && echo "$COMMAND" | grep -qE "$SAFE_REGEX"; then
+  emit_allow
+  exit 0
+fi
+
 # Auto-approve-by-default deny-list (M007/S02; see ADR-008, ADR-009).
 # Semantic flip vs. pre-M007 SAFE_PATTERNS allowlist: commands auto-approve
 # UNLESS a segment matches one of the DANGEROUS_PATTERNS below. Compound

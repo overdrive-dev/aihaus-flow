@@ -12,6 +12,7 @@
     ".claude"
   ],
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Read", "Glob", "Grep", "Write", "Edit",
       "WebFetch", "WebSearch", "Agent", "Skill",
@@ -22,7 +23,9 @@
       "Bash(: > /dev/sda*)", "Bash(dd if=/dev/zero*)",
       "Read(//**/.env)", "Read(//**/.env.*)",
       "Read(//**/credentials*)", "Read(//**/id_rsa*)", "Read(//**/*.pem)"
-    ]
+    ],
+    "_aihaus_managed": true,
+    "_aihaus_alt_auto_mode_comment": "Switch defaultMode to 'auto' via /aih-calibrate --preset auto-mode-safe. Requires Claude Code v2.1.83+, Max/Team/Enterprise/API plan, Anthropic API (not Bedrock/Vertex/Foundry), and Opus 4.6/4.7 or Sonnet 4.6. Auto mode silently drops Bash(*) — narrow rules survive."
   },
   "hooks": {
     "SessionStart": [

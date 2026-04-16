@@ -17,6 +17,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 | Name | Type | Status | Why | Last verified |
 |------|------|--------|-----|---------------|
 | aih-brainstorm | skill | WORKS-WITH-CAVEAT | Default conversational mode is single-turn, no agents — works as-is. `--panel` / `--deep` / `--research` modes spawn multiple subagents via `Agent` tool — on Cursor the vehicle is `Task` + `/name` mentions (see rules file translation table). | 2026-04-14 |
+| aih-calibrate | skill | WORKS-WITH-CAVEAT | Edits frontmatter + `settings.local.json`; Cursor prompts per write. `--preset auto-mode-safe` targets a Claude-Code-only feature (`permissions.defaultMode: auto`); on Cursor, the edit succeeds but the target field is Claude-Code-specific and ignored by Cursor's permission model. | 2026-04-16 |
 | aih-bugfix | skill | NOT-SUPPORTED | Spawns `implementer` (worktree-isolated) to apply the fix. Cursor has no `isolation: worktree` or `bypassPermissions` equivalent. Since v0.12.0, `disable-model-invocation` is removed — Cursor NL-trigger surface widens (Cursor honors the flag identically per cursor-primitives-verification.md:106-109). | 2026-04-14 |
 | aih-feature | skill | NOT-SUPPORTED | Spawns `implementer` / `frontend-dev` (worktree-isolated) for the build step. Same primitive gap as aih-bugfix. Since v0.12.0, NL-trigger surface widens on Cursor (flag removed). | 2026-04-14 |
 | aih-help | skill | WORKS | Pure read — prints command list. No subagents, no writes. | 2026-04-14 |
