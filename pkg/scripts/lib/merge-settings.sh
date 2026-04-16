@@ -79,8 +79,12 @@ def deep_merge(base, overlay):
     return overlay if overlay is not None else base
 
 merged = deep_merge(dst, src)
+# jq-compatible byte layout: explicit separators (no trailing space before
+# comma) + trailing newline so successive jq/python invocations on the same
+# file produce identical bytes. See M009 QA-REVIEW M-001.
 with open(dst_path, "w", encoding="utf-8") as fh:
-    json.dump(merged, fh, indent=2)
+    json.dump(merged, fh, indent=2, separators=(",", ": "))
+    fh.write("\n")
 PY
     then
       echo "  error: python merge failed; restoring from backup"
@@ -93,6 +97,62 @@ PY
     rm -f "$bak"
     AIHAUS_SETTINGS_BACKUP_PATH=""
     return 0
+  fi
+
+  # Post-merge defaultMode preserve — user intent wins on this single scalar.
+  # Reads .aihaus/.calibration's permission_mode field and overwrites
+  # .permissions.defaultMode in $dst so /aih-calibrate choices survive
+  # /aih-update (which otherwise lets the template's defaultMode win via
+  # overlay). Only touches .permissions.defaultMode; allow/deny/hook paths
+  # still follow template-wins. Missing sidecar or empty value = no-op.
+  # Schema contract: pkg/.aihaus/skills/aih-calibrate/annexes/state-file.md.
+  local target_root
+  target_root="$(dirname "$(dirname "$dst")")"
+  local state_file="${target_root}/.aihaus/.calibration"
+  if [[ -f "$state_file" ]]; then
+    local state_schema user_mode
+    state_schema=$(grep -E '^schema=' "$state_file" | head -1 | cut -d= -f2 | tr -d '[:space:]\r')
+    user_mode=$(grep -E '^permission_mode=' "$state_file" | head -1 | cut -d= -f2 | tr -d '[:space:]\r')
+    if [[ "$state_schema" == "1" && -n "$user_mode" ]]; then
+      local pm_tmp
+      pm_tmp="$(mktemp)"
+      local preserved=0
+      if command -v jq >/dev/null 2>&1; then
+        if jq --arg mode "$user_mode" '.permissions.defaultMode = $mode' "$dst" > "$pm_tmp"; then
+          mv "$pm_tmp" "$dst"
+          preserved=1
+        else
+          rm -f "$pm_tmp"
+        fi
+      elif command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || command -v py >/dev/null 2>&1; then
+        local pm_py_bin
+        pm_py_bin="$(command -v python3 || command -v python || command -v py)"
+        if "$pm_py_bin" - "$dst" "$user_mode" "$pm_tmp" <<'PY'
+import json, sys
+dst_path, mode, tmp_path = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(dst_path, "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+data.setdefault("permissions", {})["defaultMode"] = mode
+# jq-compatible byte layout — see M009 QA-REVIEW M-001.
+with open(tmp_path, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, indent=2, separators=(",", ": "))
+    fh.write("\n")
+PY
+        then
+          mv "$pm_tmp" "$dst"
+          preserved=1
+        else
+          rm -f "$pm_tmp"
+        fi
+      else
+        rm -f "$pm_tmp"
+      fi
+      if [[ "$preserved" = "1" ]]; then
+        echo "  settings: defaultMode preserved from .aihaus/.calibration ($user_mode)"
+      else
+        echo "  warn: defaultMode preserve step failed; leaving merged template value"
+      fi
+    fi
   fi
 
   # Post-merge migration hint (Story 3 logic, gated on jq availability for

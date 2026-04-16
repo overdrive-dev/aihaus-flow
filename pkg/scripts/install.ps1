@@ -98,6 +98,72 @@ if ($Update) {
         Copy-Item -Path $src -Destination $dst -Recurse -Force
         Write-Host "  refreshed: .aihaus\$name"
     }
+
+    # Restore per-agent calibration from .aihaus\.calibration (schema v1).
+    # Mirror of restore_calibration() in update.sh -- pinned call site between
+    # agents refresh and .claude\ re-link so both layers pick up restored
+    # frontmatter. Schema contract:
+    # pkg\.aihaus\skills\aih-calibrate\annexes\state-file.md
+    $stateFile = Join-Path $TargetAihaus '.calibration'
+    if (Test-Path $stateFile) {
+        $schemaLine = (Select-String -Path $stateFile -Pattern '^schema=' | Select-Object -First 1)
+        $schema = ''
+        if ($schemaLine) {
+            $schema = ($schemaLine.Line -split '=', 2)[1]
+            $schema = ($schema -replace "`r", '').Trim()
+        }
+        if ($schema -ne '1') {
+            Write-Host "  warn: unknown .calibration schema='$schema' -- skipping restore"
+        } else {
+            $restored = 0
+            $skipped = 0
+            $lastPreset = ''
+            foreach ($line in (Get-Content -LiteralPath $stateFile)) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                if ($line -match '^\s*#') { continue }
+                if ($line -notmatch '=') { continue }
+                $parts = $line -split '=', 2
+                $key = ($parts[0] -replace "`r", '').Trim()
+                $value = ($parts[1] -replace "`r", '').Trim()
+                if ($key -eq 'schema') { continue }
+                if ($key -eq 'permission_mode') { continue }
+                if ($key -eq 'last_preset') { $lastPreset = $value; continue }
+                if ($key -eq 'last_commit') { continue }
+                if ([string]::IsNullOrWhiteSpace($value)) { continue }
+
+                $agentFile = Join-Path (Join-Path $TargetAihaus 'agents') ("$key.md")
+                if (Test-Path $agentFile) {
+                    $content = Get-Content -LiteralPath $agentFile
+                    $newContent = $content -replace '^effort: .*', "effort: $value"
+                    # UTF8 no-BOM, no trailing newline -- matches sed -i.bak byte layout.
+                    Set-Content -LiteralPath $agentFile -Value $newContent -Encoding UTF8 -NoNewline
+                    $restored++
+                } else {
+                    $skipped++
+                    Write-Host "  warn: .calibration references missing agent '$key' -- skipped"
+                }
+            }
+            if ($skipped -gt 0) {
+                Write-Host ("  restored {0} per-agent effort override(s) from .aihaus\.calibration ({1} skipped -- missing agents)" -f $restored, $skipped)
+            } else {
+                Write-Host ("  restored {0} per-agent effort override(s) from .aihaus\.calibration" -f $restored)
+            }
+            if ($lastPreset -eq 'auto-mode-safe') {
+                Write-Host ""
+                Write-Host "  !!  Your last preset was auto-mode-safe, but side effects" -ForegroundColor Yellow
+                Write-Host "  !!  (auto-approve-bash.sh SAFE_PATTERNS widening + worktree" -ForegroundColor Yellow
+                Write-Host "  !!  agents' permissionMode removal) are NOT auto-restored." -ForegroundColor Yellow
+                Write-Host "  !!  Classifier pauses may occur until you re-run:" -ForegroundColor Yellow
+                Write-Host "  !!    /aih-calibrate --preset auto-mode-safe" -ForegroundColor Yellow
+                Write-Host ""
+                # Dedupe flag -- post-merge defaultMode-preserve block
+                # (install.ps1:292ish) reads the same sidecar and would emit
+                # this identical !! block a second time on -Update runs.
+                # Flag skip there.
+                $script:AutoModeSafeWarningEmitted = $true
+            }
+        }
+    }
 } else {
     # Step 3: existing .aihaus prompt
     if (Test-Path $TargetAihaus) {
@@ -135,7 +201,7 @@ function Link-Or-Copy {
 
     if ($script:Mode -eq 'link') {
         try {
-            # mklink /J is available via cmd on every modern Windows — no admin required
+            # mklink /J is available via cmd on every modern Windows -- no admin required
             $out = cmd /c "mklink /J `"$dst`" `"$src`"" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  link: .claude\$Name -> .aihaus\$Name"
@@ -187,6 +253,59 @@ if (-not (Test-Path $SettingsSrc)) {
     $merged = Merge-Object $dstJson $srcJson
     $merged | ConvertTo-Json -Depth 20 | Set-Content -Path $SettingsOut -Encoding UTF8
     Write-Host "  settings: merged"
+
+    # Post-merge defaultMode preserve -- user intent wins on this single scalar.
+    # Mirror of merge-settings.sh:98-150. Reads .aihaus\.calibration's
+    # permission_mode and overwrites .permissions.defaultMode so
+    # /aih-calibrate choices survive install.ps1 -Update (which otherwise
+    # lets the template's defaultMode win via Merge-Object). Only touches
+    # .permissions.defaultMode; allow/deny/hook paths still follow template-wins.
+    # Missing sidecar or empty value = silent no-op.
+    # Schema contract: pkg\.aihaus\skills\aih-calibrate\annexes\state-file.md.
+    $pmStateFile = Join-Path $TargetAihaus '.calibration'
+    if (Test-Path $pmStateFile) {
+        $pmSchema = ''
+        $pmUserMode = ''
+        $pmLastPreset = ''
+        foreach ($line in (Get-Content -LiteralPath $pmStateFile)) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            if ($line -match '^\s*#') { continue }
+            if ($line -notmatch '=') { continue }
+            $pmParts = $line -split '=', 2
+            $pmKey = ($pmParts[0] -replace "`r", '').Trim()
+            $pmVal = ($pmParts[1] -replace "`r", '').Trim()
+            if ($pmKey -eq 'schema' -and -not $pmSchema) { $pmSchema = $pmVal }
+            elseif ($pmKey -eq 'permission_mode' -and -not $pmUserMode) { $pmUserMode = $pmVal }
+            elseif ($pmKey -eq 'last_preset' -and -not $pmLastPreset) { $pmLastPreset = $pmVal }
+        }
+        if ($pmSchema -eq '1' -and -not [string]::IsNullOrWhiteSpace($pmUserMode)) {
+            try {
+                $pmJson = Get-Content -LiteralPath $SettingsOut -Raw | ConvertFrom-Json
+                if (-not ($pmJson.PSObject.Properties.Name -contains 'permissions')) {
+                    Add-Member -InputObject $pmJson -NotePropertyName 'permissions' -NotePropertyValue ([pscustomobject]@{}) -Force
+                }
+                if ($pmJson.permissions.PSObject.Properties.Name -contains 'defaultMode') {
+                    $pmJson.permissions.defaultMode = $pmUserMode
+                } else {
+                    Add-Member -InputObject $pmJson.permissions -NotePropertyName 'defaultMode' -NotePropertyValue $pmUserMode -Force
+                }
+                $pmJson | ConvertTo-Json -Depth 20 | Set-Content -Path $SettingsOut -Encoding UTF8
+                Write-Host "  settings: defaultMode preserved from .aihaus\.calibration ($pmUserMode)"
+            } catch {
+                Write-Host "  warn: defaultMode preserve step failed; leaving merged template value"
+            }
+            if ($pmLastPreset -eq 'auto-mode-safe' -and -not $script:AutoModeSafeWarningEmitted) {
+                Write-Host ""
+                Write-Host "  !!  Your last preset was auto-mode-safe, but side effects" -ForegroundColor Yellow
+                Write-Host "  !!  (auto-approve-bash.sh SAFE_PATTERNS widening + worktree" -ForegroundColor Yellow
+                Write-Host "  !!  agents' permissionMode removal) are NOT auto-restored." -ForegroundColor Yellow
+                Write-Host "  !!  Classifier pauses may occur until you re-run:" -ForegroundColor Yellow
+                Write-Host "  !!    /aih-calibrate --preset auto-mode-safe" -ForegroundColor Yellow
+                Write-Host ""
+                $script:AutoModeSafeWarningEmitted = $true
+            }
+        }
+    }
 }
 
 # Step 8: write install mode marker

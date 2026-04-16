@@ -122,6 +122,13 @@ if [[ "${UPDATE}" == "1" ]]; then
     cp -R "${src}" "${dst}"
     echo "  refreshed: .aihaus/${name}"
   done
+  # Restore per-agent calibration from sidecar after agents/ wipe — pinned
+  # between the refresh loop above and the .claude/ link_or_copy loop below,
+  # mirroring update.sh's call site so both .aihaus/agents/ (physical) and
+  # .claude/agents/ (symlink or copy) pick up restored frontmatter.
+  # shellcheck source=lib/restore-calibration.sh
+  source "$(dirname "$0")/lib/restore-calibration.sh"
+  restore_calibration "${TARGET}/.aihaus"
 else
   # Step 3: existing .aihaus/ prompt
   if [[ -e "${TARGET}/.aihaus" ]]; then

@@ -82,6 +82,20 @@ Effort presets:
 - `quality-first` — adds `max` to coding/adversarial agents (use sparingly; docs warn "prone to overthinking")
 - `auto-mode-safe` — switches permission mode only; keeps `balanced` effort
 
+Calibration survives `/aih-update` via a `.aihaus/.calibration` sidecar
+(M009 / ADR-M009-A). The file is user-owned, never committed, and
+mirrors the `.install-mode` precedent — it lives at `.aihaus/` root so
+the refresh loop (which only touches `skills/`, `agents/`, `hooks/`,
+`templates/`) leaves it alone. `update.sh` re-applies recorded `effort:`
+tiers to refreshed agents and `merge-settings.sh` preserves the recorded
+`permissions.defaultMode` post-merge. If `last_preset=auto-mode-safe`,
+the update prints a loud `!!` warning — hook/worktree side effects
+aren't auto-replayed; re-run `/aih-calibrate --preset auto-mode-safe` to
+reapply. Pre-v0.13 hand-edited frontmatter: run `/aih-calibrate --inspect`
+before the first post-v0.13 update to snapshot current state, then
+re-apply per-agent after the update. Full schema + migration guide:
+`pkg/.aihaus/skills/aih-calibrate/annexes/state-file.md`.
+
 ## Installer Behavior
 
 The install scripts create symlinks (Unix) or directory junctions (Windows) from `.claude/{skills,agents,hooks}` to `.aihaus/{skills,agents,hooks}` in the target repo. The `--copy` flag forces file copies instead. Settings are merged (not overwritten) using `jq` or Python as a fallback.

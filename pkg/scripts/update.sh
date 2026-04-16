@@ -109,6 +109,17 @@ for name in skills agents hooks templates; do
   update_aihaus_dir "${name}"
 done
 
+# ---- Restore per-agent calibration from sidecar ------------------------------
+# Reads .aihaus/.calibration (schema v1) and re-applies recorded effort tiers
+# to refreshed agent frontmatters. Call site is pinned between the refresh
+# loop above and the link_or_copy loop below so both .aihaus/agents/ (physical)
+# and .claude/agents/ (symlink or copy) pick up restored frontmatter.
+# Missing sidecar = silent no-op. Schema contract: pkg/.aihaus/skills/
+# aih-calibrate/annexes/state-file.md.
+# shellcheck source=lib/restore-calibration.sh
+source "$(dirname "$0")/lib/restore-calibration.sh"
+restore_calibration "${AIHAUS}"
+
 # Count what was updated
 if [[ -d "${AIHAUS}/skills" ]]; then
   count_skills=$(find "${AIHAUS}/skills" -type f -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
