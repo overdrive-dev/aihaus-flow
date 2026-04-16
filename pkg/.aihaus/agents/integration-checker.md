@@ -6,7 +6,7 @@ description: >
   end-to-end. Existence is not integration.
 tools: Read, Bash, Grep, Glob
 model: opus
-effort: high
+effort: xhigh
 color: blue
 memory: project
 ---

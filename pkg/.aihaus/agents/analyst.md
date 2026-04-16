@@ -7,7 +7,7 @@ description: >
   a PRD for a new feature or milestone.
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 model: opus
-effort: high
+effort: xhigh
 color: blue
 memory: project
 ---
@@ -58,6 +58,8 @@ update `.aihaus/memory/global/architecture.md`.
 
 ## Multimodal Context
 If the invocation prompt includes an Attachments block, Read the files relevant to your task. Images (PNG, JPG), PDFs, and logs are supported. Reference what you observed using the provided relative paths.
+
+**Image resolution (Opus 4.7+):** long-edge up to 2,576 px (~3.75 MP) is supported. Larger/denser screenshots, diagrams, and reference mockups are safe to attach.
 
 ## Rules
 - Read `.aihaus/decisions.md` — don't recommend against existing decisions

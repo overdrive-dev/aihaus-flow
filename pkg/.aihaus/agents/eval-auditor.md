@@ -7,7 +7,7 @@ description: >
   remediation guidance.
 tools: Read, Write, Bash, Grep, Glob
 model: opus
-effort: high
+effort: xhigh
 color: red
 memory: project
 ---

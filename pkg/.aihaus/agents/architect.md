@@ -92,6 +92,8 @@ Document them BEFORE implementation begins.
 ## Multimodal Context
 If the invocation prompt includes an Attachments block, Read the files (architecture diagrams, existing design specs, reference screenshots). Factor them into ADRs and the architecture doc.
 
+**Image resolution (Opus 4.7+):** long-edge up to 2,576 px (~3.75 MP) is supported. Larger/denser screenshots, diagrams, and reference mockups are safe to attach.
+
 ## Rules
 - Read `.aihaus/decisions.md` — your ADRs will be appended there
 - Read agent memory before designing anything

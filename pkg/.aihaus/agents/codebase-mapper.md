@@ -6,7 +6,7 @@ description: >
   reference docs that other agents consume for planning and execution.
 tools: Read, Bash, Grep, Glob, Write
 model: opus
-effort: high
+effort: xhigh
 color: cyan
 memory: project
 ---

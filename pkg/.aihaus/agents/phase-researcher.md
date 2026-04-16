@@ -8,7 +8,7 @@ description: >
 tools: Read, Write, Bash, Grep, Glob, WebSearch, WebFetch
 # MCP tools (when available): mcp__context7__*, mcp__firecrawl__*, mcp__exa__*
 model: opus
-effort: high
+effort: xhigh
 color: cyan
 memory: project
 ---

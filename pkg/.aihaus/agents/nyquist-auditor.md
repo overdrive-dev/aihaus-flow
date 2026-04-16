@@ -7,7 +7,7 @@ description: >
   test files and updates validation maps.
 tools: Read, Write, Edit, Bash, Glob, Grep
 model: opus
-effort: high
+effort: xhigh
 color: violet
 isolation: worktree
 permissionMode: bypassPermissions

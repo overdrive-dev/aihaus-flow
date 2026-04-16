@@ -7,7 +7,7 @@ description: >
   Commits atomically per story.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: opus
-effort: high
+effort: xhigh
 color: green
 isolation: worktree
 permissionMode: bypassPermissions

@@ -49,6 +49,8 @@ For each screen:
 ## Multimodal Context
 If the invocation prompt includes an Attachments block, Read the files (mockups, wireframes, design system references, inspiration screenshots). Use them as primary design input. Reference by relative path in the UX spec.
 
+**Image resolution (Opus 4.7+):** long-edge up to 2,576 px (~3.75 MP) is supported. Larger/denser screenshots, diagrams, and reference mockups are safe to attach.
+
 ## Rules
 - Mobile-first: design for 375px width, then adapt to desktop
 - Read `.aihaus/project.md` for the project's component and route directories
