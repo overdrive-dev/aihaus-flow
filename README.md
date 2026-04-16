@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.12.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.13.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 [![Cursor](https://img.shields.io/badge/Cursor-first--class-000000?style=for-the-badge)](https://cursor.com)
 
@@ -50,11 +50,11 @@ Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and s
 ---
 
 > [!NOTE]
-> ### v0.12.0 — Skill chaining + exec-phase autonomy
+> ### v0.13.0 — Opus 4.7 agents + `/aih-calibrate` that survives updates
 >
-> Skills can now invoke other skills directly (ADR-007), unlocking silent chains like `/aih-feature --plan <slug>` that skip re-prompting. The `autonomy-guard` hook enforces `autonomy-protocol.md` at runtime — option menus and honest checkpoints are blocked during execution. Cursor remains a first-class install target (since v0.10.0); see the [compatibility matrix](pkg/.aihaus/rules/COMPAT-MATRIX.md) for per-skill support.
+> 43 agents adopt the Opus 4.7 effort tier (+vision note), giving planners/reviewers deeper deliberation by default. New `/aih-calibrate` skill lets you retune per-agent effort and flip `permissions.defaultMode` via four presets (`cost-optimized`, `balanced`, `quality-first`, `auto-mode-safe`) — every edit atomic, committed, reversible. Calibration now **survives `/aih-update`** via a `.aihaus/.calibration` sidecar; all four update paths (bash + PowerShell, install.sh + install.ps1) restore effort tiers and preserve `defaultMode` byte-identically.
 >
-> See [ADR-007](pkg/.aihaus/decisions.md) for the skill-chaining decision record.
+> See [ADR-M008-A..C + ADR-M009-A](pkg/.aihaus/decisions.md) for the calibration + sidecar decision records, and the [v0.13.0 release notes](https://github.com/overdrive-dev/aihaus-flow/releases/tag/v0.13.0) for the full list.
 
 ---
 
