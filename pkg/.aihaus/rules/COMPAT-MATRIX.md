@@ -79,7 +79,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 
 ## Summary
 
-- **Skills:** 11 rows — 2 WORKS, 5 WORKS-WITH-CAVEAT, 4 NOT-SUPPORTED.
+- **Skills:** 12 rows — 2 WORKS, 6 WORKS-WITH-CAVEAT, 4 NOT-SUPPORTED.
 - **Agents:** 43 rows — 25 WORKS, 13 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
 
 ## Maintenance
