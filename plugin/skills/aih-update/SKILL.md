@@ -1,0 +1,199 @@
+---
+name: aih-update
+description: Update aihaus to the latest version from the remote repository. Fetches, compares, applies, and re-links.
+disable-model-invocation: true
+allowed-tools: Read Grep Glob Bash
+argument-hint: "[--check | --force]"
+---
+
+## Task
+
+Update the local aihaus installation by pulling the latest package from the
+remote git repository. Fully autonomous — fetches, compares versions, applies
+changes, re-links, and reports what changed.
+
+$ARGUMENTS
+
+## Flags
+
+- `--check` — Only check if an update is available. Do not apply.
+- `--force` — Skip version comparison, always pull and apply.
+- `--session-log <milestone-slug>` — M004 story L post-hoc retrospective. Skip update logic; generate `.aihaus/milestones/<slug>/execution/SESSION-LOG.md` from `pkg/.aihaus/templates/SESSION-LOG.md`. Fill Timeline/Friction/Wins/Ideas/Artifacts/Hand-off from on-disk artifacts (RUN-MANIFEST.md, CHECK.md, VERIFICATION.md, INTEGRATION.md, reviewer reports, `.claude/audit/*.jsonl`, self-evolution additions). Opt-in only (F-M5); template H2 headers load-bearing — smoke-test enforces.
+- No flag — Default: check version, pull if newer, apply, re-link.
+
+---
+
+## Phase 1 — Detect Package Source
+
+### 1. Find the aihaus package repository
+
+Check these locations in order:
+
+1. If `.aihaus/.install-source` exists, read the remote URL from it.
+2. If `.aihaus/` is a symlink, resolve it to find the package root, then
+   check `git -C <pkg-root> remote get-url origin`.
+3. If a `pkg/` directory exists in the current repo (dogfooding mode),
+   use the current repo's remote: `git remote get-url origin`.
+4. If none found, ask the user: "Where is the aihaus package repo?
+   Provide a git URL or local path."
+
+Store as `PKG_REMOTE` and `PKG_LOCAL` (local clone path).
+
+### 2. Check if package repo is cloned locally
+
+If `PKG_LOCAL` exists and is a git repo, use it.
+If not, check for a cached clone at `~/.aihaus-pkg/` or `/tmp/aihaus-pkg/`.
+If no local clone exists, clone to `~/.aihaus-pkg/`:
+
+```bash
+git clone --depth 1 "$PKG_REMOTE" ~/.aihaus-pkg
+```
+
+---
+
+## Phase 2 — Version Comparison
+
+### 3. Fetch latest from remote
+
+```bash
+git -C "$PKG_LOCAL" fetch origin --tags
+```
+
+### 4. Compare versions
+
+Read local version: `cat .aihaus/.version 2>/dev/null || echo "0.0.0"`
+Read remote version: `git -C "$PKG_LOCAL" show origin/main:pkg/VERSION 2>/dev/null`
+
+If `--check` flag: print comparison and stop.
+
+```
+aihaus update check:
+  Local:  0.1.0
+  Remote: 0.2.0
+  Status: Update available (run /aih-update to apply)
+```
+
+If versions are equal and `--force` is not set: print "Already up to date." and stop.
+
+### 5. Show changelog diff
+
+```bash
+git -C "$PKG_LOCAL" log --oneline local-tag..origin/main -- pkg/
+```
+
+Print: "Changes since your version: [N commits]"
+Show the commit subjects (max 20 lines).
+
+---
+
+## Phase 3 — Apply Update
+
+### 6. Pull latest
+
+```bash
+git -C "$PKG_LOCAL" checkout main
+git -C "$PKG_LOCAL" pull origin main
+```
+
+### 7. Run the package update script
+
+```bash
+bash "$PKG_LOCAL/pkg/scripts/install.sh" --target "$(pwd)" --update
+```
+
+This re-links skills, agents, hooks, templates from the updated package.
+Preserves all local data (project.md, plans, milestones, memory).
+
+### 8. Write version marker
+
+```bash
+cat "$PKG_LOCAL/pkg/VERSION" > .aihaus/.version
+```
+
+### 9. Write source marker (for future updates)
+
+```bash
+echo "$PKG_REMOTE" > .aihaus/.install-source
+```
+
+---
+
+## Phase 4 — Verify & Report
+
+### 10. Run smoke test (if available)
+
+```bash
+[[ -f "$PKG_LOCAL/tools/smoke-test.sh" ]] || { echo "tools/smoke-test.sh missing in $PKG_LOCAL — migration notice: older clone layout. Re-run /aih-update after a clean clone."; return 0; }
+bash "$PKG_LOCAL/tools/smoke-test.sh" 2>/dev/null
+```
+
+If it fails, warn but don't rollback — the user can investigate.
+
+### 11. Pre-flight Warnings
+
+Before reporting, surface any migration-relevant state:
+
+- **In-flight milestones** — mirror `aih-resume` Phase 1 detection so warnings match what `/aih-resume` would pick up.
+  1. Skip `.aihaus/milestones/drafts/` — it is the draft container, not a run.
+  2. **Primary:** `Glob` `.aihaus/milestones/*/RUN-MANIFEST.md`. For each, read `Status:` (and `Phase:`). Warn iff `Status` is not `completed`.
+  3. **Legacy fallback:** for milestone dirs with no `RUN-MANIFEST.md` and no `execution/MILESTONE-SUMMARY.md`, warn only when execution visibly started — i.e., `stories/*.md` exists OR `execution/` contains `analysis-brief.md`, `PRD.md`, or `architecture.md`. Bare log files (`DECISIONS-LOG.md`, `KNOWLEDGE-LOG.md`) and empty `stories/` + `execution/reviews/` scaffolds do not qualify — skip silently.
+  4. **Message:** `In-flight milestone detected: <slug> (phase: <phase-or-unknown>). Post-update, run /aih-resume to continue.` Omit the parenthetical for legacy dirs where phase is unavailable.
+- **Legacy `aihaus:` prefix installs** — if `.claude/commands/aihaus:*.md` exists, warn: "Pre-rename installation detected — legacy `aihaus:` commands will be replaced by `aih-*`."
+
+### 12. Migration Notice (version-gated)
+
+Read the previous version from `.aihaus/.version` (or treat as `0.0.0` if missing). Print the blocks whose boundary `prev_version` crosses (both may fire on a multi-version skip):
+
+- **`prev_version < 0.2.0`** — gathering-mode boundary:
+  ```
+  Migration (v0.2.0): /aih-milestone now enters gathering mode. /aih-resume added.
+  Backward-compat: /aih-milestone "desc" --execute preserves old one-shot behavior.
+  ```
+- **`prev_version < 0.11.0`** — command-retirement boundary:
+  ```
+  Migration (v0.11.0) — commands retired:
+    /aih-run                → /aih-milestone + "start" (or --execute), /aih-feature --plan <slug>
+    /aih-plan-to-milestone  → /aih-milestone --plan <slug> (first-class, no longer DEPRECATED)
+  Update muscle memory / CI scripts / keyboard snippets accordingly.
+  ```
+
+Append: "Restart Claude Code to pick up reshuffled skills." when any block fires.
+
+### 13. Report
+
+```
+aihaus updated: 0.1.0 → 0.2.0
+  Agents: [N] (was [M])
+  Skills: [N] (was [M])
+  Hooks: [N]
+  Changes: [N commits]
+  Source: [remote URL]
+
+Run /aih-help to see available commands.
+```
+
+If new skills appeared in the update diff, append: "⚠️  Restart Claude Code to load new skills."
+
+---
+
+## Dogfooding Mode
+
+When running inside the aihaus-flow repo itself (detected by `pkg/` existing):
+
+1. Skip cloning — use `pkg/` directly as the package source.
+2. `git pull origin main` to update the repo itself.
+3. Run `bash pkg/scripts/install.sh --target . --update` to re-link.
+4. Report what changed.
+
+---
+
+## Guardrails
+
+- NEVER modifies files inside `pkg/` — only pulls from remote.
+- NEVER deletes local data (project.md, plans, milestones, memory).
+- If git fetch fails, report the error and stop gracefully.
+- If the smoke test fails after update, warn but don't rollback.
+- Write `.aihaus/.version` and `.aihaus/.install-source` for future updates.
+
+## Autonomy
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
