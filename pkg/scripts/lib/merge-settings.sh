@@ -79,8 +79,12 @@ def deep_merge(base, overlay):
     return overlay if overlay is not None else base
 
 merged = deep_merge(dst, src)
+# jq-compatible byte layout: explicit separators (no trailing space before
+# comma) + trailing newline so successive jq/python invocations on the same
+# file produce identical bytes. See M009 QA-REVIEW M-001.
 with open(dst_path, "w", encoding="utf-8") as fh:
-    json.dump(merged, fh, indent=2)
+    json.dump(merged, fh, indent=2, separators=(",", ": "))
+    fh.write("\n")
 PY
     then
       echo "  error: python merge failed; restoring from backup"
@@ -129,8 +133,10 @@ dst_path, mode, tmp_path = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(dst_path, "r", encoding="utf-8") as fh:
     data = json.load(fh)
 data.setdefault("permissions", {})["defaultMode"] = mode
+# jq-compatible byte layout — see M009 QA-REVIEW M-001.
 with open(tmp_path, "w", encoding="utf-8") as fh:
-    json.dump(data, fh, indent=2)
+    json.dump(data, fh, indent=2, separators=(",", ": "))
+    fh.write("\n")
 PY
         then
           mv "$pm_tmp" "$dst"
