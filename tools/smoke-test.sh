@@ -694,42 +694,17 @@ check_calibration_sidecar() {
   mkdir -p "$tmpdir"
   local problems=()
 
-  # Helper — inline bash mirror of restore_calibration() from update.sh.
-  # Kept byte-compatible with the production idiom (same sed pattern, same
-  # CRLF strip, same schema gate, same `!!` block).
+  # Source the shared restore_calibration library — eliminates test/prod
+  # drift (previously this was an inline mirror of update.sh's function).
+  # shellcheck source=../pkg/scripts/lib/restore-calibration.sh
+  source "${PACKAGE_ROOT}/scripts/lib/restore-calibration.sh"
+  # Shim keeping Check 27's (state_file, agents_dir) call signature —
+  # derives aihaus_root from state_file's parent, then delegates.
   _smoke_restore_calibration() {
     local state_file="$1"
-    local agents_dir="$2"
-    [[ -f "$state_file" ]] || return 0
-    local schema
-    schema=$(grep -E '^schema=' "$state_file" | head -1 | cut -d= -f2 | tr -d '[:space:]\r')
-    if [[ "$schema" != "1" ]]; then
-      echo "  warn: unknown .calibration schema='${schema}' — skipping restore"
-      return 0
-    fi
-    while IFS='=' read -r key value; do
-      [[ -z "$key" || "$key" =~ ^# ]] && continue
-      [[ "$key" =~ ^(schema|permission_mode|last_preset|last_commit)$ ]] && continue
-      value="${value%$'\r'}"
-      [[ -z "$value" || "$value" =~ ^[[:space:]]+$ ]] && continue
-      local agent_file="${agents_dir}/${key}.md"
-      if [[ -f "$agent_file" ]]; then
-        sed -i.bak "s/^effort: .*/effort: ${value}/" "$agent_file" && rm -f "${agent_file}.bak"
-      else
-        echo "  warn: .calibration references missing agent '${key}' — skipped"
-      fi
-    done < "$state_file"
-    local last_preset
-    last_preset=$(grep -E '^last_preset=' "$state_file" | head -1 | cut -d= -f2 | tr -d '[:space:]\r')
-    if [[ "$last_preset" == "auto-mode-safe" ]]; then
-      echo ""
-      echo "  !!  Your last preset was auto-mode-safe, but side effects"
-      echo "  !!  (auto-approve-bash.sh SAFE_PATTERNS widening + worktree"
-      echo "  !!  agents' permissionMode removal) are NOT auto-restored."
-      echo "  !!  Classifier pauses may occur until you re-run:"
-      echo "  !!    /aih-calibrate --preset auto-mode-safe"
-      echo ""
-    fi
+    local aihaus_root
+    aihaus_root="$(dirname "$state_file")"
+    restore_calibration "$aihaus_root"
   }
 
   # ---------- Assertion 1: effort restore with valid.calibration -----------

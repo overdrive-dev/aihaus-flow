@@ -156,6 +156,11 @@ if ($Update) {
                 Write-Host "  !!  Classifier pauses may occur until you re-run:" -ForegroundColor Yellow
                 Write-Host "  !!    /aih-calibrate --preset auto-mode-safe" -ForegroundColor Yellow
                 Write-Host ""
+                # Dedupe flag -- post-merge defaultMode-preserve block
+                # (install.ps1:292ish) reads the same sidecar and would emit
+                # this identical !! block a second time on -Update runs.
+                # Flag skip there.
+                $script:AutoModeSafeWarningEmitted = $true
             }
         }
     }
@@ -289,7 +294,7 @@ if (-not (Test-Path $SettingsSrc)) {
             } catch {
                 Write-Host "  warn: defaultMode preserve step failed; leaving merged template value"
             }
-            if ($pmLastPreset -eq 'auto-mode-safe') {
+            if ($pmLastPreset -eq 'auto-mode-safe' -and -not $script:AutoModeSafeWarningEmitted) {
                 Write-Host ""
                 Write-Host "  !!  Your last preset was auto-mode-safe, but side effects" -ForegroundColor Yellow
                 Write-Host "  !!  (auto-approve-bash.sh SAFE_PATTERNS widening + worktree" -ForegroundColor Yellow
@@ -297,6 +302,7 @@ if (-not (Test-Path $SettingsSrc)) {
                 Write-Host "  !!  Classifier pauses may occur until you re-run:" -ForegroundColor Yellow
                 Write-Host "  !!    /aih-calibrate --preset auto-mode-safe" -ForegroundColor Yellow
                 Write-Host ""
+                $script:AutoModeSafeWarningEmitted = $true
             }
         }
     }
