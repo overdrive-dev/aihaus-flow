@@ -1,70 +1,4 @@
 {
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
-  "additionalDirectories": [
-    ".aihaus",
-    ".claude"
-  ],
-  "permissions": {
-    "allow": [
-      "Read",
-      "Glob",
-      "Grep",
-      "Write",
-      "Edit",
-      "WebFetch",
-      "WebSearch",
-      "Agent",
-      "Skill",
-      "Bash(git *)",
-      "Bash(git -C *)",
-      "Bash(npm *)",
-      "Bash(npx *)",
-      "Bash(node *)",
-      "Bash(py *)",
-      "Bash(python *)",
-      "Bash(python3 *)",
-      "Bash(pytest *)",
-      "Bash(alembic *)",
-      "Bash(pip *)",
-      "Bash(uv *)",
-      "Bash(gh *)",
-      "Bash(ls *)",
-      "Bash(pwd)",
-      "Bash(cat *)",
-      "Bash(head *)",
-      "Bash(tail *)",
-      "Bash(wc *)",
-      "Bash(mkdir *)",
-      "Bash(touch *)",
-      "Bash(cp *)",
-      "Bash(mv *)",
-      "Bash(find *)",
-      "Bash(grep *)",
-      "Bash(curl *)",
-      "Bash(which *)",
-      "Bash(where *)",
-      "Bash(echo *)",
-      "Bash(sort *)",
-      "Bash(jq *)",
-      "Bash(realpath *)",
-      "Bash(date *)",
-      "Bash(test *)",
-      "Bash(diff *)",
-      "Bash(chmod *)",
-      "Bash(bash *)"
-    ],
-    "deny": [
-      "Bash(rm -rf /)",
-      "Bash(rm -rf ~)",
-      "Read(//**/.env)",
-      "Read(//**/.env.*)",
-      "Read(//**/credentials*)",
-      "Read(//**/id_rsa*)",
-      "Read(//**/*.pem)"
-    ]
-  },
   "hooks": {
     "SessionStart": [
       {
@@ -72,7 +6,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-autonomy.sh\"",
+            "timeout": 10,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh\"",
             "statusMessage": "Loading project context..."
           }
         ]
@@ -84,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/bash-guard.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/bash-guard.sh\"",
             "timeout": 10,
             "statusMessage": "Checking command safety..."
           }
@@ -95,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/file-guard.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/file-guard.sh\"",
             "timeout": 10,
             "statusMessage": "Checking file safety..."
           }
@@ -108,7 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-approve-bash.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/auto-approve-bash.sh\"",
             "timeout": 10,
             "statusMessage": "Evaluating permission..."
           }
@@ -119,7 +59,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-approve-writes.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/auto-approve-writes.sh\"",
             "timeout": 10,
             "statusMessage": "Evaluating write permission..."
           }
@@ -130,7 +70,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/permission-debug.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/permission-debug.sh\"",
             "timeout": 5,
             "async": true
           }
@@ -143,7 +83,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/backup-file.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/backup-file.sh\"",
             "async": true,
             "statusMessage": "Backing up..."
           }
@@ -154,7 +94,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit-log.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/audit-log.sh\"",
             "async": true
           }
         ]
@@ -166,7 +106,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/task-created.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/task-created.sh\"",
             "timeout": 10,
             "statusMessage": "Validating task..."
           }
@@ -179,7 +119,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/task-completed.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/task-completed.sh\"",
             "timeout": 30,
             "statusMessage": "Verifying completion..."
           }
@@ -192,7 +132,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/teammate-idle.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/teammate-idle.sh\"",
             "timeout": 10
           }
         ]
@@ -204,7 +144,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit-agent.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/audit-agent.sh\"",
             "async": true
           }
         ]
@@ -216,8 +156,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-end.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end.sh\"",
             "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/autonomy-guard.sh\"",
+            "timeout": 10
           }
         ]
       }

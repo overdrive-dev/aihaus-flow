@@ -1,0 +1,35 @@
+{
+  "notion_database_id": "YOUR_NOTION_DATABASE_ID",
+  "status_flow": {
+    "request": "Requests",
+    "backlog": "Backlog",
+    "in_progress": "In Progress",
+    "testing": "Testing",
+    "done": "Done",
+    "rejected": "Rejected",
+    "archived": "Archived"
+  },
+  "roles": ["Admin", "Manager", "Developer", "Viewer"],
+  "card_fields": {
+    "role": "Role",
+    "device": "Device",
+    "version": "Version",
+    "screen": "Screen",
+    "route": "Route",
+    "milestone": "Milestone",
+    "phase": "Phase",
+    "requested": "Requested",
+    "delivered": "Delivered",
+    "status": "Status",
+    "notes": "Notes"
+  },
+  "title_format": "{device} - {version} - {task}",
+  "sync_commands": {
+    "dry_run": "npm run notion:sync:dry",
+    "sync": "npm run notion:sync",
+    "body_dry": "npm run notion:sync:body:dry",
+    "body_sync": "npm run notion:sync:body",
+    "body_force": "npm run notion:sync:body:force",
+    "query": "npm run notion:query"
+  }
+}
