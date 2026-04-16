@@ -63,7 +63,7 @@ DANGEROUS_PATTERNS=(
 
   # --- code injection via interpreter flags ---
   "awk\\s+'[^']*BEGIN\\s*\\{[^}]*system"
-  'sed\s+-i\s+[^e]'
+  'sed\s+-i\s+[^-]'
 
   # --- code-via-pipe ---
   'curl\s+[^|]*\|\s*(ba)?sh\b'
