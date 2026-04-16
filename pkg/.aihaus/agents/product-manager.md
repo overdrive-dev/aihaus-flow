@@ -6,7 +6,7 @@ description: >
   analysis briefs and produces structured requirements documents.
 tools: Read, Grep, Glob, Bash
 model: opus
-effort: max
+effort: xhigh
 color: purple
 memory: project
 ---

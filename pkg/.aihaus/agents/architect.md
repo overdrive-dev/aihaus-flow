@@ -7,7 +7,7 @@ description: >
   and produces binding technical decisions.
 tools: Read, Grep, Glob, Bash, WebFetch
 model: opus
-effort: max
+effort: xhigh
 color: orange
 memory: project
 ---

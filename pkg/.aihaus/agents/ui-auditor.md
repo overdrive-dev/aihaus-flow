@@ -7,7 +7,7 @@ description: >
   with actionable findings.
 tools: Read, Write, Bash, Grep, Glob
 model: opus
-effort: xhigh
+effort: high
 color: pink
 memory: project
 ---

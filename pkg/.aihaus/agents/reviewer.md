@@ -6,7 +6,7 @@ description: >
   acceptance criteria compliance. Read-only — does not modify code.
 tools: Read, Grep, Glob, Bash
 model: opus
-effort: xhigh
+effort: high
 color: red
 memory: project
 ---

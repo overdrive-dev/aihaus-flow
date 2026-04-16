@@ -6,7 +6,7 @@ description: >
   REVIEW-FIX.md with fix evidence.
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: opus
-effort: xhigh
+effort: high
 color: teal
 isolation: worktree
 permissionMode: bypassPermissions

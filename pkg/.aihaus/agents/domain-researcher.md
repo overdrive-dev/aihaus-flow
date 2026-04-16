@@ -8,7 +8,7 @@ description: >
 tools: Read, Write, Bash, Grep, Glob, WebSearch, WebFetch
 # MCP tools (when available): mcp__context7__resolve-library-id, mcp__context7__get-library-docs
 model: opus
-effort: xhigh
+effort: high
 color: violet
 memory: project
 ---

@@ -6,7 +6,7 @@ description: >
   with severity-classified findings. Read-only — does not modify code.
 tools: Read, Grep, Glob, Bash
 model: opus
-effort: xhigh
+effort: high
 color: orange
 memory: project
 ---

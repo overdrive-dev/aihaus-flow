@@ -6,7 +6,7 @@ description: >
   produces VERIFICATION.md with evidence-based verdicts.
 tools: Read, Write, Bash, Grep, Glob
 model: opus
-effort: xhigh
+effort: high
 color: green
 memory: project
 ---

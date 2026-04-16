@@ -6,7 +6,7 @@ description: >
   autonomously or pause at checkpoints for human input.
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch
 model: opus
-effort: xhigh
+effort: high
 color: coral
 memory: project
 ---

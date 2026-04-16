@@ -7,7 +7,7 @@ description: >
   guardrails, and monitoring sections of the AI spec.
 tools: Read, Write, Bash, Grep, Glob
 model: opus
-effort: xhigh
+effort: high
 color: amber
 memory: project
 ---

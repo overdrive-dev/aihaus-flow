@@ -7,7 +7,7 @@ description: >
   a PRD for a new feature or milestone.
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 model: opus
-effort: xhigh
+effort: high
 color: blue
 memory: project
 ---

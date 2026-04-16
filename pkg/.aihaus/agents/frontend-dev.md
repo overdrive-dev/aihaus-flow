@@ -7,7 +7,7 @@ description: >
   acceptance criteria.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: opus
-effort: xhigh
+effort: high
 color: yellow
 isolation: worktree
 permissionMode: bypassPermissions
