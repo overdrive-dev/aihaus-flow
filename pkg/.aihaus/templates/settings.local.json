@@ -7,6 +7,10 @@
       "taskCreateReminder": true
     }
   },
+  "additionalDirectories": [
+    ".aihaus",
+    ".claude"
+  ],
   "permissions": {
     "allow": [
       "Read", "Glob", "Grep", "Write", "Edit",
@@ -77,6 +81,17 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-approve-writes.sh",
             "timeout": 10,
             "statusMessage": "Evaluating write permission..."
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/permission-debug.sh",
+            "timeout": 5,
+            "async": true
           }
         ]
       }
