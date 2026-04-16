@@ -45,7 +45,7 @@ There is no build command, no type checker, and no unit test framework. The smok
 ## Key Conventions
 
 - **Skills must declare `name: aih-<slug>`** in YAML frontmatter and stay under 200 lines. The smoke test enforces both.
-- **Agents declare** `name`, `tools`, `model`, and `memory` in YAML frontmatter. `implementer`, `frontend-dev`, and `code-fixer` use `isolation: worktree` and `permissionMode: bypassPermissions`.
+- **Agents declare** `name`, `tools`, `model`, `effort`, `color`, and `memory` in YAML frontmatter (added M008; smoke-test Check 6 enforces all six). `implementer`, `frontend-dev`, and `code-fixer` use `isolation: worktree` and `permissionMode: bypassPermissions`. Default effort tier post-v0.13.0 is `xhigh` on Opus 4.7 coding/agentic agents (requires Claude Code v2.1.111+; older Claude Code falls back to `high` automatically).
 - **Agents are stack-agnostic.** They read `.aihaus/project.md` at runtime for stack details. Never hardcode languages, frameworks, or directory structures in agent definitions.
 - **The purity check** scans all shipped files for references to foreign framework names. Any match fails the check. See the `FORBIDDEN_TERMS` array in `tools/purity-check.sh` for the full denylist.
 - **`project.md`** uses marker comments (`<!-- AIHAUS:AUTO-GENERATED-START -->` / `<!-- AIHAUS:MANUAL-START -->`) to separate machine-owned and human-owned sections.
@@ -65,6 +65,22 @@ After any change to skills, agents, or hooks, run `bash tools/smoke-test.sh` to 
 - If the skill/agent relies on `isolation: worktree` or `permissionMode: bypassPermissions`, it cannot run on Cursor (Cursor lacks both primitives). Update `pkg/.aihaus/rules/COMPAT-MATRIX.md` with a NOT-SUPPORTED row in the same commit.
 - If it uses the `Agent` tool for subagent spawning, Cursor users invoke the same surface via `Task` + `/<name>` mentions — the rules file handles tool-name translation, no skill-side change needed.
 - Prefer per-agent `tools:` whitelists even though Cursor inherits parent tools (the read-only discipline is documented in COMPAT-MATRIX.md and still enforced on Claude Code).
+
+## Calibration and Permission Modes
+
+Users can retune effort tiers and permission modes after install via
+`/aih-calibrate` (added M008). The default install uses `permissionMode:
+bypassPermissions` + `Bash(*)` + hook-based auto-approve — this is the
+autonomy contract M005 locks in. Auto mode (Claude Code ≥ v2.1.83) is
+available via `/aih-calibrate --preset auto-mode-safe` but drops `Bash(*)`
+and ignores subagent `permissionMode` — the skill prints the full
+caveat matrix before applying.
+
+Effort presets:
+- `cost-optimized` — all opus agents at `effort: high` (Opus 4.6 default)
+- `balanced` — Rev. 2 distribution: 22 opus agents at `xhigh`, 6 max untouched (default after v0.13.0)
+- `quality-first` — adds `max` to coding/adversarial agents (use sparingly; docs warn "prone to overthinking")
+- `auto-mode-safe` — switches permission mode only; keeps `balanced` effort
 
 ## Installer Behavior
 

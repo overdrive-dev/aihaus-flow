@@ -7,7 +7,7 @@ description: >
   to exactly one phase. Uses goal-backward thinking.
 tools: Read, Write, Bash, Glob, Grep
 model: opus
-effort: max
+effort: xhigh
 color: purple
 memory: project
 ---

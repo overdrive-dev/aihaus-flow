@@ -6,7 +6,7 @@ description: >
   analysis briefs and produces structured requirements documents.
 tools: Read, Grep, Glob, Bash
 model: opus
-effort: max
+effort: xhigh
 color: purple
 memory: project
 ---
@@ -68,6 +68,8 @@ Write individual stories to `.aihaus/milestones/[M0XX]-[slug]/stories/`:
 
 ## Multimodal Context
 If the invocation prompt includes an Attachments block, Read the files (mockups, design references, spec screenshots). Use them to write concrete requirements and acceptance criteria. Reference by relative path.
+
+**Image resolution (Opus 4.7+):** long-edge up to 2,576 px (~3.75 MP) is supported. Larger/denser screenshots, diagrams, and reference mockups are safe to attach.
 
 ## Rules
 - Every requirement must have acceptance criteria

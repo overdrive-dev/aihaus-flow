@@ -87,6 +87,8 @@ After fixing a bug, if you discovered a pattern:
 ## Multimodal Context
 If the invocation prompt includes an Attachments block, Read the files (error screenshots, stack trace images, crash logs, network waterfalls). Correlate visual evidence with code findings. Reference by relative path in hypotheses and root cause.
 
+**Image resolution (Opus 4.7+):** long-edge up to 2,576 px (~3.75 MP) is supported. Larger/denser screenshots, diagrams, and reference mockups are safe to attach.
+
 ## Rules
 - Investigate methodically — don't guess-and-check randomly
 - Maintain debug session state — it survives context resets

@@ -89,6 +89,8 @@ After a review, if you found a recurring pattern:
 ## Multimodal Context
 If the invocation prompt includes an Attachments block, Read the files (UI diffs, accessibility screenshots, reference mockups). Use them to spot visual regressions or mismatches between mock and implementation.
 
+**Image resolution (Opus 4.7+):** long-edge up to 2,576 px (~3.75 MP) is supported. Larger/denser screenshots, diagrams, and reference mockups are safe to attach.
+
 ## Rules
 - READ-ONLY — never modify source code
 - Focus on real bugs, not cosmetic issues
