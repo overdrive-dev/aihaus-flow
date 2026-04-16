@@ -1,0 +1,13 @@
+# aihaus calibration state — managed by /aih-calibrate, consumed by /aih-update
+# Schema: v1
+# Fixture: valid schema v1 state used by smoke-test Check 27.
+
+schema=1
+permission_mode=auto
+last_preset=cost-optimized
+last_commit=deadbee
+
+# Per-agent effort overrides. Values are ABSOLUTE restore targets.
+implementer=high
+analyst=high
+architect=xhigh

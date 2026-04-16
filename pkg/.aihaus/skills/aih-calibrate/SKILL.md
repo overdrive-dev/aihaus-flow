@@ -106,6 +106,24 @@ Permission-mode tradeoff matrix + caveats: `annexes/permission-modes.md`.
     print the failing check output, exit without retry.
 19. On green: print final distribution delta + one-line cost-estimate
     change; print the `git revert <sha>` rollback one-liner.
+20. **Post-gate sidecar write** (`.aihaus/.calibration`, schema v1). Only
+    after the commit + gate both pass; never on `--dry-run` or
+    `--inspect`. Write `schema=1`, `permission_mode=<current>`,
+    `last_preset=<preset-or-custom>`, `last_commit=$(git rev-parse --short HEAD)`,
+    then one `<agent-basename>=<effort>` line per entry in Phase 2's
+    **post-filter** diff list (step 8 output). File layout + schema
+    contract: `annexes/state-file.md`.
+    - **20-guard** — if step 18 self-reverted the commit (`git reset`
+      fired), SKIP the write. A stale sidecar with no matching commit
+      would lie about repo state.
+    - **20-ownership** — NEVER `git add .aihaus/.calibration` under any
+      mode. It is derived, user-owned state (ADR-M009-A) — same class as
+      `.install-mode`. Dogfood `.gitignore:19` (`/.aihaus/`) covers it;
+      end-user repos follow their own policy for `.aihaus/`.
+    - **20-adversarial-immune** — per-agent entries come from the
+      post-filter diff (ADR-M008-C). `plan-checker` and `contrarian`
+      appear in the sidecar only if the user ran explicit `--agent <name>`
+      targeting them; preset runs must NOT emit entries for them.
 
 ## Guardrails
 
@@ -139,6 +157,8 @@ tuning without searching through git history.
   enumeration.
 - `annexes/permission-modes.md` — permission-mode tradeoff matrix +
   4-caveat list + decision tree.
+- `annexes/state-file.md` — `.aihaus/.calibration` schema v1, ownership,
+  CRLF rules, pre-v0.13 migration path.
 
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules. Overrides any

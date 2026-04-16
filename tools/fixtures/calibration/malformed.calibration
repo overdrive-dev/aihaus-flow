@@ -1,0 +1,21 @@
+# Fixture: malformed schema v1 — mix of valid and broken lines.
+# Restore must tolerate each bad line and continue, exiting 0.
+
+schema=1
+permission_mode=bypassPermissions
+last_preset=balanced
+last_commit=cafebab
+
+# A valid entry — should restore successfully.
+implementer=high
+
+# Missing '=' — parser should skip silently (no 'key=value' shape).
+analyst high
+
+# Unknown agent — restore warns and increments skip counter.
+nonexistent-agent=xhigh
+
+# Whitespace-only value — defensive continue skips.
+architect=
+
+# Another valid line — should restore.

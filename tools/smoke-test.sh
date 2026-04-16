@@ -671,6 +671,158 @@ check_purity() {
   fi
 }
 
+# ---- Check 27: calibration sidecar restore round-trip -----------------------
+# Four assertions covering the M009 calibration sidecar contract:
+#   (1) effort restore from valid.calibration writes expected tiers
+#   (2) malformed.calibration tolerated without error (bad lines skipped)
+#   (3) merge-settings.sh post-merge step preserves permissions.defaultMode
+#   (4) last_preset=auto-mode-safe emits the `!!` stdout warning block
+# Self-contained — uses tools/fixtures/calibration/ only, never invokes
+# /aih-calibrate (R7 cycle prevention).
+check_calibration_sidecar() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: calibration sidecar restore (effort + defaultMode + warnings)"
+  local fx="${PACKAGE_ROOT}/../tools/fixtures/calibration"
+  [[ -d "$fx" ]] || fx="tools/fixtures/calibration"
+  if [[ ! -d "$fx" ]]; then
+    _fail "$label" "fixtures dir missing: tools/fixtures/calibration"
+    return
+  fi
+
+  local repo_root="${PACKAGE_ROOT}/.."
+  local tmpdir="${repo_root}/tools/.out/calibration-test-$$"
+  mkdir -p "$tmpdir"
+  local problems=()
+
+  # Helper — inline bash mirror of restore_calibration() from update.sh.
+  # Kept byte-compatible with the production idiom (same sed pattern, same
+  # CRLF strip, same schema gate, same `!!` block).
+  _smoke_restore_calibration() {
+    local state_file="$1"
+    local agents_dir="$2"
+    [[ -f "$state_file" ]] || return 0
+    local schema
+    schema=$(grep -E '^schema=' "$state_file" | head -1 | cut -d= -f2 | tr -d '[:space:]\r')
+    if [[ "$schema" != "1" ]]; then
+      echo "  warn: unknown .calibration schema='${schema}' — skipping restore"
+      return 0
+    fi
+    while IFS='=' read -r key value; do
+      [[ -z "$key" || "$key" =~ ^# ]] && continue
+      [[ "$key" =~ ^(schema|permission_mode|last_preset|last_commit)$ ]] && continue
+      value="${value%$'\r'}"
+      [[ -z "$value" || "$value" =~ ^[[:space:]]+$ ]] && continue
+      local agent_file="${agents_dir}/${key}.md"
+      if [[ -f "$agent_file" ]]; then
+        sed -i.bak "s/^effort: .*/effort: ${value}/" "$agent_file" && rm -f "${agent_file}.bak"
+      else
+        echo "  warn: .calibration references missing agent '${key}' — skipped"
+      fi
+    done < "$state_file"
+    local last_preset
+    last_preset=$(grep -E '^last_preset=' "$state_file" | head -1 | cut -d= -f2 | tr -d '[:space:]\r')
+    if [[ "$last_preset" == "auto-mode-safe" ]]; then
+      echo ""
+      echo "  !!  Your last preset was auto-mode-safe, but side effects"
+      echo "  !!  (auto-approve-bash.sh SAFE_PATTERNS widening + worktree"
+      echo "  !!  agents' permissionMode removal) are NOT auto-restored."
+      echo "  !!  Classifier pauses may occur until you re-run:"
+      echo "  !!    /aih-calibrate --preset auto-mode-safe"
+      echo ""
+    fi
+  }
+
+  # ---------- Assertion 1: effort restore with valid.calibration -----------
+  local a1_dir="${tmpdir}/a1"
+  mkdir -p "$a1_dir/.aihaus/agents"
+  cp "$fx/valid.calibration" "$a1_dir/.aihaus/.calibration"
+  cp "$fx/agents-fixture/implementer.md" "$a1_dir/.aihaus/agents/implementer.md"
+  cp "$fx/agents-fixture/analyst.md" "$a1_dir/.aihaus/agents/analyst.md"
+  cp "$fx/agents-fixture/architect.md" "$a1_dir/.aihaus/agents/architect.md"
+  _smoke_restore_calibration "$a1_dir/.aihaus/.calibration" "$a1_dir/.aihaus/agents" >/dev/null 2>&1
+
+  grep -q '^effort: high$' "$a1_dir/.aihaus/agents/implementer.md" \
+    || problems+=("A1: implementer effort not restored to 'high'")
+  grep -q '^effort: high$' "$a1_dir/.aihaus/agents/analyst.md" \
+    || problems+=("A1: analyst effort not restored to 'high'")
+  grep -q '^effort: xhigh$' "$a1_dir/.aihaus/agents/architect.md" \
+    || problems+=("A1: architect effort not restored to 'xhigh'")
+
+  # ---------- Assertion 2: malformed.calibration tolerated -----------------
+  local a2_dir="${tmpdir}/a2"
+  mkdir -p "$a2_dir/.aihaus/agents"
+  cp "$fx/malformed.calibration" "$a2_dir/.aihaus/.calibration"
+  cp "$fx/agents-fixture/implementer.md" "$a2_dir/.aihaus/agents/implementer.md"
+  cp "$fx/agents-fixture/analyst.md" "$a2_dir/.aihaus/agents/analyst.md"
+  cp "$fx/agents-fixture/architect.md" "$a2_dir/.aihaus/agents/architect.md"
+  local a2_out a2_rc
+  a2_out=$(_smoke_restore_calibration "$a2_dir/.aihaus/.calibration" "$a2_dir/.aihaus/agents" 2>&1; echo "RC=$?")
+  a2_rc="${a2_out##*RC=}"
+  if [[ "$a2_rc" != "0" ]]; then
+    problems+=("A2: malformed fixture returned non-zero ($a2_rc)")
+  fi
+  # Good line still applied.
+  grep -q '^effort: high$' "$a2_dir/.aihaus/agents/implementer.md" \
+    || problems+=("A2: valid line in malformed fixture did not apply")
+  # Missing-agent warning emitted.
+  echo "$a2_out" | grep -q "missing agent 'nonexistent-agent'" \
+    || problems+=("A2: missing-agent warning not emitted")
+  # Whitespace-only value didn't wipe architect's effort frontmatter.
+  grep -q '^effort: max$' "$a2_dir/.aihaus/agents/architect.md" \
+    || problems+=("A2: empty-value line incorrectly mutated architect effort")
+
+  # ---------- Assertion 3: defaultMode preserve via merge-settings ---------
+  # Stage under a mock <target>/.claude/ so merge-settings.sh can derive
+  # .aihaus/.calibration from $dirname($dirname($dst)).
+  local a3_dir="${tmpdir}/a3"
+  mkdir -p "$a3_dir/.claude" "$a3_dir/.aihaus"
+  cp "$fx/settings-before.json" "$a3_dir/.claude/settings.local.json"
+  cp "$fx/settings-template.json" "$a3_dir/template.json"
+  cp "$fx/valid.calibration" "$a3_dir/.aihaus/.calibration"
+  (
+    # shellcheck disable=SC1090
+    source "${PACKAGE_ROOT}/scripts/lib/merge-settings.sh"
+    merge_settings "$a3_dir/.claude/settings.local.json" "$a3_dir/template.json" >/dev/null 2>&1
+  )
+  if command -v jq >/dev/null 2>&1; then
+    local a3_mode
+    a3_mode=$(jq -r '.permissions.defaultMode' "$a3_dir/.claude/settings.local.json" 2>/dev/null)
+    if [[ "$a3_mode" != "auto" ]]; then
+      problems+=("A3: defaultMode not preserved (got '$a3_mode', expected 'auto')")
+    fi
+  else
+    # No jq → the post-merge preserve step is gated off; skip with pass-through.
+    grep -q '"defaultMode"[[:space:]]*:[[:space:]]*"auto"' "$a3_dir/.claude/settings.local.json" \
+      || problems+=("A3: defaultMode preserve check (no-jq fallback) did not find auto")
+  fi
+
+  # ---------- Assertion 4: auto-mode-safe warning block --------------------
+  local a4_dir="${tmpdir}/a4"
+  mkdir -p "$a4_dir/.aihaus/agents"
+  cat > "$a4_dir/.aihaus/.calibration" <<EOF
+schema=1
+permission_mode=auto
+last_preset=auto-mode-safe
+last_commit=abc1234
+implementer=xhigh
+EOF
+  cp "$fx/agents-fixture/implementer.md" "$a4_dir/.aihaus/agents/implementer.md"
+  local a4_out
+  a4_out=$(_smoke_restore_calibration "$a4_dir/.aihaus/.calibration" "$a4_dir/.aihaus/agents" 2>&1)
+  echo "$a4_out" | grep -q '!!.*auto-mode-safe' \
+    || problems+=("A4: auto-mode-safe warning block missing from stdout")
+  echo "$a4_out" | grep -q '!!.*/aih-calibrate --preset auto-mode-safe' \
+    || problems+=("A4: warning does not reference /aih-calibrate --preset auto-mode-safe")
+
+  rm -rf "$tmpdir"
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -701,6 +853,7 @@ check_auto_approve_patterns
 check_merge_semantics_convergence
 check_autonomy_guard_detects_violations
 check_excluded_skills_keep_flag
+check_calibration_sidecar
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

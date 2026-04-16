@@ -101,8 +101,8 @@ git -C "$PKG_LOCAL" pull origin main
 bash "$PKG_LOCAL/pkg/scripts/install.sh" --target "$(pwd)" --update
 ```
 
-This re-links skills, agents, hooks, templates from the updated package.
-Preserves all local data (project.md, plans, milestones, memory).
+Re-links skills/agents/hooks/templates from the updated package. Preserves
+local data (project.md, plans, milestones, memory) + calibration via `.aihaus/.calibration` (auto-mode-safe users see a `!!` re-run warning).
 
 ### 8. Write version marker
 

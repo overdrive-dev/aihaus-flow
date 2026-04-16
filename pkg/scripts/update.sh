@@ -109,6 +109,71 @@ for name in skills agents hooks templates; do
   update_aihaus_dir "${name}"
 done
 
+# ---- Restore per-agent calibration from sidecar ------------------------------
+# Reads .aihaus/.calibration (schema v1) and re-applies recorded effort tiers
+# to refreshed agent frontmatters. Call site is pinned between the refresh
+# loop above and the link_or_copy loop below so both .aihaus/agents/ (physical)
+# and .claude/agents/ (symlink or copy) pick up restored frontmatter.
+# Missing sidecar = silent no-op. Schema contract: pkg/.aihaus/skills/
+# aih-calibrate/annexes/state-file.md.
+restore_calibration() {
+  local state_file="${AIHAUS}/.calibration"
+  [[ -f "$state_file" ]] || return 0
+
+  # Schema gate — unknown versions bail with a loud warning, leave defaults.
+  local schema
+  schema=$(grep -E '^schema=' "$state_file" | head -1 | cut -d= -f2 | tr -d '[:space:]\r')
+  if [[ "$schema" != "1" ]]; then
+    echo "  warn: unknown .calibration schema='${schema}' — skipping restore"
+    return 0
+  fi
+
+  local restored=0 skipped=0
+  while IFS='=' read -r key value; do
+    # Skip blank lines and comments.
+    [[ -z "$key" || "$key" =~ ^# ]] && continue
+    # Skip metadata keys — only per-agent lines past this point.
+    [[ "$key" =~ ^(schema|permission_mode|last_preset|last_commit)$ ]] && continue
+    # CRLF normalization — Windows-authored sidecars (F-008).
+    value="${value%$'\r'}"
+    # Defensive: whitespace-only values skip.
+    [[ -z "$value" || "$value" =~ ^[[:space:]]+$ ]] && continue
+
+    local agent_file="${AIHAUS}/agents/${key}.md"
+    if [[ -f "$agent_file" ]]; then
+      sed -i.bak "s/^effort: .*/effort: ${value}/" "$agent_file" && rm -f "${agent_file}.bak"
+      restored=$((restored + 1))
+    else
+      skipped=$((skipped + 1))
+      echo "  warn: .calibration references missing agent '${key}' — skipped"
+    fi
+  done < "$state_file"
+
+  if [[ "$skipped" -gt 0 ]]; then
+    echo "  restored ${restored} per-agent effort override(s) from .aihaus/.calibration (${skipped} skipped — missing agents)"
+  else
+    echo "  restored ${restored} per-agent effort override(s) from .aihaus/.calibration"
+  fi
+
+  # Loud warning when auto-mode-safe was the last preset — side effects
+  # (auto-approve-bash.sh SAFE_PATTERNS widening + worktree agents'
+  # permissionMode removal) are NOT auto-restored and must be re-applied
+  # by re-running the preset.
+  local last_preset
+  last_preset=$(grep -E '^last_preset=' "$state_file" | head -1 | cut -d= -f2 | tr -d '[:space:]\r')
+  if [[ "$last_preset" == "auto-mode-safe" ]]; then
+    echo ""
+    echo "  !!  Your last preset was auto-mode-safe, but side effects"
+    echo "  !!  (auto-approve-bash.sh SAFE_PATTERNS widening + worktree"
+    echo "  !!  agents' permissionMode removal) are NOT auto-restored."
+    echo "  !!  Classifier pauses may occur until you re-run:"
+    echo "  !!    /aih-calibrate --preset auto-mode-safe"
+    echo ""
+  fi
+}
+
+restore_calibration
+
 # Count what was updated
 if [[ -d "${AIHAUS}/skills" ]]; then
   count_skills=$(find "${AIHAUS}/skills" -type f -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
