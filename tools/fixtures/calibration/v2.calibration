@@ -1,0 +1,17 @@
+# aihaus calibration state -- fixture: valid schema v2 used by smoke Check 28.
+# Exercises cohort-level apply + per-agent overrides + custom-skip + adversarial absence.
+
+schema=2
+permission_mode=bypassPermissions
+last_preset=cost-optimized
+last_commit=0defeed
+
+# Cohort-level -- :doer downgrade (B1); :verifier custom (B3 skip).
+# :planner preserved as baseline (no row). :adversarial INTENTIONALLY ABSENT (B6).
+cohort.doer.model=sonnet
+cohort.doer.effort=medium
+cohort.verifier.model=custom
+cohort.verifier.effort=custom
+
+# Per-agent override -- implementer gets opus despite cohort.doer.model=sonnet (B2).
+implementer.model=opus

@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.13.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.14.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 [![Cursor](https://img.shields.io/badge/Cursor-first--class-000000?style=for-the-badge)](https://cursor.com)
 
@@ -48,6 +48,13 @@ Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and s
 </div>
 
 ---
+
+> [!NOTE]
+> ### v0.14.0 — Cohort aliases + joint (model, effort) calibration primitive
+>
+> `/aih-calibrate` now tunes all 43 agents via 4 role cohorts (`:planner`, `:doer`, `:verifier`, `:adversarial`) with joint `(model, effort)` tuples — one flag, one commit, reversible. `/aih-calibrate --cohort :doer --model sonnet --effort high` downgrades all 11 `:doer` members in a single atomic edit instead of 11 per-agent calls. Schema v2 sidecar is additive from v1 — existing v0.13.0 sidecars keep restoring byte-identically on `/aih-update`. The `:adversarial` cohort (`plan-checker`, `contrarian`, `reviewer`, `code-reviewer`) is preset-immune (extends ADR-M008-C from 2 → 4 agents via ADR-M010-A). Bundled: Phase-1 distribution report now renders as a GFM pipe table (fixes box-drawing fragment clipping on cmd.exe / split panes).
+>
+> See [ADR-M008-A amendment + ADR-M010-A](pkg/.aihaus/decisions.md) for the cohort primitive + preset-map shape, and [cohorts.md](pkg/.aihaus/skills/aih-calibrate/annexes/cohorts.md) for the full 43-agent mapping.
 
 > [!NOTE]
 > ### v0.13.0 — Opus 4.7 agents + `/aih-calibrate` that survives updates
