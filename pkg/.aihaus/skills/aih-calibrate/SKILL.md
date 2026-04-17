@@ -48,9 +48,13 @@ Permission-mode tradeoff matrix + caveats: `annexes/permission-modes.md`.
    current tier distribution.
 3. Read `pkg/.aihaus/templates/settings.local.json` to capture current
    `permissions.defaultMode` (and surface `_aihaus_alt_auto_mode_comment`).
-4. Print the distribution report (agents-by-name + model + effort +
-   permissionMode) plus a one-line cost-estimate delta vs. the `balanced`
-   preset.
+4. Print the distribution report as a **GFM Markdown pipe table** (`| Agent
+   | Model | Effort | PermissionMode |` with a `---` separator row) — NOT
+   Unicode box-drawing (`┌──┬──┐` / `├──┼──┤`). Pipe tables wrap safely on
+   narrow terminals and copy cleanly; box-drawing clips to garbage on
+   cmd.exe and split panes. Include every agent name + its model + effort
+   + permissionMode; follow with a one-line cost-estimate delta vs. the
+   `balanced` preset.
 5. **Stop here if `--inspect` given.** No edits, no commit.
 
 ### Phase 2 — Compute target distribution
