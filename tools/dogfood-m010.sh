@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # dogfood-m010.sh -- write-path behavior regression for ADR-M010-A
-# preset-immunity. Complements smoke-test Check 28 B6 (which is a
+# preset-immunity. Complements smoke-test Check 28 (which is a
 # schema-shape invariant on a static fixture) by actually invoking
-# /aih-calibrate's Phase-4 step 20 write logic and asserting no
+# /aih-effort's Phase-4 step 20 write logic and asserting no
 # adversarial entries appear in the produced sidecar.
 #
 # Not gated by smoke-test.sh (R7 cycle prevention); run manually or
@@ -19,7 +19,7 @@ SIDECAR="$REPO_ROOT/.aihaus/.calibration"
 echo "dogfood-m010: verifying ADR-M010-A preset-immunity write-path filter"
 
 if [[ ! -f "$SIDECAR" ]]; then
-  echo "  skip: no .aihaus/.calibration present (run /aih-calibrate --preset cost-optimized first)"
+  echo "  skip: no .aihaus/.calibration present (run /aih-effort --preset cost first)"
   exit 0
 fi
 

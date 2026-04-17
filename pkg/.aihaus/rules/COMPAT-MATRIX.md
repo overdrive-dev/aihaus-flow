@@ -1,6 +1,6 @@
 # aihaus on Cursor — Compatibility Matrix
 
-**Last generated:** 2026-04-14
+**Last generated:** 2026-04-17
 **Verification source:** `.aihaus/research/cursor-primitives-verification.md` (2026-04-14 live WebFetch pass)
 **Scope:** every skill under `pkg/.aihaus/skills/` and every agent under `pkg/.aihaus/agents/` at the time of authoring.
 
@@ -17,7 +17,8 @@ Rows are sorted by type (skill first, then agent), name ascending.
 | Name | Type | Status | Why | Last verified |
 |------|------|--------|-----|---------------|
 | aih-brainstorm | skill | WORKS-WITH-CAVEAT | Default conversational mode is single-turn, no agents — works as-is. `--panel` / `--deep` / `--research` modes spawn multiple subagents via `Agent` tool — on Cursor the vehicle is `Task` + `/name` mentions (see rules file translation table). | 2026-04-14 |
-| aih-calibrate | skill | WORKS-WITH-CAVEAT | Edits frontmatter + `settings.local.json`; Cursor prompts per write. `--preset auto-mode-safe` targets a Claude-Code-only feature (`permissions.defaultMode: auto`); on Cursor, the edit succeeds but the target field is Claude-Code-specific and ignored by Cursor's permission model. | 2026-04-16 |
+| aih-automode | skill | NOT-SUPPORTED | Cursor has no per-session permission-mode primitive. `permissions.defaultMode: auto` is a Claude Code-specific field; the skill's `--enable` / `--disable` edits succeed mechanically but have no effect in Cursor's permission model. | 2026-04-17 |
+| aih-effort | skill | WORKS-WITH-CAVEAT | Edits frontmatter + `settings.local.json`; Cursor prompts per write. `--preset` operations and `--cohort` / `--agent` overrides are functional. The `.automode` sidecar emitted by some presets is Claude Code-specific and ignored by Cursor. | 2026-04-17 |
 | aih-bugfix | skill | NOT-SUPPORTED | Spawns `implementer` (worktree-isolated) to apply the fix. Cursor has no `isolation: worktree` or `bypassPermissions` equivalent. Since v0.12.0, `disable-model-invocation` is removed — Cursor NL-trigger surface widens (Cursor honors the flag identically per cursor-primitives-verification.md:106-109). | 2026-04-14 |
 | aih-feature | skill | NOT-SUPPORTED | Spawns `implementer` / `frontend-dev` (worktree-isolated) for the build step. Same primitive gap as aih-bugfix. Since v0.12.0, NL-trigger surface widens on Cursor (flag removed). | 2026-04-14 |
 | aih-help | skill | WORKS | Pure read — prints command list. No subagents, no writes. | 2026-04-14 |
@@ -79,7 +80,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 
 ## Summary
 
-- **Skills:** 12 rows — 2 WORKS, 6 WORKS-WITH-CAVEAT, 4 NOT-SUPPORTED.
+- **Skills:** 13 rows — 2 WORKS, 6 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
 - **Agents:** 43 rows — 25 WORKS, 13 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
 
 ## Maintenance

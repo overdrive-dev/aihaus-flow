@@ -1,0 +1,9 @@
+# aihaus calibration state -- managed by /aih-effort, consumed by /aih-update
+# Schema: v2
+# Fixture 1: pure-cohort v2 (Check 29 migration gate)
+# Tests: schema=2 cohort-only migration → v3 .effort; no automode; .v2.bak created.
+
+schema=2
+last_preset=balanced
+last_commit=abc1111
+cohort.doer.effort=medium

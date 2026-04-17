@@ -1,16 +1,16 @@
 # Permission-Mode Tradeoff Matrix
 
-This annex backs the `/aih-calibrate --permission-mode` and `--preset
-auto-mode-safe` paths. The 4-caveat numbered list below is printed
-**verbatim** before the `auto-mode-safe` full-word confirmation prompt —
-do not drift its wording.
+This annex backs the `/aih-automode --enable` path. The 4-caveat numbered
+list below is printed **verbatim** before the literal-word `auto` confirmation
+prompt — do not drift its wording. Extracted from the former skill in M012/S04
+per ADR-M012-A (skill-split decision).
 
 ## Mode Matrix
 
 | Mode | Plans supported | Providers | `Bash(*)` behavior | Subagent `permissionMode` honored | Classifier latency | aihaus default |
 |------|-----------------|-----------|--------------------|------------------------------------|---------------------|----------------|
 | `bypassPermissions` | all | all | honored | honored | none | **YES (default)** |
-| `auto` | Max, Team, Enterprise, API (not Pro) | Anthropic API only | **dropped** | **ignored** | classifier round-trip per non-read action | opt-in via `/aih-calibrate --preset auto-mode-safe` |
+| `auto` | Max, Team, Enterprise, API (not Pro) | Anthropic API only | **dropped** | **ignored** | classifier round-trip per non-read action | opt-in via `/aih-automode --enable` |
 | `acceptEdits` | all | all | honored (but prompts on non-fs Bash) | honored | none | not a preset |
 | `default` | all | all | honored only for read-only | honored | none | not a preset (would prompt constantly) |
 | `dontAsk` | all | all | honored only for explicitly-allowed narrow rules | honored | none | not a preset (too restrictive for autonomous milestones) |
@@ -36,7 +36,7 @@ do not drift its wording.
 
 ## Decision Tree — Should You Use Auto Mode?
 
-Use `--preset auto-mode-safe` only if **all** of the following are true:
+Use `/aih-automode --enable` only if **all** of the following are true:
 
 - **(a) Plan:** you are on Claude Max, Team, Enterprise, or API. Pro plan
   is not eligible; the skill detects this via `claude --print-config`
@@ -57,35 +57,38 @@ If any of (a)–(e) fail: stay on `bypassPermissions`. The aihaus autonomy
 contract (M005 + ADR-M008-B) assumes `bypassPermissions` + `Bash(*)` +
 hook-based auto-approve; auto mode is an alternative, not an upgrade.
 
-## Confirmation Prompt (Phase 3 step 11)
+## Confirmation Prompt
 
 After printing the 4-caveat list above, the skill asks:
 
-> Esta operação troca o permission mode para `auto`. Para confirmar,
-> digite a palavra `auto-mode` (qualquer outra resposta aborta):
+> To confirm, type the literal word `auto` (any other response aborts):
 
-Only the exact trimmed string `auto-mode` (case-sensitive) proceeds.
-Any other response — including `y`, `sim`, `yes`, empty enter — aborts
-with the message *"Auto mode não ativado. Nenhum arquivo foi editado."*
+Only the exact trimmed string `auto` (case-sensitive) proceeds.
+Any other response — including `y`, `sim`, `yes`, `auto-mode`, empty enter —
+aborts with the message *"Auto mode not enabled. No files were edited."*
 and exits. No commit is created on abort.
 
 ## Rollback
 
-After `/aih-calibrate --preset auto-mode-safe` applies:
+After `/aih-automode --enable` applies:
 
-- **Revert everything:** `git revert HEAD` — restores
-  `defaultMode: "bypassPermissions"`, re-inserts
-  `permissionMode: bypassPermissions` on the 3 worktree agents, and
-  reverts the `auto-approve-bash.sh` widening. Byte-identical.
-- **Revert just the permission mode (keep hook widening):** not
-  recommended — partial reverts leave the `auto-approve-bash.sh`
-  widening orphaned. Use `git revert HEAD` and re-apply any hook
-  patterns manually if you genuinely want them without auto mode.
+- **Disable cleanly:** run `/aih-automode --disable` — reverts
+  `defaultMode` to `bypassPermissions`, restores `permissionMode:
+  bypassPermissions` on the 3 worktree agents, writes `.automode`
+  with `enabled=false`. No confirmation required.
+- **Revert just the permission mode:** not recommended to use
+  `git revert HEAD` here since `/aih-automode --enable` does NOT create
+  a git commit. Use `/aih-automode --disable` instead.
 
 ## References
 
 - ADR-M008-B — Default permission mode stays `bypassPermissions`; auto is
   opt-in only. Binding.
-- PLAN.md Rev. 3 Part 5 — auto-mode opt-in prep rationale.
-- `_shared/autonomy-protocol.md` — Phase-3 one-question rule; no option
-  menus even for destructive confirmations.
+- ADR-M012-A — skill-split rationale; `/aih-automode` as the dedicated
+  permission-mode skill (split from the former calibration skill in M012).
+- `_shared/autonomy-protocol.md` — one-question rule; no option menus
+  even for destructive confirmations.
+- `annexes/caveat-block.md` — verbatim caveat block text + confirmation
+  prompt shape.
+- `annexes/state-file.md` — `.automode` sidecar schema, gitignore, and
+  idempotence contract.

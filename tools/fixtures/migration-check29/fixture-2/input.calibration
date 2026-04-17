@@ -1,0 +1,9 @@
+# aihaus calibration state -- managed by /aih-effort, consumed by /aih-update
+# Schema: v2
+# Fixture 2: auto-mode-safe v2 (Check 29 migration gate)
+# Tests: last_preset=auto-mode-safe migrates to balanced + writes .automode; !! block emitted.
+
+schema=2
+last_preset=auto-mode-safe
+permission_mode=auto
+last_commit=abc2222

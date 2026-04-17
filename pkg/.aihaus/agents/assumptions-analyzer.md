@@ -5,7 +5,7 @@ description: >
   with evidence and confidence levels. Spawned before planning to ensure
   decisions are grounded in what the code actually reveals.
 tools: Read, Bash, Grep, Glob
-model: sonnet
+model: opus
 effort: high
 color: cyan
 memory: project

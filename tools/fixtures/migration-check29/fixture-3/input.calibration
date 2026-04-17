@@ -1,0 +1,10 @@
+# aihaus calibration state -- managed by /aih-effort, consumed by /aih-update
+# Schema: v2
+# Fixture 3: investigator-custom v2 (Check 29 migration gate)
+# Tests: cohort.investigator.* migrates to per-agent overrides; !! warning emitted.
+
+schema=2
+last_preset=balanced
+last_commit=abc3333
+cohort.investigator.effort=medium
+cohort.investigator.model=sonnet

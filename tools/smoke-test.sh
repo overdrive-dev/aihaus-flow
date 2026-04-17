@@ -41,8 +41,8 @@ _start_check() {
 # ---- Check 1: 13 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 12 expected SKILL.md files"
-  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-resume aih-brainstorm aih-calibrate)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 13 expected SKILL.md files"
+  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-resume aih-brainstorm aih-effort aih-automode)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -133,11 +133,50 @@ check_skill_length() {
 }
 
 # ---- Check 6: every agent frontmatter declares the six required fields ------
+# AND each agent's model: value matches the cohort default from cohorts.md
+# (per-cohort value-validation, ADR-M012-A § smoke-test Check 6).
+# effort: is presence-only (values differ across presets).
+#
+# Cohort default-model table (6-cohort, balanced preset):
+#   :planner-binding → opus
+#   :planner         → opus
+#   :doer            → sonnet
+#   :verifier        → haiku
+#   :adversarial-scout  → opus
+#   :adversarial-review → opus
+#
+# get_cohort_members <:cohort-name>
+#   Reads the 5-column pipe-table from cohorts.md (F-006 parse contract).
+#   NF=7 when awk -F'|' splits on '|'. Column indices (1-based): f[2]=raw#,
+#   f[3]=Agent, f[4]=Cohort, f[5]=Model (strip whitespace).
+#   Returns one agent name per line.
+_get_cohort_members() {
+  local cohort_key="$1"  # e.g. ":planner-binding"
+  local cohorts_file="${PACKAGE_ROOT}/.aihaus/skills/aih-effort/annexes/cohorts.md"
+  if [[ ! -f "$cohorts_file" ]]; then
+    return 1
+  fi
+  # Parse only data rows (skip header and separator rows).
+  # NF=7 on every data row per F-006 binding contract.
+  awk -F'|' -v cohort="$cohort_key" '
+    NF==7 {
+      agent=substr($3,1); gsub(/^[[:space:]]+|[[:space:]]+$/,"",agent)
+      coh=substr($4,1);   gsub(/^[[:space:]]+|[[:space:]]+$/,"",coh)
+      # skip header row and separator row
+      if (agent=="" || agent=="#" || agent ~ /^-+$/) next
+      if (coh==cohort) print agent
+    }
+  ' "$cohorts_file"
+}
+
 check_agent_frontmatter() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: every agent declares name/tools/model/effort/color/memory"
+  local label="Check ${CHECK_NUMBER}: every agent declares name/tools/model/effort/color/memory; model: matches cohort default"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
+  local cohorts_file="${PACKAGE_ROOT}/.aihaus/skills/aih-effort/annexes/cohorts.md"
   local offenders=()
+
+  # ---- Part A: presence check (all 6 required fields) -----------------------
   while IFS= read -r -d '' file; do
     local front
     front=$(awk '/^---$/{c++; next} c==1' "$file")
@@ -147,6 +186,40 @@ check_agent_frontmatter() {
       fi
     done
   done < <(find "$agents_root" -maxdepth 1 -type f -name '*.md' -print0)
+
+  # ---- Part B: per-cohort model value-validation ----------------------------
+  if [[ ! -f "$cohorts_file" ]]; then
+    offenders+=("cohorts.md not found at ${cohorts_file#${PACKAGE_ROOT}/}; cannot validate model baselines")
+  else
+    # Cohort → expected model map (6-cohort balanced baseline, ADR-M012-A).
+    declare -A _cohort_model_map
+    _cohort_model_map[":planner-binding"]="opus"
+    _cohort_model_map[":planner"]="opus"
+    _cohort_model_map[":doer"]="sonnet"
+    _cohort_model_map[":verifier"]="haiku"
+    _cohort_model_map[":adversarial-scout"]="opus"
+    _cohort_model_map[":adversarial-review"]="opus"
+
+    local cohort expected_model members agent_file actual_model
+    for cohort in ":planner-binding" ":planner" ":doer" ":verifier" ":adversarial-scout" ":adversarial-review"; do
+      expected_model="${_cohort_model_map[$cohort]}"
+      # Read members from cohorts.md (not hardcoded).
+      while IFS= read -r member; do
+        [[ -z "$member" ]] && continue
+        agent_file="${agents_root}/${member}.md"
+        if [[ ! -f "$agent_file" ]]; then
+          offenders+=("${cohort} member '${member}' has no agent file at agents/${member}.md")
+          continue
+        fi
+        actual_model=$(awk '/^---$/{c++; next} c==1 && /^model:/{print $2; exit}' "$agent_file")
+        if [[ "$actual_model" != "$expected_model" ]]; then
+          offenders+=("agents/${member}.md: cohort ${cohort} expects model=${expected_model}, got model=${actual_model}")
+        fi
+      done < <(_get_cohort_members "$cohort")
+    done
+    unset _cohort_model_map
+  fi
+
   if [[ ${#offenders[@]} -eq 0 ]]; then
     _pass "$label"
   else
@@ -672,147 +745,25 @@ check_purity() {
   fi
 }
 
-# ---- Check 27: calibration sidecar restore round-trip -----------------------
-# Four assertions covering the M009 calibration sidecar contract:
-#   (1) effort restore from valid.calibration writes expected tiers
-#   (2) malformed.calibration tolerated without error (bad lines skipped)
-#   (3) merge-settings.sh post-merge step preserves permissions.defaultMode
-#   (4) last_preset=auto-mode-safe emits the `!!` stdout warning block
-# Self-contained — uses tools/fixtures/calibration/ only, never invokes
-# /aih-calibrate (R7 cycle prevention).
-check_calibration_sidecar() {
+# ---- Check 27: skill directory count = 13 (M012/S07) -----------------------
+# Verifies that exactly 13 aih-* skill directories exist under .aihaus/skills/.
+# Note: Check 1 verifies the NAMED SKILL.md files (13 expected names including
+# aih-effort and aih-automode). Check 27 independently verifies the directory
+# count so that unexpected directories (stale renames, extra skill dirs) also
+# cause CI failure. If the count exceeds 13, a stale directory likely remains
+# from the M012/S04 skill rename.
+check_skill_count_and_staleness() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: calibration sidecar restore (effort + defaultMode + warnings)"
-  local fx="${PACKAGE_ROOT}/../tools/fixtures/calibration"
-  [[ -d "$fx" ]] || fx="tools/fixtures/calibration"
-  if [[ ! -d "$fx" ]]; then
-    _fail "$label" "fixtures dir missing: tools/fixtures/calibration"
-    return
-  fi
-
-  local repo_root="${PACKAGE_ROOT}/.."
-  local tmpdir="${repo_root}/tools/.out/calibration-test-$$"
-  mkdir -p "$tmpdir"
+  local label="Check ${CHECK_NUMBER}: exactly 13 aih-* skill dirs exist (M012/S07)"
+  local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   local problems=()
 
-  # Source the shared restore_calibration library — eliminates test/prod
-  # drift (previously this was an inline mirror of update.sh's function).
-  # shellcheck source=../pkg/scripts/lib/restore-calibration.sh
-  source "${PACKAGE_ROOT}/scripts/lib/restore-calibration.sh"
-  # Shim keeping Check 27's (state_file, agents_dir) call signature —
-  # derives aihaus_root from state_file's parent, then delegates.
-  _smoke_restore_calibration() {
-    local state_file="$1"
-    local aihaus_root
-    aihaus_root="$(dirname "$state_file")"
-    restore_calibration "$aihaus_root"
-  }
-
-  # ---------- Assertion 1: effort restore with valid.calibration -----------
-  local a1_dir="${tmpdir}/a1"
-  mkdir -p "$a1_dir/.aihaus/agents"
-  cp "$fx/valid.calibration" "$a1_dir/.aihaus/.calibration"
-  cp "$fx/agents-fixture/implementer.md" "$a1_dir/.aihaus/agents/implementer.md"
-  cp "$fx/agents-fixture/analyst.md" "$a1_dir/.aihaus/agents/analyst.md"
-  cp "$fx/agents-fixture/architect.md" "$a1_dir/.aihaus/agents/architect.md"
-  _smoke_restore_calibration "$a1_dir/.aihaus/.calibration" "$a1_dir/.aihaus/agents" >/dev/null 2>&1
-
-  grep -q '^effort: high$' "$a1_dir/.aihaus/agents/implementer.md" \
-    || problems+=("A1: implementer effort not restored to 'high'")
-  grep -q '^effort: high$' "$a1_dir/.aihaus/agents/analyst.md" \
-    || problems+=("A1: analyst effort not restored to 'high'")
-  grep -q '^effort: xhigh$' "$a1_dir/.aihaus/agents/architect.md" \
-    || problems+=("A1: architect effort not restored to 'xhigh'")
-
-  # ---------- Assertion 2: malformed.calibration tolerated -----------------
-  local a2_dir="${tmpdir}/a2"
-  mkdir -p "$a2_dir/.aihaus/agents"
-  cp "$fx/malformed.calibration" "$a2_dir/.aihaus/.calibration"
-  cp "$fx/agents-fixture/implementer.md" "$a2_dir/.aihaus/agents/implementer.md"
-  cp "$fx/agents-fixture/analyst.md" "$a2_dir/.aihaus/agents/analyst.md"
-  cp "$fx/agents-fixture/architect.md" "$a2_dir/.aihaus/agents/architect.md"
-  local a2_out a2_rc
-  a2_out=$(_smoke_restore_calibration "$a2_dir/.aihaus/.calibration" "$a2_dir/.aihaus/agents" 2>&1; echo "RC=$?")
-  a2_rc="${a2_out##*RC=}"
-  if [[ "$a2_rc" != "0" ]]; then
-    problems+=("A2: malformed fixture returned non-zero ($a2_rc)")
+  # Count aih-* directories (exclude _shared and any non-aih prefixed dirs).
+  local actual_count
+  actual_count=$(find "$skills_root" -maxdepth 1 -type d -name 'aih-*' | wc -l | tr -d ' ')
+  if [[ "$actual_count" -ne 13 ]]; then
+    problems+=("expected 13 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
   fi
-  # Good line still applied.
-  grep -q '^effort: high$' "$a2_dir/.aihaus/agents/implementer.md" \
-    || problems+=("A2: valid line in malformed fixture did not apply")
-  # Missing-agent warning emitted.
-  echo "$a2_out" | grep -q "missing agent 'nonexistent-agent'" \
-    || problems+=("A2: missing-agent warning not emitted")
-  # Whitespace-only value didn't wipe architect's effort frontmatter.
-  grep -q '^effort: max$' "$a2_dir/.aihaus/agents/architect.md" \
-    || problems+=("A2: empty-value line incorrectly mutated architect effort")
-
-  # ---------- Assertion 3: defaultMode preserve via merge-settings ---------
-  # Stage under a mock <target>/.claude/ so merge-settings.sh can derive
-  # .aihaus/.calibration from $dirname($dirname($dst)).
-  local a3_dir="${tmpdir}/a3"
-  mkdir -p "$a3_dir/.claude" "$a3_dir/.aihaus"
-  cp "$fx/settings-before.json" "$a3_dir/.claude/settings.local.json"
-  cp "$fx/settings-template.json" "$a3_dir/template.json"
-  cp "$fx/valid.calibration" "$a3_dir/.aihaus/.calibration"
-  (
-    # shellcheck disable=SC1090
-    source "${PACKAGE_ROOT}/scripts/lib/merge-settings.sh"
-    merge_settings "$a3_dir/.claude/settings.local.json" "$a3_dir/template.json" >/dev/null 2>&1
-  )
-  if command -v jq >/dev/null 2>&1; then
-    local a3_mode
-    a3_mode=$(jq -r '.permissions.defaultMode' "$a3_dir/.claude/settings.local.json" 2>/dev/null)
-    if [[ "$a3_mode" != "auto" ]]; then
-      problems+=("A3: defaultMode not preserved (got '$a3_mode', expected 'auto')")
-    fi
-  else
-    # No jq → the post-merge preserve step is gated off; skip with pass-through.
-    grep -q '"defaultMode"[[:space:]]*:[[:space:]]*"auto"' "$a3_dir/.claude/settings.local.json" \
-      || problems+=("A3: defaultMode preserve check (no-jq fallback) did not find auto")
-  fi
-
-  # ---------- Assertion 4: auto-mode-safe warning block --------------------
-  local a4_dir="${tmpdir}/a4"
-  mkdir -p "$a4_dir/.aihaus/agents"
-  cat > "$a4_dir/.aihaus/.calibration" <<EOF
-schema=1
-permission_mode=auto
-last_preset=auto-mode-safe
-last_commit=abc1234
-implementer=xhigh
-EOF
-  cp "$fx/agents-fixture/implementer.md" "$a4_dir/.aihaus/agents/implementer.md"
-  local a4_out
-  a4_out=$(_smoke_restore_calibration "$a4_dir/.aihaus/.calibration" "$a4_dir/.aihaus/agents" 2>&1)
-  echo "$a4_out" | grep -q '!!.*auto-mode-safe' \
-    || problems+=("A4: auto-mode-safe warning block missing from stdout")
-  echo "$a4_out" | grep -q '!!.*/aih-calibrate --preset auto-mode-safe' \
-    || problems+=("A4: warning does not reference /aih-calibrate --preset auto-mode-safe")
-
-  # ---------- Assertion 5: adversarial explicit-entry honor ----------------
-  # ADR-M008-A x ADR-M008-C cross-break risk (analyst § Risks). If a v1
-  # sidecar includes a plan-checker= line, restore honors it (explicit
-  # user intent from --agent plan-checker). The WRITE-path filter lives
-  # elsewhere (SKILL.md Phase-4 step 20); read-path simply applies what's
-  # recorded. This test exercises the read-path's explicit-intent semantic.
-  local a5_dir="${tmpdir}/a5"
-  mkdir -p "$a5_dir/.aihaus/agents"
-  cat > "$a5_dir/.aihaus/.calibration" <<EOF
-schema=1
-permission_mode=bypassPermissions
-last_preset=custom
-last_commit=ad5a5ad
-plan-checker=high
-EOF
-  # Stage an adversarial member at baseline (opus, max). Use architect
-  # fixture as stand-in -- only frontmatter shape matters for the sed.
-  cp "$fx/agents-fixture/architect.md" "$a5_dir/.aihaus/agents/plan-checker.md"
-  _smoke_restore_calibration "$a5_dir/.aihaus/.calibration" "$a5_dir/.aihaus/agents" >/dev/null 2>&1
-  grep -q '^effort: high$' "$a5_dir/.aihaus/agents/plan-checker.md" \
-    || problems+=("A5: plan-checker explicit entry not honored by restore")
-
-  rm -rf "$tmpdir"
 
   if [[ ${#problems[@]} -eq 0 ]]; then
     _pass "$label"
@@ -821,136 +772,111 @@ EOF
   fi
 }
 
-# ---- Check 28: calibration sidecar v2 cohort round-trip --------------------
-# Six assertions exercising the M010 schema v2 + cohort primitive:
-#   B1 cohort-level (model, effort) mutation applied to cohort members
-#   B2 per-agent override wins over cohort default (apply-order semantic)
-#   B3 cohort.<name>.<field>=custom skips (D-4 fallback)
-#   B4 unknown cohort warns + skips + exits 0
-#   B5 v1 sidecar on v2-aware reader round-trips byte-identically
-#   B6 v2 schema shape invariant -- no :adversarial entries in preset-shape
-#      fixture (paired with tools/dogfood-m010.sh for write-path behavior)
-# Self-contained: uses tools/fixtures/calibration/ only; never invokes
-# /aih-calibrate directly (R7 cycle prevention preserved).
-check_calibration_sidecar_v2() {
+# ---- Check 28: cohort membership round-trip + parse contract (M012/S07) ------
+# Seven sub-assertions covering the 6-cohort v0.16.0 taxonomy in cohorts.md:
+#   C1 each of the 43 agents appears under exactly one cohort
+#   C2 cohort counts match: planner-binding=4, planner=13, doer=15, verifier=7,
+#      adversarial-scout=2, adversarial-review=2 (total=43)
+#   C3 no :verifier-rich or :investigator cohort name appears in the table
+#   C4 F-006 parse contract: every data row yields NF=7 (awk -F'|' | sort -u == "7")
+#   C5 header row literal match: "| # | Agent | Cohort | Model | Effort |"
+# Self-contained: reads cohorts.md directly; no invocation of /aih-effort
+# (R7 cycle prevention preserved).
+check_cohort_membership_roundtrip() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: calibration sidecar v2 round-trip (cohort + model + effort)"
-  local fx="${PACKAGE_ROOT}/../tools/fixtures/calibration"
-  [[ -d "$fx" ]] || fx="tools/fixtures/calibration"
-  if [[ ! -d "$fx" ]]; then
-    _fail "$label" "fixtures dir missing: tools/fixtures/calibration"
+  local label="Check ${CHECK_NUMBER}: cohort membership + counts + F-006 parse contract (M012/S07)"
+  local cohorts_md="${PACKAGE_ROOT}/.aihaus/skills/aih-effort/annexes/cohorts.md"
+  local problems=()
+
+  if [[ ! -f "$cohorts_md" ]]; then
+    _fail "$label" "cohorts.md not found at aih-effort/annexes/cohorts.md"
     return
   fi
 
-  local repo_root="${PACKAGE_ROOT}/.."
-  local tmpdir="${repo_root}/tools/.out/calibration-v2-test-$$"
-  mkdir -p "$tmpdir"
-  local problems=()
-
-  # shellcheck source=../pkg/scripts/lib/restore-calibration.sh
-  source "${PACKAGE_ROOT}/scripts/lib/restore-calibration.sh"
-
-  # Helper: stage a minimal .aihaus layout for a test case.
-  _b_stage() {
-    local dir="$1"
-    mkdir -p "$dir/.aihaus/agents" "$dir/.aihaus/skills/aih-calibrate/annexes"
-    cp "${PACKAGE_ROOT}/.aihaus/skills/aih-calibrate/annexes/cohorts.md" \
-       "$dir/.aihaus/skills/aih-calibrate/annexes/cohorts.md"
-  }
-
-  # ---------- B1 cohort-level mutation + B2 per-agent override win ---------
-  # v2.calibration has cohort.doer.model=sonnet + cohort.doer.effort=medium
-  # and implementer.model=opus. Expected post-restore:
-  #   implementer.md  → model: opus (override), effort: medium (cohort)
-  #   test-writer.md  → model: sonnet, effort: medium (cohort only)
-  local b1_dir="${tmpdir}/b1"
-  _b_stage "$b1_dir"
-  cp "$fx/v2.calibration" "$b1_dir/.aihaus/.calibration"
-  cp "$fx/agents-fixture/implementer.md" "$b1_dir/.aihaus/agents/implementer.md"
-  # test-writer is a :doer fixture -- copy implementer fixture and rename.
-  cp "$fx/agents-fixture/implementer.md" "$b1_dir/.aihaus/agents/test-writer.md"
-  # verifier member for B3 -- cohort.verifier.*=custom means no mutation.
-  cp "$fx/agents-fixture/verifier.md" "$b1_dir/.aihaus/agents/verifier.md"
-  restore_calibration "$b1_dir/.aihaus" >/dev/null 2>&1
-
-  # B1 -- cohort-level applied to non-override :doer member.
-  grep -q '^model: sonnet$' "$b1_dir/.aihaus/agents/test-writer.md" \
-    || problems+=("B1: cohort.doer.model=sonnet not applied to test-writer")
-  grep -q '^effort: medium$' "$b1_dir/.aihaus/agents/test-writer.md" \
-    || problems+=("B1: cohort.doer.effort=medium not applied to test-writer")
-
-  # B2 -- per-agent implementer.model=opus wins over cohort.doer.model=sonnet;
-  # cohort.doer.effort=medium still applies (no effort override).
-  grep -q '^model: opus$' "$b1_dir/.aihaus/agents/implementer.md" \
-    || problems+=("B2: implementer.model=opus override did not win over cohort")
-  grep -q '^effort: medium$' "$b1_dir/.aihaus/agents/implementer.md" \
-    || problems+=("B2: implementer effort not inherited from cohort.doer")
-
-  # B3 -- cohort.verifier.model=custom + cohort.verifier.effort=custom skip,
-  # no per-agent override for verifier → baseline preserved (model: opus, effort: max).
-  grep -q '^model: opus$' "$b1_dir/.aihaus/agents/verifier.md" \
-    || problems+=("B3: cohort.verifier.model=custom should defer; verifier.model mutated unexpectedly")
-  grep -q '^effort: max$' "$b1_dir/.aihaus/agents/verifier.md" \
-    || problems+=("B3: cohort.verifier.effort=custom should defer; verifier.effort mutated unexpectedly")
-
-  # ---------- B4 unknown cohort warns + skips ------------------------------
-  local b4_dir="${tmpdir}/b4"
-  _b_stage "$b4_dir"
-  cat > "$b4_dir/.aihaus/.calibration" <<EOF
-schema=2
-permission_mode=bypassPermissions
-last_preset=custom
-last_commit=b4b4b4b
-cohort.nonexistent.model=sonnet
-cohort.nonexistent.effort=high
-implementer=high
-EOF
-  cp "$fx/agents-fixture/implementer.md" "$b4_dir/.aihaus/agents/implementer.md"
-  local b4_out b4_rc
-  b4_out=$(restore_calibration "$b4_dir/.aihaus" 2>&1; echo "RC=$?")
-  b4_rc="${b4_out##*RC=}"
-  if [[ "$b4_rc" != "0" ]]; then
-    problems+=("B4: unknown cohort fixture returned non-zero ($b4_rc)")
+  # ---------- C4: F-006 parse contract: every data row yields NF=7 ----------
+  local nf_values
+  nf_values=$(awk -F'|' '/^\| +[0-9]+ +\|/ { print NF }' "$cohorts_md" | sort -u)
+  if [[ "$nf_values" != "7" ]]; then
+    problems+=("C4: F-006 parse contract violated -- data row NF values should be exactly '7'; got: '${nf_values}'")
   fi
-  echo "$b4_out" | grep -q "unknown cohort 'nonexistent'" \
-    || problems+=("B4: unknown-cohort warning not emitted")
-  grep -q '^effort: high$' "$b4_dir/.aihaus/agents/implementer.md" \
-    || problems+=("B4: implementer per-agent line did not apply (unknown cohort should not short-circuit)")
 
-  # ---------- B5 v1 sidecar on v2-aware reader -----------------------------
-  # Feed v2-migration-input.calibration (schema=1) through the v2-capable
-  # restore_calibration and assert v1 effort restore works byte-identically
-  # (legacy dispatch contract -- Check 27 A1 parity on the v1 path).
-  local b5_dir="${tmpdir}/b5"
-  _b_stage "$b5_dir"
-  cp "$fx/v2-migration-input.calibration" "$b5_dir/.aihaus/.calibration"
-  cp "$fx/agents-fixture/implementer.md" "$b5_dir/.aihaus/agents/implementer.md"
-  cp "$fx/agents-fixture/analyst.md" "$b5_dir/.aihaus/agents/analyst.md"
-  cp "$fx/agents-fixture/architect.md" "$b5_dir/.aihaus/agents/architect.md"
-  restore_calibration "$b5_dir/.aihaus" >/dev/null 2>&1
-  grep -q '^effort: high$' "$b5_dir/.aihaus/agents/implementer.md" \
-    || problems+=("B5: v1 implementer effort not restored through v2-aware reader")
-  grep -q '^effort: high$' "$b5_dir/.aihaus/agents/analyst.md" \
-    || problems+=("B5: v1 analyst effort not restored through v2-aware reader")
-  grep -q '^effort: xhigh$' "$b5_dir/.aihaus/agents/architect.md" \
-    || problems+=("B5: v1 architect effort not restored through v2-aware reader")
+  # ---------- C5: header row literal match ---------------------------------
+  local expected_header="| # | Agent | Cohort | Model | Effort |"
+  if ! grep -qF "$expected_header" "$cohorts_md"; then
+    problems+=("C5: header row literal match failed -- expected '${expected_header}' (ADR-M012-A binding clause)")
+  fi
 
-  # ---------- B6 v2 schema shape invariant -- no adversarial entries -------
-  # The v2.calibration fixture represents "what a preset-apply MUST
-  # produce": cohort rows only for :planner / :doer / :verifier /
-  # :investigator (M010.1 added :investigator), plus a single per-agent
-  # model override. Assert no entries for the 4 adversarial members AND no
-  # cohort.adversarial.* fields present.
-  # This is a schema-documentation check, not a write-path behavior test.
-  # Paired with tools/dogfood-m010.sh (write-path behavior).
-  grep -qE '^(plan-checker|contrarian|reviewer|code-reviewer)=' "$fx/v2.calibration" \
-    && problems+=("B6: v2.calibration has a per-agent effort entry for an adversarial member (write-filter invariant violated)")
-  grep -qE '^(plan-checker|contrarian|reviewer|code-reviewer)\.model=' "$fx/v2.calibration" \
-    && problems+=("B6: v2.calibration has a per-agent .model entry for an adversarial member")
-  grep -qE '^cohort\.adversarial\.(model|effort)=' "$fx/v2.calibration" \
-    && problems+=("B6: v2.calibration has a cohort.adversarial.* entry (preset-apply must skip adversarial)")
+  # ---------- C1 + C2: agent membership + cohort counts --------------------
+  declare -A _seen_agents
+  declare -A _cohort_counts
+  _cohort_counts[":planner-binding"]=0
+  _cohort_counts[":planner"]=0
+  _cohort_counts[":doer"]=0
+  _cohort_counts[":verifier"]=0
+  _cohort_counts[":adversarial-scout"]=0
+  _cohort_counts[":adversarial-review"]=0
 
-  rm -rf "$tmpdir"
+  local duplicates=()
+  local unknown_cohorts=()
+
+  while IFS='|' read -r _ num agent cohort model effort _; do
+    # Strip whitespace.
+    agent="${agent#"${agent%%[! ]*}"}"; agent="${agent%"${agent##*[! ]}"}"
+    cohort="${cohort#"${cohort%%[! ]*}"}"; cohort="${cohort%"${cohort##*[! ]}"}"
+    # Skip empty rows (separator lines, blank lines).
+    [[ -z "$agent" || "$agent" =~ ^-+$ || "$agent" == "#" ]] && continue
+    # Skip header row.
+    [[ "$agent" == "Agent" ]] && continue
+
+    # C1: each agent appears exactly once.
+    if [[ -v "_seen_agents[$agent]" ]]; then
+      duplicates+=("$agent (duplicate cohort assignment)")
+    fi
+    _seen_agents["$agent"]="$cohort"
+
+    # Tally cohort count.
+    if [[ -v "_cohort_counts[$cohort]" ]]; then
+      _cohort_counts["$cohort"]=$(( _cohort_counts["$cohort"] + 1 ))
+    else
+      unknown_cohorts+=("$agent → unknown cohort '${cohort}'")
+    fi
+  done < <(grep -E '^\| +[0-9]+ +\|' "$cohorts_md")
+
+  for dup in "${duplicates[@]}"; do
+    problems+=("C1: $dup")
+  done
+  for unk in "${unknown_cohorts[@]}"; do
+    problems+=("C2: $unk")
+  done
+
+  local total_agents="${#_seen_agents[@]}"
+  if [[ "$total_agents" -ne 43 ]]; then
+    problems+=("C1: expected 43 agents in membership table; found ${total_agents}")
+  fi
+
+  # C2: expected cohort counts.
+  local -A _expected_counts=(
+    [":planner-binding"]=4
+    [":planner"]=13
+    [":doer"]=15
+    [":verifier"]=7
+    [":adversarial-scout"]=2
+    [":adversarial-review"]=2
+  )
+  for cohort in ":planner-binding" ":planner" ":doer" ":verifier" ":adversarial-scout" ":adversarial-review"; do
+    local got="${_cohort_counts[$cohort]}"
+    local want="${_expected_counts[$cohort]}"
+    if [[ "$got" -ne "$want" ]]; then
+      problems+=("C2: cohort ${cohort} expected ${want} members; got ${got}")
+    fi
+  done
+
+  unset _seen_agents _cohort_counts _expected_counts
+
+  # ---------- C3: no deprecated cohort names in table ----------------------
+  if grep -qE '^\|[^|]*\| *:(verifier-rich|investigator) *\|' "$cohorts_md"; then
+    problems+=("C3: deprecated cohort name ':verifier-rich' or ':investigator' still present in membership table")
+  fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
     _pass "$label"
@@ -1165,6 +1091,192 @@ EOF
   fi
 }
 
+# ---- Check 30: migration fixtures (v2->v3 restore-effort.sh, M012/S07) ------
+# Three golden-fixture pairs exercising S06's restore-effort.sh migration path:
+#   F1 pure-cohort v2 (balanced + doer.effort=medium)
+#      → schema=3 .effort; .v2.bak exists; .automode absent; idempotent
+#   F2 auto-mode-safe v2 (last_preset=auto-mode-safe, permission_mode=auto)
+#      → schema=3 .effort; .automode exists with enabled=true;
+#        !! block in stderr pointing at /aih-automode --enable; idempotent
+#   F3 investigator-custom v2 (cohort.investigator.effort + .model)
+#      → schema=3 .effort; 3 per-agent overrides; !! warning about FR-M06; idempotent
+# Comparison strips the timestamp line (# Migrated from schema v2 ... on <ts>)
+# so the check is stable. Idempotence: second restore_effort run leaves .effort
+# byte-identical (hash comparison).
+# Self-contained: never invokes /aih-effort (R7 cycle prevention).
+check_migration_fixtures() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: migration fixtures v2->v3 (restore-effort.sh, 3 pairs + idempotence)"
+  local fx_root="${PACKAGE_ROOT}/../tools/fixtures/migration-check29"
+  [[ -d "$fx_root" ]] || fx_root="tools/fixtures/migration-check29"
+  if [[ ! -d "$fx_root" ]]; then
+    _fail "$label" "fixtures dir missing: tools/fixtures/migration-check29"
+    return
+  fi
+
+  # shellcheck source=../pkg/scripts/lib/restore-effort.sh
+  source "${PACKAGE_ROOT}/scripts/lib/restore-effort.sh"
+
+  local repo_root="${PACKAGE_ROOT}/.."
+  local out_root="${repo_root}/tools/.out"
+  mkdir -p "$out_root" 2>/dev/null || true
+  local problems=()
+
+  # _strip_timestamp: filter out the "# Migrated from schema v2 ... on <ts>" line
+  # for stable comparison (timestamp varies per run).
+  _strip_timestamp() { grep -v '^# Migrated from schema v2'; }
+
+  # ---------- Fixture 1: pure-cohort v2 ------------------------------------
+  local f1_dir="${out_root}/mig-f1-$$"
+  rm -rf "$f1_dir"; mkdir -p "$f1_dir/.aihaus/agents"
+  cp "$fx_root/fixture-1/input.calibration" "$f1_dir/.aihaus/.calibration"
+  local f1_stderr
+  f1_stderr=$(restore_effort "$f1_dir/.aihaus" 2>&1 >/dev/null || true)
+
+  # .v2.bak must exist.
+  [[ -f "$f1_dir/.aihaus/.calibration.v2.bak" ]] \
+    || problems+=("F1: .calibration.v2.bak not created")
+
+  # .automode must NOT exist for balanced/no-auto-mode-safe.
+  [[ ! -f "$f1_dir/.aihaus/.automode" ]] \
+    || problems+=("F1: .automode should NOT exist for pure-cohort balanced fixture")
+
+  # .effort content matches golden (minus timestamp line).
+  if [[ -f "$f1_dir/.aihaus/.effort" ]]; then
+    local f1_got f1_want
+    f1_got=$(grep -v '^# Migrated from schema v2' "$f1_dir/.aihaus/.effort")
+    f1_want=$(grep -v '^# Migrated from schema v2' "$fx_root/fixture-1/expected.effort")
+    if [[ "$f1_got" != "$f1_want" ]]; then
+      problems+=("F1: .effort content mismatch vs golden")
+      problems+=("F1:  got:  $(echo "$f1_got" | head -5 | tr '\n' '|')")
+      problems+=("F1:  want: $(echo "$f1_want" | head -5 | tr '\n' '|')")
+    fi
+  else
+    problems+=("F1: .effort not created")
+  fi
+
+  # Idempotence: run restore_effort again on the v3 .effort; hash must not change.
+  if [[ -f "$f1_dir/.aihaus/.effort" ]]; then
+    local f1_hash_before f1_hash_after
+    f1_hash_before=$(grep -v '^# Migrated from schema v2' "$f1_dir/.aihaus/.effort" | md5sum 2>/dev/null || sha256sum "$f1_dir/.aihaus/.effort" 2>/dev/null || cksum "$f1_dir/.aihaus/.effort")
+    restore_effort "$f1_dir/.aihaus" >/dev/null 2>&1 || true
+    f1_hash_after=$(grep -v '^# Migrated from schema v2' "$f1_dir/.aihaus/.effort" | md5sum 2>/dev/null || sha256sum "$f1_dir/.aihaus/.effort" 2>/dev/null || cksum "$f1_dir/.aihaus/.effort")
+    [[ "$f1_hash_before" == "$f1_hash_after" ]] \
+      || problems+=("F1: idempotence failed -- .effort changed on second run")
+  fi
+  rm -rf "$f1_dir"
+
+  # ---------- Fixture 2: auto-mode-safe v2 ---------------------------------
+  local f2_dir="${out_root}/mig-f2-$$"
+  rm -rf "$f2_dir"; mkdir -p "$f2_dir/.aihaus/agents"
+  cp "$fx_root/fixture-2/input.calibration" "$f2_dir/.aihaus/.calibration"
+  local f2_stderr
+  f2_stderr=$(restore_effort "$f2_dir/.aihaus" 2>&1 >/dev/null || true)
+
+  # .v2.bak must exist.
+  [[ -f "$f2_dir/.aihaus/.calibration.v2.bak" ]] \
+    || problems+=("F2: .calibration.v2.bak not created")
+
+  # .automode must exist with enabled=true.
+  if [[ -f "$f2_dir/.aihaus/.automode" ]]; then
+    grep -q '^enabled=true$' "$f2_dir/.aihaus/.automode" \
+      || problems+=("F2: .automode missing 'enabled=true' line")
+  else
+    problems+=("F2: .automode not created for auto-mode-safe fixture")
+  fi
+
+  # stderr must contain the !! block pointing at /aih-automode --enable.
+  echo "$f2_stderr" | grep -q '!!' \
+    || problems+=("F2: !! warning block not emitted in stderr")
+  echo "$f2_stderr" | grep -q '/aih-automode --enable' \
+    || problems+=("F2: stderr missing /aih-automode --enable reference")
+
+  # .effort content matches golden.
+  if [[ -f "$f2_dir/.aihaus/.effort" ]]; then
+    local f2_got f2_want
+    f2_got=$(grep -v '^# Migrated from schema v2' "$f2_dir/.aihaus/.effort")
+    f2_want=$(grep -v '^# Migrated from schema v2' "$fx_root/fixture-2/expected.effort")
+    if [[ "$f2_got" != "$f2_want" ]]; then
+      problems+=("F2: .effort content mismatch vs golden")
+      problems+=("F2:  got:  $(echo "$f2_got" | head -5 | tr '\n' '|')")
+      problems+=("F2:  want: $(echo "$f2_want" | head -5 | tr '\n' '|')")
+    fi
+  else
+    problems+=("F2: .effort not created")
+  fi
+
+  # Idempotence: second run on v3 .effort leaves file unchanged.
+  if [[ -f "$f2_dir/.aihaus/.effort" ]]; then
+    local f2_hash_before f2_hash_after
+    f2_hash_before=$(grep -v '^# Migrated from schema v2' "$f2_dir/.aihaus/.effort" | md5sum 2>/dev/null || sha256sum "$f2_dir/.aihaus/.effort" 2>/dev/null || cksum "$f2_dir/.aihaus/.effort")
+    restore_effort "$f2_dir/.aihaus" >/dev/null 2>&1 || true
+    f2_hash_after=$(grep -v '^# Migrated from schema v2' "$f2_dir/.aihaus/.effort" | md5sum 2>/dev/null || sha256sum "$f2_dir/.aihaus/.effort" 2>/dev/null || cksum "$f2_dir/.aihaus/.effort")
+    [[ "$f2_hash_before" == "$f2_hash_after" ]] \
+      || problems+=("F2: idempotence failed -- .effort changed on second run")
+  fi
+  rm -rf "$f2_dir"
+
+  # ---------- Fixture 3: investigator-custom v2 ----------------------------
+  local f3_dir="${out_root}/mig-f3-$$"
+  rm -rf "$f3_dir"; mkdir -p "$f3_dir/.aihaus/agents"
+  cp "$fx_root/fixture-3/input.calibration" "$f3_dir/.aihaus/.calibration"
+  local f3_stderr
+  f3_stderr=$(restore_effort "$f3_dir/.aihaus" 2>&1 >/dev/null || true)
+
+  # .v2.bak must exist.
+  [[ -f "$f3_dir/.aihaus/.calibration.v2.bak" ]] \
+    || problems+=("F3: .calibration.v2.bak not created")
+
+  # .automode must NOT exist (no auto-mode-safe trigger).
+  [[ ! -f "$f3_dir/.aihaus/.automode" ]] \
+    || problems+=("F3: .automode should NOT exist for investigator-custom fixture")
+
+  # .effort must contain the 3 per-agent overrides (FR-M06 migration).
+  if [[ -f "$f3_dir/.aihaus/.effort" ]]; then
+    grep -q '^debugger.model=sonnet$' "$f3_dir/.aihaus/.effort" \
+      || problems+=("F3: debugger.model=sonnet not in .effort (FR-M06)")
+    grep -q '^debug-session-manager.model=sonnet$' "$f3_dir/.aihaus/.effort" \
+      || problems+=("F3: debug-session-manager.model=sonnet not in .effort (FR-M06)")
+    grep -q '^user-profiler.model=sonnet$' "$f3_dir/.aihaus/.effort" \
+      || problems+=("F3: user-profiler.model=sonnet not in .effort (FR-M06)")
+
+    # Full golden diff (minus timestamp).
+    local f3_got f3_want
+    f3_got=$(grep -v '^# Migrated from schema v2' "$f3_dir/.aihaus/.effort")
+    f3_want=$(grep -v '^# Migrated from schema v2' "$fx_root/fixture-3/expected.effort")
+    if [[ "$f3_got" != "$f3_want" ]]; then
+      problems+=("F3: .effort content mismatch vs golden")
+      problems+=("F3:  got:  $(echo "$f3_got" | head -8 | tr '\n' '|')")
+      problems+=("F3:  want: $(echo "$f3_want" | head -8 | tr '\n' '|')")
+    fi
+  else
+    problems+=("F3: .effort not created")
+  fi
+
+  # stderr must contain !! block warning about investigator cohort deletion.
+  echo "$f3_stderr" | grep -q '!!' \
+    || problems+=("F3: !! warning block not emitted in stderr")
+  echo "$f3_stderr" | grep -q 'investigator' \
+    || problems+=("F3: stderr missing investigator-deletion warning")
+
+  # Idempotence.
+  if [[ -f "$f3_dir/.aihaus/.effort" ]]; then
+    local f3_hash_before f3_hash_after
+    f3_hash_before=$(grep -v '^# Migrated from schema v2' "$f3_dir/.aihaus/.effort" | md5sum 2>/dev/null || sha256sum "$f3_dir/.aihaus/.effort" 2>/dev/null || cksum "$f3_dir/.aihaus/.effort")
+    restore_effort "$f3_dir/.aihaus" >/dev/null 2>&1 || true
+    f3_hash_after=$(grep -v '^# Migrated from schema v2' "$f3_dir/.aihaus/.effort" | md5sum 2>/dev/null || sha256sum "$f3_dir/.aihaus/.effort" 2>/dev/null || cksum "$f3_dir/.aihaus/.effort")
+    [[ "$f3_hash_before" == "$f3_hash_after" ]] \
+      || problems+=("F3: idempotence failed -- .effort changed on second run")
+  fi
+  rm -rf "$f3_dir"
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -1195,9 +1307,10 @@ check_auto_approve_patterns
 check_merge_semantics_convergence
 check_autonomy_guard_detects_violations
 check_excluded_skills_keep_flag
-check_calibration_sidecar
-check_calibration_sidecar_v2
+check_skill_count_and_staleness
+check_cohort_membership_roundtrip
 check_autonomy_gate_fixtures
+check_migration_fixtures
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

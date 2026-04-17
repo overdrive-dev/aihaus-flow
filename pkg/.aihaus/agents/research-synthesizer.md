@@ -5,7 +5,7 @@ description: >
   SUMMARY.md. Extracts key findings, identifies cross-research patterns,
   derives roadmap implications, and commits all research files.
 tools: Read, Write, Bash
-model: sonnet
+model: opus
 effort: high
 color: purple
 memory: project

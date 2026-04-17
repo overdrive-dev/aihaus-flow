@@ -24,8 +24,8 @@ emit_allow() {
 # These patterns are explicitly auto-approved BEFORE the DANGEROUS_PATTERNS
 # scan runs. Under the post-M007 deny-list semantics they would be
 # auto-approved anyway (no match against DANGEROUS_PATTERNS), but listing
-# them explicitly gives users on auto mode (`/aih-calibrate --preset
-# auto-mode-safe`) a narrow rule surface that survives when `Bash(*)` is
+# them explicitly gives users on auto mode (`/aih-automode --enable`)
+# a narrow rule surface that survives when `Bash(*)` is
 # silently dropped by the classifier. Additive-only: NEVER remove entries
 # here — smoke-test Check 22 asserts auto-approve behavior on a subset.
 #

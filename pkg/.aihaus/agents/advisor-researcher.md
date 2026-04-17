@@ -5,7 +5,7 @@ description: >
   table with conditional recommendations. Spawned by discussion workflows
   when trade-off analysis is needed before locking a decision.
 tools: Read, Bash, Grep, Glob, WebSearch, WebFetch
-model: sonnet
+model: opus
 effort: high
 color: cyan
 memory: project

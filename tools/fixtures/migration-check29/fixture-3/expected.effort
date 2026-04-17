@@ -1,0 +1,17 @@
+# aihaus effort state -- managed by /aih-effort, consumed by /aih-update
+# Schema: v3 -- 6 uniform cohorts + per-agent overrides
+# This file is USER-OWNED and derived state. Safe to delete. Do not commit.
+
+schema=3
+last_preset=balanced
+last_commit=abc3333
+
+# Cohort-level rows (migrated from v2)
+
+# investigator cohort deleted in v3 -- re-emitted as per-agent overrides (FR-M06)
+debugger.model=sonnet
+debug-session-manager.model=sonnet
+user-profiler.model=sonnet
+debugger=medium
+debug-session-manager=medium
+user-profiler=medium

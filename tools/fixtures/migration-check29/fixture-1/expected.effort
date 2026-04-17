@@ -1,0 +1,10 @@
+# aihaus effort state -- managed by /aih-effort, consumed by /aih-update
+# Schema: v3 -- 6 uniform cohorts + per-agent overrides
+# This file is USER-OWNED and derived state. Safe to delete. Do not commit.
+
+schema=3
+last_preset=balanced
+last_commit=abc1111
+
+# Cohort-level rows (migrated from v2)
+cohort.doer.effort=medium

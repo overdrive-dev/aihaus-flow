@@ -1,4 +1,4 @@
-# aihaus calibration state — managed by /aih-calibrate, consumed by /aih-update
+# aihaus calibration state — managed by /aih-effort, consumed by /aih-update
 # Schema: v1
 # Fixture: valid schema v1 state used by smoke-test Check 27.
 
