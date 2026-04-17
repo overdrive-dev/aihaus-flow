@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-aihaus is a workflow automation package for Claude Code **and** Cursor (multi-platform since v0.10.0 / M006 — see ADR-005). It provides 12 intent-based commands (`init`, `plan`, `bugfix`, `feature`, `milestone`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`, `calibrate`) that users install into their own repositories via `install.sh --platform <claude|cursor|both>`. `/aih-run` and `/aih-plan-to-milestone` were retired in v0.11.0 — their behavior lives in `/aih-milestone` (execution + `--plan` promotion) and `/aih-feature --plan` (inline small-plan execution). `/aih-calibrate` was added in v0.13.0 (M008). There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, rules, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
+aihaus is a workflow automation package for Claude Code **and** Cursor (multi-platform since v0.10.0 / M006 — see ADR-005). It provides 13 intent-based commands (`init`, `plan`, `bugfix`, `feature`, `milestone`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`, `effort`, `automode`) that users install into their own repositories via `install.sh --platform <claude|cursor|both>`. `/aih-run` and `/aih-plan-to-milestone` were retired in v0.11.0 — their behavior lives in `/aih-milestone` (execution + `--plan` promotion) and `/aih-feature --plan` (inline small-plan execution). `/aih-effort` (the effort-tuning skill, added M008 and renamed in v0.17.0 / M012) handles effort + model tuning; `/aih-automode` (new in v0.17.0 / M012) handles permission-mode enable/disable. There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, rules, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
 
 ## Repo Structure
 
@@ -29,7 +29,7 @@ There is no build command, no type checker, and no unit test framework. The smok
 
 ## Package Contents (inside `pkg/`)
 
-- `pkg/.aihaus/skills/*/SKILL.md` — 12 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code (or as a `Task` mention on Cursor).
+- `pkg/.aihaus/skills/*/SKILL.md` — 13 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code (or as a `Task` mention on Cursor).
 - `pkg/.aihaus/skills/_shared/autonomy-protocol.md` — binding execution-autonomy rules (M005 / ADR-bound-to-all-skills): 3-phase rule, TRUE blocker definition, no option menus, no delegated typing. Every SKILL.md references it.
 - `pkg/.aihaus/agents/*.md` — 43 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
 - `pkg/.aihaus/hooks/*.sh` — 17 shell hooks for Claude Code lifecycle events: M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance) plus v0.12.0 runtime autonomy enforcement (autonomy-guard blocks forbidden execution-phase patterns).
@@ -68,53 +68,72 @@ After any change to skills, agents, or hooks, run `bash tools/smoke-test.sh` to 
 
 ## Calibration and Permission Modes
 
-Users can retune effort tiers and permission modes after install via
-`/aih-calibrate` (added M008). The default install uses `permissionMode:
-bypassPermissions` + `Bash(*)` + hook-based auto-approve — this is the
-autonomy contract M005 locks in. Auto mode (Claude Code ≥ v2.1.83) is
-available via `/aih-calibrate --preset auto-mode-safe` but drops `Bash(*)`
-and ignores subagent `permissionMode` — the skill prints the full
-caveat matrix before applying.
+> **BREAKING (v0.17.0 / M012):** The former effort-calibration skill has
+> been renamed to `/aih-effort`; permission-mode calibration is now a
+> separate skill `/aih-automode`. The old skill name is gone — typing it
+> returns skill-not-found. See release notes M012
+> (tools/.out/release-notes-M012.md) for the migration recipe.
 
-Effort presets (v0.15.0 — cohort-tuple shape, 5 cohorts):
-- `cost-optimized` — `:planner (opus, high)`, `:doer (sonnet, high)`, `:verifier (haiku, medium)`, `:investigator (sonnet, medium)`, `:adversarial` preset-immune. Maximum cost reduction via haiku on verifiers; binding planners preserved at `(opus, xhigh)` via overrides.
-- `balanced` — default post-v0.15.0. Matches cohort defaults byte-identically on clean v0.15.0 install. v0.14.0 users see a distribution shift (16 agents move from opus → sonnet/haiku) — intentional feature, not regression.
-- `quality-first` — all non-adversarial cohorts pulled to `(opus, max)` (verifiers `(opus, xhigh)`). Sonnet/haiku agents stay at `(sonnet|haiku, high)` via overrides ("sonnet falls back to high" — M008 rule); prone to overthinking, use sparingly.
-- `auto-mode-safe` — effort + model distribution identical to `balanced`; only the permission surface changes (D-5).
+Users can retune effort tiers via `/aih-effort` and enable auto-mode via
+`/aih-automode` (both added/renamed M012). The default install uses
+`permissionMode: bypassPermissions` + `Bash(*)` + hook-based auto-approve
+— this is the autonomy contract M005 locks in. Auto mode (Claude Code
+≥ v2.1.83) is opt-in via `/aih-automode --enable` — it drops `Bash(*)`
+and ignores subagent `permissionMode`; the skill prints the full caveat
+matrix before applying.
 
-Cohort aliases (v0.14.0 / M010 / ADR-M010-A + M010.1 amendment v0.15.0).
-All 43 agents are grouped into **5** role cohorts — `:planner` (17),
-`:doer` (11), `:verifier` (8), `:investigator` (3), `:adversarial` (4).
-Each cohort carries a **default model** + joint `(model, effort)` tuple
-as the preset primitive. Per Anthropic's models overview, defaults map:
-`:planner → opus`, `:doer → sonnet`, `:verifier → haiku`,
-`:investigator → sonnet`, `:adversarial → opus` (preset-immune).
-`:investigator` (new v0.15.0) holds `debugger`, `debug-session-manager`,
-`user-profiler` — split from `:verifier` because hypothesis-driven
-investigation ≠ static artifact verification. Invoke via
-`/aih-calibrate --cohort :<name> --model X --effort Y` (both axes
-required, D-2). Per-agent escape hatch via `/aih-calibrate --agent <name>
---model X --effort Y` (ADR-M008-A amendment, D-3). The `:adversarial`
-cohort is preset-immune (`plan-checker`, `contrarian`, `reviewer`,
-`code-reviewer`) — only an explicit `--cohort :adversarial` (with
+**Effort presets** (v0.17.0 — cohort-tuple shape, 6 cohorts). Three
+presets, invoked via `/aih-effort --preset <name>`:
+- `cost` — `:planner-binding (opus, high)`, `:planner (opus, high)`,
+  `:doer (sonnet, medium)`, `:verifier (haiku, medium)`;
+  `:adversarial-scout` + `:adversarial-review` preset-immune. Maximum
+  cost reduction via haiku on verifiers and medium effort on doers.
+- `balanced` — default on clean v0.17.0 install. Matches cohort defaults
+  byte-identically: `:planner-binding (opus, xhigh)`, `:planner (opus, high)`,
+  `:doer (sonnet, high)`, `:verifier (haiku, high)`.
+- `high` — maximum quality on non-immune cohorts: `:planner-binding (opus, xhigh)`
+  (unchanged), `:planner (opus, xhigh)`, `:doer (opus, high)` (sonnet → opus
+  swap; sonnet caps at `high` so xhigh silently clips), `:verifier (haiku, high)`
+  (unchanged). Prone to overthinking on `:planner`, use sparingly.
+
+**Cohort aliases** (v0.17.0 / M012 / ADR-M012-A). All 43 agents are
+grouped into **6** uniform cohorts — one fixed default model per cohort:
+
+| Cohort | Count | Default model | Notes |
+|--------|-------|---------------|-------|
+| `:planner-binding` | 4 | opus | Split from `:planner` (v0.15.0 intra-cohort xhigh carve-out → first-class cohort). Members: architect, planner, product-manager, roadmapper |
+| `:planner` | 13 | opus | Research + structured planning agents upstream of code. Was 17 before `:planner-binding` split |
+| `:doer` | 15 | sonnet | Forward-edit implementation agents. Absorbed former `:investigator` (deleted M012) — default tier byte-identical. Only cohort with model swap: `high` preset → `(opus, high)` |
+| `:verifier` | 7 | haiku | Read-only assessment agents. Former `verifier-rich` subset (sonnet overrides) deleted |
+| `:adversarial-scout` | 2 | opus | `plan-checker`, `contrarian` — preset-immune, `(opus, max)` baseline. Split from `:adversarial` |
+| `:adversarial-review` | 2 | opus | `reviewer`, `code-reviewer` — preset-immune, `(opus, high)` baseline. Split from `:adversarial` |
+
+**Deleted cohorts (M012):** `:investigator` (absorbed into `:doer`) and
+`:verifier-rich` subset (agents reassigned individually). The single
+`:adversarial` cohort (v0.15.0) is replaced by two cohorts above.
+
+Invoke via `/aih-effort --cohort :<name> --model X --effort Y` (both axes
+required). Per-agent escape hatch via `/aih-effort --agent <name> --model X
+--effort Y` (ADR-M008-A amendment). The `:adversarial-scout` and
+`:adversarial-review` cohorts are preset-immune — only an explicit
+`--cohort :adversarial-scout` or `--cohort :adversarial-review` (with
 literal-word `adversarial` confirmation) or `--agent <member>` can mutate
 them. Full 43-agent mapping + prose rationale:
-`pkg/.aihaus/skills/aih-calibrate/annexes/cohorts.md`.
+`pkg/.aihaus/skills/aih-effort/annexes/cohorts.md`.
 
-Calibration survives `/aih-update` via a `.aihaus/.calibration` sidecar
-(M009 / ADR-M009-A). The file is user-owned, never committed, and
-mirrors the `.install-mode` precedent — it lives at `.aihaus/` root so
-the refresh loop (which only touches `skills/`, `agents/`, `hooks/`,
-`templates/`) leaves it alone. Schema v2 (v0.14.0+) adds cohort-level
-fields `cohort.<name>.model` + `cohort.<name>.effort` additively;
-schema v1 sidecars keep restoring byte-identically via the legacy
-dispatch. `update.sh` re-applies recorded `(model, effort)` to refreshed
-agents and `merge-settings.sh` preserves the recorded
-`permissions.defaultMode` post-merge. If `last_preset=auto-mode-safe`,
-the update prints a loud `!!` warning — hook/worktree side effects
-aren't auto-replayed; re-run `/aih-calibrate --preset auto-mode-safe` to
+**Sidecars.** Effort calibration survives `/aih-update` via a
+`.aihaus/.effort` sidecar (schema v3; renamed from `.aihaus/.calibration`
+v2 in M012 / ADR-M012-A; ownership preserved per ADR-M009-A). A sibling
+`.aihaus/.automode` sidecar (2 fields: `enabled`, `last_enabled_at`)
+tracks auto-mode opt-in independently. Both files are user-owned, never
+committed, and live at `.aihaus/` root so the refresh loop (which only
+touches `skills/`, `agents/`, `hooks/`, `templates/`) leaves them alone.
+`update.sh` re-applies recorded `(model, effort)` to refreshed agents from
+`.effort`; `merge-settings.sh` preserves `permissions.defaultMode`. If
+`.automode enabled=true`, update prints a loud `!!` warning — hook/worktree
+side effects aren't auto-replayed; re-run `/aih-automode --enable` to
 reapply. Full schema + migration guide:
-`pkg/.aihaus/skills/aih-calibrate/annexes/state-file.md`.
+`pkg/.aihaus/skills/aih-effort/annexes/state-file.md`.
 
 ## Autonomy Protocol (M011 state gate + statusLine)
 

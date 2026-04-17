@@ -399,7 +399,7 @@ Skills that could explode cost enforce hard caps *before* spawning. `/aih-brains
 - **git**
 - **bash** (Unix) or **PowerShell 5+** (Windows)
 - **Claude Code v2.1.111+** recommended to activate Opus 4.7 `effort: xhigh`. Older Claude Code works — `xhigh` falls back to `high` automatically.
-- **Optional:** users on Anthropic API + Max/Team/Enterprise can switch to Claude Code auto mode via `/aih-calibrate --preset auto-mode-safe`. See caveats in `pkg/.aihaus/skills/aih-calibrate/annexes/permission-modes.md`.
+- **Optional:** users on Anthropic API + Max/Team/Enterprise can switch to Claude Code auto mode via `/aih-automode --enable`. See caveats in `pkg/.aihaus/skills/aih-automode/annexes/permission-modes.md`.
 
 No runtime. No build step. No package manager. The entire package is markdown and shell scripts.
 
