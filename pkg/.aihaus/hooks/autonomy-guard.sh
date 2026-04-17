@@ -83,14 +83,39 @@ log_violation() {
     >> "$AUDIT_LOG" 2>/dev/null || true
 }
 
-# M011/S05 — minimal log_gate_decision shim (S06 finalizes the 13-field schema).
-# Emits one JSON line to $AUDIT_GATE_LOG per stop-gate decision. Fields emitted
-# here are the core 6 (ts, decision, exec_phase, manifest_status, cli_available,
-# message_hash) + optional (matched_pattern, section, haiku_reason,
-# matched_whitelist, haiku_latency_ms, cache_hit, rate_limited) passed via env.
+# M011/S06 — finalized log_gate_decision with 13-field schema + rotation.
+# Emits one JSONL line to $AUDIT_GATE_LOG per stop-gate decision. Fields:
+#   ts, decision, message_hash, matched_pattern, section, haiku_reason,
+#   matched_whitelist, haiku_latency_ms, exec_phase, manifest_status,
+#   cli_available, cache_hit, rate_limited, timeout (14 total incl. timeout;
+#   13 semantic per architecture § 6 — `timeout` is the operational add-on).
+#
+# Decision enum (11 first-class values per F-10 unification):
+#   paused-allow | regex-match | haiku-continue | haiku-block |
+#   timeout-fallback-allow | parse-fail-allow | no-cli-skip |
+#   haiku-opt-out | cache-hit-continue | cache-hit-block | rate-limit-skip-allow
+#
+# Rotation (CONTEXT.md Q-2): at write time, if file size ≥ 10 MB OR line
+# count ≥ 10 000, atomic `mv $AUDIT_GATE_LOG $AUDIT_GATE_LOG.old` (overwrites
+# prior .old). Single stat + conditional wc per write; < 1 ms overhead.
+rotate_gate_log_if_needed() {
+  [ -f "$AUDIT_GATE_LOG" ] || return 0
+  local bytes lines
+  bytes="$(stat -c%s "$AUDIT_GATE_LOG" 2>/dev/null || stat -f%z "$AUDIT_GATE_LOG" 2>/dev/null || echo 0)"
+  if [ "$bytes" -ge 10485760 ]; then
+    mv -f "$AUDIT_GATE_LOG" "$AUDIT_GATE_LOG.old" 2>/dev/null || true
+    return 0
+  fi
+  lines="$(wc -l < "$AUDIT_GATE_LOG" 2>/dev/null | tr -d ' ')"
+  if [ -n "$lines" ] && [ "$lines" -ge 10000 ]; then
+    mv -f "$AUDIT_GATE_LOG" "$AUDIT_GATE_LOG.old" 2>/dev/null || true
+  fi
+}
+
 log_gate_decision() {
   local decision="$1"
   mkdir -p "$(dirname "$AUDIT_GATE_LOG")" 2>/dev/null || return 0
+  rotate_gate_log_if_needed
   local ts; ts="$(ts_iso)"
   local hash="${GATE_MSG_HASH:-null}"
   local mstatus="${GATE_MANIFEST_STATUS:-null}"
@@ -117,6 +142,23 @@ log_gate_decision() {
     "$(_qq "$hash")" "$(_qq "$pat")" "$(_qq "$sec")" "$(_qq "$hreason")" "$(_qq "$hwhite")" "$hlat" \
     "$in_execution" "$(_qq "$mstatus")" "$cliok" "$chit" "$rlim" "$tmo" \
     >> "$AUDIT_GATE_LOG" 2>/dev/null || true
+}
+
+# M011/S06 — append cache entry with opportunistic stale-line pruning.
+# Format: <ts_unix>|<hash>|<decision>
+# Entries older than 300s (5-min TTL) are dropped on every write — keeps
+# the cache small (~50 lines typical) without a background process.
+append_cache_entry() {
+  local entry="$1"
+  mkdir -p "$(dirname "$GATE_CACHE")" 2>/dev/null || return 0
+  local now; now="$(date +%s 2>/dev/null || echo 0)"
+  if [ -f "$GATE_CACHE" ]; then
+    # Keep only entries newer than 300s.
+    local tmp="$GATE_CACHE.tmp.$$"
+    awk -F'|' -v now="$now" 'NF>=1 && (now - ($1+0)) <= 300 {print}' "$GATE_CACHE" > "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$GATE_CACHE" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+  fi
+  printf '%s\n' "$entry" >> "$GATE_CACHE" 2>/dev/null || true
 }
 
 emit_block() {
@@ -330,13 +372,13 @@ if [ "${HAIKU_RC:-0}" = "124" ]; then
   GATE_TIMEOUT=1
   log_gate_decision "timeout-fallback-allow"
   # Record cache entry so subsequent storms dedupe.
-  printf '%s|%s|%s\n' "$now_unix" "$GATE_MSG_HASH" "timeout" >> "$GATE_CACHE" 2>/dev/null || true
+  append_cache_entry "$now_unix|$GATE_MSG_HASH|timeout"
   exit 0
 fi
 
 if [ -z "$HAIKU_OUT" ]; then
   log_gate_decision "parse-fail-allow"
-  printf '%s|%s|%s\n' "$now_unix" "$GATE_MSG_HASH" "parsefail" >> "$GATE_CACHE" 2>/dev/null || true
+  append_cache_entry "$now_unix|$GATE_MSG_HASH|parsefail"
   exit 0
 fi
 
@@ -360,19 +402,19 @@ fi
 case "$DECISION" in
   continue)
     log_gate_decision "haiku-continue"
-    printf '%s|%s|%s\n' "$now_unix" "$GATE_MSG_HASH" "continue" >> "$GATE_CACHE" 2>/dev/null || true
+    append_cache_entry "$now_unix|$GATE_MSG_HASH|continue"
     exit 0
     ;;
   block)
     log_gate_decision "haiku-block"
-    printf '%s|%s|%s\n' "$now_unix" "$GATE_MSG_HASH" "block" >> "$GATE_CACHE" 2>/dev/null || true
+    append_cache_entry "$now_unix|$GATE_MSG_HASH|block"
     emit_block_haiku "${HREASON:-Stop-gate haiku backstop blocked the turn (no TRUE-blocker match).}"
     exit 0
     ;;
   *)
     # Parse failure — fail-safe allow (never block on ambiguous output).
     log_gate_decision "parse-fail-allow"
-    printf '%s|%s|%s\n' "$now_unix" "$GATE_MSG_HASH" "parsefail" >> "$GATE_CACHE" 2>/dev/null || true
+    append_cache_entry "$now_unix|$GATE_MSG_HASH|parsefail"
     exit 0
     ;;
 esac

@@ -1,10 +1,18 @@
 {
   "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "AIHAUS_AUTONOMY_HAIKU": "1"
   },
   "aihaus": {
     "suppress": {
       "taskCreateReminder": true
+    },
+    "audit": {
+      "gateLogPath": ".claude/audit/autonomy-gate.jsonl",
+      "rotateSizeMB": 10,
+      "rotateLines": 10000,
+      "haikuRateWindowSec": 30,
+      "cacheTtlSec": 300
     }
   },
   "additionalDirectories": [
