@@ -5,13 +5,23 @@
 # Usage: phase-advance.sh --to <phase> --dir <milestone_or_plan_dir>
 #   <phase> ∈ gathering | planning | ready | running | complete | paused
 #
+# M011/S01: wraps the STATUS.md + metadata writes in a coarse flock-w-2 on
+# $DIR/RUN-MANIFEST.md.lock (POSIX) or mkdir-atomic fallback (Windows) so
+# concurrent writers from manifest-append.sh and phase-advance.sh serialize
+# on the same lock target.
+#
 # Env: AIHAUS_AUDIT_LOG (optional; default .claude/audit/hook.jsonl)
 #
-# Exit codes: 0 ok, 2 invalid args, 3 worktree-refuse, 10 invoke-stack-non-empty,
-#             11 atomic-replace-failed, 12 target-dir-missing.
+# Exit codes: 0 ok, 2 invalid args, 3 worktree-refuse, 6 lock-timeout,
+#             10 invoke-stack-non-empty, 11 atomic-replace-failed,
+#             12 target-dir-missing.
 set -euo pipefail
 
 AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+
+# --- source shared helpers (F-01 extraction; see architecture § 2.0) ---
+# shellcheck source=lib/manifest-helpers.sh
+. "$(dirname "$0")/lib/manifest-helpers.sh"
 
 TO=""
 DIR=""
@@ -50,6 +60,20 @@ log_audit() {
     "$(ts_iso)" "$from_phase" "$TO" "$DIR" "$result" "$fallback" "$backup" \
     >> "$AUDIT_LOG" 2>/dev/null || true
 }
+
+# --- coarse outer lock (M011/S01 + S02) ---
+# Lock sibling file $DIR/RUN-MANIFEST.md so concurrent writers from
+# manifest-append.sh serialize against phase-advance on the SAME target.
+COARSE_LOCK_TARGET="$DIR/RUN-MANIFEST.md"
+detect_platform
+if ! acquire_coarse_lock "$COARSE_LOCK_TARGET"; then
+  echo "phase-advance.sh: coarse lock timeout after 2s on $COARSE_LOCK_TARGET.lock" >&2
+  log_audit "fail-flock-timeout" "unknown" "false" "false"
+  exit 6
+fi
+if [ "${AIH_USE_MKDIR_LOCK:-0}" = "1" ]; then
+  trap 'release_coarse_lock "$COARSE_LOCK_TARGET"' EXIT INT TERM
+fi
 
 # --- detect existing STATUS.md state ---
 STATUS_FILE="$DIR/STATUS.md"
