@@ -122,13 +122,18 @@ if [[ "${UPDATE}" == "1" ]]; then
     cp -R "${src}" "${dst}"
     echo "  refreshed: .aihaus/${name}"
   done
-  # Restore per-agent calibration from sidecar after agents/ wipe — pinned
+  # Restore per-agent effort from sidecar after agents/ wipe — pinned
   # between the refresh loop above and the .claude/ link_or_copy loop below,
   # mirroring update.sh's call site so both .aihaus/agents/ (physical) and
   # .claude/agents/ (symlink or copy) pick up restored frontmatter.
-  # shellcheck source=lib/restore-calibration.sh
-  source "$(dirname "$0")/lib/restore-calibration.sh"
-  restore_calibration "${TARGET}/.aihaus"
+  # Dispatch order matches update.sh: restore_effort may write .automode during
+  # v2->v3 migration, which restore_automode then reads.
+  # shellcheck source=lib/restore-effort.sh
+  source "$(dirname "$0")/lib/restore-effort.sh"
+  restore_effort "${TARGET}/.aihaus"
+  # shellcheck source=lib/restore-automode.sh
+  source "$(dirname "$0")/lib/restore-automode.sh"
+  restore_automode "${TARGET}/.aihaus"
 else
   # Step 3: existing .aihaus/ prompt
   if [[ -e "${TARGET}/.aihaus" ]]; then
