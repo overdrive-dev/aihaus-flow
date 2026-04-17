@@ -26,6 +26,15 @@ AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
 # shellcheck source=lib/manifest-helpers.sh
 . "$(dirname "$0")/lib/manifest-helpers.sh"
 
+# --- runtime platform detect (M011/S02; F-03 no-persistence) ---
+# Probes `command -v flock` at invocation. POSIX path uses flock -w 2 on a
+# fd-backed lock file; Windows path (MSYS/Cygwin/no-flock) falls through to
+# mkdir-atomic with bounded 2s retry. AIH_USE_MKDIR_LOCK caches the choice
+# for the hook process lifetime — no disk state, zero ADR-005 collision
+# (.aihaus/.install-platform remains reserved for claude|cursor|both).
+detect_platform
+detect_fractional_sleep
+
 # --- argument parsing ---
 
 FIELD=""
@@ -90,7 +99,7 @@ onedrive_advisory() {
 # --- coarse outer lock (M011/S01 + S02) ---
 
 acquire_coarse() {
-  detect_platform
+  # detect_platform already called at hook startup; lib re-probes safely.
   if ! acquire_coarse_lock "$MANIFEST_PATH"; then
     echo "manifest-append.sh: coarse lock timeout after 2s on $MANIFEST_PATH.lock" >&2
     log_audit "fail" "flock-timeout"

@@ -23,6 +23,13 @@ AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
 # shellcheck source=lib/manifest-helpers.sh
 . "$(dirname "$0")/lib/manifest-helpers.sh"
 
+# --- runtime platform detect (M011/S02; F-03 no-persistence) ---
+# Probes `command -v flock` at invocation. POSIX → flock -w 2; Windows → mkdir
+# atomic fallback. AIH_USE_MKDIR_LOCK caches the choice for the hook process
+# lifetime — no disk state, zero collision with ADR-005's .install-platform.
+detect_platform
+detect_fractional_sleep
+
 TO=""
 DIR=""
 while [ $# -gt 0 ]; do
@@ -65,7 +72,7 @@ log_audit() {
 # Lock sibling file $DIR/RUN-MANIFEST.md so concurrent writers from
 # manifest-append.sh serialize against phase-advance on the SAME target.
 COARSE_LOCK_TARGET="$DIR/RUN-MANIFEST.md"
-detect_platform
+# detect_platform already called at hook startup; lib re-probes safely.
 if ! acquire_coarse_lock "$COARSE_LOCK_TARGET"; then
   echo "phase-advance.sh: coarse lock timeout after 2s on $COARSE_LOCK_TARGET.lock" >&2
   log_audit "fail-flock-timeout" "unknown" "false" "false"
