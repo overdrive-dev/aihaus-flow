@@ -31,11 +31,15 @@ option menus, no delegated typing.
 | `/aih-calibrate --preset balanced` | Post-Story-A distribution (default post-v0.13.0). |
 | `/aih-calibrate --preset quality-first` | Opus coding/agentic → `max`; binding → `max`. Docs warn "prone to overthinking". |
 | `/aih-calibrate --preset auto-mode-safe` | Switches `defaultMode` to `auto`; keeps balanced effort; requires full-word `auto-mode` confirm. |
-| `/aih-calibrate --agent <name> --effort <level>` | Single-agent frontmatter edit. |
+| `/aih-calibrate --agent <name> --effort <level>` | Single-agent effort edit (v0.13 preserved). |
+| `/aih-calibrate --cohort :<name> --model <m> --effort <e>` | Joint cohort apply — both axes required (D-2). `:adversarial` requires literal-word `adversarial` confirm. |
+| `/aih-calibrate --agent <name> --model <m> --effort <e>` | Per-agent joint override — ADR-M008-A amendment (D-3 dual-axis escape hatch). |
 | `/aih-calibrate --permission-mode <m>` | Edits `settings.local.json` only. |
 
-Preset → effort distribution map: `annexes/presets.md`.
+Preset → cohort tuple map: `annexes/presets.md`.
+Cohort membership (43 agents → 4 cohorts): `annexes/cohorts.md`.
 Permission-mode tradeoff matrix + caveats: `annexes/permission-modes.md`.
+CLI surface detail + adversarial bypass + Phase-4 v2 write: `annexes/cli-surface.md`.
 
 ## Execution Protocol
 
@@ -49,31 +53,37 @@ Permission-mode tradeoff matrix + caveats: `annexes/permission-modes.md`.
 3. Read `pkg/.aihaus/templates/settings.local.json` to capture current
    `permissions.defaultMode` (and surface `_aihaus_alt_auto_mode_comment`).
 4. Print the distribution report as a **GFM Markdown pipe table** (`| Agent
-   | Model | Effort | PermissionMode |` with a `---` separator row) — NOT
-   Unicode box-drawing (`┌──┬──┐` / `├──┼──┤`). Pipe tables wrap safely on
-   narrow terminals and copy cleanly; box-drawing clips to garbage on
-   cmd.exe and split panes. Include every agent name + its model + effort
-   + permissionMode; follow with a one-line cost-estimate delta vs. the
-   `balanced` preset.
+   | Model | Effort | Cohort | PermissionMode |` with a `---` separator
+   row) — NOT Unicode box-drawing (`┌──┬──┐` / `├──┼──┤`). Pipe tables wrap
+   safely on narrow terminals and copy cleanly; box-drawing clips to
+   garbage on cmd.exe and split panes. Cohort value is looked up from
+   `annexes/cohorts.md` per agent. Follow the table with a one-line
+   cost-estimate delta vs. the `balanced` preset.
 5. **Stop here if `--inspect` given.** No edits, no commit.
 
 ### Phase 2 — Compute target distribution
-6. Parse `$ARGUMENTS`: resolve `--preset`, `--agent`+`--effort`, or
-   `--permission-mode`.
-7. **Filter out `plan-checker` and `contrarian` before applying any
-   preset-driven diff** (ADR-M008-C — adversarial agents are preset-immune).
-   Only an explicit `--agent plan-checker` or `--agent contrarian`
-   invocation is allowed to mutate their `effort:`.
-8. For `--preset`, load the per-preset agent enumeration from
-   `annexes/presets.md`; compute the file-by-file diff (list of
-   `pkg/.aihaus/agents/*.md` paths whose `effort:` differs from the target,
-   plus the settings template if the preset changes `defaultMode`).
-9. Print the computed diff (explicit path list + old→new transitions). This
-   list is the exact `git add` argument vector for Phase 4.
+6. Parse `$ARGUMENTS`: resolve `--preset`, `--cohort :<name> --model
+   --effort`, `--agent --effort`, `--agent --model --effort`, or
+   `--permission-mode`. Validate dual-axis requirements per
+   `annexes/cli-surface.md` — reject single-axis `--cohort` and
+   single-axis `--agent --model`.
+7. **Load `:adversarial` member list from `annexes/cohorts.md` and
+   filter those 4 agents out of any preset-driven diff** (ADR-M010-A
+   supersedes ADR-M008-C — immune list grows 2→4). Only explicit
+   `--cohort :adversarial` (with literal-word confirm) or
+   `--agent <member>` can mutate adversarial frontmatter.
+8. For `--preset`, load cohort tuples from `annexes/presets.md` and
+   expand each member via `annexes/cohorts.md`; compute the file-by-file
+   diff (target `(model, effort)` per agent, plus settings template if
+   the preset changes `defaultMode`). Diff entry exists when either axis
+   differs from target.
+9. Print the computed diff (explicit path list + old→new transitions per
+   axis). This list is the exact `git add` argument vector for Phase 4.
 
 ### Phase 3 — Confirm + apply
 10. **One question per autonomy-protocol:** *"Aplicar preset X
-    (N agent edits + settings change)? y/sim/enter"*. No A/B/C menus.
+    (N agent edits across K cohorts + settings change)? y/sim/enter"*.
+    No A/B/C menus. N = total file edits; K = cohorts touched.
 11. **Exception — `--preset auto-mode-safe`:** print the 4-caveat matrix
     from `annexes/permission-modes.md` inline first, then ask *"Para
     confirmar, digite a palavra `auto-mode` (qualquer outra resposta
@@ -85,10 +95,16 @@ Permission-mode tradeoff matrix + caveats: `annexes/permission-modes.md`.
 13. **Version pre-check for `auto-mode-safe`:** run `claude --version`; if
     below v2.1.83, warn that `defaultMode: auto` will be silently ignored
     and re-confirm before writing.
-14. Apply edits via the Edit tool (exact string replacement on
-    `effort: <old>` per agent file; INSERT or Edit-replace on
-    `"defaultMode": "<current>"` per architecture §Edit Application
-    Strategy). Never sed/awk — Edit's Read precondition is free safety.
+14. Apply edits via the Edit tool — for cohort/preset apply, do BOTH
+    `model: <old>` → `model: <target>` AND `effort: <old>` → `effort:
+    <target>` per agent file when both differ (two Edit calls per file;
+    `git checkout -- <file>` on mid-sequence failure). For
+    `--permission-mode`: INSERT/replace `"defaultMode": "<current>"` per
+    architecture. Never sed/awk — Edit's Read precondition is free safety.
+14a. **Adversarial bypass (explicit `--cohort :adversarial` or
+    `--agent <adversarial-member>`):** layered full-word confirmation
+    required. Full prompt shape + abort semantics in
+    `annexes/cli-surface.md` § Adversarial bypass.
 15. For `auto-mode-safe`: also delete `permissionMode: bypassPermissions`
     from `implementer`, `frontend-dev`, `code-fixer` (the field is a no-op
     under auto mode) AND widen the safe-pattern allowlist in
@@ -110,38 +126,43 @@ Permission-mode tradeoff matrix + caveats: `annexes/permission-modes.md`.
     print the failing check output, exit without retry.
 19. On green: print final distribution delta + one-line cost-estimate
     change; print the `git revert <sha>` rollback one-liner.
-20. **Post-gate sidecar write** (`.aihaus/.calibration`, schema v1). Only
-    after the commit + gate both pass; never on `--dry-run` or
-    `--inspect`. Write `schema=1`, `permission_mode=<current>`,
-    `last_preset=<preset-or-custom>`, `last_commit=$(git rev-parse --short HEAD)`,
-    then one `<agent-basename>=<effort>` line per entry in Phase 2's
-    **post-filter** diff list (step 8 output). File layout + schema
-    contract: `annexes/state-file.md`.
-    - **20-guard** — if step 18 self-reverted the commit (`git reset`
-      fired), SKIP the write. A stale sidecar with no matching commit
-      would lie about repo state.
+20. **Post-gate sidecar write** (`.aihaus/.calibration`, `schema=2`). Only
+    after the commit + gate pass; never on `--dry-run` / `--inspect`.
+    Emit `schema=2`, `permission_mode=<current>`, `last_preset=<name>`,
+    `last_commit=$(git rev-parse --short HEAD)`, one `cohort.<name>.model`
+    + `cohort.<name>.effort` pair per cohort touched (preset runs filter
+    `:adversarial`), and per-agent `<agent>=<effort>` + `<agent>.model=<m>`
+    lines for each override. If a `schema=1` sidecar is present at write
+    time, run the v1→v2 auto-infer migration. Full layout, write-time
+    filter, and migration pseudocode: `annexes/cli-surface.md` § Phase-4
+    step 20 — v2 sidecar write. Schema contract:
+    `annexes/state-file.md`.
+    - **20-guard** — if step 18 self-reverted (`git reset` fired), SKIP
+      the write.
     - **20-ownership** — NEVER `git add .aihaus/.calibration` under any
-      mode. It is derived, user-owned state (ADR-M009-A) — same class as
-      `.install-mode`. Dogfood `.gitignore:19` (`/.aihaus/`) covers it;
-      end-user repos follow their own policy for `.aihaus/`.
-    - **20-adversarial-immune** — per-agent entries come from the
-      post-filter diff (ADR-M008-C). `plan-checker` and `contrarian`
-      appear in the sidecar only if the user ran explicit `--agent <name>`
-      targeting them; preset runs must NOT emit entries for them.
+      mode (ADR-M009-A; dogfood `.gitignore:19` covers it).
+    - **20-adversarial-immune** — preset-write filter excludes all 4
+      `:adversarial` members via `annexes/cohorts.md` lookup (ADR-M010-A
+      supersedes ADR-M008-C's 2-agent list).
 
 ## Guardrails
 
 Three non-negotiables — referenced in `annexes/permission-modes.md`:
 
-1. **plan-checker and contrarian are preset-immune.** No `--preset
-   <name>` invocation changes their `effort:`. Only explicit
-   `--agent plan-checker --effort <level>` (or the equivalent for
-   contrarian) can touch them. See ADR-M008-C.
+1. **The `:adversarial` cohort is preset-immune (4 agents: plan-checker,
+   contrarian, reviewer, code-reviewer).** No `--preset <name>`
+   invocation mutates any member. Explicit `--cohort :adversarial
+   --model X --effort Y` or `--agent <member> --model X --effort Y` is
+   the only path — literal-word `adversarial` confirmation required.
+   See ADR-M010-A (supersedes ADR-M008-C's 2-agent list).
 2. **`--preset auto-mode-safe` requires full-word `auto-mode` confirmation.**
    Any other response (including `y`, `sim`, empty, `yes`) aborts with no
    edits. The 4-caveat matrix MUST print before the prompt.
-3. **Never edit `model:` frontmatter.** Out of scope for this milestone;
-   aliases auto-upgrade and pinning forces future sweeps.
+3. **`model:` edits are scoped to cohort iteration or explicit per-agent
+   dual-axis.** Presets mutate `model:` only via cohort iteration (see
+   `annexes/presets.md` + ADR-M010-A). Per-agent paths: `--agent X
+   --model Y --effort Z` (both axes required, ADR-M008-A amendment);
+   single-axis `--agent X --model Y` without `--effort` remains rejected.
 
 Additional invariants:
 
@@ -157,12 +178,14 @@ byte-identical pre-invocation state (agent frontmatters + settings).
 tuning without searching through git history.
 
 ## Annexes (referenced, not duplicated)
-- `annexes/presets.md` — preset → distribution map + per-preset agent
-  enumeration.
+- `annexes/presets.md` — preset → cohort tuple map + override blocks.
+- `annexes/cohorts.md` — 43 agents → 4 cohorts; single source of truth.
+- `annexes/cli-surface.md` — CLI validation, adversarial bypass, v2
+  sidecar write + migration detail.
 - `annexes/permission-modes.md` — permission-mode tradeoff matrix +
   4-caveat list + decision tree.
-- `annexes/state-file.md` — `.aihaus/.calibration` schema v1, ownership,
-  CRLF rules, pre-v0.13 migration path.
+- `annexes/state-file.md` — `.aihaus/.calibration` schema v1 + v2,
+  ownership, CRLF rules, migration paths.
 
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules. Overrides any
