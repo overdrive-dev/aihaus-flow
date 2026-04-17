@@ -936,9 +936,10 @@ EOF
 
   # ---------- B6 v2 schema shape invariant -- no adversarial entries -------
   # The v2.calibration fixture represents "what a preset-apply MUST
-  # produce": cohort rows only for :planner / :doer / :verifier, plus a
-  # single per-agent model override. Assert no entries for the 4
-  # adversarial members AND no cohort.adversarial.* fields present.
+  # produce": cohort rows only for :planner / :doer / :verifier /
+  # :investigator (M010.1 added :investigator), plus a single per-agent
+  # model override. Assert no entries for the 4 adversarial members AND no
+  # cohort.adversarial.* fields present.
   # This is a schema-documentation check, not a write-path behavior test.
   # Paired with tools/dogfood-m010.sh (write-path behavior).
   grep -qE '^(plan-checker|contrarian|reviewer|code-reviewer)=' "$fx/v2.calibration" \

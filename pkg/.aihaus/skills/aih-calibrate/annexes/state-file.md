@@ -110,10 +110,11 @@ planner.model=opus
 - **`last_commit`** — short SHA. Unchanged from v1.
 - **NEW** `cohort.<name>.model=<opus|sonnet|haiku|custom>` — one per
   cohort. Accepted cohort names: `planner`, `doer`, `verifier`,
-  `adversarial` (no colon on disk; `:` is CLI ergonomics only — keeps
-  `IFS='='` parser simple). `custom` signals non-uniform — restore skips
-  the cohort-level mutation for that field and defers to per-agent
-  override lines.
+  `investigator`, `adversarial` (no colon on disk; `:` is CLI ergonomics
+  only — keeps `IFS='='` parser simple). `investigator` added in v0.15.0
+  (M010.1 amendment). `custom` signals non-uniform — restore skips the
+  cohort-level mutation for that field and defers to per-agent override
+  lines.
 - **NEW** `cohort.<name>.effort=<low|medium|high|xhigh|max|custom>` — one
   per cohort. Same `custom`-defer semantic.
 - **Per-agent effort** `<agent-basename>=<effort-level>` — retained from
@@ -122,8 +123,9 @@ planner.model=opus
 - **NEW** per-agent model `<agent-basename>.model=<m>` — same role for
   model axis. `.model` suffix is the grammar disambiguator.
 
-**Accepted cohort names (4):** `planner`, `doer`, `verifier`,
-`adversarial`. Unknown cohort values warn + skip (forward-compat).
+**Accepted cohort names (5):** `planner`, `doer`, `verifier`,
+`investigator`, `adversarial`. Unknown cohort values warn + skip
+(forward-compat).
 
 ## Schema-gate behavior (hard boundary — ADR-M009-A preserved)
 
@@ -158,7 +160,7 @@ auto-rewritten by `/aih-update` alone (preserves ADR-M009-A user-owned
 semantic).
 
 ```
-for each cohort in [:planner, :doer, :verifier, :adversarial]:
+for each cohort in [:planner, :doer, :verifier, :investigator, :adversarial]:
   members = cohorts.md lookup
   if all members share same (model, effort) in current frontmatter:
     write cohort.<name>.model=<m> + cohort.<name>.effort=<e>

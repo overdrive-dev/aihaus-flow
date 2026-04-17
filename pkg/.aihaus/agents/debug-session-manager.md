@@ -5,7 +5,7 @@ description: >
   debugger agents, handles checkpoints, dispatches specialist reviews,
   applies fixes. Returns compact summary to main context.
 tools: Read, Write, Bash, Grep, Glob, Task
-model: opus
+model: sonnet
 effort: high
 color: orange
 memory: project

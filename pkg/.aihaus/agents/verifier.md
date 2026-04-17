@@ -5,7 +5,7 @@ description: >
   what was promised, not just that tasks completed. Runs after execution,
   produces VERIFICATION.md with evidence-based verdicts.
 tools: Read, Write, Bash, Grep, Glob
-model: opus
+model: haiku
 effort: high
 color: green
 memory: project

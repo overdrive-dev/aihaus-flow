@@ -5,7 +5,7 @@ description: >
   supplement, and fix modes. Explores the codebase to gather accurate
   facts — never fabricates paths, functions, or commands.
 tools: Read, Write, Bash, Grep, Glob
-model: opus
+model: sonnet
 effort: high
 color: purple
 memory: project

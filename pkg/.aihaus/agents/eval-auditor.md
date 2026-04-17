@@ -6,7 +6,7 @@ description: >
   or MISSING. Produces a scored review with findings, gaps, and
   remediation guidance.
 tools: Read, Write, Bash, Grep, Glob
-model: opus
+model: haiku
 effort: high
 color: red
 memory: project

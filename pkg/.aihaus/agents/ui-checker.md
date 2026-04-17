@@ -7,7 +7,7 @@ description: >
   issues before they reach implementation. Read-only — never modifies
   the spec.
 tools: Read, Bash, Glob, Grep
-model: sonnet
+model: haiku
 effort: high
 color: cyan
 memory: project

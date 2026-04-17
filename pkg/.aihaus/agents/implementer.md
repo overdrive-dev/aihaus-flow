@@ -6,7 +6,7 @@ description: >
   API endpoints. Works from architecture docs and story acceptance criteria.
   Commits atomically per story.
 tools: Read, Write, Edit, Grep, Glob, Bash
-model: opus
+model: sonnet
 effort: high
 color: green
 isolation: worktree

@@ -5,7 +5,7 @@ description: >
   code. Reads threat model, checks each mitigation is present. Produces
   SECURITY.md. Read-only for source files.
 tools: Read, Write, Bash, Grep, Glob
-model: opus
+model: haiku
 effort: high
 color: red
 memory: project

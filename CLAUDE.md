@@ -76,25 +76,30 @@ available via `/aih-calibrate --preset auto-mode-safe` but drops `Bash(*)`
 and ignores subagent `permissionMode` — the skill prints the full
 caveat matrix before applying.
 
-Effort presets (v0.14.0 — cohort-tuple shape):
-- `cost-optimized` — `:planner (opus, high)`, `:doer (sonnet, high)`, `:verifier (sonnet, medium)`, `:adversarial` preset-immune. Joint-axis downgrade on `:doer` + `:verifier`; binding planners preserved at `(opus, xhigh)` via overrides.
-- `balanced` — default post-v0.14.0. Ships functionally equivalent to v0.13.0 `cost-optimized` distribution (Q-2 representational change). Zero-diff reversibility on clean v0.13.0 install.
-- `quality-first` — `:planner (opus, max)`, `:doer (opus, max)`, `:verifier (opus, xhigh)`. Sonnet agents stay at `(sonnet, high)` via overrides ("sonnet falls back to high"); prone to overthinking, use sparingly.
-- `auto-mode-safe` — effort distribution identical to `balanced`; only the permission surface changes (D-5).
+Effort presets (v0.15.0 — cohort-tuple shape, 5 cohorts):
+- `cost-optimized` — `:planner (opus, high)`, `:doer (sonnet, high)`, `:verifier (haiku, medium)`, `:investigator (sonnet, medium)`, `:adversarial` preset-immune. Maximum cost reduction via haiku on verifiers; binding planners preserved at `(opus, xhigh)` via overrides.
+- `balanced` — default post-v0.15.0. Matches cohort defaults byte-identically on clean v0.15.0 install. v0.14.0 users see a distribution shift (16 agents move from opus → sonnet/haiku) — intentional feature, not regression.
+- `quality-first` — all non-adversarial cohorts pulled to `(opus, max)` (verifiers `(opus, xhigh)`). Sonnet/haiku agents stay at `(sonnet|haiku, high)` via overrides ("sonnet falls back to high" — M008 rule); prone to overthinking, use sparingly.
+- `auto-mode-safe` — effort + model distribution identical to `balanced`; only the permission surface changes (D-5).
 
-Cohort aliases (v0.14.0 / M010 / ADR-M010-A). All 43 agents are grouped
-into 4 role cohorts — `:planner` (17 agents), `:doer` (11), `:verifier`
-(11), `:adversarial` (4). Each cohort carries a joint `(model, effort)`
-tuple, which is now the preset primitive (presets are lists of
-`(cohort, model, effort)` tuples; per-agent enumerations are retired).
-Invoke via `/aih-calibrate --cohort :<name> --model X --effort Y` (both
-axes required, D-2). Per-agent escape hatch via `/aih-calibrate --agent
-<name> --model X --effort Y` (ADR-M008-A amendment, D-3). The
-`:adversarial` cohort is preset-immune (extends ADR-M008-C's 2-agent
-list to 4: `plan-checker`, `contrarian`, `reviewer`, `code-reviewer`) —
-only an explicit `--cohort :adversarial` (with literal-word `adversarial`
-confirmation) or `--agent <member>` can mutate them. Full 43-agent
-mapping + prose rationale: `pkg/.aihaus/skills/aih-calibrate/annexes/cohorts.md`.
+Cohort aliases (v0.14.0 / M010 / ADR-M010-A + M010.1 amendment v0.15.0).
+All 43 agents are grouped into **5** role cohorts — `:planner` (17),
+`:doer` (11), `:verifier` (8), `:investigator` (3), `:adversarial` (4).
+Each cohort carries a **default model** + joint `(model, effort)` tuple
+as the preset primitive. Per Anthropic's models overview, defaults map:
+`:planner → opus`, `:doer → sonnet`, `:verifier → haiku`,
+`:investigator → sonnet`, `:adversarial → opus` (preset-immune).
+`:investigator` (new v0.15.0) holds `debugger`, `debug-session-manager`,
+`user-profiler` — split from `:verifier` because hypothesis-driven
+investigation ≠ static artifact verification. Invoke via
+`/aih-calibrate --cohort :<name> --model X --effort Y` (both axes
+required, D-2). Per-agent escape hatch via `/aih-calibrate --agent <name>
+--model X --effort Y` (ADR-M008-A amendment, D-3). The `:adversarial`
+cohort is preset-immune (`plan-checker`, `contrarian`, `reviewer`,
+`code-reviewer`) — only an explicit `--cohort :adversarial` (with
+literal-word `adversarial` confirmation) or `--agent <member>` can mutate
+them. Full 43-agent mapping + prose rationale:
+`pkg/.aihaus/skills/aih-calibrate/annexes/cohorts.md`.
 
 Calibration survives `/aih-update` via a `.aihaus/.calibration` sidecar
 (M009 / ADR-M009-A). The file is user-owned, never committed, and

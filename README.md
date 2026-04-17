@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.14.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.15.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 [![Cursor](https://img.shields.io/badge/Cursor-first--class-000000?style=for-the-badge)](https://cursor.com)
 
@@ -48,6 +48,13 @@ Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and s
 </div>
 
 ---
+
+> [!NOTE]
+> ### v0.15.0 — 5 cohorts + per-cohort default-model axis (big cost drop)
+>
+> Cohort taxonomy grows 4 → 5: new `:investigator` cohort (`debugger`, `debug-session-manager`, `user-profiler`) splits out of `:verifier` because hypothesis-driven investigation ≠ static artifact verification. Each cohort now binds a **default model** per Anthropic's models overview — `:planner → opus`, `:doer → sonnet`, `:verifier → haiku`, `:investigator → sonnet`, `:adversarial → opus` (preset-immune). Shipped distribution shifts from 32 opus / 11 sonnet / 0 haiku (v0.14.0) to **16 opus / 21 sonnet / 6 haiku** (v0.15.0) — roughly 30-40% cost reduction on an average multi-milestone run, with no reasoning regression on `:planner` / `:adversarial` paths where it matters.
+>
+> ADR-M008-A amendment preserved; ADR-M008-C / M010 `:adversarial` preset-immunity preserved; ADR-M009-A sidecar unchanged. See [ADR-M010-A M010.1 amendment](pkg/.aihaus/decisions.md) + [cohorts.md](pkg/.aihaus/skills/aih-calibrate/annexes/cohorts.md) for the full taxonomy + rationale.
 
 > [!NOTE]
 > ### v0.14.0 — Cohort aliases + joint (model, effort) calibration primitive

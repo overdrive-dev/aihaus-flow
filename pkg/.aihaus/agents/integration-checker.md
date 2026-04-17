@@ -5,7 +5,7 @@ description: >
   properly — exports are imported, APIs are consumed, data flows
   end-to-end. Existence is not integration.
 tools: Read, Bash, Grep, Glob
-model: opus
+model: haiku
 effort: high
 color: blue
 memory: project

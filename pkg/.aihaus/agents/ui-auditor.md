@@ -6,7 +6,7 @@ description: >
   identifies top priority fixes, and produces a scored UI-REVIEW.md
   with actionable findings.
 tools: Read, Write, Bash, Grep, Glob
-model: opus
+model: sonnet
 effort: high
 color: pink
 memory: project
