@@ -1,0 +1,14 @@
+# aihaus calibration state -- fixture: v1 schema fed to v2-aware reader (B5).
+# Identical shape to valid.calibration; isolated file so the migration-path
+# regression test doesn't clobber Check 27 A1's inputs.
+
+schema=1
+permission_mode=auto
+last_preset=cost-optimized
+last_commit=feedbad
+
+# Per-agent effort overrides -- same keys as valid.calibration so the
+# byte-identity contract is directly comparable across A1 and B5.
+implementer=high
+analyst=high
+architect=xhigh

@@ -789,6 +789,165 @@ EOF
   echo "$a4_out" | grep -q '!!.*/aih-calibrate --preset auto-mode-safe' \
     || problems+=("A4: warning does not reference /aih-calibrate --preset auto-mode-safe")
 
+  # ---------- Assertion 5: adversarial explicit-entry honor ----------------
+  # ADR-M008-A x ADR-M008-C cross-break risk (analyst § Risks). If a v1
+  # sidecar includes a plan-checker= line, restore honors it (explicit
+  # user intent from --agent plan-checker). The WRITE-path filter lives
+  # elsewhere (SKILL.md Phase-4 step 20); read-path simply applies what's
+  # recorded. This test exercises the read-path's explicit-intent semantic.
+  local a5_dir="${tmpdir}/a5"
+  mkdir -p "$a5_dir/.aihaus/agents"
+  cat > "$a5_dir/.aihaus/.calibration" <<EOF
+schema=1
+permission_mode=bypassPermissions
+last_preset=custom
+last_commit=ad5a5ad
+plan-checker=high
+EOF
+  # Stage an adversarial member at baseline (opus, max). Use architect
+  # fixture as stand-in -- only frontmatter shape matters for the sed.
+  cp "$fx/agents-fixture/architect.md" "$a5_dir/.aihaus/agents/plan-checker.md"
+  _smoke_restore_calibration "$a5_dir/.aihaus/.calibration" "$a5_dir/.aihaus/agents" >/dev/null 2>&1
+  grep -q '^effort: high$' "$a5_dir/.aihaus/agents/plan-checker.md" \
+    || problems+=("A5: plan-checker explicit entry not honored by restore")
+
+  rm -rf "$tmpdir"
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- Check 28: calibration sidecar v2 cohort round-trip --------------------
+# Six assertions exercising the M010 schema v2 + cohort primitive:
+#   B1 cohort-level (model, effort) mutation applied to cohort members
+#   B2 per-agent override wins over cohort default (apply-order semantic)
+#   B3 cohort.<name>.<field>=custom skips (D-4 fallback)
+#   B4 unknown cohort warns + skips + exits 0
+#   B5 v1 sidecar on v2-aware reader round-trips byte-identically
+#   B6 v2 schema shape invariant -- no :adversarial entries in preset-shape
+#      fixture (paired with tools/dogfood-m010.sh for write-path behavior)
+# Self-contained: uses tools/fixtures/calibration/ only; never invokes
+# /aih-calibrate directly (R7 cycle prevention preserved).
+check_calibration_sidecar_v2() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: calibration sidecar v2 round-trip (cohort + model + effort)"
+  local fx="${PACKAGE_ROOT}/../tools/fixtures/calibration"
+  [[ -d "$fx" ]] || fx="tools/fixtures/calibration"
+  if [[ ! -d "$fx" ]]; then
+    _fail "$label" "fixtures dir missing: tools/fixtures/calibration"
+    return
+  fi
+
+  local repo_root="${PACKAGE_ROOT}/.."
+  local tmpdir="${repo_root}/tools/.out/calibration-v2-test-$$"
+  mkdir -p "$tmpdir"
+  local problems=()
+
+  # shellcheck source=../pkg/scripts/lib/restore-calibration.sh
+  source "${PACKAGE_ROOT}/scripts/lib/restore-calibration.sh"
+
+  # Helper: stage a minimal .aihaus layout for a test case.
+  _b_stage() {
+    local dir="$1"
+    mkdir -p "$dir/.aihaus/agents" "$dir/.aihaus/skills/aih-calibrate/annexes"
+    cp "${PACKAGE_ROOT}/.aihaus/skills/aih-calibrate/annexes/cohorts.md" \
+       "$dir/.aihaus/skills/aih-calibrate/annexes/cohorts.md"
+  }
+
+  # ---------- B1 cohort-level mutation + B2 per-agent override win ---------
+  # v2.calibration has cohort.doer.model=sonnet + cohort.doer.effort=medium
+  # and implementer.model=opus. Expected post-restore:
+  #   implementer.md  → model: opus (override), effort: medium (cohort)
+  #   test-writer.md  → model: sonnet, effort: medium (cohort only)
+  local b1_dir="${tmpdir}/b1"
+  _b_stage "$b1_dir"
+  cp "$fx/v2.calibration" "$b1_dir/.aihaus/.calibration"
+  cp "$fx/agents-fixture/implementer.md" "$b1_dir/.aihaus/agents/implementer.md"
+  # test-writer is a :doer fixture -- copy implementer fixture and rename.
+  cp "$fx/agents-fixture/implementer.md" "$b1_dir/.aihaus/agents/test-writer.md"
+  # verifier member for B3 -- cohort.verifier.*=custom means no mutation.
+  cp "$fx/agents-fixture/verifier.md" "$b1_dir/.aihaus/agents/verifier.md"
+  restore_calibration "$b1_dir/.aihaus" >/dev/null 2>&1
+
+  # B1 -- cohort-level applied to non-override :doer member.
+  grep -q '^model: sonnet$' "$b1_dir/.aihaus/agents/test-writer.md" \
+    || problems+=("B1: cohort.doer.model=sonnet not applied to test-writer")
+  grep -q '^effort: medium$' "$b1_dir/.aihaus/agents/test-writer.md" \
+    || problems+=("B1: cohort.doer.effort=medium not applied to test-writer")
+
+  # B2 -- per-agent implementer.model=opus wins over cohort.doer.model=sonnet;
+  # cohort.doer.effort=medium still applies (no effort override).
+  grep -q '^model: opus$' "$b1_dir/.aihaus/agents/implementer.md" \
+    || problems+=("B2: implementer.model=opus override did not win over cohort")
+  grep -q '^effort: medium$' "$b1_dir/.aihaus/agents/implementer.md" \
+    || problems+=("B2: implementer effort not inherited from cohort.doer")
+
+  # B3 -- cohort.verifier.model=custom + cohort.verifier.effort=custom skip,
+  # no per-agent override for verifier → baseline preserved (model: opus, effort: max).
+  grep -q '^model: opus$' "$b1_dir/.aihaus/agents/verifier.md" \
+    || problems+=("B3: cohort.verifier.model=custom should defer; verifier.model mutated unexpectedly")
+  grep -q '^effort: max$' "$b1_dir/.aihaus/agents/verifier.md" \
+    || problems+=("B3: cohort.verifier.effort=custom should defer; verifier.effort mutated unexpectedly")
+
+  # ---------- B4 unknown cohort warns + skips ------------------------------
+  local b4_dir="${tmpdir}/b4"
+  _b_stage "$b4_dir"
+  cat > "$b4_dir/.aihaus/.calibration" <<EOF
+schema=2
+permission_mode=bypassPermissions
+last_preset=custom
+last_commit=b4b4b4b
+cohort.nonexistent.model=sonnet
+cohort.nonexistent.effort=high
+implementer=high
+EOF
+  cp "$fx/agents-fixture/implementer.md" "$b4_dir/.aihaus/agents/implementer.md"
+  local b4_out b4_rc
+  b4_out=$(restore_calibration "$b4_dir/.aihaus" 2>&1; echo "RC=$?")
+  b4_rc="${b4_out##*RC=}"
+  if [[ "$b4_rc" != "0" ]]; then
+    problems+=("B4: unknown cohort fixture returned non-zero ($b4_rc)")
+  fi
+  echo "$b4_out" | grep -q "unknown cohort 'nonexistent'" \
+    || problems+=("B4: unknown-cohort warning not emitted")
+  grep -q '^effort: high$' "$b4_dir/.aihaus/agents/implementer.md" \
+    || problems+=("B4: implementer per-agent line did not apply (unknown cohort should not short-circuit)")
+
+  # ---------- B5 v1 sidecar on v2-aware reader -----------------------------
+  # Feed v2-migration-input.calibration (schema=1) through the v2-capable
+  # restore_calibration and assert v1 effort restore works byte-identically
+  # (legacy dispatch contract -- Check 27 A1 parity on the v1 path).
+  local b5_dir="${tmpdir}/b5"
+  _b_stage "$b5_dir"
+  cp "$fx/v2-migration-input.calibration" "$b5_dir/.aihaus/.calibration"
+  cp "$fx/agents-fixture/implementer.md" "$b5_dir/.aihaus/agents/implementer.md"
+  cp "$fx/agents-fixture/analyst.md" "$b5_dir/.aihaus/agents/analyst.md"
+  cp "$fx/agents-fixture/architect.md" "$b5_dir/.aihaus/agents/architect.md"
+  restore_calibration "$b5_dir/.aihaus" >/dev/null 2>&1
+  grep -q '^effort: high$' "$b5_dir/.aihaus/agents/implementer.md" \
+    || problems+=("B5: v1 implementer effort not restored through v2-aware reader")
+  grep -q '^effort: high$' "$b5_dir/.aihaus/agents/analyst.md" \
+    || problems+=("B5: v1 analyst effort not restored through v2-aware reader")
+  grep -q '^effort: xhigh$' "$b5_dir/.aihaus/agents/architect.md" \
+    || problems+=("B5: v1 architect effort not restored through v2-aware reader")
+
+  # ---------- B6 v2 schema shape invariant -- no adversarial entries -------
+  # The v2.calibration fixture represents "what a preset-apply MUST
+  # produce": cohort rows only for :planner / :doer / :verifier, plus a
+  # single per-agent model override. Assert no entries for the 4
+  # adversarial members AND no cohort.adversarial.* fields present.
+  # This is a schema-documentation check, not a write-path behavior test.
+  # Paired with tools/dogfood-m010.sh (write-path behavior).
+  grep -qE '^(plan-checker|contrarian|reviewer|code-reviewer)=' "$fx/v2.calibration" \
+    && problems+=("B6: v2.calibration has a per-agent effort entry for an adversarial member (write-filter invariant violated)")
+  grep -qE '^(plan-checker|contrarian|reviewer|code-reviewer)\.model=' "$fx/v2.calibration" \
+    && problems+=("B6: v2.calibration has a per-agent .model entry for an adversarial member")
+  grep -qE '^cohort\.adversarial\.(model|effort)=' "$fx/v2.calibration" \
+    && problems+=("B6: v2.calibration has a cohort.adversarial.* entry (preset-apply must skip adversarial)")
+
   rm -rf "$tmpdir"
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -829,6 +988,7 @@ check_merge_semantics_convergence
 check_autonomy_guard_detects_violations
 check_excluded_skills_keep_flag
 check_calibration_sidecar
+check_calibration_sidecar_v2
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
