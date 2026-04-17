@@ -5,7 +5,7 @@ description: >
   patterns, and accessibility requirements. Reads PRDs and produces UX
   specifications that frontend developers follow.
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: opus
 effort: high
 color: pink
 memory: project

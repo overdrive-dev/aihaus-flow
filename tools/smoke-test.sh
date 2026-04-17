@@ -133,11 +133,50 @@ check_skill_length() {
 }
 
 # ---- Check 6: every agent frontmatter declares the six required fields ------
+# AND each agent's model: value matches the cohort default from cohorts.md
+# (per-cohort value-validation, ADR-M012-A § smoke-test Check 6).
+# effort: is presence-only (values differ across presets).
+#
+# Cohort default-model table (6-cohort, balanced preset):
+#   :planner-binding → opus
+#   :planner         → opus
+#   :doer            → sonnet
+#   :verifier        → haiku
+#   :adversarial-scout  → opus
+#   :adversarial-review → opus
+#
+# get_cohort_members <:cohort-name>
+#   Reads the 5-column pipe-table from cohorts.md (F-006 parse contract).
+#   NF=7 when awk -F'|' splits on '|'. Column indices (1-based): f[2]=raw#,
+#   f[3]=Agent, f[4]=Cohort, f[5]=Model (strip whitespace).
+#   Returns one agent name per line.
+_get_cohort_members() {
+  local cohort_key="$1"  # e.g. ":planner-binding"
+  local cohorts_file="${PACKAGE_ROOT}/.aihaus/skills/aih-effort/annexes/cohorts.md"
+  if [[ ! -f "$cohorts_file" ]]; then
+    return 1
+  fi
+  # Parse only data rows (skip header and separator rows).
+  # NF=7 on every data row per F-006 binding contract.
+  awk -F'|' -v cohort="$cohort_key" '
+    NF==7 {
+      agent=substr($3,1); gsub(/^[[:space:]]+|[[:space:]]+$/,"",agent)
+      coh=substr($4,1);   gsub(/^[[:space:]]+|[[:space:]]+$/,"",coh)
+      # skip header row and separator row
+      if (agent=="" || agent=="#" || agent ~ /^-+$/) next
+      if (coh==cohort) print agent
+    }
+  ' "$cohorts_file"
+}
+
 check_agent_frontmatter() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: every agent declares name/tools/model/effort/color/memory"
+  local label="Check ${CHECK_NUMBER}: every agent declares name/tools/model/effort/color/memory; model: matches cohort default"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
+  local cohorts_file="${PACKAGE_ROOT}/.aihaus/skills/aih-effort/annexes/cohorts.md"
   local offenders=()
+
+  # ---- Part A: presence check (all 6 required fields) -----------------------
   while IFS= read -r -d '' file; do
     local front
     front=$(awk '/^---$/{c++; next} c==1' "$file")
@@ -147,6 +186,40 @@ check_agent_frontmatter() {
       fi
     done
   done < <(find "$agents_root" -maxdepth 1 -type f -name '*.md' -print0)
+
+  # ---- Part B: per-cohort model value-validation ----------------------------
+  if [[ ! -f "$cohorts_file" ]]; then
+    offenders+=("cohorts.md not found at ${cohorts_file#${PACKAGE_ROOT}/}; cannot validate model baselines")
+  else
+    # Cohort → expected model map (6-cohort balanced baseline, ADR-M012-A).
+    declare -A _cohort_model_map
+    _cohort_model_map[":planner-binding"]="opus"
+    _cohort_model_map[":planner"]="opus"
+    _cohort_model_map[":doer"]="sonnet"
+    _cohort_model_map[":verifier"]="haiku"
+    _cohort_model_map[":adversarial-scout"]="opus"
+    _cohort_model_map[":adversarial-review"]="opus"
+
+    local cohort expected_model members agent_file actual_model
+    for cohort in ":planner-binding" ":planner" ":doer" ":verifier" ":adversarial-scout" ":adversarial-review"; do
+      expected_model="${_cohort_model_map[$cohort]}"
+      # Read members from cohorts.md (not hardcoded).
+      while IFS= read -r member; do
+        [[ -z "$member" ]] && continue
+        agent_file="${agents_root}/${member}.md"
+        if [[ ! -f "$agent_file" ]]; then
+          offenders+=("${cohort} member '${member}' has no agent file at agents/${member}.md")
+          continue
+        fi
+        actual_model=$(awk '/^---$/{c++; next} c==1 && /^model:/{print $2; exit}' "$agent_file")
+        if [[ "$actual_model" != "$expected_model" ]]; then
+          offenders+=("agents/${member}.md: cohort ${cohort} expects model=${expected_model}, got model=${actual_model}")
+        fi
+      done < <(_get_cohort_members "$cohort")
+    done
+    unset _cohort_model_map
+  fi
+
   if [[ ${#offenders[@]} -eq 0 ]]; then
     _pass "$label"
   else

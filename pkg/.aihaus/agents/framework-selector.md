@@ -6,7 +6,7 @@ description: >
   scores frameworks against constraints, and produces a ranked
   recommendation with rationale.
 tools: Read, Bash, Grep, Glob, WebSearch
-model: sonnet
+model: opus
 effort: high
 color: sky
 memory: project
