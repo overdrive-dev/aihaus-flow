@@ -45,6 +45,432 @@ if (-not (Test-Path $Target)) {
 $Target = (Resolve-Path $Target).Path
 $Mode = if ($Copy) { 'copy' } else { 'link' }
 
+# ============================================================================
+# Test-PresetImmune -- PowerShell equivalent of is_preset_immune() in
+# restore-effort.sh (architecture.md §is_preset_immune). Returns $true iff
+# cohort is :adversarial-scout or :adversarial-review.
+# All preset-write call sites MUST use this helper (R3 / ADR-M012-A).
+# Post-S06 grep: rg 'Test-PresetImmune' pkg/scripts/ returns >= 2 matches.
+# ============================================================================
+function Test-PresetImmune {
+    param([string]$Cohort)
+    return $Cohort -match '^:?(adversarial-scout|adversarial-review)$'
+}
+
+# ============================================================================
+# Restore-Effort -- PowerShell mirror of restore_effort() in
+# pkg/scripts/lib/restore-effort.sh. Handles v2->v3 migration and v3 restore.
+# ADR references: ADR-M012-A, ADR-M009-A.
+# ============================================================================
+function Restore-Effort {
+    param([string]$AihausRoot)
+
+    $v2File    = Join-Path $AihausRoot '.calibration'
+    $v3File    = Join-Path $AihausRoot '.effort'
+    $agentsDir = Join-Path $AihausRoot 'agents'
+
+    # Determine which sidecar to read.
+    $stateFile      = $null
+    $detectedSchema = ''
+    if (Test-Path $v3File) {
+        $stateFile = $v3File
+        $sl = Select-String -Path $v3File -Pattern '^schema=' | Select-Object -First 1
+        if ($sl) { $detectedSchema = (($sl.Line -split '=', 2)[1] -replace "`r", '').Trim() }
+    } elseif (Test-Path $v2File) {
+        $stateFile = $v2File
+        $sl = Select-String -Path $v2File -Pattern '^schema=' | Select-Object -First 1
+        if ($sl) { $detectedSchema = (($sl.Line -split '=', 2)[1] -replace "`r", '').Trim() }
+    } else {
+        return  # No sidecar -- silent no-op.
+    }
+
+    if ([string]::IsNullOrEmpty($detectedSchema)) {
+        Write-Host "  !!" -ForegroundColor Yellow
+        Write-Host "  !!  Sidecar has no schema= line (pre-v1 file). Cannot auto-migrate." -ForegroundColor Yellow
+        Write-Host "  !!  Delete the sidecar and re-run: /aih-effort --preset balanced" -ForegroundColor Yellow
+        Write-Host "  !!" -ForegroundColor Yellow
+        return
+    }
+
+    if ($detectedSchema -eq '3') {
+        Restore-EffortV3 -AihausRoot $AihausRoot -StateFile $v3File
+    } elseif ($detectedSchema -eq '2') {
+        Invoke-MigrateV2ToV3 -AihausRoot $AihausRoot -V2File $v2File -V3File $v3File
+        if (Test-Path $v3File) {
+            Restore-EffortV3 -AihausRoot $AihausRoot -StateFile $v3File
+        }
+    } else {
+        Write-Host "  !!" -ForegroundColor Yellow
+        Write-Host "  !!  Unknown sidecar schema='$detectedSchema' -- skipping restore." -ForegroundColor Yellow
+        Write-Host "  !!  Delete the sidecar and re-run: /aih-effort --preset balanced" -ForegroundColor Yellow
+        Write-Host "  !!" -ForegroundColor Yellow
+    }
+}
+
+# ============================================================================
+# Invoke-MigrateV2ToV3 -- v2 .calibration -> v3 .effort migration.
+# Writes .effort, emits 4 lossy-case !! warnings, renames .calibration to
+# .calibration.v2.bak. Does NOT replay permission-mode side effects (ADR-M009-A).
+# ============================================================================
+function Invoke-MigrateV2ToV3 {
+    param(
+        [string]$AihausRoot,
+        [string]$V2File,
+        [string]$V3File
+    )
+
+    $sidecarLines = Get-Content -LiteralPath $V2File
+
+    # ---- Parse v2 fields ---------------------------------------------------
+    $v2LastPreset = ''; $v2LastCommit = ''; $v2PermMode = ''
+    $v2PlannerModel = ''; $v2PlannerEffort = ''
+    $v2DoerModel = ''; $v2DoerEffort = ''
+    $v2VerifierModel = ''; $v2VerifierEffort = ''
+    $v2InvestigatorModel = ''; $v2InvestigatorEffort = ''
+    $v2AdversarialModel = ''; $v2AdversarialEffort = ''
+    $perAgentEffortLines = [System.Collections.Generic.List[string]]::new()
+    $perAgentModelLines  = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($line in $sidecarLines) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ($line -match '^\s*#') { continue }
+        if ($line -notmatch '=') { continue }
+        $parts = $line -split '=', 2
+        $k = ($parts[0] -replace "`r", '').Trim()
+        $v = ($parts[1] -replace "`r", '').Trim()
+        switch ($k) {
+            'schema'                   { }  # Skip.
+            'last_preset'              { $v2LastPreset = $v }
+            'last_commit'              { $v2LastCommit = $v }
+            'permission_mode'          { $v2PermMode = $v }
+            'cohort.planner.model'     { $v2PlannerModel = $v }
+            'cohort.planner.effort'    { $v2PlannerEffort = $v }
+            'cohort.doer.model'        { $v2DoerModel = $v }
+            'cohort.doer.effort'       { $v2DoerEffort = $v }
+            'cohort.verifier.model'    { $v2VerifierModel = $v }
+            'cohort.verifier.effort'   { $v2VerifierEffort = $v }
+            'cohort.investigator.model'  { $v2InvestigatorModel = $v }
+            'cohort.investigator.effort' { $v2InvestigatorEffort = $v }
+            'cohort.adversarial.model'   { $v2AdversarialModel = $v }
+            'cohort.adversarial.effort'  { $v2AdversarialEffort = $v }
+            default {
+                if ($k -match '^cohort\.') { }  # Unknown v2 cohort -- skip.
+                elseif ($k -match '\.model$') { $perAgentModelLines.Add("$k=$v") }
+                else { $perAgentEffortLines.Add("$k=$v") }
+            }
+        }
+    }
+
+    # ---- Derive v3 last_preset + drift note --------------------------------
+    $v3LastPreset = 'balanced'
+    $presetDriftNote = ''
+    switch ($v2LastPreset) {
+        'balanced'       { $v3LastPreset = 'balanced' }
+        'cost-optimized' {
+            $v3LastPreset = 'cost'
+            $presetDriftNote = "cost-optimized renamed to 'cost'; effort defaults shifted: :planner high->medium; :doer high->medium"
+        }
+        'quality-first'  {
+            $v3LastPreset = 'high'
+            $presetDriftNote = "quality-first renamed to 'high'; effort defaults shifted: :planner max->xhigh"
+        }
+        'auto-mode-safe' { $v3LastPreset = 'balanced' }
+        ''               { $v3LastPreset = 'balanced' }
+        default {
+            $v3LastPreset = 'balanced'
+            Write-Host "" -ForegroundColor Yellow
+            Write-Host "  !!  v2 sidecar had unknown last_preset='$v2LastPreset' -- reset to balanced." -ForegroundColor Yellow
+            Write-Host "  !!" -ForegroundColor Yellow
+        }
+    }
+
+    $plannerLossy      = ($v2PlannerModel -ne '' -or $v2PlannerEffort -ne '')
+    $adversarialLossy  = ($v2AdversarialModel -ne '' -or $v2AdversarialEffort -ne '')
+    $investigatorLossy = ($v2InvestigatorModel -ne '' -or $v2InvestigatorEffort -ne '')
+
+    # ---- Write v3 .effort.tmp ----------------------------------------------
+    $migrationTs = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $tmpFile = "$V3File.tmp"
+    $sb = [System.Text.StringBuilder]::new()
+    [void]$sb.AppendLine('# aihaus effort state -- managed by /aih-effort, consumed by /aih-update')
+    [void]$sb.AppendLine('# Schema: v3 -- 6 uniform cohorts + per-agent overrides')
+    [void]$sb.AppendLine('# This file is USER-OWNED and derived state. Safe to delete. Do not commit.')
+    [void]$sb.AppendLine("# Migrated from schema v2 (.calibration) on $migrationTs")
+    [void]$sb.AppendLine('')
+    [void]$sb.AppendLine('schema=3')
+    [void]$sb.AppendLine("last_preset=$v3LastPreset")
+    if ($v2LastCommit) { [void]$sb.AppendLine("last_commit=$v2LastCommit") }
+    [void]$sb.AppendLine('')
+    [void]$sb.AppendLine('# Cohort-level rows (migrated from v2)')
+    # planner -> planner-binding ONLY (lossy split, FR-M05).
+    if ($v2PlannerModel)  { [void]$sb.AppendLine("cohort.planner-binding.model=$v2PlannerModel") }
+    if ($v2PlannerEffort) { [void]$sb.AppendLine("cohort.planner-binding.effort=$v2PlannerEffort") }
+    # doer -- direct passthrough.
+    if ($v2DoerModel)   { [void]$sb.AppendLine("cohort.doer.model=$v2DoerModel") }
+    if ($v2DoerEffort)  { [void]$sb.AppendLine("cohort.doer.effort=$v2DoerEffort") }
+    # verifier -- direct passthrough.
+    if ($v2VerifierModel)  { [void]$sb.AppendLine("cohort.verifier.model=$v2VerifierModel") }
+    if ($v2VerifierEffort) { [void]$sb.AppendLine("cohort.verifier.effort=$v2VerifierEffort") }
+    # adversarial -> adversarial-scout ONLY (lossy split, FR-M05 shape).
+    if ($v2AdversarialModel)  { [void]$sb.AppendLine("cohort.adversarial-scout.model=$v2AdversarialModel") }
+    if ($v2AdversarialEffort) { [void]$sb.AppendLine("cohort.adversarial-scout.effort=$v2AdversarialEffort") }
+    # investigator -> per-agent overrides (lossy deletion, FR-M06).
+    if ($investigatorLossy) {
+        [void]$sb.AppendLine('')
+        [void]$sb.AppendLine('# investigator cohort deleted in v3 -- re-emitted as per-agent overrides (FR-M06)')
+        if ($v2InvestigatorModel) {
+            [void]$sb.AppendLine("debugger.model=$v2InvestigatorModel")
+            [void]$sb.AppendLine("debug-session-manager.model=$v2InvestigatorModel")
+            [void]$sb.AppendLine("user-profiler.model=$v2InvestigatorModel")
+        }
+        if ($v2InvestigatorEffort) {
+            [void]$sb.AppendLine("debugger=$v2InvestigatorEffort")
+            [void]$sb.AppendLine("debug-session-manager=$v2InvestigatorEffort")
+            [void]$sb.AppendLine("user-profiler=$v2InvestigatorEffort")
+        }
+    }
+    # Per-agent passthrough.
+    if ($perAgentEffortLines.Count -gt 0) {
+        [void]$sb.AppendLine('')
+        [void]$sb.AppendLine('# Per-agent effort overrides')
+        foreach ($l in $perAgentEffortLines) { [void]$sb.AppendLine($l) }
+    }
+    if ($perAgentModelLines.Count -gt 0) {
+        [void]$sb.AppendLine('')
+        [void]$sb.AppendLine('# Per-agent model overrides')
+        foreach ($l in $perAgentModelLines) { [void]$sb.AppendLine($l) }
+    }
+    [System.IO.File]::WriteAllText($tmpFile, $sb.ToString(), [System.Text.Encoding]::UTF8)
+
+    # ---- Write .automode if auto-mode-safe or permission_mode=auto (FR-M07) --
+    if ($v2LastPreset -eq 'auto-mode-safe' -or $v2PermMode -eq 'auto') {
+        $automodeFile = Join-Path $AihausRoot '.automode'
+        [System.IO.File]::WriteAllText($automodeFile,
+            "enabled=true`nlast_enabled_at=$migrationTs`n",
+            [System.Text.Encoding]::UTF8)
+    }
+
+    # ---- Atomic swap -------------------------------------------------------
+    Move-Item -Path $tmpFile -Destination $V3File -Force
+    Move-Item -Path $V2File  -Destination "$V2File.v2.bak" -Force
+    Write-Host "  migrated .aihaus\.calibration -> .aihaus\.effort (schema v2 -> v3)"
+
+    # ---- Emit lossy-case !! warnings (FR-M05, FR-M06, FR-M07, FR-M10) -----
+    if ($plannerLossy) {
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "  !!  v2 sidecar had cohort.planner.* settings (planner cohort split -- FR-M05)." -ForegroundColor Yellow
+        Write-Host "  !!  Applied to :planner-binding ONLY (architect, planner, product-manager, roadmapper)." -ForegroundColor Yellow
+        Write-Host "  !!  :planner (13 agents) remains at v3 balanced default." -ForegroundColor Yellow
+        Write-Host "  !!  To also calibrate :planner: /aih-effort --cohort :planner --effort <X>" -ForegroundColor Yellow
+        Write-Host "" -ForegroundColor Yellow
+    }
+    if ($adversarialLossy) {
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "  !!  v2 sidecar had cohort.adversarial.* settings (adversarial split -- FR-M05)." -ForegroundColor Yellow
+        Write-Host "  !!  Applied to :adversarial-scout ONLY (contrarian, plan-checker)." -ForegroundColor Yellow
+        Write-Host "  !!  :adversarial-review (reviewer, code-reviewer) stays at v3 balanced default." -ForegroundColor Yellow
+        Write-Host "  !!  To mirror to review tier: /aih-effort --cohort :adversarial-review --effort <X>" -ForegroundColor Yellow
+        Write-Host "" -ForegroundColor Yellow
+    }
+    if ($investigatorLossy) {
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "  !!  v2 sidecar had cohort.investigator.* settings (cohort deleted -- FR-M06)." -ForegroundColor Yellow
+        Write-Host "  !!  :investigator removed in v3; settings preserved as per-agent overrides for:" -ForegroundColor Yellow
+        Write-Host "  !!    debugger, debug-session-manager, user-profiler" -ForegroundColor Yellow
+        Write-Host "  !!  Review .aihaus\.effort to confirm these overrides are still intended." -ForegroundColor Yellow
+        Write-Host "" -ForegroundColor Yellow
+    }
+    if ($v2LastPreset -eq 'auto-mode-safe' -or $v2PermMode -eq 'auto') {
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "  !!  v2 sidecar had last_preset=auto-mode-safe." -ForegroundColor Yellow
+        Write-Host "  !!    State migrated to .aihaus\.automode (enabled=true)." -ForegroundColor Yellow
+        Write-Host "  !!    Side effects (defaultMode=auto, worktree frontmatter, SAFE_PATTERNS) are NOT replayed." -ForegroundColor Yellow
+        Write-Host "  !!    Run /aih-automode --enable to re-apply." -ForegroundColor Yellow
+        Write-Host "" -ForegroundColor Yellow
+        $script:AutoModeSafeWarningEmitted = $true
+    }
+    if ($presetDriftNote) {
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "  !!  Preset renamed during migration -- effort distribution may differ:" -ForegroundColor Yellow
+        Write-Host "  !!    $presetDriftNote" -ForegroundColor Yellow
+        Write-Host "  !!  Absolute per-cohort values from v2 were preserved verbatim (ADR-M009-A)." -ForegroundColor Yellow
+        Write-Host "  !!  To apply v3 preset defaults: /aih-effort --preset $v3LastPreset" -ForegroundColor Yellow
+        Write-Host "" -ForegroundColor Yellow
+    }
+}
+
+# ============================================================================
+# Restore-EffortV3 -- idempotent v3 restore loop.
+# Pass 1: cohort-level apply (skipping preset-immune via Test-PresetImmune).
+# Pass 2: per-agent overrides -- always win over cohort-level (apply-order ADR-M012-A).
+# 6-cohort regex: planner-binding|planner|doer|verifier|adversarial-scout|adversarial-review
+# ============================================================================
+function Restore-EffortV3 {
+    param(
+        [string]$AihausRoot,
+        [string]$StateFile
+    )
+
+    $cohortsMd = Join-Path $AihausRoot 'skills\aih-effort\annexes\cohorts.md'
+    $agentsDir = Join-Path $AihausRoot 'agents'
+    $restored = 0
+    $skipped  = 0
+    $sidecarLines = Get-Content -LiteralPath $StateFile
+
+    # Build cohort membership map from cohorts.md (6 cohorts).
+    $cohortMembers = @{
+        'planner-binding'    = [System.Collections.Generic.List[string]]::new()
+        'planner'            = [System.Collections.Generic.List[string]]::new()
+        'doer'               = [System.Collections.Generic.List[string]]::new()
+        'verifier'           = [System.Collections.Generic.List[string]]::new()
+        'adversarial-scout'  = [System.Collections.Generic.List[string]]::new()
+        'adversarial-review' = [System.Collections.Generic.List[string]]::new()
+    }
+
+    if (Test-Path $cohortsMd) {
+        foreach ($cline in (Get-Content -LiteralPath $cohortsMd)) {
+            # 5-col pipe-table: | # | Agent | Cohort | Model | Effort |
+            # Match row lines and extract agent (col 2) + cohort (col 3).
+            if ($cline -match '^\|\s*\d+\s*\|\s*(?<agent>[a-z][a-z0-9-]+)\s*\|\s*(?<cohort>:[a-z][a-z0-9-]+)') {
+                $cname = $Matches.cohort.TrimStart(':')
+                if ($cohortMembers.ContainsKey($cname)) {
+                    $cohortMembers[$cname].Add($Matches.agent)
+                }
+            }
+        }
+    } else {
+        Write-Host "  warn: cohorts.md missing at $cohortsMd -- skipping cohort-level restore; per-agent overrides still applied"
+    }
+
+    # Pass 1 -- cohort-level apply. 6-cohort regex (F-002 AC).
+    foreach ($line in $sidecarLines) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ($line -match '^\s*#') { continue }
+        if ($line -notmatch '=') { continue }
+        $parts = $line -split '=', 2
+        $key   = ($parts[0] -replace "`r", '').Trim()
+        $value = ($parts[1] -replace "`r", '').Trim()
+        # 6-cohort regex: replaces the old 4-cohort pattern (planner|doer|verifier|adversarial).
+        if ($key -notmatch '^cohort\.(planner-binding|planner|doer|verifier|adversarial-scout|adversarial-review)\.(model|effort)$') { continue }
+        if ([string]::IsNullOrWhiteSpace($value)) { continue }
+        if ($value -eq 'custom') { continue }
+
+        $cohortName = ($key -split '\.', 3)[1]
+        $field      = ($key -split '\.', 3)[2]
+
+        # Skip preset-immune cohorts via Test-PresetImmune (R3 / ADR-M012-A).
+        if (Test-PresetImmune $cohortName) { continue }
+
+        $members = $cohortMembers[$cohortName]
+        foreach ($member in $members) {
+            $agentFile = Join-Path $agentsDir "$member.md"
+            if (Test-Path $agentFile) {
+                $content = Get-Content -LiteralPath $agentFile
+                if ($field -eq 'model') {
+                    $newContent = $content -replace '^model: .*', "model: $value"
+                } else {
+                    $newContent = $content -replace '^effort: .*', "effort: $value"
+                }
+                Set-Content -LiteralPath $agentFile -Value $newContent -Encoding UTF8 -NoNewline
+                $restored++
+            } else {
+                $skipped++
+                Write-Host "  warn: .effort cohort '$cohortName' references missing agent '$member' -- skipped"
+            }
+        }
+    }
+
+    # Pass 2 -- per-agent overrides (win over cohort via apply order).
+    foreach ($line in $sidecarLines) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ($line -match '^\s*#') { continue }
+        if ($line -notmatch '=') { continue }
+        $parts = $line -split '=', 2
+        $key   = ($parts[0] -replace "`r", '').Trim()
+        $value = ($parts[1] -replace "`r", '').Trim()
+        if ($key -eq 'schema') { continue }
+        if ($key -eq 'last_preset') { continue }
+        if ($key -eq 'last_commit') { continue }
+        if ([string]::IsNullOrWhiteSpace($value)) { continue }
+
+        # Cohort keys handled in Pass 1; warn on unknown v3 cohort names.
+        if ($key -match '^cohort\.') {
+            if ($key -notmatch '^cohort\.(planner-binding|planner|doer|verifier|adversarial-scout|adversarial-review)\.(model|effort)$') {
+                $bad = ($key -replace '^cohort\.', '') -replace '\..*$', ''
+                Write-Host "  warn: .effort references unknown cohort '$bad' -- skipped"
+                $skipped++
+            }
+            continue
+        }
+
+        # Dotted per-agent model vs. effort.
+        if ($key -match '\.model$') {
+            $agent = $key -replace '\.model$', ''
+            $field = 'model'
+        } else {
+            $agent = $key
+            $field = 'effort'
+        }
+
+        $agentFile = Join-Path $agentsDir "$agent.md"
+        if (Test-Path $agentFile) {
+            $content = Get-Content -LiteralPath $agentFile
+            if ($field -eq 'model') {
+                $newContent = $content -replace '^model: .*', "model: $value"
+            } else {
+                $newContent = $content -replace '^effort: .*', "effort: $value"
+            }
+            Set-Content -LiteralPath $agentFile -Value $newContent -Encoding UTF8 -NoNewline
+            $restored++
+        } else {
+            $skipped++
+            Write-Host "  warn: .effort references missing agent '$agent' -- skipped"
+        }
+    }
+
+    if ($skipped -gt 0) {
+        Write-Host ("  restored {0} effort entry(ies) from .aihaus\.effort ({1} skipped -- missing agents/cohorts)" -f $restored, $skipped)
+    } else {
+        Write-Host ("  restored {0} effort entry(ies) from .aihaus\.effort" -f $restored)
+    }
+}
+
+# ============================================================================
+# Restore-Automode -- reads .automode (if present). If enabled=true, emits
+# informational stderr block pointing at /aih-automode --enable.
+# Does NOT auto-replay side effects (ADR-M009-A record-defer discipline).
+# ============================================================================
+function Restore-Automode {
+    param([string]$AihausRoot)
+
+    $automodeFile = Join-Path $AihausRoot '.automode'
+    if (-not (Test-Path $automodeFile)) { return }
+
+    $enabled = ''; $lastEnabledAt = ''
+    foreach ($line in (Get-Content -LiteralPath $automodeFile)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ($line -match '^\s*#') { continue }
+        $parts = $line -split '=', 2
+        $k = ($parts[0] -replace "`r", '').Trim()
+        $v = if ($parts.Count -gt 1) { ($parts[1] -replace "`r", '').Trim() } else { '' }
+        if ($k -eq 'enabled')         { $enabled = $v }
+        elseif ($k -eq 'last_enabled_at') { $lastEnabledAt = $v }
+    }
+
+    if ($enabled -eq 'true') {
+        $tsNote = if ($lastEnabledAt) { " (last enabled: $lastEnabledAt)" } else { '' }
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "  !!  .aihaus\.automode shows enabled=true$tsNote." -ForegroundColor Yellow
+        Write-Host "  !!  Permission-mode side effects are NOT auto-replayed after /aih-update." -ForegroundColor Yellow
+        Write-Host "  !!  Run /aih-automode --enable to re-apply defaultMode=auto and worktree" -ForegroundColor Yellow
+        Write-Host "  !!  agent frontmatter changes." -ForegroundColor Yellow
+        Write-Host "" -ForegroundColor Yellow
+    }
+}
+
+# Dedupe flag for auto-mode-safe warning across both blocks.
+$script:AutoModeSafeWarningEmitted = $false
+
 if ($Update) {
     Write-Host "aihaus updater (via -Update)"
 } else {
@@ -99,192 +525,18 @@ if ($Update) {
         Write-Host "  refreshed: .aihaus\$name"
     }
 
-    # Restore per-agent calibration from .aihaus\.calibration (schema v1
-    # or v2). Mirror of restore_calibration() in lib/restore-calibration.sh
-    # -- pinned call site between agents refresh and .claude\ re-link so
-    # both layers pick up restored frontmatter.
+    # Restore per-agent effort from sidecar.
+    # Dispatch order (binding per architecture.md):
+    #   1. Restore-Effort   -- migrates v2 .calibration -> v3 .effort (if needed)
+    #                          or idempotent v3 restore. May write .automode.
+    #   2. Restore-Automode -- reads .automode; prints /aih-automode --enable pointer
+    #                          if enabled=true. Does NOT replay side effects.
+    # Pinned between agents refresh and .claude\ re-link so both layers pick up
+    # restored frontmatter.
     # Schema contract: <aihaus_root>\skills\aih-effort\annexes\state-file.md
-    # Cohort membership (v2): <aihaus_root>\skills\aih-effort\annexes\cohorts.md
-    $stateFile = Join-Path $TargetAihaus '.calibration'
-    if (Test-Path $stateFile) {
-        $schemaLine = (Select-String -Path $stateFile -Pattern '^schema=' | Select-Object -First 1)
-        $schema = ''
-        if ($schemaLine) {
-            $schema = ($schemaLine.Line -split '=', 2)[1]
-            $schema = ($schema -replace "`r", '').Trim()
-        }
-        if ($schema -ne '1' -and $schema -ne '2') {
-            Write-Host "  warn: unknown .calibration schema='$schema' -- skipping restore"
-        } else {
-            $restored = 0
-            $skipped = 0
-            $lastPreset = ''
-
-            # Read all sidecar lines once -- both schema passes use them.
-            $sidecarLines = Get-Content -LiteralPath $stateFile
-
-            # Collect last_preset for the auto-mode-safe warning block.
-            foreach ($line in $sidecarLines) {
-                if ($line -match '^\s*last_preset\s*=') {
-                    $lastPreset = (($line -split '=', 2)[1] -replace "`r", '').Trim()
-                    break
-                }
-            }
-
-            $agentsDir = Join-Path $TargetAihaus 'agents'
-
-            if ($schema -eq '1') {
-                # ---- Schema v1 legacy effort-only loop (byte-identical to v0.13.0) ----
-                foreach ($line in $sidecarLines) {
-                    if ([string]::IsNullOrWhiteSpace($line)) { continue }
-                    if ($line -match '^\s*#') { continue }
-                    if ($line -notmatch '=') { continue }
-                    $parts = $line -split '=', 2
-                    $key = ($parts[0] -replace "`r", '').Trim()
-                    $value = ($parts[1] -replace "`r", '').Trim()
-                    if ($key -eq 'schema') { continue }
-                    if ($key -eq 'permission_mode') { continue }
-                    if ($key -eq 'last_preset') { continue }
-                    if ($key -eq 'last_commit') { continue }
-                    if ([string]::IsNullOrWhiteSpace($value)) { continue }
-
-                    $agentFile = Join-Path $agentsDir ("$key.md")
-                    if (Test-Path $agentFile) {
-                        $content = Get-Content -LiteralPath $agentFile
-                        $newContent = $content -replace '^effort: .*', "effort: $value"
-                        # UTF8 no-BOM, no trailing newline -- matches sed -i.bak byte layout.
-                        Set-Content -LiteralPath $agentFile -Value $newContent -Encoding UTF8 -NoNewline
-                        $restored++
-                    } else {
-                        $skipped++
-                        Write-Host "  warn: .calibration references missing agent '$key' -- skipped"
-                    }
-                }
-                if ($skipped -gt 0) {
-                    Write-Host ("  restored {0} per-agent effort override(s) from .aihaus\.calibration ({1} skipped -- missing agents)" -f $restored, $skipped)
-                } else {
-                    Write-Host ("  restored {0} per-agent effort override(s) from .aihaus\.calibration" -f $restored)
-                }
-            } else {
-                # ---- Schema v2 cohort-level apply + per-agent overrides ----
-                $cohortsMd = Join-Path $TargetAihaus 'skills\aih-effort\annexes\cohorts.md'
-                $cohortMembers = @{ planner = @(); doer = @(); verifier = @(); adversarial = @() }
-                if (Test-Path $cohortsMd) {
-                    foreach ($cline in (Get-Content -LiteralPath $cohortsMd)) {
-                        if ($cline -match '^\|\s*\d+\s*\|\s*(?<agent>\S+)\s*\|\s*(?<cohort>:\w+)') {
-                            $cname = $Matches.cohort.Substring(1)
-                            if ($cohortMembers.ContainsKey($cname)) {
-                                $cohortMembers[$cname] += $Matches.agent
-                            }
-                        }
-                    }
-                } else {
-                    Write-Host "  warn: cohorts.md missing at $cohortsMd -- skipping cohort-level restore; per-agent overrides still applied"
-                }
-
-                # Pass 1 -- cohort-level apply. custom values defer to per-agent.
-                foreach ($line in $sidecarLines) {
-                    if ([string]::IsNullOrWhiteSpace($line)) { continue }
-                    if ($line -match '^\s*#') { continue }
-                    if ($line -notmatch '=') { continue }
-                    $parts = $line -split '=', 2
-                    $key = ($parts[0] -replace "`r", '').Trim()
-                    $value = ($parts[1] -replace "`r", '').Trim()
-                    if ($key -notmatch '^cohort\.(planner|doer|verifier|adversarial)\.(model|effort)$') { continue }
-                    if ([string]::IsNullOrWhiteSpace($value)) { continue }
-                    if ($value -eq 'custom') { continue }
-                    $cohortName = ($key -split '\.')[1]
-                    $field = ($key -split '\.')[2]
-                    $members = $cohortMembers[$cohortName]
-                    foreach ($member in $members) {
-                        $agentFile = Join-Path $agentsDir ("$member.md")
-                        if (Test-Path $agentFile) {
-                            $content = Get-Content -LiteralPath $agentFile
-                            if ($field -eq 'model') {
-                                $newContent = $content -replace '^model: .*', "model: $value"
-                            } else {
-                                $newContent = $content -replace '^effort: .*', "effort: $value"
-                            }
-                            Set-Content -LiteralPath $agentFile -Value $newContent -Encoding UTF8 -NoNewline
-                            $restored++
-                        } else {
-                            $skipped++
-                            Write-Host "  warn: .calibration cohort '$cohortName' references missing agent '$member' -- skipped"
-                        }
-                    }
-                }
-
-                # Pass 2 -- per-agent overrides (win over cohort via apply order).
-                foreach ($line in $sidecarLines) {
-                    if ([string]::IsNullOrWhiteSpace($line)) { continue }
-                    if ($line -match '^\s*#') { continue }
-                    if ($line -notmatch '=') { continue }
-                    $parts = $line -split '=', 2
-                    $key = ($parts[0] -replace "`r", '').Trim()
-                    $value = ($parts[1] -replace "`r", '').Trim()
-                    if ($key -eq 'schema') { continue }
-                    if ($key -eq 'permission_mode') { continue }
-                    if ($key -eq 'last_preset') { continue }
-                    if ($key -eq 'last_commit') { continue }
-                    if ([string]::IsNullOrWhiteSpace($value)) { continue }
-
-                    # Cohort keys handled in Pass 1; warn on unknown cohort.
-                    if ($key -match '^cohort\.') {
-                        if ($key -notmatch '^cohort\.(planner|doer|verifier|adversarial)\.(model|effort)$') {
-                            $bad = ($key -replace '^cohort\.', '') -replace '\..*$', ''
-                            Write-Host "  warn: .calibration references unknown cohort '$bad' -- skipped"
-                            $skipped++
-                        }
-                        continue
-                    }
-
-                    # Dotted per-agent model vs. v1-compat effort entry.
-                    if ($key -match '\.model$') {
-                        $agent = $key -replace '\.model$', ''
-                        $field = 'model'
-                    } else {
-                        $agent = $key
-                        $field = 'effort'
-                    }
-
-                    $agentFile = Join-Path $agentsDir ("$agent.md")
-                    if (Test-Path $agentFile) {
-                        $content = Get-Content -LiteralPath $agentFile
-                        if ($field -eq 'model') {
-                            $newContent = $content -replace '^model: .*', "model: $value"
-                        } else {
-                            $newContent = $content -replace '^effort: .*', "effort: $value"
-                        }
-                        Set-Content -LiteralPath $agentFile -Value $newContent -Encoding UTF8 -NoNewline
-                        $restored++
-                    } else {
-                        $skipped++
-                        Write-Host "  warn: .calibration references missing agent '$agent' -- skipped"
-                    }
-                }
-
-                if ($skipped -gt 0) {
-                    Write-Host ("  restored {0} calibration entry(ies) from .aihaus\.calibration ({1} skipped -- missing agents/cohorts)" -f $restored, $skipped)
-                } else {
-                    Write-Host ("  restored {0} calibration entry(ies) from .aihaus\.calibration" -f $restored)
-                }
-            }
-
-            if ($lastPreset -eq 'auto-mode-safe') {
-                Write-Host ""
-                Write-Host "  !!  Your last preset was auto-mode-safe, but side effects" -ForegroundColor Yellow
-                Write-Host "  !!  (auto-approve-bash.sh SAFE_PATTERNS widening + worktree" -ForegroundColor Yellow
-                Write-Host "  !!  agents' permissionMode removal) are NOT auto-restored." -ForegroundColor Yellow
-                Write-Host "  !!  Classifier pauses may occur until you re-run:" -ForegroundColor Yellow
-                Write-Host "  !!    /aih-automode --enable" -ForegroundColor Yellow
-                Write-Host ""
-                # Dedupe flag -- post-merge defaultMode-preserve block
-                # (install.ps1:292ish) reads the same sidecar and would emit
-                # this identical !! block a second time on -Update runs.
-                $script:AutoModeSafeWarningEmitted = $true
-            }
-        }
-    }
+    # Cohort membership (v3): <aihaus_root>\skills\aih-effort\annexes\cohorts.md
+    Restore-Effort  -AihausRoot $TargetAihaus
+    Restore-Automode -AihausRoot $TargetAihaus
 } else {
     # Step 3: existing .aihaus prompt
     if (Test-Path $TargetAihaus) {
@@ -376,18 +628,19 @@ if (-not (Test-Path $SettingsSrc)) {
     Write-Host "  settings: merged"
 
     # Post-merge defaultMode preserve -- user intent wins on this single scalar.
-    # Mirror of merge-settings.sh:98-150. Reads .aihaus\.calibration's
-    # permission_mode and overwrites .permissions.defaultMode so
-    # /aih-effort choices survive install.ps1 -Update (which otherwise
-    # lets the template's defaultMode win via Merge-Object). Only touches
-    # .permissions.defaultMode; allow/deny/hook paths still follow template-wins.
-    # Missing sidecar or empty value = silent no-op.
+    # Mirror of merge-settings.sh post-merge block. Reads .aihaus\.effort (v3)
+    # or .aihaus\.calibration (v2 during first migration run) for permission_mode
+    # and overwrites .permissions.defaultMode so /aih-effort choices survive
+    # install.ps1 -Update. Only touches .permissions.defaultMode; allow/deny/hook
+    # paths still follow template-wins. Missing sidecar or empty value = no-op.
     # Schema contract: pkg\.aihaus\skills\aih-effort\annexes\state-file.md.
-    $pmStateFile = Join-Path $TargetAihaus '.calibration'
-    if (Test-Path $pmStateFile) {
-        $pmSchema = ''
-        $pmUserMode = ''
-        $pmLastPreset = ''
+    $pmV3File = Join-Path $TargetAihaus '.effort'
+    $pmV2File = Join-Path $TargetAihaus '.calibration'
+    # Prefer v3; fall back to v2 during first-time migration run.
+    $pmStateFile = if (Test-Path $pmV3File) { $pmV3File } elseif (Test-Path $pmV2File) { $pmV2File } else { $null }
+
+    if ($pmStateFile) {
+        $pmSchema = ''; $pmUserMode = ''; $pmLastPreset = ''
         foreach ($line in (Get-Content -LiteralPath $pmStateFile)) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             if ($line -match '^\s*#') { continue }
@@ -395,10 +648,11 @@ if (-not (Test-Path $SettingsSrc)) {
             $pmParts = $line -split '=', 2
             $pmKey = ($pmParts[0] -replace "`r", '').Trim()
             $pmVal = ($pmParts[1] -replace "`r", '').Trim()
-            if ($pmKey -eq 'schema' -and -not $pmSchema) { $pmSchema = $pmVal }
+            if ($pmKey -eq 'schema' -and -not $pmSchema)          { $pmSchema = $pmVal }
             elseif ($pmKey -eq 'permission_mode' -and -not $pmUserMode) { $pmUserMode = $pmVal }
-            elseif ($pmKey -eq 'last_preset' -and -not $pmLastPreset) { $pmLastPreset = $pmVal }
+            elseif ($pmKey -eq 'last_preset' -and -not $pmLastPreset)   { $pmLastPreset = $pmVal }
         }
+        # v3 drops permission_mode; only v2 schema=1/2 sidecars carry it.
         if (($pmSchema -eq '1' -or $pmSchema -eq '2') -and -not [string]::IsNullOrWhiteSpace($pmUserMode)) {
             try {
                 $pmJson = Get-Content -LiteralPath $SettingsOut -Raw | ConvertFrom-Json
@@ -416,13 +670,12 @@ if (-not (Test-Path $SettingsSrc)) {
                 Write-Host "  warn: defaultMode preserve step failed; leaving merged template value"
             }
             if ($pmLastPreset -eq 'auto-mode-safe' -and -not $script:AutoModeSafeWarningEmitted) {
-                Write-Host ""
-                Write-Host "  !!  Your last preset was auto-mode-safe, but side effects" -ForegroundColor Yellow
-                Write-Host "  !!  (auto-approve-bash.sh SAFE_PATTERNS widening + worktree" -ForegroundColor Yellow
-                Write-Host "  !!  agents' permissionMode removal) are NOT auto-restored." -ForegroundColor Yellow
-                Write-Host "  !!  Classifier pauses may occur until you re-run:" -ForegroundColor Yellow
-                Write-Host "  !!    /aih-automode --enable" -ForegroundColor Yellow
-                Write-Host ""
+                Write-Host "" -ForegroundColor Yellow
+                Write-Host "  !!  v2 sidecar had last_preset=auto-mode-safe." -ForegroundColor Yellow
+                Write-Host "  !!    State migrated to .aihaus\.automode (enabled=true)." -ForegroundColor Yellow
+                Write-Host "  !!    Side effects (defaultMode=auto, worktree frontmatter, SAFE_PATTERNS) are NOT replayed." -ForegroundColor Yellow
+                Write-Host "  !!    Run /aih-automode --enable to re-apply." -ForegroundColor Yellow
+                Write-Host "" -ForegroundColor Yellow
                 $script:AutoModeSafeWarningEmitted = $true
             }
         }

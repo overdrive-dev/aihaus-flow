@@ -109,16 +109,24 @@ for name in skills agents hooks templates; do
   update_aihaus_dir "${name}"
 done
 
-# ---- Restore per-agent calibration from sidecar ------------------------------
-# Reads .aihaus/.calibration (schema v1) and re-applies recorded effort tiers
-# to refreshed agent frontmatters. Call site is pinned between the refresh
-# loop above and the link_or_copy loop below so both .aihaus/agents/ (physical)
-# and .claude/agents/ (symlink or copy) pick up restored frontmatter.
+# ---- Restore per-agent effort from sidecar -----------------------------------
+# Dispatch order (binding per architecture.md):
+#   1. restore_effort   -- migrates v2 .calibration -> v3 .effort (if needed)
+#                          or idempotent v3 restore. May write .automode during
+#                          v2->v3 migration (auto-mode-safe case).
+#   2. restore_automode -- reads .automode (written by restore_effort if it just
+#                          migrated) and emits /aih-automode --enable pointer if
+#                          enabled=true. Does NOT replay permission-mode side effects.
+# Call site pinned between refresh loop and link_or_copy so both .aihaus/agents/
+# (physical) and .claude/agents/ (symlink or copy) pick up restored frontmatter.
 # Missing sidecar = silent no-op. Schema contract: pkg/.aihaus/skills/
 # aih-effort/annexes/state-file.md.
-# shellcheck source=lib/restore-calibration.sh
-source "$(dirname "$0")/lib/restore-calibration.sh"
-restore_calibration "${AIHAUS}"
+# shellcheck source=lib/restore-effort.sh
+source "$(dirname "$0")/lib/restore-effort.sh"
+restore_effort "${AIHAUS}"
+# shellcheck source=lib/restore-automode.sh
+source "$(dirname "$0")/lib/restore-automode.sh"
+restore_automode "${AIHAUS}"
 
 # Count what was updated
 if [[ -d "${AIHAUS}/skills" ]]; then

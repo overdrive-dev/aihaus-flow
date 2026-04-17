@@ -101,11 +101,11 @@ PY
 
   # Post-merge defaultMode preserve — user intent wins on this single scalar.
   # Reads .aihaus/.calibration's permission_mode field and overwrites
-  # .permissions.defaultMode in $dst so /aih-calibrate choices survive
+  # .permissions.defaultMode in $dst so /aih-effort choices survive
   # /aih-update (which otherwise lets the template's defaultMode win via
   # overlay). Only touches .permissions.defaultMode; allow/deny/hook paths
   # still follow template-wins. Missing sidecar or empty value = no-op.
-  # Schema contract: pkg/.aihaus/skills/aih-calibrate/annexes/state-file.md.
+  # Schema contract: pkg/.aihaus/skills/aih-effort/annexes/state-file.md.
   local target_root
   target_root="$(dirname "$(dirname "$dst")")"
   local state_file="${target_root}/.aihaus/.calibration"
