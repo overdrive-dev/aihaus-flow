@@ -77,6 +77,8 @@ Present a single message containing:
 
 > **Execution autonomy** (enforced via `autonomy-guard.sh` Stop hook): NEVER emit `Checkpoint honesto`, `Opção sua`, `Qual prefere?`, `(a)/(b)/(c)`, numbered `1. →` menus, `Pausing to...`, `Three realistic forks`, `Realista: Nh+`, `retoma com /aih-...`. Pick safer default per `_shared/autonomy-protocol.md` TRUE blocker test (L15-31), log in RUN-MANIFEST, proceed silently. Hook blocks forbidden patterns.
 
+> **MANIFEST_PATH env injection (M011/S03 — F-04):** when `--plan` carries a plan with a RUN-MANIFEST in play, every Agent-tool spawn prompt in Phase 2 (`code-reviewer`, `verifier`, `code-fixer`, `integration-checker`) MUST begin with `MANIFEST_PATH="<abs>/.aihaus/features/[YYMMDD]-[slug]/RUN-MANIFEST.md"` so worktree-isolated subagents resolve Q-4 case 1 deterministically (statusLine + autonomy-guard paused short-circuit).
+
 ### Phase 2 Task Tracking
 Create all tasks as `pending` at the start of Phase 2 using TaskCreate:
 | Subject | activeForm |
