@@ -7,7 +7,7 @@ description: >
   summary files.
 tools: Read, Write, Edit, Bash, Grep, Glob
 # MCP tools (when available): mcp__context7__resolve-library-id, mcp__context7__get-library-docs
-model: opus
+model: sonnet
 effort: high
 color: yellow
 isolation: worktree

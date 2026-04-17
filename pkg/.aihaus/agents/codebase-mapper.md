@@ -5,7 +5,7 @@ description: >
   stack, architecture, conventions, testing, and concerns. Produces
   reference docs that other agents consume for planning and execution.
 tools: Read, Bash, Grep, Glob, Write
-model: opus
+model: sonnet
 effort: high
 color: cyan
 memory: project

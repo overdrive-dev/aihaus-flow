@@ -5,7 +5,7 @@ description: >
   Reads files, runs language/framework detection, and produces a structured
   findings document for /aih-init to populate project.md.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: sonnet
 effort: high
 color: cyan
 memory: project

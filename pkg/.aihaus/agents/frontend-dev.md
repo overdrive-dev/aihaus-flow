@@ -6,7 +6,7 @@ description: >
   styling, navigation, and state management. Works from UX specs and story
   acceptance criteria.
 tools: Read, Write, Edit, Grep, Glob, Bash
-model: opus
+model: sonnet
 effort: high
 color: yellow
 isolation: worktree

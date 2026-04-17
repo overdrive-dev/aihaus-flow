@@ -72,7 +72,7 @@ last_preset=<preset-or-custom>
 last_commit=$(git rev-parse --short HEAD)
 
 # Cohort-level — one per cohort TOUCHED by this invocation.
-# Preset runs emit :planner, :doer, :verifier rows (skip :adversarial).
+# Preset runs emit :planner, :doer, :verifier, :investigator rows (skip :adversarial).
 # Explicit --cohort :adversarial invocations emit that row.
 cohort.<name>.model=<m>
 cohort.<name>.effort=<e>
@@ -110,7 +110,7 @@ the filter is NOT applied — user intent is recorded.
 If a `schema=1` sidecar is present at the moment of writing:
 
 ```
-for each cohort in [:planner, :doer, :verifier, :adversarial]:
+for each cohort in [:planner, :doer, :verifier, :investigator, :adversarial]:
   members = cohorts.md lookup
   if all members share (model, effort) in current frontmatter:
     write cohort.<name>.model=<m> + cohort.<name>.effort=<e>

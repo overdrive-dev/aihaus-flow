@@ -5,7 +5,7 @@ description: >
   observe, refine. Maintains persistent debug sessions. Can diagnose
   autonomously or pause at checkpoints for human input.
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch
-model: opus
+model: sonnet
 effort: high
 color: coral
 memory: project

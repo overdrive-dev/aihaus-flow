@@ -5,7 +5,7 @@ description: >
   Checks file paths, commands, API endpoints, functions, and dependencies.
   Produces structured JSON verification results per document.
 tools: Read, Write, Bash, Grep, Glob
-model: sonnet
+model: haiku
 effort: high
 color: orange
 memory: project

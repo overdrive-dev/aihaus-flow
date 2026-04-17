@@ -6,12 +6,15 @@ permission_mode=bypassPermissions
 last_preset=cost-optimized
 last_commit=0defeed
 
-# Cohort-level -- :doer downgrade (B1); :verifier custom (B3 skip).
+# Cohort-level -- :doer downgrade (B1); :verifier custom (B3 skip);
+# :investigator at sonnet/high (M010.1 cohort default, added v0.15.0).
 # :planner preserved as baseline (no row). :adversarial INTENTIONALLY ABSENT (B6).
 cohort.doer.model=sonnet
 cohort.doer.effort=medium
 cohort.verifier.model=custom
 cohort.verifier.effort=custom
+cohort.investigator.model=sonnet
+cohort.investigator.effort=high
 
 # Per-agent override -- implementer gets opus despite cohort.doer.model=sonnet (B2).
 implementer.model=opus

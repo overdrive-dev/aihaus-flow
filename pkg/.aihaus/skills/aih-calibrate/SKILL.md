@@ -37,7 +37,7 @@ option menus, no delegated typing.
 | `/aih-calibrate --permission-mode <m>` | Edits `settings.local.json` only. |
 
 Preset → cohort tuple map: `annexes/presets.md`.
-Cohort membership (43 agents → 4 cohorts): `annexes/cohorts.md`.
+Cohort membership (43 agents → 5 cohorts): `annexes/cohorts.md`.
 Permission-mode tradeoff matrix + caveats: `annexes/permission-modes.md`.
 CLI surface detail + adversarial bypass + Phase-4 v2 write: `annexes/cli-surface.md`.
 
@@ -179,7 +179,7 @@ tuning without searching through git history.
 
 ## Annexes (referenced, not duplicated)
 - `annexes/presets.md` — preset → cohort tuple map + override blocks.
-- `annexes/cohorts.md` — 43 agents → 4 cohorts; single source of truth.
+- `annexes/cohorts.md` — 43 agents → 5 cohorts + per-cohort default model; single source of truth.
 - `annexes/cli-surface.md` — CLI validation, adversarial bypass, v2
   sidecar write + migration detail.
 - `annexes/permission-modes.md` — permission-mode tradeoff matrix +

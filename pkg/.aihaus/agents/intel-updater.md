@@ -6,7 +6,7 @@ description: >
   components, dependencies) that other agents query instead of doing
   expensive codebase exploration.
 tools: Read, Write, Bash, Glob, Grep
-model: opus
+model: sonnet
 effort: high
 color: cyan
 memory: project

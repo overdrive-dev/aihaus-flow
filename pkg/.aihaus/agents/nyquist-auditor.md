@@ -6,7 +6,7 @@ description: >
   reports results. Implementation files are read-only — only creates
   test files and updates validation maps.
 tools: Read, Write, Edit, Bash, Glob, Grep
-model: opus
+model: sonnet
 effort: high
 color: violet
 isolation: worktree
