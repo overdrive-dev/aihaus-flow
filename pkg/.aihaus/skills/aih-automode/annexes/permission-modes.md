@@ -2,8 +2,8 @@
 
 This annex backs the `/aih-automode --enable` path. The 4-caveat numbered
 list below is printed **verbatim** before the literal-word `auto` confirmation
-prompt — do not drift its wording. Moved here from `aih-calibrate/annexes/`
-via `git mv` in M012/S04; cross-references updated to `/aih-automode`.
+prompt — do not drift its wording. Extracted from the former skill in M012/S04
+per ADR-M012-A (skill-split decision).
 
 ## Mode Matrix
 
@@ -84,8 +84,8 @@ After `/aih-automode --enable` applies:
 
 - ADR-M008-B — Default permission mode stays `bypassPermissions`; auto is
   opt-in only. Binding.
-- ADR-M012-A — skill-split rationale; `/aih-automode` as the new owner
-  of permission-mode calibration (extracted from `/aih-calibrate`).
+- ADR-M012-A — skill-split rationale; `/aih-automode` as the dedicated
+  permission-mode skill (split from the former calibration skill in M012).
 - `_shared/autonomy-protocol.md` — one-question rule; no option menus
   even for destructive confirmations.
 - `annexes/caveat-block.md` — verbatim caveat block text + confirmation
