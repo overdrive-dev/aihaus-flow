@@ -51,9 +51,13 @@ During planning phase, lettered options in a table (Alternatives Considered, Ris
 
 ## No honest checkpoints / reality renegotiation
 
-Do not emit spontaneous "honest checkpoint", "reality check", "surface honest scope", "let me pause to reconsider" prose mid-execution. These are disguised checkpoints — they stop the flow without the user having asked for a stop.
+Do not emit spontaneous "honest checkpoint", "reality check", "surface honest scope", "let me pause to reconsider" prose mid-execution. These are disguised checkpoints — they stop the flow without the user having asked for a stop. The M005 regex fast-path + M011 haiku backstop (ADR-M011-A) detect the common phrasings and block them; novel phrasings are caught by the conservative haiku judge, which then surfaces a block via `autonomy-guard.sh`.
 
-When a TRUE blocker IS hit (per the TRUE blocker definition above), emit the state-gate block via `phase-advance.sh --to paused --reason "<text>"` instead of checkpoint prose. This records the stop in RUN-MANIFEST Metadata (`status: paused` + `pause_reason: <text>`); the stop-gate recognizes `status=paused` as a legitimate stop (ADR-M011-A). This works from worktree-isolated agents — the `--to paused` path bypasses the worktree refusal (F-02). Checkpoint prose remains forbidden.
+When a TRUE blocker IS hit (per the TRUE blocker definition above), emit the **state-gate block** via:
+
+    bash .aihaus/hooks/phase-advance.sh --to paused --reason "<reason>" --dir <milestone-dir>
+
+That single call writes `status: paused` + `pause_reason: <text>` into RUN-MANIFEST Metadata, which `autonomy-guard.sh` recognizes as a legitimate stop (short-circuits allow before the regex or haiku branches). This works from worktree-isolated agents — the `--to paused` path bypasses the worktree refusal (F-02). Checkpoint-style prose remains forbidden; `phase-advance --to paused` is the canonical escape. If the haiku backstop blocks you with a spurious checkpoint-like pattern, pick the safer default per §3-phase rule and proceed silently.
 
 Observed anti-patterns to avoid verbatim:
 - "Pausing to surface honest scope before continuing."
@@ -62,7 +66,7 @@ Observed anti-patterns to avoid verbatim:
 - "Three realistic forks: (1) ... (2) ... (3) ..."
 - "Suggested next steps: Option A ... Option B ... Option C ..."
 
-If the execution-phase estimate was wrong, continue executing and let the user decide when to stop via ESC. If the execution phase hits an unexpected condition, apply the TRUE blocker test above — only pause if it matches.
+If the execution-phase estimate was wrong, continue executing and let the user decide when to stop via ESC. If the execution phase hits an unexpected condition, apply the TRUE blocker test above — only pause if it matches (and when pausing, use the canonical `phase-advance --to paused` call above).
 
 ## No delegated typing
 

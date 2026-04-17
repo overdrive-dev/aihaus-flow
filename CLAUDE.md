@@ -116,6 +116,25 @@ aren't auto-replayed; re-run `/aih-calibrate --preset auto-mode-safe` to
 reapply. Full schema + migration guide:
 `pkg/.aihaus/skills/aih-calibrate/annexes/state-file.md`.
 
+## Autonomy Protocol (M011 state gate + statusLine)
+
+Since v0.16.0 / M011, `autonomy-guard.sh` runs a layered stop gate in
+deterministic order: (1) `Metadata.status: paused` → allow stop silent
+(S04 promotes `paused` to a first-class TRUE-blocker escape via
+`phase-advance.sh --to paused --reason "<text>"`); (2) 11-regex
+fast-path (M005, byte-identical); (3) haiku backstop via
+`claude --print --model haiku-4.5` with the conservative JSON-out
+prompt — 3s timeout, fail-safe allow on every ambiguous path. Opt-out
+via `AIHAUS_AUTONOMY_HAIKU=0`. Every decision lands in
+`.claude/audit/autonomy-gate.jsonl` (13-field schema, 11-value
+decision enum, rotated at 10 MB OR 10 000 lines atomically to
+`.old`). Per-message 5-min hash cache + global 30-s rate window in
+`.claude/audit/autonomy-gate.cache` dedupe retry-storms. Milestone
+visibility rides the same substrate: `statusline-milestone.sh`
+reads RUN-MANIFEST on every TUI turn (per-turn ~5ms) and renders
+`M0XX · SNN/total · phase:X · agents:N · sha:abc1234`. Both
+primitives are ADR-M011-A (state gate) + ADR-M011-B (statusLine).
+
 ## Installer Behavior
 
 The install scripts create symlinks (Unix) or directory junctions (Windows) from `.claude/{skills,agents,hooks}` to `.aihaus/{skills,agents,hooks}` in the target repo. The `--copy` flag forces file copies instead. Settings are merged (not overwritten) using `jq` or Python as a fallback.
