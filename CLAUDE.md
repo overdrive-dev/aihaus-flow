@@ -76,24 +76,39 @@ available via `/aih-calibrate --preset auto-mode-safe` but drops `Bash(*)`
 and ignores subagent `permissionMode` — the skill prints the full
 caveat matrix before applying.
 
-Effort presets:
-- `cost-optimized` — all opus agents at `effort: high` (Opus 4.6 default)
-- `balanced` — Rev. 2 distribution: 22 opus agents at `xhigh`, 6 max untouched (default after v0.13.0)
-- `quality-first` — adds `max` to coding/adversarial agents (use sparingly; docs warn "prone to overthinking")
-- `auto-mode-safe` — switches permission mode only; keeps `balanced` effort
+Effort presets (v0.14.0 — cohort-tuple shape):
+- `cost-optimized` — `:planner (opus, high)`, `:doer (sonnet, high)`, `:verifier (sonnet, medium)`, `:adversarial` preset-immune. Joint-axis downgrade on `:doer` + `:verifier`; binding planners preserved at `(opus, xhigh)` via overrides.
+- `balanced` — default post-v0.14.0. Ships functionally equivalent to v0.13.0 `cost-optimized` distribution (Q-2 representational change). Zero-diff reversibility on clean v0.13.0 install.
+- `quality-first` — `:planner (opus, max)`, `:doer (opus, max)`, `:verifier (opus, xhigh)`. Sonnet agents stay at `(sonnet, high)` via overrides ("sonnet falls back to high"); prone to overthinking, use sparingly.
+- `auto-mode-safe` — effort distribution identical to `balanced`; only the permission surface changes (D-5).
+
+Cohort aliases (v0.14.0 / M010 / ADR-M010-A). All 43 agents are grouped
+into 4 role cohorts — `:planner` (17 agents), `:doer` (11), `:verifier`
+(11), `:adversarial` (4). Each cohort carries a joint `(model, effort)`
+tuple, which is now the preset primitive (presets are lists of
+`(cohort, model, effort)` tuples; per-agent enumerations are retired).
+Invoke via `/aih-calibrate --cohort :<name> --model X --effort Y` (both
+axes required, D-2). Per-agent escape hatch via `/aih-calibrate --agent
+<name> --model X --effort Y` (ADR-M008-A amendment, D-3). The
+`:adversarial` cohort is preset-immune (extends ADR-M008-C's 2-agent
+list to 4: `plan-checker`, `contrarian`, `reviewer`, `code-reviewer`) —
+only an explicit `--cohort :adversarial` (with literal-word `adversarial`
+confirmation) or `--agent <member>` can mutate them. Full 43-agent
+mapping + prose rationale: `pkg/.aihaus/skills/aih-calibrate/annexes/cohorts.md`.
 
 Calibration survives `/aih-update` via a `.aihaus/.calibration` sidecar
 (M009 / ADR-M009-A). The file is user-owned, never committed, and
 mirrors the `.install-mode` precedent — it lives at `.aihaus/` root so
 the refresh loop (which only touches `skills/`, `agents/`, `hooks/`,
-`templates/`) leaves it alone. `update.sh` re-applies recorded `effort:`
-tiers to refreshed agents and `merge-settings.sh` preserves the recorded
+`templates/`) leaves it alone. Schema v2 (v0.14.0+) adds cohort-level
+fields `cohort.<name>.model` + `cohort.<name>.effort` additively;
+schema v1 sidecars keep restoring byte-identically via the legacy
+dispatch. `update.sh` re-applies recorded `(model, effort)` to refreshed
+agents and `merge-settings.sh` preserves the recorded
 `permissions.defaultMode` post-merge. If `last_preset=auto-mode-safe`,
 the update prints a loud `!!` warning — hook/worktree side effects
 aren't auto-replayed; re-run `/aih-calibrate --preset auto-mode-safe` to
-reapply. Pre-v0.13 hand-edited frontmatter: run `/aih-calibrate --inspect`
-before the first post-v0.13 update to snapshot current state, then
-re-apply per-agent after the update. Full schema + migration guide:
+reapply. Full schema + migration guide:
 `pkg/.aihaus/skills/aih-calibrate/annexes/state-file.md`.
 
 ## Installer Behavior

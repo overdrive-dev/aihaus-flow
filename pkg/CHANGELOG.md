@@ -5,6 +5,18 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-04-16
+
+- Cohort aliases shipped — `:planner` (17 agents), `:doer` (11), `:verifier` (11), `:adversarial` (4). Full mapping at `pkg/.aihaus/skills/aih-calibrate/annexes/cohorts.md` (Q-1 single source of truth)
+- Joint `(model, effort)` tuple is the new calibration primitive — retires per-agent enumerations inside `presets.md`. 4 presets rewritten as cohort-tuple maps
+- New CLI flags: `--cohort :<name> --model <m> --effort <e>` (both axes required); `--agent <name> --model <m> --effort <e>` (dual-axis escape hatch)
+- `:adversarial` cohort is preset-immune — extends ADR-M008-C's 2-agent list (`plan-checker`, `contrarian`) to 4 agents (`reviewer`, `code-reviewer` added). Explicit `--cohort :adversarial` requires literal-word `adversarial` confirmation
+- Sidecar schema v1 → v2 additive — new `cohort.<name>.model` + `cohort.<name>.effort` fields; per-agent `<agent>.model=<m>` override grammar. v1 sidecars keep restoring byte-identically via legacy dispatch
+- ADR-M008-A amendment (M010) — scoped allowance for cohort-driven + explicit per-agent dual-axis `model:` edits. ADR-M010-A formalizes cohort taxonomy + preset-map shape
+- Phase-1 distribution report now renders as GFM pipe table (5 columns: `Agent | Model | Effort | Cohort | PermissionMode`) — fixes box-drawing fragment clipping on cmd.exe / split panes / copy-back (independent S08 bugfix)
+- Smoke-test suite extends to 28 checks — Check 27 gets A5 (adversarial explicit-entry honor); new Check 28 (v2 cohort round-trip, 6 assertions B1-B6)
+- v0.14.0 ships functionally equivalent to v0.13.0 `cost-optimized` distribution (Q-2) — representational change; users opt into new vocabulary via `/aih-calibrate --preset <name>`
+
 ## [0.8.0] - 2026-04-14
 
 - Cursor coexistence layer (preview) at `cursor-preview/` — documentation-only, no code under `pkg/`
