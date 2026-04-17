@@ -99,11 +99,12 @@ if ($Update) {
         Write-Host "  refreshed: .aihaus\$name"
     }
 
-    # Restore per-agent calibration from .aihaus\.calibration (schema v1).
-    # Mirror of restore_calibration() in update.sh -- pinned call site between
-    # agents refresh and .claude\ re-link so both layers pick up restored
-    # frontmatter. Schema contract:
-    # pkg\.aihaus\skills\aih-calibrate\annexes\state-file.md
+    # Restore per-agent calibration from .aihaus\.calibration (schema v1
+    # or v2). Mirror of restore_calibration() in lib/restore-calibration.sh
+    # -- pinned call site between agents refresh and .claude\ re-link so
+    # both layers pick up restored frontmatter.
+    # Schema contract: <aihaus_root>\skills\aih-calibrate\annexes\state-file.md
+    # Cohort membership (v2): <aihaus_root>\skills\aih-calibrate\annexes\cohorts.md
     $stateFile = Join-Path $TargetAihaus '.calibration'
     if (Test-Path $stateFile) {
         $schemaLine = (Select-String -Path $stateFile -Pattern '^schema=' | Select-Object -First 1)
@@ -112,42 +113,163 @@ if ($Update) {
             $schema = ($schemaLine.Line -split '=', 2)[1]
             $schema = ($schema -replace "`r", '').Trim()
         }
-        if ($schema -ne '1') {
+        if ($schema -ne '1' -and $schema -ne '2') {
             Write-Host "  warn: unknown .calibration schema='$schema' -- skipping restore"
         } else {
             $restored = 0
             $skipped = 0
             $lastPreset = ''
-            foreach ($line in (Get-Content -LiteralPath $stateFile)) {
-                if ([string]::IsNullOrWhiteSpace($line)) { continue }
-                if ($line -match '^\s*#') { continue }
-                if ($line -notmatch '=') { continue }
-                $parts = $line -split '=', 2
-                $key = ($parts[0] -replace "`r", '').Trim()
-                $value = ($parts[1] -replace "`r", '').Trim()
-                if ($key -eq 'schema') { continue }
-                if ($key -eq 'permission_mode') { continue }
-                if ($key -eq 'last_preset') { $lastPreset = $value; continue }
-                if ($key -eq 'last_commit') { continue }
-                if ([string]::IsNullOrWhiteSpace($value)) { continue }
 
-                $agentFile = Join-Path (Join-Path $TargetAihaus 'agents') ("$key.md")
-                if (Test-Path $agentFile) {
-                    $content = Get-Content -LiteralPath $agentFile
-                    $newContent = $content -replace '^effort: .*', "effort: $value"
-                    # UTF8 no-BOM, no trailing newline -- matches sed -i.bak byte layout.
-                    Set-Content -LiteralPath $agentFile -Value $newContent -Encoding UTF8 -NoNewline
-                    $restored++
-                } else {
-                    $skipped++
-                    Write-Host "  warn: .calibration references missing agent '$key' -- skipped"
+            # Read all sidecar lines once -- both schema passes use them.
+            $sidecarLines = Get-Content -LiteralPath $stateFile
+
+            # Collect last_preset for the auto-mode-safe warning block.
+            foreach ($line in $sidecarLines) {
+                if ($line -match '^\s*last_preset\s*=') {
+                    $lastPreset = (($line -split '=', 2)[1] -replace "`r", '').Trim()
+                    break
                 }
             }
-            if ($skipped -gt 0) {
-                Write-Host ("  restored {0} per-agent effort override(s) from .aihaus\.calibration ({1} skipped -- missing agents)" -f $restored, $skipped)
+
+            $agentsDir = Join-Path $TargetAihaus 'agents'
+
+            if ($schema -eq '1') {
+                # ---- Schema v1 legacy effort-only loop (byte-identical to v0.13.0) ----
+                foreach ($line in $sidecarLines) {
+                    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                    if ($line -match '^\s*#') { continue }
+                    if ($line -notmatch '=') { continue }
+                    $parts = $line -split '=', 2
+                    $key = ($parts[0] -replace "`r", '').Trim()
+                    $value = ($parts[1] -replace "`r", '').Trim()
+                    if ($key -eq 'schema') { continue }
+                    if ($key -eq 'permission_mode') { continue }
+                    if ($key -eq 'last_preset') { continue }
+                    if ($key -eq 'last_commit') { continue }
+                    if ([string]::IsNullOrWhiteSpace($value)) { continue }
+
+                    $agentFile = Join-Path $agentsDir ("$key.md")
+                    if (Test-Path $agentFile) {
+                        $content = Get-Content -LiteralPath $agentFile
+                        $newContent = $content -replace '^effort: .*', "effort: $value"
+                        # UTF8 no-BOM, no trailing newline -- matches sed -i.bak byte layout.
+                        Set-Content -LiteralPath $agentFile -Value $newContent -Encoding UTF8 -NoNewline
+                        $restored++
+                    } else {
+                        $skipped++
+                        Write-Host "  warn: .calibration references missing agent '$key' -- skipped"
+                    }
+                }
+                if ($skipped -gt 0) {
+                    Write-Host ("  restored {0} per-agent effort override(s) from .aihaus\.calibration ({1} skipped -- missing agents)" -f $restored, $skipped)
+                } else {
+                    Write-Host ("  restored {0} per-agent effort override(s) from .aihaus\.calibration" -f $restored)
+                }
             } else {
-                Write-Host ("  restored {0} per-agent effort override(s) from .aihaus\.calibration" -f $restored)
+                # ---- Schema v2 cohort-level apply + per-agent overrides ----
+                $cohortsMd = Join-Path $TargetAihaus 'skills\aih-calibrate\annexes\cohorts.md'
+                $cohortMembers = @{ planner = @(); doer = @(); verifier = @(); adversarial = @() }
+                if (Test-Path $cohortsMd) {
+                    foreach ($cline in (Get-Content -LiteralPath $cohortsMd)) {
+                        if ($cline -match '^\|\s*\d+\s*\|\s*(?<agent>\S+)\s*\|\s*(?<cohort>:\w+)') {
+                            $cname = $Matches.cohort.Substring(1)
+                            if ($cohortMembers.ContainsKey($cname)) {
+                                $cohortMembers[$cname] += $Matches.agent
+                            }
+                        }
+                    }
+                } else {
+                    Write-Host "  warn: cohorts.md missing at $cohortsMd -- skipping cohort-level restore; per-agent overrides still applied"
+                }
+
+                # Pass 1 -- cohort-level apply. custom values defer to per-agent.
+                foreach ($line in $sidecarLines) {
+                    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                    if ($line -match '^\s*#') { continue }
+                    if ($line -notmatch '=') { continue }
+                    $parts = $line -split '=', 2
+                    $key = ($parts[0] -replace "`r", '').Trim()
+                    $value = ($parts[1] -replace "`r", '').Trim()
+                    if ($key -notmatch '^cohort\.(planner|doer|verifier|adversarial)\.(model|effort)$') { continue }
+                    if ([string]::IsNullOrWhiteSpace($value)) { continue }
+                    if ($value -eq 'custom') { continue }
+                    $cohortName = ($key -split '\.')[1]
+                    $field = ($key -split '\.')[2]
+                    $members = $cohortMembers[$cohortName]
+                    foreach ($member in $members) {
+                        $agentFile = Join-Path $agentsDir ("$member.md")
+                        if (Test-Path $agentFile) {
+                            $content = Get-Content -LiteralPath $agentFile
+                            if ($field -eq 'model') {
+                                $newContent = $content -replace '^model: .*', "model: $value"
+                            } else {
+                                $newContent = $content -replace '^effort: .*', "effort: $value"
+                            }
+                            Set-Content -LiteralPath $agentFile -Value $newContent -Encoding UTF8 -NoNewline
+                            $restored++
+                        } else {
+                            $skipped++
+                            Write-Host "  warn: .calibration cohort '$cohortName' references missing agent '$member' -- skipped"
+                        }
+                    }
+                }
+
+                # Pass 2 -- per-agent overrides (win over cohort via apply order).
+                foreach ($line in $sidecarLines) {
+                    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                    if ($line -match '^\s*#') { continue }
+                    if ($line -notmatch '=') { continue }
+                    $parts = $line -split '=', 2
+                    $key = ($parts[0] -replace "`r", '').Trim()
+                    $value = ($parts[1] -replace "`r", '').Trim()
+                    if ($key -eq 'schema') { continue }
+                    if ($key -eq 'permission_mode') { continue }
+                    if ($key -eq 'last_preset') { continue }
+                    if ($key -eq 'last_commit') { continue }
+                    if ([string]::IsNullOrWhiteSpace($value)) { continue }
+
+                    # Cohort keys handled in Pass 1; warn on unknown cohort.
+                    if ($key -match '^cohort\.') {
+                        if ($key -notmatch '^cohort\.(planner|doer|verifier|adversarial)\.(model|effort)$') {
+                            $bad = ($key -replace '^cohort\.', '') -replace '\..*$', ''
+                            Write-Host "  warn: .calibration references unknown cohort '$bad' -- skipped"
+                            $skipped++
+                        }
+                        continue
+                    }
+
+                    # Dotted per-agent model vs. v1-compat effort entry.
+                    if ($key -match '\.model$') {
+                        $agent = $key -replace '\.model$', ''
+                        $field = 'model'
+                    } else {
+                        $agent = $key
+                        $field = 'effort'
+                    }
+
+                    $agentFile = Join-Path $agentsDir ("$agent.md")
+                    if (Test-Path $agentFile) {
+                        $content = Get-Content -LiteralPath $agentFile
+                        if ($field -eq 'model') {
+                            $newContent = $content -replace '^model: .*', "model: $value"
+                        } else {
+                            $newContent = $content -replace '^effort: .*', "effort: $value"
+                        }
+                        Set-Content -LiteralPath $agentFile -Value $newContent -Encoding UTF8 -NoNewline
+                        $restored++
+                    } else {
+                        $skipped++
+                        Write-Host "  warn: .calibration references missing agent '$agent' -- skipped"
+                    }
+                }
+
+                if ($skipped -gt 0) {
+                    Write-Host ("  restored {0} calibration entry(ies) from .aihaus\.calibration ({1} skipped -- missing agents/cohorts)" -f $restored, $skipped)
+                } else {
+                    Write-Host ("  restored {0} calibration entry(ies) from .aihaus\.calibration" -f $restored)
+                }
             }
+
             if ($lastPreset -eq 'auto-mode-safe') {
                 Write-Host ""
                 Write-Host "  !!  Your last preset was auto-mode-safe, but side effects" -ForegroundColor Yellow
@@ -159,7 +281,6 @@ if ($Update) {
                 # Dedupe flag -- post-merge defaultMode-preserve block
                 # (install.ps1:292ish) reads the same sidecar and would emit
                 # this identical !! block a second time on -Update runs.
-                # Flag skip there.
                 $script:AutoModeSafeWarningEmitted = $true
             }
         }
@@ -278,7 +399,7 @@ if (-not (Test-Path $SettingsSrc)) {
             elseif ($pmKey -eq 'permission_mode' -and -not $pmUserMode) { $pmUserMode = $pmVal }
             elseif ($pmKey -eq 'last_preset' -and -not $pmLastPreset) { $pmLastPreset = $pmVal }
         }
-        if ($pmSchema -eq '1' -and -not [string]::IsNullOrWhiteSpace($pmUserMode)) {
+        if (($pmSchema -eq '1' -or $pmSchema -eq '2') -and -not [string]::IsNullOrWhiteSpace($pmUserMode)) {
             try {
                 $pmJson = Get-Content -LiteralPath $SettingsOut -Raw | ConvertFrom-Json
                 if (-not ($pmJson.PSObject.Properties.Name -contains 'permissions')) {
