@@ -32,10 +32,12 @@ detect_fractional_sleep
 
 TO=""
 DIR=""
+REASON=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --to) TO="$2"; shift 2 ;;
     --dir) DIR="$2"; shift 2 ;;
+    --reason) REASON="$2"; shift 2 ;;
     *) echo "phase-advance.sh: unknown arg $1" >&2; exit 2 ;;
   esac
 done
@@ -49,12 +51,36 @@ case "$TO" in
   *) echo "phase-advance.sh: invalid phase $TO" >&2; exit 2 ;;
 esac
 
-# --- worktree refusal ---
-if command -v git >/dev/null 2>&1; then
-  SUPER="$(git rev-parse --show-superproject-working-tree 2>/dev/null || true)"
-  if [ -n "$SUPER" ]; then
-    echo "phase-advance.sh: refused — inside a git worktree." >&2
-    exit 3
+# --- --reason required when --to paused (M011/S04) ---
+if [ "$TO" = "paused" ] && [ -z "$REASON" ]; then
+  echo "phase-advance.sh: --reason required when --to paused" >&2
+  exit 2
+fi
+
+# --- sanitize REASON payload (trim, collapse newlines, quote→apostrophe, truncate@200) ---
+if [ -n "$REASON" ]; then
+  REASON="$(printf '%s' "$REASON" \
+    | tr '\n\r\t' '   ' \
+    | sed -e 's/^[[:space:]]\+//' -e 's/[[:space:]]\+$//' -e 's/  */ /g' -e 's/"/'"'"'/g')"
+  if [ "${#REASON}" -gt 200 ]; then
+    REASON="${REASON:0:200}…"
+  fi
+fi
+
+# --- worktree refusal (M011/S04 F-02 bypass for --to paused) ---
+# paused IS the escape hatch worktree-isolated agents must be able to emit
+# when hitting a TRUE blocker — the paused write targets the absolute
+# $MANIFEST_PATH in the main repo, not the worktree tree. Bypass applies
+# ONLY to paused; gathering|planning|ready|running|complete keep exit 3.
+if [ "$TO" = "paused" ]; then
+  : # skip worktree refusal — paused is the escape hatch (F-02 / ADR-M011-A)
+else
+  if command -v git >/dev/null 2>&1; then
+    SUPER="$(git rev-parse --show-superproject-working-tree 2>/dev/null || true)"
+    if [ -n "$SUPER" ]; then
+      echo "phase-advance.sh: refused — inside a git worktree." >&2
+      exit 3
+    fi
   fi
 fi
 
@@ -90,10 +116,15 @@ if [ -f "$STATUS_FILE" ]; then
 fi
 
 # --- refuse if Invoke stack non-empty in sibling RUN-MANIFEST.md ---
+# (M011/S04: relaxed for --to paused — pausing mid-invocation is exactly the
+# legitimate case; TRUE blockers surface inside an active invocation.)
 MANIFEST="$DIR/RUN-MANIFEST.md"
+STACK_ROWS=0
 if [ -f "$MANIFEST" ]; then
   STACK_ROWS="$(awk '/^## Invoke stack$/ {on=1; next} /^## / {on=0} on && /[^[:space:]]/' "$MANIFEST" | wc -l | tr -d ' ')"
-  if [ "$STACK_ROWS" -gt 0 ]; then
+  if [ "$TO" = "paused" ]; then
+    : # paused allowed mid-execution; audit note emitted below
+  elif [ "$STACK_ROWS" -gt 0 ]; then
     echo "phase-advance.sh: refused — Invoke stack non-empty ($STACK_ROWS rows). Complete active invocation first." >&2
     log_audit "refused-invoke-active" "$FROM_PHASE"
     exit 10
@@ -143,6 +174,17 @@ for secondary in "$DIR/PLAN.md" "$DIR/CONTEXT.md"; do
     { print }
   ' "$secondary" > "$TMP2" && mv -f "$TMP2" "$secondary" 2>/dev/null || true
 done
+
+# --- M011/S04: paused writes Metadata.status + Metadata.pause_reason + progress log ---
+if [ "$TO" = "paused" ] && [ -f "$MANIFEST" ]; then
+  # update_metadata_kv and append_progress_log both operate on $MANIFEST_PATH.
+  MANIFEST_PATH="$MANIFEST"
+  export MANIFEST_PATH
+  update_metadata_kv "status" "paused"
+  update_metadata_kv "pause_reason" "$REASON"
+  update_metadata_kv "last_updated" "$(ts_iso)"
+  append_progress_log "paused: $REASON (active-stack-rows=$STACK_ROWS)"
+fi
 
 log_audit "ok" "$FROM_PHASE" "$FALLBACK_USED" "$BACKUP_CREATED"
 echo "phase-advance.sh: $FROM_PHASE → $TO (dir=$DIR)"

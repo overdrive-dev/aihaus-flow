@@ -53,6 +53,8 @@ During planning phase, lettered options in a table (Alternatives Considered, Ris
 
 Do not emit spontaneous "honest checkpoint", "reality check", "surface honest scope", "let me pause to reconsider" prose mid-execution. These are disguised checkpoints — they stop the flow without the user having asked for a stop.
 
+When a TRUE blocker IS hit (per the TRUE blocker definition above), emit the state-gate block via `phase-advance.sh --to paused --reason "<text>"` instead of checkpoint prose. This records the stop in RUN-MANIFEST Metadata (`status: paused` + `pause_reason: <text>`); the stop-gate recognizes `status=paused` as a legitimate stop (ADR-M011-A). This works from worktree-isolated agents — the `--to paused` path bypasses the worktree refusal (F-02). Checkpoint prose remains forbidden.
+
 Observed anti-patterns to avoid verbatim:
 - "Pausing to surface honest scope before continuing."
 - "Wave 1 completa. Stop aqui pra alinhar escopo de Wave 2."
