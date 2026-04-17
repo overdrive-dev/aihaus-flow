@@ -356,12 +356,12 @@ EOF
 # Invoke haiku with 3-s timeout. Capture stdout; ignore stderr.
 HAIKU_START_MS="$(date +%s%3N 2>/dev/null || echo 0)"
 if command -v timeout >/dev/null 2>&1; then
-  HAIKU_OUT="$(printf '%s' "$PROMPT_BODY" | timeout 3s claude --print --model haiku-4.5 2>/dev/null || true)"
-  HAIKU_RC=$?
+  HAIKU_OUT="$(printf '%s' "$PROMPT_BODY" | timeout 3s claude --print --model haiku-4.5 2>/dev/null)"
+  HAIKU_RC=${PIPESTATUS[1]:-$?}
 else
   # No timeout command → best-effort invocation (rare; git-bash ships it).
-  HAIKU_OUT="$(printf '%s' "$PROMPT_BODY" | claude --print --model haiku-4.5 2>/dev/null || true)"
-  HAIKU_RC=$?
+  HAIKU_OUT="$(printf '%s' "$PROMPT_BODY" | claude --print --model haiku-4.5 2>/dev/null)"
+  HAIKU_RC=${PIPESTATUS[1]:-$?}
 fi
 HAIKU_END_MS="$(date +%s%3N 2>/dev/null || echo 0)"
 GATE_HAIKU_LATENCY_MS=$((HAIKU_END_MS - HAIKU_START_MS))

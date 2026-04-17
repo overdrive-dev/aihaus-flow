@@ -1,0 +1,1 @@
+Checkpoint honesto: I hit an auth blocker. This message contains a forbidden regex on purpose — the paused short-circuit must precede regex scan.

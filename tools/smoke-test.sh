@@ -959,6 +959,212 @@ EOF
   fi
 }
 
+# ---- Check 29: autonomy-gate fixture suite (6 sub-assertions, M011/S08) ----
+# Exercises the full stop-gate decision space for autonomy-guard.sh:
+#
+#   A1 regex-path hit               — M005 canonical pattern still blocks
+#   A2 regex-miss → haiku-continue  — stubbed claude returns continue
+#   A3 regex-miss → haiku-block     — stubbed claude returns block
+#   A4 paused-allow                 — status=paused short-circuits regex
+#   A5 timeout-fallback-allow       — 3-s haiku timeout → fail-safe allow
+#   A6 no-cli-skip                  — claude absent → regex-only + audit
+#
+# Mirrors the Check 27/28 calibration-sidecar pattern: single function with
+# a problems[] accumulator; each sub-assertion stages a fresh tmpdir and
+# isolates the audit jsonl via $AIHAUS_AUDIT_GATE_LOG. Runs all 6 regardless
+# of individual failures; reports all problems at once; does NOT invoke the
+# real claude CLI (A2/A3 stub canned JSON; A5 stubs a sleeper; A6 narrows
+# PATH to exclude claude).
+check_autonomy_gate_fixtures() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: stop-gate fixture suite (6 sub-assertions)"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/autonomy-guard.sh"
+  local fixtures="${SCRIPT_DIR}/fixtures/autonomy-gate"
+  local out_root="${SCRIPT_DIR}/.out"
+  local problems=()
+
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "hook not found: $hook"
+    return
+  fi
+  for a in A1-regex-hit A2-haiku-continue A3-haiku-block A4-paused-allow A5-timeout-allow A6-no-cli-skip; do
+    if [[ ! -d "$fixtures/$a" ]]; then
+      problems+=("missing fixture dir: $a")
+    fi
+  done
+  if [[ ${#problems[@]} -gt 0 ]]; then
+    _fail "$label" "${problems[@]}"
+    return
+  fi
+  mkdir -p "$out_root" 2>/dev/null || true
+
+  # ---- A1 regex-path hit ---------------------------------------------------
+  local tmp_a1="$out_root/gate-test-$$-A1"
+  rm -rf "$tmp_a1"; mkdir -p "$tmp_a1"
+  # Narrow PATH so A1 also proves regex fast-path survives without claude.
+  local narrow_path; narrow_path="$(dirname "$(command -v bash)"):/usr/bin:/bin"
+  local out_a1
+  out_a1="$(PATH="$narrow_path" \
+    AIHAUS_EXEC_PHASE=1 \
+    MANIFEST_PATH="$fixtures/A1-regex-hit/manifest.md" \
+    AIHAUS_AUDIT_GATE_LOG="$tmp_a1/gate.jsonl" \
+    AIHAUS_AUDIT_GATE_CACHE="$tmp_a1/gate.cache" \
+    AIHAUS_AUDIT_LOG="$tmp_a1/violations.jsonl" \
+    bash "$hook" < "$fixtures/A1-regex-hit/message.txt" 2>/dev/null || true)"
+  if ! printf '%s' "$out_a1" | grep -q '"decision":"block"'; then
+    problems+=("A1: expected block JSON; got: ${out_a1:0:120}")
+  fi
+  if [[ -f "$tmp_a1/gate.jsonl" ]]; then
+    if ! grep -q '"decision":"regex-match"' "$tmp_a1/gate.jsonl"; then
+      problems+=("A1: audit missing decision=regex-match")
+    fi
+  else
+    problems+=("A1: audit jsonl not written")
+  fi
+
+  # ---- A2 regex-miss → haiku-continue -------------------------------------
+  local tmp_a2="$out_root/gate-test-$$-A2"
+  rm -rf "$tmp_a2"; mkdir -p "$tmp_a2/stub-bin"
+  cat > "$tmp_a2/stub-bin/claude" <<'EOF'
+#!/usr/bin/env bash
+echo '{"decision":"continue","reason":"mid-execution progress update"}'
+EOF
+  chmod +x "$tmp_a2/stub-bin/claude"
+  local narrow_a2="$tmp_a2/stub-bin:$(dirname "$(command -v bash)"):/usr/bin:/bin"
+  local out_a2 rc_a2
+  out_a2="$(PATH="$narrow_a2" \
+    AIHAUS_EXEC_PHASE=1 \
+    MANIFEST_PATH="$fixtures/A2-haiku-continue/manifest.md" \
+    AIHAUS_AUDIT_GATE_LOG="$tmp_a2/gate.jsonl" \
+    AIHAUS_AUDIT_GATE_CACHE="$tmp_a2/gate.cache" \
+    AIHAUS_AUDIT_LOG="$tmp_a2/violations.jsonl" \
+    bash "$hook" < "$fixtures/A2-haiku-continue/message.txt" 2>/dev/null || true)"
+  rc_a2=$?
+  if [[ -n "$out_a2" ]]; then
+    problems+=("A2: expected empty stdout; got: ${out_a2:0:120}")
+  fi
+  if [[ -f "$tmp_a2/gate.jsonl" ]]; then
+    if ! grep -q '"decision":"haiku-continue"' "$tmp_a2/gate.jsonl"; then
+      problems+=("A2: audit missing decision=haiku-continue")
+    fi
+  else
+    problems+=("A2: audit jsonl not written")
+  fi
+
+  # ---- A3 regex-miss → haiku-block ----------------------------------------
+  local tmp_a3="$out_root/gate-test-$$-A3"
+  rm -rf "$tmp_a3"; mkdir -p "$tmp_a3/stub-bin"
+  cat > "$tmp_a3/stub-bin/claude" <<'EOF'
+#!/usr/bin/env bash
+echo '{"decision":"block","reason":"state summary without TRUE blocker"}'
+EOF
+  chmod +x "$tmp_a3/stub-bin/claude"
+  local narrow_a3="$tmp_a3/stub-bin:$(dirname "$(command -v bash)"):/usr/bin:/bin"
+  local out_a3
+  out_a3="$(PATH="$narrow_a3" \
+    AIHAUS_EXEC_PHASE=1 \
+    MANIFEST_PATH="$fixtures/A3-haiku-block/manifest.md" \
+    AIHAUS_AUDIT_GATE_LOG="$tmp_a3/gate.jsonl" \
+    AIHAUS_AUDIT_GATE_CACHE="$tmp_a3/gate.cache" \
+    AIHAUS_AUDIT_LOG="$tmp_a3/violations.jsonl" \
+    bash "$hook" < "$fixtures/A3-haiku-block/message.txt" 2>/dev/null || true)"
+  if ! printf '%s' "$out_a3" | grep -q '"decision":"block"'; then
+    problems+=("A3: expected block JSON; got: ${out_a3:0:120}")
+  fi
+  if [[ -f "$tmp_a3/gate.jsonl" ]]; then
+    if ! grep -q '"decision":"haiku-block"' "$tmp_a3/gate.jsonl"; then
+      problems+=("A3: audit missing decision=haiku-block")
+    fi
+  else
+    problems+=("A3: audit jsonl not written")
+  fi
+
+  # ---- A4 paused-allow -----------------------------------------------------
+  local tmp_a4="$out_root/gate-test-$$-A4"
+  rm -rf "$tmp_a4"; mkdir -p "$tmp_a4"
+  local out_a4
+  out_a4="$(PATH="$narrow_path" \
+    AIHAUS_EXEC_PHASE=1 \
+    MANIFEST_PATH="$fixtures/A4-paused-allow/manifest.md" \
+    AIHAUS_AUDIT_GATE_LOG="$tmp_a4/gate.jsonl" \
+    AIHAUS_AUDIT_GATE_CACHE="$tmp_a4/gate.cache" \
+    AIHAUS_AUDIT_LOG="$tmp_a4/violations.jsonl" \
+    bash "$hook" < "$fixtures/A4-paused-allow/message.txt" 2>/dev/null || true)"
+  if [[ -n "$out_a4" ]]; then
+    problems+=("A4: expected empty stdout (paused short-circuit); got: ${out_a4:0:120}")
+  fi
+  if [[ -f "$tmp_a4/gate.jsonl" ]]; then
+    if ! grep -q '"decision":"paused-allow"' "$tmp_a4/gate.jsonl"; then
+      problems+=("A4: audit missing decision=paused-allow")
+    fi
+  else
+    problems+=("A4: audit jsonl not written")
+  fi
+
+  # ---- A5 timeout-fallback-allow ------------------------------------------
+  # Stub `claude` as the sleep-5 fixture; hook wraps in `timeout 3s`.
+  local tmp_a5="$out_root/gate-test-$$-A5"
+  rm -rf "$tmp_a5"; mkdir -p "$tmp_a5/stub-bin"
+  cp "$fixtures/A5-timeout-allow/claude-stub-sleep.sh" "$tmp_a5/stub-bin/claude"
+  chmod +x "$tmp_a5/stub-bin/claude"
+  local narrow_a5="$tmp_a5/stub-bin:$(dirname "$(command -v bash)"):/usr/bin:/bin"
+  # Only run if `timeout` is available (needed for the 3s bound).
+  if command -v timeout >/dev/null 2>&1; then
+    local out_a5
+    out_a5="$(PATH="$narrow_a5" \
+      AIHAUS_EXEC_PHASE=1 \
+      MANIFEST_PATH="$fixtures/A5-timeout-allow/manifest.md" \
+      AIHAUS_AUDIT_GATE_LOG="$tmp_a5/gate.jsonl" \
+      AIHAUS_AUDIT_GATE_CACHE="$tmp_a5/gate.cache" \
+      AIHAUS_AUDIT_LOG="$tmp_a5/violations.jsonl" \
+      bash "$hook" < "$fixtures/A5-timeout-allow/message.txt" 2>/dev/null || true)"
+    if [[ -n "$out_a5" ]]; then
+      problems+=("A5: expected empty stdout on timeout; got: ${out_a5:0:120}")
+    fi
+    if [[ -f "$tmp_a5/gate.jsonl" ]]; then
+      if ! grep -q '"decision":"timeout-fallback-allow"' "$tmp_a5/gate.jsonl"; then
+        problems+=("A5: audit missing decision=timeout-fallback-allow")
+      fi
+    else
+      problems+=("A5: audit jsonl not written")
+    fi
+  fi
+
+  # ---- A6 no-cli-skip ------------------------------------------------------
+  # Strip `claude` from PATH entirely; hook must emit no-cli-skip.
+  local tmp_a6="$out_root/gate-test-$$-A6"
+  rm -rf "$tmp_a6"; mkdir -p "$tmp_a6/empty-bin"
+  # Only keep bash + core tools; NO claude.
+  local narrow_a6="$(dirname "$(command -v bash)"):/usr/bin:/bin"
+  local out_a6
+  out_a6="$(PATH="$narrow_a6" \
+    AIHAUS_EXEC_PHASE=1 \
+    MANIFEST_PATH="$fixtures/A6-no-cli-skip/manifest.md" \
+    AIHAUS_AUDIT_GATE_LOG="$tmp_a6/gate.jsonl" \
+    AIHAUS_AUDIT_GATE_CACHE="$tmp_a6/gate.cache" \
+    AIHAUS_AUDIT_LOG="$tmp_a6/violations.jsonl" \
+    bash "$hook" < "$fixtures/A6-no-cli-skip/message.txt" 2>/dev/null || true)"
+  if [[ -n "$out_a6" ]]; then
+    problems+=("A6: expected empty stdout when claude absent; got: ${out_a6:0:120}")
+  fi
+  if [[ -f "$tmp_a6/gate.jsonl" ]]; then
+    if ! grep -q '"decision":"no-cli-skip"' "$tmp_a6/gate.jsonl"; then
+      problems+=("A6: audit missing decision=no-cli-skip")
+    fi
+  else
+    problems+=("A6: audit jsonl not written")
+  fi
+
+  # ---- cleanup (best-effort) ----------------------------------------------
+  rm -rf "$tmp_a1" "$tmp_a2" "$tmp_a3" "$tmp_a4" "$tmp_a5" "$tmp_a6" 2>/dev/null || true
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -991,6 +1197,7 @@ check_autonomy_guard_detects_violations
 check_excluded_skills_keep_flag
 check_calibration_sidecar
 check_calibration_sidecar_v2
+check_autonomy_gate_fixtures
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
