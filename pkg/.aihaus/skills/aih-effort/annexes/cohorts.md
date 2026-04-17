@@ -1,193 +1,329 @@
-# Cohort Taxonomy — 43 Agents → 5 Role Cohorts
+# Cohort Taxonomy — 43 Agents → 6 Uniform Cohorts
 
-This annex is the single source of truth for cohort membership consumed by
-`/aih-calibrate` (Phase-2 preset filter, Phase-4 sidecar write) and by the
-restore path in `pkg/scripts/lib/restore-calibration.sh` + `install.ps1`.
-Membership lives ONLY here — no `cohort:` frontmatter field per agent
-(Q-1 resolution — keeps the sync surface minimal and avoids 43 smoke-test
-assertions). See ADR-M010-A (+ M010.1 amendment) for the formal cohort
-semantics, and ADR-M008-C for the preset-immunity contract the
-`:adversarial` cohort formalizes.
+This annex is the single source of truth for cohort membership, consumed by
+`/aih-effort` (preset filter, sidecar write) and by the restore path in
+`pkg/scripts/lib/restore-effort.sh` + `install.ps1`. Membership lives ONLY
+here — no `cohort:` frontmatter field per agent (keeps the sync surface
+minimal). See **ADR-M012-A** in `.aihaus/decisions.md` for the formal
+cohort semantics; see `annexes/presets.md` for the 3-preset effort matrix.
 
-A **cohort** is a joint `(model, effort)` tier aligned to role. Every
-cohort declares a **default model** (the tier most members should run on
-given each model's documented strengths per Anthropic's models overview);
-individual members may carry an override set in their frontmatter +
-recorded as an override line in `annexes/presets.md`. The 5 cohorts below
-cover all 43 agents. Calibration presets express the intended role-tier
-as cohort tuples; preset apply iterates cohorts and mutates both `model:`
-and `effort:` per member atomically.
+A **cohort** is a group of agents sharing one fixed default model + a
+calibratable effort tier. Every cohort below declares exactly one
+**Default model** (the baseline for a clean v0.16.0 install). Effort is
+the only axis preset-calibration mutates, except for `:doer` (model swaps
+sonnet → opus on the `high` preset). All other cohorts hold their fixed
+model across all 3 presets (`cost`, `balanced`, `high`).
 
-## Per-cohort default models
-
-Per Anthropic's models overview (Opus 4.7 = "most capable for complex
-reasoning and agentic coding"; Sonnet 4.6 = "best combination of speed
-and intelligence"; Haiku 4.5 = "fastest with near-frontier intelligence"):
-
-| Cohort | Default model | Default effort | Rationale |
-|--------|--------------|----------------|-----------|
-| `:planner` | opus | high (xhigh for binding-4) | Complex reasoning + agentic coding; plans gate downstream work. |
-| `:doer` | sonnet | high | Daily-driver speed-intelligence balance for code/doc writes. |
-| `:verifier` | haiku | high (medium in `cost-optimized`) | Near-frontier intelligence suffices for boolean artifact checks; 5× cheaper on input than opus. |
-| `:investigator` | sonnet | high | Hypothesis-driven investigation of runtime/behavioral state — not pure artifact verification. |
-| `:adversarial` | opus | high (max for plan-checker + contrarian) | Binding review gate; preset-immune per ADR-M008-C (extended M010 via ADR-M010-A). |
+---
 
 ## Cohorts
 
-### `:planner` (17 agents)
+### `:planner-binding`
 
-Upstream-of-decision research + structured planning. Produce BRIEFs, PRDs,
-architectures, plans, research synthesis — artifacts that feed later
-cohorts. The 4 binding planners (`architect`, `planner`, `product-manager`,
-`roadmapper`) carry `(opus, xhigh)` by default because their outputs gate
-every downstream story; the rest default to `(opus, high)` or
-`(sonnet, high)`. `assumptions-analyzer` is placed here (not `:doer`) per
-evidence — its frontmatter says "spawned before planning to ensure
-decisions are grounded in what the code actually reveals".
-`advisor-researcher` + `brainstorm-synthesizer` are placed here because
-both produce upstream-of-plan artifacts (research comparisons, synthesis
-briefs).
+**Default model:** opus
+**Default effort:** xhigh (balanced)
 
-### `:doer` (11 agents)
+The 4 upstream binding planners whose outputs gate every downstream story.
+Elevated to their own cohort (was an intra-cohort `xhigh` carve-out inside
+the v0.15.0 `:planner`) so that the binding tier is a first-class calibration
+target — explicit `--cohort :planner-binding` or `--cohort :planner` invocations
+apply to each independently.
 
-Forward-edit implementation — writes code, tests, docs; performs network
-actions (e.g. `notion-sync`). Default tier shifted from opus → sonnet in
-v0.15.0 (M010.1 amendment) — the cost trade most users want is "run my
-`:doer` cohort on sonnet" in one flag. Sonnet 4.6 handles the full daily
-implementation surface; escalate to opus via `--agent <name> --model opus
---effort <e>` for atypical code-gen work.
+Members (alphabetical):
 
-### `:verifier` (8 agents)
+- architect
+- planner
+- product-manager
+- roadmapper
 
-Read-only assessments over existing artifacts — evidence + confidence
-levels, no code mutation. Default tier shifted from opus → haiku in
-v0.15.0 (M010.1 amendment) per Anthropic's "near-frontier intelligence"
-framing — boolean artifact checks (paths exist, frontmatter keys match,
-data flows wire up) don't need opus-grade reasoning, and the cost savings
-are substantial at scale. Two members override to sonnet:
-**`nyquist-auditor`** (writes + iteratively debugs minimal behavioral
-tests; code-gen surface needs sonnet) and **`ui-auditor`** (6-pillar
-visual audit needs vision + aesthetic judgment).
+**Count: 4**
 
-### `:investigator` (3 agents) — NEW in M010.1
+---
 
-Hypothesis-driven investigation of runtime or behavioral state — distinct
-from `:verifier` which checks static artifacts. Default tier `(sonnet, high)`:
-- **`debugger`** — uses scientific method (hypothesize → test → observe →
-  refine). Needs reasoning about causation, not just artifact checks.
-- **`debug-session-manager`** — orchestrates multi-cycle debug checkpoint
-  loops. Judgment about when to escalate, when to retry.
-- **`user-profiler`** — scored analysis of developer behavior across 8
-  dimensions with confidence levels. Multi-axis synthesis, not artifact
-  grep.
+### `:planner`
 
-Split from `:verifier` in v0.15.0 (ADR-M010-A M010.1 amendment) because
-investigation-class agents were mismatched to haiku-default verifier tier
-— their work is closer to `:planner` reasoning than artifact checking,
-but their outputs feed `:doer` work (debug diagnoses inform fixes), so
-sonnet-default sits between the two.
+**Default model:** opus
+**Default effort:** high (balanced)
 
-### `:adversarial` (4 agents) — preset-immune
+Research + structured planning agents that produce upstream-of-decision
+artifacts (BRIEFs, research synthesis, arch-adjacent analysis, UX
+specifications). Do not produce code or mutate files directly. Output
+feeds `:planner-binding` and `:doer`.
 
-Binding review gate — members produce findings that are binding on
-downstream merge/release decisions. **No `--preset <name>` invocation
-mutates any member of this cohort.** Members: `plan-checker`, `contrarian`,
-`reviewer`, `code-reviewer`. `plan-checker` + `contrarian` at
-`(opus, max)`; `reviewer` + `code-reviewer` at `(opus, high)`. The cohort
-is non-uniform by design (2 tiers shipping) — this is expected, not drift,
-and the v1→v2 sidecar migration path exempts `:adversarial` from the
-loud `!!` warning on non-uniformity.
+Members (alphabetical):
 
-**M010 extends preset-immunity from 2 agents (`plan-checker`,
-`contrarian` per ADR-M008-C) to 4 agents (the full `:adversarial` cohort)
-via ADR-M010-A** — `reviewer` + `code-reviewer` produce adversarial
-findings of the same shape as `plan-checker` + `contrarian`. Only an
-explicit `--cohort :adversarial --model X --effort Y` (both axes required
-+ literal-word `adversarial` confirmation) or `--agent <adversarial-member>`
-invocation is allowed to mutate a member.
+- advisor-researcher
+- ai-researcher
+- analyst
+- assumptions-analyzer
+- brainstorm-synthesizer
+- domain-researcher
+- eval-planner
+- framework-selector
+- phase-researcher
+- project-researcher
+- research-synthesizer
+- ui-researcher
+- ux-designer
 
-## Membership (43 agents)
+**Count: 13**
 
-Model column reflects the **current shipped default** after the v0.15.0
-distribution shift (10 agents moved from opus to sonnet or haiku per the
-cohort defaults above; overrides retained for 2 `:verifier` members).
+---
+
+### `:doer`
+
+**Default model:** sonnet
+**Default effort:** high (balanced)
+
+Forward-edit implementation agents — write code, tests, docs; perform network
+actions (e.g., `notion-sync`). The only cohort with a model swap across
+presets: `balanced` = `(sonnet, high)`, `high` = `(opus, high)` (sonnet caps
+at effort `high`; xhigh/max exist only on opus). `cost` = `(sonnet, medium)`.
+
+Includes former `investigator` cohort members (`debugger`, `debug-session-manager`,
+`user-profiler`) — absorbed in M012 because the default tier `(sonnet, high)`
+was byte-identical, making the investigator cohort indistinguishable from
+`:doer` at calibration time.
+
+Members (alphabetical):
+
+- code-fixer
+- codebase-mapper
+- debug-session-manager
+- debugger
+- doc-writer
+- executor
+- frontend-dev
+- implementer
+- intel-updater
+- notion-sync
+- nyquist-auditor
+- pattern-mapper
+- project-analyst
+- test-writer
+- user-profiler
+
+**Count: 15**
+
+---
+
+### `:verifier`
+
+**Default model:** haiku
+**Default effort:** high (balanced)
+
+Read-only assessment agents that check existing artifacts for correctness,
+integration, security, and visual quality — no code mutation. Haiku 4.5
+provides near-frontier intelligence at 5× lower cost than opus for boolean
+artifact checks. `cost` = `(haiku, medium)`.
+
+`ui-auditor` moved here from the v0.15.0 `verifier-rich` override subset:
+vision-based artifact verification is precisely the haiku-eligible workload —
+Haiku 4.5 supports vision, matching `ui-auditor`'s 6-pillar visual audit.
+`nyquist-auditor` moved to `:doer` (see Reassignments subsection).
+
+Members (alphabetical):
+
+- doc-verifier
+- eval-auditor
+- integration-checker
+- security-auditor
+- ui-auditor
+- ui-checker
+- verifier
+
+**Count: 7**
+
+---
+
+### `:adversarial-scout`
+
+**Default model:** opus
+**Default effort:** max (preset-immune baseline)
+
+**Preset-immune:** true
+
+No `--preset <name>` invocation mutates any member of this cohort. Only
+an explicit `--cohort :adversarial-scout --model X --effort Y` (with
+literal-word `adversarial` confirmation) or `--agent <member> --model X
+--effort Y` invocation may alter a member. Immunity enforced via the
+`is_preset_immune(cohort)` helper in `pkg/scripts/lib/restore-effort.sh`
+(PowerShell: `Test-PresetImmune` in `install.ps1`). See ADR-M012-A for the
+`is_preset_immune` binding contract.
+
+Scout-tier agents produce pre-merge findings that are binding on downstream
+plan approval. `(opus, max)` effort reflects the highest-stakes review
+position: a scout finding blocks story execution, making false-negatives
+catastrophic.
+
+Members (alphabetical):
+
+- contrarian
+- plan-checker
+
+**Count: 2**
+
+---
+
+### `:adversarial-review`
+
+**Default model:** opus
+**Default effort:** high (preset-immune baseline)
+
+**Preset-immune:** true
+
+No `--preset <name>` invocation mutates any member of this cohort. Only
+an explicit `--cohort :adversarial-review --model X --effort Y` (with
+literal-word `adversarial` confirmation) or `--agent <member> --model X
+--effort Y` invocation may alter a member. Immunity enforced via the same
+`is_preset_immune(cohort)` helper referenced above. See ADR-M012-A.
+
+Review-tier agents produce post-implementation code and logic review findings
+that gate merge. `(opus, high)` rather than `(opus, max)` — review scope is
+bounded to an already-implemented diff, not an open-ended plan.
+
+Members (alphabetical):
+
+- code-reviewer
+- reviewer
+
+**Count: 2**
+
+---
+
+## Membership table (43 agents)
+
+**Parse contract (F-006 — binding per ADR-M012-A).** This table has exactly
+5 data columns. The header is `| # | Agent | Cohort | Model | Effort |`.
+Every data row yields NF=7 when `awk -F'|'` splits on `|` (counting leading
++ trailing empty fields). Column order is positional and must not change
+without an ADR amendment — `restore-effort.sh` parses `f[3]=Agent`,
+`f[4]=Cohort`; `install.ps1` uses `(?<agent>\S+)` at position 3 and
+`(?<cohort>:\w[\w-]*)` at position 4. S07 smoke Check 28 asserts NF=7
+on every data row at CI time.
+
+Model column reflects the cohort's **fixed default model** for a balanced
+install. Effort column reflects the **balanced preset** default for each
+cohort.
 
 | # | Agent | Cohort | Model | Effort |
 |---|-------|--------|-------|--------|
-| 1  | advisor-researcher       | :planner      | sonnet | high  |
-| 2  | ai-researcher            | :planner      | opus   | high  |
-| 3  | analyst                  | :planner      | opus   | high  |
-| 4  | architect                | :planner      | opus   | xhigh |
-| 5  | assumptions-analyzer     | :planner      | sonnet | high  |
-| 6  | brainstorm-synthesizer   | :planner      | opus   | high  |
-| 7  | code-fixer               | :doer         | sonnet | high  |
-| 8  | code-reviewer            | :adversarial  | opus   | high  |
-| 9  | codebase-mapper          | :doer         | sonnet | high  |
-| 10 | contrarian               | :adversarial  | opus   | max   |
-| 11 | debug-session-manager    | :investigator | sonnet | high  |
-| 12 | debugger                 | :investigator | sonnet | high  |
-| 13 | doc-verifier             | :verifier     | haiku  | high  |
-| 14 | doc-writer               | :doer         | sonnet | high  |
-| 15 | domain-researcher        | :planner      | opus   | high  |
-| 16 | eval-auditor             | :verifier     | haiku  | high  |
-| 17 | eval-planner             | :planner      | opus   | high  |
-| 18 | executor                 | :doer         | sonnet | high  |
-| 19 | framework-selector       | :planner      | sonnet | high  |
-| 20 | frontend-dev             | :doer         | sonnet | high  |
-| 21 | implementer              | :doer         | sonnet | high  |
-| 22 | integration-checker      | :verifier     | haiku  | high  |
-| 23 | intel-updater            | :doer         | sonnet | high  |
-| 24 | notion-sync              | :doer         | sonnet | high  |
-| 25 | nyquist-auditor          | :verifier     | sonnet | high  |
-| 26 | pattern-mapper           | :doer         | sonnet | high  |
-| 27 | phase-researcher         | :planner      | opus   | high  |
-| 28 | plan-checker             | :adversarial  | opus   | max   |
-| 29 | planner                  | :planner      | opus   | xhigh |
-| 30 | product-manager          | :planner      | opus   | xhigh |
-| 31 | project-analyst          | :doer         | sonnet | high  |
-| 32 | project-researcher       | :planner      | opus   | high  |
-| 33 | research-synthesizer     | :planner      | sonnet | high  |
-| 34 | reviewer                 | :adversarial  | opus   | high  |
-| 35 | roadmapper               | :planner      | opus   | xhigh |
-| 36 | security-auditor         | :verifier     | haiku  | high  |
-| 37 | test-writer              | :doer         | sonnet | high  |
-| 38 | ui-auditor               | :verifier     | sonnet | high  |
-| 39 | ui-checker               | :verifier     | haiku  | high  |
-| 40 | ui-researcher            | :planner      | opus   | high  |
-| 41 | user-profiler            | :investigator | sonnet | high  |
-| 42 | ux-designer              | :planner      | sonnet | high  |
-| 43 | verifier                 | :verifier     | haiku  | high  |
+|  1 | advisor-researcher       | :planner          | opus   | high  |
+|  2 | ai-researcher            | :planner          | opus   | high  |
+|  3 | analyst                  | :planner          | opus   | high  |
+|  4 | architect                | :planner-binding  | opus   | xhigh |
+|  5 | assumptions-analyzer     | :planner          | opus   | high  |
+|  6 | brainstorm-synthesizer   | :planner          | opus   | high  |
+|  7 | code-fixer               | :doer             | sonnet | high  |
+|  8 | code-reviewer            | :adversarial-review | opus | high  |
+|  9 | codebase-mapper          | :doer             | sonnet | high  |
+| 10 | contrarian               | :adversarial-scout | opus  | max   |
+| 11 | debug-session-manager    | :doer             | sonnet | high  |
+| 12 | debugger                 | :doer             | sonnet | high  |
+| 13 | doc-verifier             | :verifier         | haiku  | high  |
+| 14 | doc-writer               | :doer             | sonnet | high  |
+| 15 | domain-researcher        | :planner          | opus   | high  |
+| 16 | eval-auditor             | :verifier         | haiku  | high  |
+| 17 | eval-planner             | :planner          | opus   | high  |
+| 18 | executor                 | :doer             | sonnet | high  |
+| 19 | framework-selector       | :planner          | opus   | high  |
+| 20 | frontend-dev             | :doer             | sonnet | high  |
+| 21 | implementer              | :doer             | sonnet | high  |
+| 22 | integration-checker      | :verifier         | haiku  | high  |
+| 23 | intel-updater            | :doer             | sonnet | high  |
+| 24 | notion-sync              | :doer             | sonnet | high  |
+| 25 | nyquist-auditor          | :doer             | sonnet | high  |
+| 26 | pattern-mapper           | :doer             | sonnet | high  |
+| 27 | phase-researcher         | :planner          | opus   | high  |
+| 28 | plan-checker             | :adversarial-scout | opus  | max   |
+| 29 | planner                  | :planner-binding  | opus   | xhigh |
+| 30 | product-manager          | :planner-binding  | opus   | xhigh |
+| 31 | project-analyst          | :doer             | sonnet | high  |
+| 32 | project-researcher       | :planner          | opus   | high  |
+| 33 | research-synthesizer     | :planner          | opus   | high  |
+| 34 | reviewer                 | :adversarial-review | opus | high  |
+| 35 | roadmapper               | :planner-binding  | opus   | xhigh |
+| 36 | security-auditor         | :verifier         | haiku  | high  |
+| 37 | test-writer              | :doer             | sonnet | high  |
+| 38 | ui-auditor               | :verifier         | haiku  | high  |
+| 39 | ui-checker               | :verifier         | haiku  | high  |
+| 40 | ui-researcher            | :planner          | opus   | high  |
+| 41 | user-profiler            | :doer             | sonnet | high  |
+| 42 | ux-designer              | :planner          | opus   | high  |
+| 43 | verifier                 | :verifier         | haiku  | high  |
 
-**Totals:** :planner = 17 · :doer = 11 · :verifier = 8 · :investigator = 3 · :adversarial = 4 · Sum = 43 ✓
+**Totals:** :planner-binding=4 · :planner=13 · :doer=15 · :verifier=7 · :adversarial-scout=2 · :adversarial-review=2 · Sum=43
 
-**Model distribution (shipped v0.15.0):** opus = 16 · sonnet = 21 · haiku = 6 · Sum = 43 ✓. Adversarial max-effort unchanged (plan-checker + contrarian at `max`). 16 agents moved from opus in v0.14.0 → sonnet/haiku in v0.15.0 per cohort defaults (8 `:doer` opus→sonnet; 4 `:verifier` opus→haiku; 2 `:verifier` opus→sonnet override; 2 `:investigator` opus→sonnet). Additionally 2 `:verifier` agents moved sonnet→haiku (`doc-verifier`, `ui-checker`).
+---
 
-## Edge-case placements (D-1 + M010.1 resolution)
+## Reassignments vs v0.15.0
 
-Agents that diverge from seed-context sketches; evidence from frontmatter
-descriptions locks the placement:
+The following moves occurred relative to the v0.15.0 5-cohort taxonomy. All
+rationale is authoritative (ADR-M012-A binding).
 
-- **`advisor-researcher` → `:planner`** — "Researches a single gray-area
-  decision and returns a structured comparison table. Spawned by
-  discussion workflows when trade-off analysis is needed before locking a
-  decision." Research-upstream-of-plan role.
-- **`assumptions-analyzer` → `:planner`** (not `:doer`) — "Spawned before
-  planning to ensure decisions are grounded in what the code actually
-  reveals." Upstream of plan, not a doer.
-- **`brainstorm-synthesizer` → `:planner`** — "Fan-in synthesizer for
-  `/aih-brainstorm`. Produces BRIEF.md with synthesized findings... and a
-  suggested next command." Produces upstream-of-plan input.
-- **`user-profiler` → `:investigator`** (M010.1 — moved from `:verifier`) —
-  "Analyzes developer behavior across 8 dimensions... Produces a scored
-  profile with confidence levels and evidence." Multi-axis synthesis
-  matches `:investigator` shape better than artifact-verification.
-- **`debugger` + `debug-session-manager` → `:investigator`** (M010.1 —
-  moved from `:verifier`) — hypothesis-driven investigation of runtime
-  state, not static artifact checks. Default sonnet tier per cohort
-  default.
+#### Agent reassignments
 
-Flag annotations (`*` for deviation, `!` for adversarial immunity) are
-analyst-brief-only — they do NOT appear in the Cohort column above.
-Parsers (bash awk, PowerShell regex) consume the clean 5-column layout
-and defensively strip trailing non-cohort characters for forward
-compatibility.
+| Agent | v0.15.0 cohort | v0.16.0 cohort | Rationale |
+|-------|---------------|----------------|-----------|
+| nyquist-auditor | `:verifier` (sonnet override, inside the v0.15.0 verifier-rich subset) | `:doer` | Generates and iteratively debugs minimal behavioral tests — a file-generation workload that belongs in the `:doer` cohort, not the read-only `:verifier` cohort. Moving off the sonnet override to `:doer` sonnet-default. |
+| ui-auditor | `:verifier` (sonnet override, inside the v0.15.0 verifier-rich subset) | `:verifier` (haiku default) | Artifact verification with vision — Haiku 4.5 supports vision and its near-frontier intelligence suffices for the 6-pillar visual audit. Moving off the sonnet override to `:verifier` haiku-default eliminates the non-uniformity. |
+| debugger | `investigator` cohort (deleted in M012) | `:doer` | Cohort deleted. Default tier `(sonnet, high)` byte-identical to `:doer`; no calibration-meaningful distinction. |
+| debug-session-manager | `investigator` cohort (deleted in M012) | `:doer` | Same rationale as `debugger`. |
+| user-profiler | `investigator` cohort (deleted in M012) | `:doer` | Same rationale as `debugger`. |
+| architect | `:planner` (xhigh binding override) | `:planner-binding` | Binding-4 split: elevated to their own cohort from an intra-cohort carve-out. |
+| planner | `:planner` (xhigh binding override) | `:planner-binding` | Same rationale as `architect`. |
+| product-manager | `:planner` (xhigh binding override) | `:planner-binding` | Same rationale as `architect`. |
+| roadmapper | `:planner` (xhigh binding override) | `:planner-binding` | Same rationale as `architect`. |
+| plan-checker | `:adversarial` | `:adversarial-scout` | Adversarial split: scouts carry the `(opus, max)` tier. |
+| contrarian | `:adversarial` | `:adversarial-scout` | Same rationale as `plan-checker`. |
+| reviewer | `:adversarial` | `:adversarial-review` | Adversarial split: reviewers carry the `(opus, high)` tier. |
+| code-reviewer | `:adversarial` | `:adversarial-review` | Same rationale as `reviewer`. |
+
+#### Cohort-level changes
+
+| Change | Detail |
+|--------|--------|
+| `verifier-rich` subset deleted | Was an architect-voice label for the 2-member sonnet-override subset inside v0.15.0 `:verifier` (nyquist-auditor, ui-auditor). Never a formal cohort name in the sidecar; removed from discourse entirely. Members reassigned individually above. |
+| `investigator` cohort deleted | 3-member cohort (`debugger`, `debug-session-manager`, `user-profiler`) folded into `:doer`. Default tier was `(sonnet, high)` — byte-identical to `:doer` default. Cohort was not a meaningful calibration target; absorbing into `:doer` eliminates a category without loss of calibration resolution. |
+| `:planner` (17) split into `:planner-binding` (4) + `:planner` (13) | The intra-cohort carve-out that granted 4 binding agents `(opus, xhigh)` while the other 13 ran `(opus, high)` becomes two distinct cohorts. Users can now target `--cohort :planner-binding` independently, preserving the tier distinction without intra-cohort special-casing. |
+| `:adversarial` (4) split into `:adversarial-scout` (2) + `:adversarial-review` (2) | The internal 2-tier structure (max vs high effort) inside v0.15.0 `adversarial` cohort is now expressed as two cohorts. Both remain preset-immune. Sidecar migration maps old `adversarial.*` settings to `adversarial-scout.*` only (conservative; see ADR-M012-A migration table). |
+
+#### Rationale for the 4 non-trivial moves
+
+1. **`nyquist-auditor` → `:doer`:** `nyquist-auditor` generates tests and
+   iteratively debugs them until behavioral coverage is satisfied. This is
+   a file-generation workload — the agent writes, runs, and mutates code.
+   Keeping it in `:verifier` (a read-only assessment cohort) was a
+   category error. `:doer` sonnet-default matches the agent's actual
+   compute profile.
+
+2. **`ui-auditor` → `:verifier` (haiku default):** The agent performs a
+   6-pillar visual audit of rendered UI artifacts — a read-only,
+   vision-based assessment with a pass/fail output. Haiku 4.5 supports
+   vision natively and provides near-frontier intelligence for this
+   workload at a fraction of sonnet cost. The sonnet override existed
+   because of a conservative initial placement before Haiku 4.5 vision
+   support was confirmed; that reason no longer applies.
+
+3. **`investigator` cohort merged to `:doer`:** The investigator cohort was
+   added in M010.1 to hold `debugger`, `debug-session-manager`, and
+   `user-profiler` as hypothesis-driven agents distinct from read-only
+   `:verifier`. The split was correct at the time. However, the resulting
+   default tuple `(sonnet, high)` is byte-identical to `:doer`'s default —
+   a user targeting the investigator cohort was doing the same thing as
+   targeting the 3 agents individually within `:doer`. No calibration-level
+   distinction survived the M010.1 framing. Absorbing into `:doer` removes
+   a cohort without removing any precision.
+
+4. **`:planner` split preserves binding-4 tier distinction as a cohort:**
+   v0.15.0 expressed the binding-4 distinction as an intra-cohort override:
+   `architect`, `planner`, `product-manager`, `roadmapper` carried
+   `(opus, xhigh)` while the other 13 `:planner` members ran `(opus, high)`.
+   This meant `--cohort :planner --effort max` would silently apply `max`
+   to all 17, overwriting the binding tier distinction that made xhigh
+   meaningful. Expressing the 4-member group as its own cohort
+   (`:planner-binding`) makes the tier distinction a first-class
+   calibration boundary: `--cohort :planner` now targets exactly the 13
+   non-binding planners, and `--cohort :planner-binding` targets exactly
+   the 4 binding planners. The distinction is preserved as a structural
+   cohort, not an intra-cohort carve-out.
