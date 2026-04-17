@@ -103,8 +103,8 @@ if ($Update) {
     # or v2). Mirror of restore_calibration() in lib/restore-calibration.sh
     # -- pinned call site between agents refresh and .claude\ re-link so
     # both layers pick up restored frontmatter.
-    # Schema contract: <aihaus_root>\skills\aih-calibrate\annexes\state-file.md
-    # Cohort membership (v2): <aihaus_root>\skills\aih-calibrate\annexes\cohorts.md
+    # Schema contract: <aihaus_root>\skills\aih-effort\annexes\state-file.md
+    # Cohort membership (v2): <aihaus_root>\skills\aih-effort\annexes\cohorts.md
     $stateFile = Join-Path $TargetAihaus '.calibration'
     if (Test-Path $stateFile) {
         $schemaLine = (Select-String -Path $stateFile -Pattern '^schema=' | Select-Object -First 1)
@@ -167,7 +167,7 @@ if ($Update) {
                 }
             } else {
                 # ---- Schema v2 cohort-level apply + per-agent overrides ----
-                $cohortsMd = Join-Path $TargetAihaus 'skills\aih-calibrate\annexes\cohorts.md'
+                $cohortsMd = Join-Path $TargetAihaus 'skills\aih-effort\annexes\cohorts.md'
                 $cohortMembers = @{ planner = @(); doer = @(); verifier = @(); adversarial = @() }
                 if (Test-Path $cohortsMd) {
                     foreach ($cline in (Get-Content -LiteralPath $cohortsMd)) {
@@ -276,7 +276,7 @@ if ($Update) {
                 Write-Host "  !!  (auto-approve-bash.sh SAFE_PATTERNS widening + worktree" -ForegroundColor Yellow
                 Write-Host "  !!  agents' permissionMode removal) are NOT auto-restored." -ForegroundColor Yellow
                 Write-Host "  !!  Classifier pauses may occur until you re-run:" -ForegroundColor Yellow
-                Write-Host "  !!    /aih-calibrate --preset auto-mode-safe" -ForegroundColor Yellow
+                Write-Host "  !!    /aih-automode --enable" -ForegroundColor Yellow
                 Write-Host ""
                 # Dedupe flag -- post-merge defaultMode-preserve block
                 # (install.ps1:292ish) reads the same sidecar and would emit
@@ -378,11 +378,11 @@ if (-not (Test-Path $SettingsSrc)) {
     # Post-merge defaultMode preserve -- user intent wins on this single scalar.
     # Mirror of merge-settings.sh:98-150. Reads .aihaus\.calibration's
     # permission_mode and overwrites .permissions.defaultMode so
-    # /aih-calibrate choices survive install.ps1 -Update (which otherwise
+    # /aih-effort choices survive install.ps1 -Update (which otherwise
     # lets the template's defaultMode win via Merge-Object). Only touches
     # .permissions.defaultMode; allow/deny/hook paths still follow template-wins.
     # Missing sidecar or empty value = silent no-op.
-    # Schema contract: pkg\.aihaus\skills\aih-calibrate\annexes\state-file.md.
+    # Schema contract: pkg\.aihaus\skills\aih-effort\annexes\state-file.md.
     $pmStateFile = Join-Path $TargetAihaus '.calibration'
     if (Test-Path $pmStateFile) {
         $pmSchema = ''
@@ -421,7 +421,7 @@ if (-not (Test-Path $SettingsSrc)) {
                 Write-Host "  !!  (auto-approve-bash.sh SAFE_PATTERNS widening + worktree" -ForegroundColor Yellow
                 Write-Host "  !!  agents' permissionMode removal) are NOT auto-restored." -ForegroundColor Yellow
                 Write-Host "  !!  Classifier pauses may occur until you re-run:" -ForegroundColor Yellow
-                Write-Host "  !!    /aih-calibrate --preset auto-mode-safe" -ForegroundColor Yellow
+                Write-Host "  !!    /aih-automode --enable" -ForegroundColor Yellow
                 Write-Host ""
                 $script:AutoModeSafeWarningEmitted = $true
             }

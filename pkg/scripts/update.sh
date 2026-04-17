@@ -115,7 +115,7 @@ done
 # loop above and the link_or_copy loop below so both .aihaus/agents/ (physical)
 # and .claude/agents/ (symlink or copy) pick up restored frontmatter.
 # Missing sidecar = silent no-op. Schema contract: pkg/.aihaus/skills/
-# aih-calibrate/annexes/state-file.md.
+# aih-effort/annexes/state-file.md.
 # shellcheck source=lib/restore-calibration.sh
 source "$(dirname "$0")/lib/restore-calibration.sh"
 restore_calibration "${AIHAUS}"
