@@ -155,6 +155,14 @@ Read `team-template.md` (co-located with this annex's SKILL.md). Spawn:
 - Skip frontend-dev if backend-only, vice versa. Second dev if >8 stories.
 - Quality gates: **ux-designer** if frontend stories exist; **security** pass if auth/payments/user-data touched.
 
+**MANIFEST_PATH env injection (M011/S03 — F-04 resolution):** every Agent-tool spawn prompt in Steps E5 / E6 / E7 MUST begin with a one-line env-hint so worktree-isolated subagents can resolve Q-4 case 1 deterministically:
+
+```
+MANIFEST_PATH="<abs-path-to-main-repo>/.aihaus/milestones/M0XX-<slug>/RUN-MANIFEST.md"
+```
+
+Resolve `<abs-path>` from the milestone directory at spawn time (same variable the dispatcher itself uses for `manifest-append.sh` calls). Inherited by the spawned Agent's bash processes so `statusline-milestone.sh` and `autonomy-guard.sh` (paused short-circuit) see Q-4 case 1 hit even when the hook fires inside a git worktree.
+
 ### Step E6 — Execute stories (Wave 2 task creation)
 
 Read story files from `stories/`. For each story, TaskCreate with:
@@ -219,6 +227,7 @@ Each hook invocation below MUST land in the annex with the `--field` / `--payloa
 | End of milestone loop (Step F1) | `manifest-append.sh` | `--field phase --payload completed` |
 | End of milestone loop (Step F1) | `phase-advance.sh` | `--to complete --dir <milestone-dir>` |
 | Agent-return parsing (Step E3) | `invoke-guard.sh` | stdin = agent return text; consumed by parent skill for dispatch decision |
+| Before every Agent spawn (Steps E5/E6/E7) | (env hint) | Inject `MANIFEST_PATH=<abs-path>` into the prompt body so worktree-isolated subagents resolve Q-4 case 1 deterministically (M011/S03 F-04). |
 
 ---
 

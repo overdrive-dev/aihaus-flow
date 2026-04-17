@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.7.0-181717?style=for-the-badge&logo=github)](VERSION)
+[![Version](https://img.shields.io/badge/version-0.16.0-181717?style=for-the-badge&logo=github)](VERSION)
 [![Built for Claude Code](https://img.shields.io/badge/built%20for-Claude%20Code-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -40,6 +40,13 @@ Runs anywhere Claude Code runs — macOS, Windows, Linux.
 </div>
 
 ---
+
+> [!IMPORTANT]
+> ### v0.16.0 — autonomy state gate + milestone statusLine
+>
+> Parallel-subagent runs now serialize RUN-MANIFEST writes with `flock -w 2` (POSIX) and `mkdir`-atomic (Windows) — no more lost rows under Opus 4.7 fanout. A milestone-aware `statusLine` hook renders `M0XX · SNN/total · phase:X · agents:N · sha:abc1234` on every TUI turn, so progress is visible even when the Task checklist scrolls out. `autonomy-guard.sh` layers a conservative haiku backstop on top of the M005 regex fast-path — novel "state-summary" phrasings that used to slip through are adjudicated by `claude --print --model haiku-4.5` with fail-safe allow on every ambiguous path; opt out any time via `AIHAUS_AUTONOMY_HAIKU=0`. TRUE blockers get a canonical escape: `phase-advance.sh --to paused --reason "<text>"` writes `status: paused` into RUN-MANIFEST, which the gate recognizes silently.
+>
+> Every gate decision lands in `.claude/audit/autonomy-gate.jsonl` (13-field schema, 11-value decision enum, rotated at 10 MB / 10 000 lines). Runtime cost: ~$0.20-0.30 per milestone in regex-miss path; 2-3s added latency per haiku-path stop. Regex path (M005) unchanged — no user-visible change if your prose is already clean.
 
 > [!IMPORTANT]
 > ### v0.6.0 — `/aih-brainstorm` goes conversational

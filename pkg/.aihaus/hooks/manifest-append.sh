@@ -3,6 +3,10 @@
 # ADR-004 amendment to ADR-001. Append-only; mkdir-mutex with 30s stale reclaim;
 # trap release; worktree-refusal guard; OneDrive/cloud-sync advisory.
 #
+# M011/S01: wraps read-modify-write path in a coarse outer lock (POSIX flock -w 2
+# via manifest-helpers.sh; Windows mkdir-atomic fallback per S02). Existing
+# mkdir-mutex + 30s stale-reclaim preserved as the inner lock.
+#
 # Usage:
 #   manifest-append.sh --field story-record|invoke-push|invoke-pop|progress-log|phase|status \
 #                      --payload "<value>"
@@ -17,6 +21,19 @@ set -euo pipefail
 MAX_DEPTH=3
 STALE_LOCK_SEC=30
 AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+
+# --- source shared helpers (F-01 extraction; see architecture § 2.0) ---
+# shellcheck source=lib/manifest-helpers.sh
+. "$(dirname "$0")/lib/manifest-helpers.sh"
+
+# --- runtime platform detect (M011/S02; F-03 no-persistence) ---
+# Probes `command -v flock` at invocation. POSIX path uses flock -w 2 on a
+# fd-backed lock file; Windows path (MSYS/Cygwin/no-flock) falls through to
+# mkdir-atomic with bounded 2s retry. AIH_USE_MKDIR_LOCK caches the choice
+# for the hook process lifetime — no disk state, zero ADR-005 collision
+# (.aihaus/.install-platform remains reserved for claude|cursor|both).
+detect_platform
+detect_fractional_sleep
 
 # --- argument parsing ---
 
@@ -50,9 +67,7 @@ if command -v git >/dev/null 2>&1; then
   fi
 fi
 
-# --- helpers ---
-
-ts_iso() { date -u +%FT%TZ; }
+# --- helpers (ts_iso + shared RW primitives sourced from lib above) ---
 
 log_audit() {
   local result="$1" reason="${2:-null}"
@@ -81,7 +96,22 @@ onedrive_advisory() {
   esac
 }
 
-# --- lock (mkdir mutex with 30s stale reclaim + trap release) ---
+# --- coarse outer lock (M011/S01 + S02) ---
+
+acquire_coarse() {
+  # detect_platform already called at hook startup; lib re-probes safely.
+  if ! acquire_coarse_lock "$MANIFEST_PATH"; then
+    echo "manifest-append.sh: coarse lock timeout after 2s on $MANIFEST_PATH.lock" >&2
+    log_audit "fail" "flock-timeout"
+    exit 6
+  fi
+  # Windows path needs explicit release; POSIX fd 200 auto-releases on exit.
+  if [ "${AIH_USE_MKDIR_LOCK:-0}" = "1" ]; then
+    trap 'release_coarse_lock "$MANIFEST_PATH"; rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+  fi
+}
+
+# --- inner lock (mkdir mutex with 30s stale reclaim + trap release) ---
 
 LOCK="$MANIFEST_PATH.lock"
 
@@ -105,40 +135,20 @@ acquire_lock() {
     fi
     sleep 0.1 2>/dev/null || sleep 1
   done
-  trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+  # Compose trap: if coarse-lock trap already set (Windows path), replace with combined.
+  if [ "${AIH_USE_MKDIR_LOCK:-0}" = "1" ]; then
+    trap 'rmdir "$LOCK" 2>/dev/null || true; release_coarse_lock "$MANIFEST_PATH"' EXIT INT TERM
+  else
+    trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+  fi
 }
 
-# --- section manipulators (in-memory transforms) ---
+# --- section manipulators extracted to manifest-helpers.sh (F-01) ---
+# update_metadata_kv, append_to_section, append_progress_log, stack_depth
+# are all sourced from lib/manifest-helpers.sh at the top of this file.
 
-# Count rows in Invoke stack (non-empty content lines)
-stack_depth() {
-  awk '/^## Invoke stack$/ {on=1; next} /^## / {on=0} on && /[^[:space:]]/' "$MANIFEST_PATH" | wc -l | tr -d ' '
-}
-
-# Append a raw line to a target section, in-place, via tmp + replace.
-# For "## Invoke stack" and "## Story Records" append mode.
-append_to_section() {
-  local section_header="$1" new_line="$2" mode="${3:-append}"
-  local tmp="$MANIFEST_PATH.tmp"
-  local in_section=0 done_append=0
-  awk -v header="$section_header" -v line="$new_line" -v mode="$mode" -v out_tmp="$tmp" '
-    BEGIN { in_sec=0; done=0 }
-    {
-      if ($0 == header) { in_sec=1; print; next }
-      if (/^## / && in_sec==1) {
-        if (done==0 && mode=="append") { print line; done=1 }
-        in_sec=0; print; next
-      }
-      print
-    }
-    END {
-      if (in_sec==1 && done==0 && mode=="append") { print line }
-    }
-  ' "$MANIFEST_PATH" > "$tmp"
-  mv -f "$tmp" "$MANIFEST_PATH"
-}
-
-# Pop last non-empty line from Invoke stack
+# Pop last non-empty line from Invoke stack — local-only variant (not used by
+# phase-advance), so it stays here rather than moving to the shared lib.
 pop_invoke_stack() {
   local tmp="$MANIFEST_PATH.tmp"
   awk '
@@ -169,29 +179,10 @@ pop_invoke_stack() {
   mv -f "$tmp" "$MANIFEST_PATH"
 }
 
-# Update a Metadata key: value (phase|status|last_updated)
-update_metadata_kv() {
-  local key="$1" value="$2"
-  local tmp="$MANIFEST_PATH.tmp"
-  awk -v k="$key" -v v="$value" '
-    BEGIN { in_meta=0; updated=0 }
-    /^## Metadata$/ { in_meta=1; print; next }
-    /^## / && in_meta==1 { in_meta=0; if (!updated) print k ": " v; print; next }
-    in_meta==1 && $1 == k":" { print k ": " v; updated=1; next }
-    { print }
-    END { if (in_meta==1 && !updated) print k ": " v }
-  ' "$MANIFEST_PATH" > "$tmp"
-  mv -f "$tmp" "$MANIFEST_PATH"
-}
-
-append_progress_log() {
-  local line="$1"
-  append_to_section "## Progress Log" "- $(ts_iso) — $line" append
-}
-
 # --- main dispatch ---
 
 onedrive_advisory
+acquire_coarse
 acquire_lock
 
 case "$FIELD" in
