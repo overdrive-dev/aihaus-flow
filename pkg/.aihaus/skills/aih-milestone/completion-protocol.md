@@ -40,6 +40,85 @@ with Area, Finding, and Impact fields. Skip milestone-specific entries.
 If `.aihaus/knowledge.md` does not yet exist, create it with a
 "# Knowledge Base" header before appending.
 
+## Step 3.5: Spawn Knowledge-Curator (ADR-M013-A / Component C)
+**Recursion guard:** if `AIHAUS_KNOWLEDGE_CURATOR_ACTIVE=1` is set, skip this step
+silently (prevents self-invocation during M013's own completion).
+
+Spawn the `knowledge-curator` agent with the following inputs:
+- `{milestone_dir}/execution/DECISIONS-LOG.md`
+- `{milestone_dir}/execution/KNOWLEDGE-LOG.md`
+- `{milestone_dir}/execution/AGENT-EVOLUTION.md` (if present)
+- `.claude/audit/LEARNING-WARNINGS.jsonl` — filtered to rows with `"milestone": "M0XX"`
+  (substitute actual milestone ID)
+- `.aihaus/decisions.md` (for dedup and next-ADR-number lookup)
+- `.aihaus/knowledge.md` (for dedup and next-K-NNN lookup)
+- `.aihaus/memory/**` (all files — for dedup and routing)
+
+Instruction to the agent:
+```
+Curate knowledge for milestone {M0XX}-{slug}.
+Read all input artifacts listed above.
+Emit exactly 5 marker-fenced blocks:
+  aihaus:decisions-append, aihaus:knowledge-append, aihaus:memory-append,
+  aihaus:history-append, aihaus:curator-decisions.
+See your agent definition for the full output contract.
+```
+
+Capture the agent's stdout verbatim to:
+`{milestone_dir}/execution/CURATOR-OUTPUT.md`
+
+If the agent fails, returns empty output, or returns malformed blocks:
+- Log a `[curator-error]` entry to `.claude/audit/curator-apply.jsonl`
+- Continue with Step 3.6 (advisory-mode behavior — do not block completion)
+
+## Step 3.6: Orchestrator Parses and Applies Curator Blocks (ADR-001 preserved)
+Parse `{milestone_dir}/execution/CURATOR-OUTPUT.md` for the 5 marker-fenced blocks.
+Each block is delimited by `<!-- aihaus:<name> -->` ... `<!-- aihaus:<name>:end -->`.
+
+**Extraction pattern (awk range match):**
+```bash
+awk '/<!-- aihaus:<name> -->/,/<!-- aihaus:<name>:end -->/' CURATOR-OUTPUT.md \
+  | grep -v '<!-- aihaus:' > /tmp/block-<name>.md
+```
+
+**Application order (deterministic):**
+
+1. **Parse block `curator-decisions`** (block 5) → compute UUID receipt set.
+   This is read by the completion-gate (Component D, Step 6). No file write.
+
+2. **Apply block `decisions-append`** (block 1):
+   - Read `.aihaus/decisions.md` before editing (ADR-001 Read precondition).
+   - Append extracted block content after the last existing ADR entry.
+   - `git add .aihaus/decisions.md`
+   - Emit audit row to `.claude/audit/curator-apply.jsonl`:
+     `{"ts":"<ISO>","block":"decisions-append","target":".aihaus/decisions.md","status":"applied"}`
+
+3. **Apply block `knowledge-append`** (block 2):
+   - Read `.aihaus/knowledge.md` before editing.
+   - Append extracted block content after the last existing K-NNN entry.
+   - `git add .aihaus/knowledge.md`
+   - Emit audit row to `.claude/audit/curator-apply.jsonl`.
+
+4. **Apply block `memory-append`** (block 3):
+   - Parse sub-sections separated by `===`. Each sub-section begins with `path: <file>` and `---`.
+   - For each sub-section:
+     - Read the target file at `path:` before editing.
+     - Append the sub-section body to the target file.
+     - `git add <target>` (explicit per-file — NEVER `git add -A` or `git add .`)
+     - Emit audit row to `.claude/audit/curator-apply.jsonl`.
+
+5. **Apply block `history-append`** (block 4):
+   - Read `.aihaus/project.md` before editing.
+   - Append the history row to the `## Milestone History` table in the manual section.
+   - `git add .aihaus/project.md`
+   - Emit audit row to `.claude/audit/curator-apply.jsonl`.
+
+**If any block is `<!-- nothing to promote -->` or `<!-- no warnings for this milestone -->`:**
+skip the corresponding append silently; still emit an audit row with `"status":"skipped-empty"`.
+
+**ADR-001 compliance:** the orchestrator (not the curator) performs all file writes.
+The curator emits blocks to stdout only. All `git add` calls are explicit per-file.
+
 ## Step 4: Update Agent Memory
 Write to `.aihaus/memory/` only.
 - New patterns -> `.aihaus/memory/global/patterns.md`

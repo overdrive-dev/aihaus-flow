@@ -57,10 +57,10 @@ check_skills() {
   fi
 }
 
-# ---- Check 2: .aihaus/agents/ has 45 .md files (M013/S06 adds learning-advisor) --
+# ---- Check 2: .aihaus/agents/ has 46 .md files (M013/S07 adds knowledge-curator) --
 check_agents() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 45 .md files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 46 .md files"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   if [[ ! -d "$agents_root" ]]; then
     _fail "$label" "directory not found: $agents_root"
@@ -68,10 +68,10 @@ check_agents() {
   fi
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 45 ]]; then
+  if [[ "$count" -eq 46 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 45 .md files, found $count"
+    _fail "$label" "expected 46 .md files, found $count"
   fi
 }
 
@@ -772,11 +772,11 @@ check_skill_count_and_staleness() {
   fi
 }
 
-# ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M013/S05) --
+# ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M013/S07) --
 # Seven sub-assertions covering the 6-cohort taxonomy in cohorts.md:
-#   C1 each of the 44 agents appears under exactly one cohort
-#   C2 cohort counts match: planner-binding=4, planner=13, doer=15, verifier=8,
-#      adversarial-scout=2, adversarial-review=2 (total=44)
+#   C1 each of the 46 agents appears under exactly one cohort
+#   C2 cohort counts match: planner-binding=4, planner=14, doer=15, verifier=9,
+#      adversarial-scout=2, adversarial-review=2 (total=46)
 #   C3 no :verifier-rich or :investigator cohort name appears in the table
 #   C4 F-006 parse contract: every data row yields NF=7 (awk -F'|' | sort -u == "7")
 #   C5 header row literal match: "| # | Agent | Cohort | Model | Effort |"
@@ -850,14 +850,14 @@ check_cohort_membership_roundtrip() {
   done
 
   local total_agents="${#_seen_agents[@]}"
-  if [[ "$total_agents" -ne 45 ]]; then
-    problems+=("C1: expected 45 agents in membership table; found ${total_agents}")
+  if [[ "$total_agents" -ne 46 ]]; then
+    problems+=("C1: expected 46 agents in membership table; found ${total_agents}")
   fi
 
   # C2: expected cohort counts.
   local -A _expected_counts=(
     [":planner-binding"]=4
-    [":planner"]=13
+    [":planner"]=14
     [":doer"]=15
     [":verifier"]=9
     [":adversarial-scout"]=2
@@ -1526,12 +1526,136 @@ check_learning_advisor() {
     fi
   fi
 
-  # (g) agent count at 45
+  # (g) agent count at 46 (knowledge-curator added in M013/S07)
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -ne 45 ]]; then
-    problems+=("expected 45 agents total (learning-advisor bumps from 44); found ${count}")
+  if [[ "$count" -ne 46 ]]; then
+    problems+=("expected 46 agents total (knowledge-curator bumps from 45); found ${count}")
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- Check 37: knowledge-curator agent exists + 5 fenced-block markers documented (M013/S07) --
+# Asserts Component C of M013 shipped:
+#   (a) pkg/.aihaus/agents/knowledge-curator.md exists with required frontmatter
+#   (b) model is opus (cohort :planner default)
+#   (c) tools are Read, Grep, Glob, Bash — NO Write, NO Edit (ADR-001)
+#   (d) agent body documents all 5 fenced-block markers
+#   (e) recursion guard documented (AIHAUS_KNOWLEDGE_CURATOR_ACTIVE)
+check_knowledge_curator() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: knowledge-curator agent exists + 5 fenced-block markers documented (M013/S07)"
+  local agent="${PACKAGE_ROOT}/.aihaus/agents/knowledge-curator.md"
+  local problems=()
+
+  # (a) agent file exists with required frontmatter
+  if [[ ! -f "$agent" ]]; then
+    problems+=("knowledge-curator.md missing at agents/knowledge-curator.md")
+  else
+    local front
+    front=$(awk '/^---$/{c++; next} c==1' "$agent")
+    for field in name tools model effort color memory; do
+      if ! printf '%s\n' "$front" | grep -q "^${field}:"; then
+        problems+=("knowledge-curator.md frontmatter missing '${field}'")
+      fi
+    done
+
+    # (b) model must be opus (cohort :planner default)
+    local model
+    model=$(awk '/^---$/{c++; next} c==1 && /^model:/{print $2; exit}' "$agent")
+    if [[ "$model" != "opus" ]]; then
+      problems+=("knowledge-curator.md: expected model=opus (cohort :planner), got model=${model}")
+    fi
+
+    # (c) tools must include Read, Grep, Glob, Bash and must NOT include Write or Edit
+    local tools_line
+    tools_line=$(awk '/^---$/{c++; next} c==1 && /^tools:/{print; exit}' "$agent")
+    for required_tool in Read Grep Glob Bash; do
+      if ! printf '%s' "$tools_line" | grep -q "$required_tool"; then
+        problems+=("knowledge-curator.md: tools missing '${required_tool}'")
+      fi
+    done
+    for forbidden_tool in Write Edit; do
+      if printf '%s' "$tools_line" | grep -q "$forbidden_tool"; then
+        problems+=("knowledge-curator.md: tools must NOT include '${forbidden_tool}' (ADR-001 single-writer)")
+      fi
+    done
+
+    # (d) all 5 fenced-block markers documented in agent body
+    local markers=(
+      "aihaus:decisions-append"
+      "aihaus:knowledge-append"
+      "aihaus:memory-append"
+      "aihaus:history-append"
+      "aihaus:curator-decisions"
+    )
+    for marker in "${markers[@]}"; do
+      if ! grep -q "$marker" "$agent"; then
+        problems+=("knowledge-curator.md: missing fenced-block marker '${marker}'")
+      fi
+    done
+
+    # (e) recursion guard documented
+    if ! grep -q 'AIHAUS_KNOWLEDGE_CURATOR_ACTIVE' "$agent"; then
+      problems+=("knowledge-curator.md: missing recursion guard (AIHAUS_KNOWLEDGE_CURATOR_ACTIVE)")
+    fi
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- Check 38: verifier.md contains ## Knowledge consulted directive (M013/S07) --
+# Asserts F5 consume-side instrumentation shipped:
+#   (a) pkg/.aihaus/agents/verifier.md contains the '## Knowledge consulted' section
+#   (b) section is in the output template (inside the fenced markdown block)
+#   (c) verifier cohort is :verifier (D4 — not adversarial-scout or adversarial-review)
+check_verifier_knowledge_consulted() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: verifier.md has '## Knowledge consulted' directive (M013/S07 F5)"
+  local agent="${PACKAGE_ROOT}/.aihaus/agents/verifier.md"
+  local cohorts_md="${PACKAGE_ROOT}/.aihaus/skills/aih-effort/annexes/cohorts.md"
+  local problems=()
+
+  # (a) + (b) verifier.md contains ## Knowledge consulted
+  if [[ ! -f "$agent" ]]; then
+    problems+=("verifier.md missing at agents/verifier.md")
+  else
+    if ! grep -q '## Knowledge consulted' "$agent"; then
+      problems+=("verifier.md missing '## Knowledge consulted' section (F5 consume-side telemetry)")
+    fi
+    # 'none applicable' must also be documented as the nil-citation form
+    if ! grep -q 'none applicable' "$agent"; then
+      problems+=("verifier.md missing 'none applicable' nil-citation form for ## Knowledge consulted")
+    fi
+  fi
+
+  # (c) D4 enforcement: verifier must be in :verifier cohort, not adversarial-*
+  if [[ -f "$cohorts_md" ]]; then
+    local verifier_cohort
+    verifier_cohort=$(awk -F'|' '
+      NF==7 {
+        agent=substr($3,1); gsub(/^[[:space:]]+|[[:space:]]+$/,"",agent)
+        cohort=substr($4,1); gsub(/^[[:space:]]+|[[:space:]]+$/,"",cohort)
+        if (agent=="verifier") print cohort
+      }
+    ' "$cohorts_md")
+    if [[ "$verifier_cohort" != ":verifier" ]]; then
+      problems+=("D4 violation: verifier cohort in cohorts.md is '${verifier_cohort}', expected ':verifier' (D4 mandates non-immune cohort)")
+    fi
+    # Also assert NOT in adversarial cohorts
+    if [[ "$verifier_cohort" == ":adversarial-scout" || "$verifier_cohort" == ":adversarial-review" ]]; then
+      problems+=("D4 violation: verifier is in preset-immune cohort '${verifier_cohort}' — forbidden by ADR-M012-A D4")
+    fi
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -1581,6 +1705,8 @@ check_agent_evolution_scaffold
 check_completion_protocol_step_4_7
 check_context_curator
 check_learning_advisor
+check_knowledge_curator
+check_verifier_knowledge_consulted
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

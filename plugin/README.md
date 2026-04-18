@@ -1,5 +1,12 @@
 # aihaus — Claude Code plugin (preview)
 
+> [!IMPORTANT]
+> This plugin preview is no longer maintained.
+>
+> aihaus-flow is archived in place as historical reference. We are not maintaining this plugin packaging further, and we are not recommending it for new installs.
+>
+> **Use [`gsd2`](https://github.com/gsd-build/gsd-2) or [`gsd1`](https://github.com/gsd-build/get-shit-done) instead.**
+
 Native Claude Code plugin packaging of the [aihaus](../pkg/) agent harness. This is a **separate, parallel preview**: the existing `install.sh` flow still ships from `pkg/.aihaus/` and is unchanged. Content here is a duplicate copy, free to diverge as the plugin format requires.
 
 ## What this plugin ships

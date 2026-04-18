@@ -1,5 +1,10 @@
 # Changelog
 
+> [!IMPORTANT]
+> aihaus-flow is no longer maintained.
+>
+> For ongoing use, start with [`gsd2`](https://github.com/gsd-build/gsd-2) or [`gsd1`](https://github.com/gsd-build/get-shit-done) instead. This changelog remains here as historical reference only.
+
 All notable changes to aihaus are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

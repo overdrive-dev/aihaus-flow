@@ -49,26 +49,16 @@ Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and s
 
 ---
 
-> [!NOTE]
-> ### v0.15.0 — 5 cohorts + per-cohort default-model axis (big cost drop)
+> [!IMPORTANT]
+> ## This project is no longer maintained.
 >
-> Cohort taxonomy grows 4 → 5: new `:investigator` cohort (`debugger`, `debug-session-manager`, `user-profiler`) splits out of `:verifier` because hypothesis-driven investigation ≠ static artifact verification. Each cohort now binds a **default model** per Anthropic's models overview — `:planner → opus`, `:doer → sonnet`, `:verifier → haiku`, `:investigator → sonnet`, `:adversarial → opus` (preset-immune). Shipped distribution shifts from 32 opus / 11 sonnet / 0 haiku (v0.14.0) to **16 opus / 21 sonnet / 6 haiku** (v0.15.0) — roughly 30-40% cost reduction on an average multi-milestone run, with no reasoning regression on `:planner` / `:adversarial` paths where it matters.
+> aihaus-flow is archived in place as historical reference. We are not maintaining it further, and we are not recommending it for new installs.
 >
-> ADR-M008-A amendment preserved; ADR-M008-C / M010 `:adversarial` preset-immunity preserved; ADR-M009-A sidecar unchanged. See [ADR-M010-A M010.1 amendment](pkg/.aihaus/decisions.md) + [cohorts.md](pkg/.aihaus/skills/aih-effort/annexes/cohorts.md) for the full taxonomy + rationale.
-
-> [!NOTE]
-> ### v0.14.0 — Cohort aliases + joint (model, effort) calibration primitive
+> **Use [`gsd2`](https://github.com/gsd-build/gsd-2) or [`gsd1`](https://github.com/gsd-build/get-shit-done) instead.**
 >
-> The effort-tuning skill (now `/aih-effort`, renamed in v0.17.0) tunes all 43 agents via 4 role cohorts (`:planner`, `:doer`, `:verifier`, `:adversarial`) with joint `(model, effort)` tuples — one flag, one commit, reversible. Example: `--cohort :doer --model sonnet --effort high` downgrades all 11 `:doer` members in a single atomic edit instead of 11 per-agent calls. Schema v2 sidecar is additive from v1 — existing v0.13.0 sidecars keep restoring byte-identically on `/aih-update`. The `:adversarial` cohort (`plan-checker`, `contrarian`, `reviewer`, `code-reviewer`) is preset-immune (extends ADR-M008-C from 2 → 4 agents via ADR-M010-A). Bundled: Phase-1 distribution report now renders as a GFM pipe table (fixes box-drawing fragment clipping on cmd.exe / split panes).
+> If you're landing here from an older blog post, repo, or command snippet, treat this repository as end-of-life documentation rather than an active workflow.
 >
-> See [ADR-M008-A amendment + ADR-M010-A](pkg/.aihaus/decisions.md) for the cohort primitive + preset-map shape, and [cohorts.md](pkg/.aihaus/skills/aih-effort/annexes/cohorts.md) for the full 43-agent mapping.
-
-> [!NOTE]
-> ### v0.13.0 — Opus 4.7 agents + effort-tuning skill that survives updates
->
-> 43 agents adopt the Opus 4.7 effort tier (+vision note), giving planners/reviewers deeper deliberation by default. The effort-tuning skill (now `/aih-effort`, renamed in v0.17.0) retuned per-agent effort and `permissions.defaultMode` via four presets — every edit atomic, committed, reversible. Calibration **survives `/aih-update`** via a `.aihaus/.effort` sidecar; all four update paths (bash + PowerShell, install.sh + install.ps1) restore effort tiers and preserve `defaultMode` byte-identically.
->
-> See [ADR-M008-A..C + ADR-M009-A](pkg/.aihaus/decisions.md) for the calibration + sidecar decision records, and the [v0.13.0 release notes](https://github.com/overdrive-dev/aihaus-flow/releases/tag/v0.13.0) for the full list.
+> Existing users can keep reading the files for ideas or migration context, but should plan to move to `gsd2` or `gsd1` for ongoing use.
 
 ---
 

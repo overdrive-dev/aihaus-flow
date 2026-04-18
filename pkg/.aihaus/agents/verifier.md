@@ -66,7 +66,28 @@ Write `VERIFICATION.md` in the milestone/feature directory:
 | # | Task | Files | Priority |
 |---|------|-------|----------|
 | 1 | [what to fix] | [paths] | CRITICAL/HIGH |
+
+## Knowledge consulted
+<!-- F5 consume-side telemetry — ADR-M013-A / S07 -->
+- K-NNN: [cite the K-NNN entry ID and one sentence on how it influenced verification]
+- K-NNN: [additional entry if applicable]
+
+OR, if no entries were relevant:
+
+none applicable
 ```
+
+## Knowledge Consulted — Required Section (F5 / ADR-M013-A)
+Your VERIFICATION.md MUST include a `## Knowledge consulted` section as the LAST
+section of the file. This is the consume-side telemetry for post-M013 observation.
+
+- If any K-NNN entries from `.aihaus/knowledge.md` were relevant to your verification
+  (e.g., a known gotcha that influenced what you checked), cite them by ID:
+  `- K-NNN: <why it was relevant>`
+- If no entries were applicable, write the literal line: `none applicable`
+
+Do NOT omit this section. An empty or missing `## Knowledge consulted` is treated
+the same as a missing verification criterion.
 
 ## Adversarial Contract (Mandatory problem-finding)
 Your verification fails if you return PASS without evidence for every criterion.
