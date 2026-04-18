@@ -1277,6 +1277,33 @@ check_migration_fixtures() {
   fi
 }
 
+# ---- Check 31: memory README seeds exist and are non-empty (M013/S02) -------
+# Asserts that the four memory-bucket README files introduced in M013 are
+# present in the package source and have content (not zero-byte placeholders).
+# These files are seeded to user installs via `update.sh --migrate-memory`.
+check_memory_readme_seeds() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: memory README seeds exist and non-empty (M013/S02)"
+  local memory_root="${PACKAGE_ROOT}/.aihaus/memory"
+  local subdirs=(global backend frontend reviews)
+  local problems=()
+
+  for subdir in "${subdirs[@]}"; do
+    local f="${memory_root}/${subdir}/README.md"
+    if [[ ! -f "$f" ]]; then
+      problems+=("missing: memory/${subdir}/README.md")
+    elif [[ ! -s "$f" ]]; then
+      problems+=("empty: memory/${subdir}/README.md")
+    fi
+  done
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -1311,6 +1338,7 @@ check_skill_count_and_staleness
 check_cohort_membership_roundtrip
 check_autonomy_gate_fixtures
 check_migration_fixtures
+check_memory_readme_seeds
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

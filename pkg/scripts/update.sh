@@ -8,13 +8,16 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: update.sh [--target <path>]
+Usage: update.sh [--target <path>] [--migrate-memory]
 
 Re-syncs package-managed files in .aihaus/ from the aihaus package source.
 Local data (project.md, plans/, milestones/, memory/, etc.) is preserved.
 
 Options:
   --target <path>   Target directory (default: current working directory)
+  --migrate-memory  Seed missing memory/*/README.md files from package source.
+                    Existing files are NEVER overwritten (idempotent, opt-in).
+                    Does NOT run as part of the default refresh loop.
   -h, --help        Show this message
 EOF
 }
@@ -26,6 +29,7 @@ PKG_AIHAUS="${PKG_ROOT}/.aihaus"
 PKG_TEMPLATES="${PKG_ROOT}/templates"
 
 TARGET="${PWD}"
+MIGRATE_MEMORY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -33,6 +37,10 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { echo "ERROR: --target requires a path" >&2; exit 2; }
       TARGET="$2"
       shift 2
+      ;;
+    --migrate-memory)
+      MIGRATE_MEMORY=1
+      shift
       ;;
     -h|--help)
       usage; exit 0
@@ -183,6 +191,46 @@ merge_settings "${SETTINGS_DST}" "${SETTINGS_SRC}"
 
 # ---- Update install mode marker ----------------------------------------------
 echo "${MODE}" > "${AIHAUS}/.install-mode"
+
+# ---- Migrate memory README seeds (opt-in, ADR-M009-A safe) ------------------
+# Only runs when --migrate-memory is passed. NEVER part of the default loop.
+# For each memory sub-bucket, copies the package README.md if and only if the
+# target file does not already exist. Existing content is never overwritten.
+migrate_memory() {
+  local count_created=0
+  local count_skipped=0
+  local subdirs=(global backend frontend reviews)
+
+  echo ""
+  echo "[migrate-memory] seeding memory README files (opt-in, non-destructive)"
+
+  for subdir in "${subdirs[@]}"; do
+    local src="${PKG_AIHAUS}/memory/${subdir}/README.md"
+    local dst="${AIHAUS}/memory/${subdir}/README.md"
+
+    if [[ ! -f "${src}" ]]; then
+      echo "[migrate-memory]   SKIP  memory/${subdir}/README.md (source not found in package)"
+      count_skipped=$((count_skipped + 1))
+      continue
+    fi
+
+    if [[ -f "${dst}" ]]; then
+      echo "[migrate-memory]   SKIP  memory/${subdir}/README.md (exists)"
+      count_skipped=$((count_skipped + 1))
+    else
+      mkdir -p "${AIHAUS}/memory/${subdir}"
+      cp "${src}" "${dst}"
+      echo "[migrate-memory]   CREATE memory/${subdir}/README.md"
+      count_created=$((count_created + 1))
+    fi
+  done
+
+  echo "[migrate-memory] done: ${count_created} created, ${count_skipped} skipped"
+}
+
+if [[ "${MIGRATE_MEMORY}" -eq 1 ]]; then
+  migrate_memory
+fi
 
 # ---- Summary -----------------------------------------------------------------
 echo ""
