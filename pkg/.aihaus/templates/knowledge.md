@@ -1,6 +1,14 @@
+<!-- BOOTSTRAP-ONLY: This file seeds the initial knowledge.md on fresh installs.
+     It is NOT a promotion target for milestone retrospectives.
+     The single canonical promotion target is .aihaus/knowledge.md (gitignored; local).
+     All completion-protocol Step 3 writes go to .aihaus/knowledge.md — never to this template.
+     ADR-M013-A (dual-knowledge.md reconciliation): this file is bootstrap-only. -->
+
 # Knowledge Base (template)
 
 Seeded at install. Append per-project gotchas here. Entries are promoted from milestone retrospectives.
+The canonical promotion target is `.aihaus/knowledge.md` (local, gitignored). This template file
+provides the initial K-001 convention seed only; do NOT treat it as a live promotion target.
 
 ---
 

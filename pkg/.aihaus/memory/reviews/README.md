@@ -9,12 +9,15 @@ adversarial agents have identified across milestone reviews.
 
 ## What goes here
 
-- `common-findings.md` — plan-checker log of patterns observed in
-  multiple reviews (already present; do NOT delete or move)
-- Future reviewer-adjacent logs as defined by ADR-M013-A (S04 locks
-  final ownership; this README is a placeholder until then)
+- `common-findings.md` — cross-milestone aggregate; plan-checker + reviewer + code-reviewer
+  + verifier may append directly (ADR-M013-A scoped-writer whitelist exception)
+- `false-positives.md` — cross-milestone aggregate; reviewer + code-reviewer may append
+  directly (same ADR-M013-A whitelist exception)
+- `<M0XX>-reviewer.md` — per-milestone reviewer summary, written by orchestrator at
+  completion-protocol Step 4.7 (ADR-M013-A; single-writer: orchestrator only)
+- `<M0XX>-code-reviewer.md` — per-milestone code-reviewer summary, written by orchestrator
+  at completion-protocol Step 4.7 (ADR-M013-A; single-writer: orchestrator only)
 - Anti-pattern catalogs referenced by the evolution pass
-- Code-reviewer observations that recur across multiple PRs
 
 ## What does NOT go here
 
@@ -24,16 +27,24 @@ adversarial agents have identified across milestone reviews.
 - Backend or frontend implementation patterns → use `memory/backend/`
   or `memory/frontend/`
 
-## Ownership (placeholder — pending ADR-M013-A)
+## Ownership (locked by ADR-M013-A — S04)
 
-The final ownership contract for this bucket is defined in ADR-M013-A,
-to be written in S04. Until then:
-- `common-findings.md` is written by the plan-checker agent.
-- Other files in this bucket are written by reviewer / code-reviewer.
-- Per ADR-M009-A, `/aih-update` never overwrites this directory.
+Ownership contract defined in ADR-M013-A (`.aihaus/decisions.md`):
+
+**Cross-milestone aggregates (scoped-writer whitelist):**
+- `common-findings.md`: reviewer, code-reviewer, verifier, plan-checker may append directly
+- `false-positives.md`: reviewer, code-reviewer may append directly
+
+**Per-milestone summaries (orchestrator sole-writer):**
+- `<M0XX>-reviewer.md` and `<M0XX>-code-reviewer.md` are written by the orchestrator via
+  completion-protocol Step 4.7. The reviewer/code-reviewer agents emit their summaries
+  as fenced payload blocks; the orchestrator parses and Edit-applies.
+
+Per ADR-M009-A, `/aih-update` never overwrites this directory.
 
 ## Cross-references
 
-- ADR-M013-A (S04) — will lock explicit per-file ownership.
+- ADR-M013-A — memory ownership contract (`.aihaus/decisions.md`)
+- Completion-protocol Step 4.7 — per-milestone summary emission
 - `memory/global/` — cross-cutting patterns from the evolution pass.
 - `MEMORY.md` (index at `memory/MEMORY.md`) — entry point index.

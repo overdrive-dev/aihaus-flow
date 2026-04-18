@@ -87,7 +87,21 @@ execution/
 execution/reviews/
 execution/DECISIONS-LOG.md
 execution/KNOWLEDGE-LOG.md
+execution/AGENT-EVOLUTION.md    ← scaffolded here; Step 4.5 consume-check is non-trivially true
 RUN-MANIFEST.md       ← new checkpoint file
+```
+
+`execution/AGENT-EVOLUTION.md` initial content (scaffold only; content accumulates during milestone execution via implementer/reviewer proposals):
+```markdown
+# Agent Evolution Proposals — [M0XX]-[slug]
+
+Agent-evolution proposals accumulated during milestone execution.
+Applied at completion-protocol Step 4.5 by the orchestrator.
+Each proposal must include: agent name, evidence (file path + symptom), proposed change, story that surfaced it.
+
+---
+
+<!-- proposals appended below during execution -->
 ```
 
 RUN-MANIFEST.md initial content (schema v2 per ADR-004 — see `pkg/.aihaus/templates/RUN-MANIFEST-schema-v2.md`):

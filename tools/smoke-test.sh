@@ -1345,6 +1345,44 @@ check_backfill_script() {
   fi
 }
 
+# ---- Check 33: AGENT-EVOLUTION.md scaffold mentioned in execution.md Step E2 (M013/S04) --
+# ADR-M013-A requires that execution.md Step E2 unconditionally scaffolds
+# AGENT-EVOLUTION.md so completion-protocol Step 4.5's `if file exists` check
+# is never trivially false. A grep for the literal string "AGENT-EVOLUTION.md"
+# in the execution annex is the observable assertion.
+check_agent_evolution_scaffold() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: AGENT-EVOLUTION.md scaffold present in execution.md Step E2 (M013/S04)"
+  local exec_annex="${PACKAGE_ROOT}/.aihaus/skills/aih-milestone/annexes/execution.md"
+  if [[ ! -f "$exec_annex" ]]; then
+    _fail "$label" "execution.md annex not found at ${exec_annex#${PACKAGE_ROOT}/}"
+    return
+  fi
+  if grep -q 'AGENT-EVOLUTION\.md' "$exec_annex"; then
+    _pass "$label"
+  else
+    _fail "$label" "AGENT-EVOLUTION.md not mentioned in execution.md — Step E2 scaffold missing (ADR-M013-A)"
+  fi
+}
+
+# ---- Check 34: completion-protocol.md contains Step 4.7 (M013/S04) -----------
+# ADR-M013-A requires Step 4.7 in completion-protocol.md documenting reviewer
+# and code-reviewer per-milestone summary emission. Grep for the step header.
+check_completion_protocol_step_4_7() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: completion-protocol.md contains Step 4.7 (M013/S04)"
+  local cp="${PACKAGE_ROOT}/.aihaus/skills/aih-milestone/completion-protocol.md"
+  if [[ ! -f "$cp" ]]; then
+    _fail "$label" "completion-protocol.md not found at ${cp#${PACKAGE_ROOT}/}"
+    return
+  fi
+  if grep -q 'Step 4\.7' "$cp"; then
+    _pass "$label"
+  else
+    _fail "$label" "Step 4.7 not found in completion-protocol.md (ADR-M013-A F3 mitigation)"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -1381,6 +1419,8 @@ check_autonomy_gate_fixtures
 check_migration_fixtures
 check_memory_readme_seeds
 check_backfill_script
+check_agent_evolution_scaffold
+check_completion_protocol_step_4_7
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

@@ -66,6 +66,34 @@ If any ADR was superseded during execution, or a new convention emerged:
 2. Update `.aihaus/knowledge.md` with new conventions
 3. This keeps architecture docs current — agents read them before every task
 
+## Step 4.7: Emit Reviewer Memory Summaries (ADR-M013-A)
+After Step 4.6, instruct the `reviewer` and `code-reviewer` agents to emit per-milestone
+summaries. These agents have no Write or Edit tools — they return summary text as part
+of their Task-tool payload; the orchestrator parses and applies.
+
+1. Spawn `reviewer` with the instruction:
+   `"Emit a per-milestone summary for [M0XX]-[slug]. Return a fenced markdown block
+   between <!-- aihaus:reviewer-summary --> and <!-- aihaus:reviewer-summary:end -->
+   suitable for writing verbatim to .aihaus/memory/reviews/[M0XX]-reviewer.md.
+   Focus on recurring issues, ADR confirmations, and quality signals across all stories."`
+2. Spawn `code-reviewer` with the instruction:
+   `"Emit a per-milestone summary for [M0XX]-[slug]. Return a fenced markdown block
+   between <!-- aihaus:code-reviewer-summary --> and <!-- aihaus:code-reviewer-summary:end -->
+   suitable for writing verbatim to .aihaus/memory/reviews/[M0XX]-code-reviewer.md.
+   Focus on code-quality patterns, common findings, and anything that should influence
+   future implementation style in this repo."`
+3. Parse each agent's return for the fenced block. Apply verbatim via Edit tool:
+   - `reviewer` block → `.aihaus/memory/reviews/[M0XX]-reviewer.md`
+   - `code-reviewer` block → `.aihaus/memory/reviews/[M0XX]-code-reviewer.md`
+4. If either agent was NOT spawned during this milestone (e.g., no code-review stories ran),
+   skip that agent's Step 4.7 sub-step silently.
+
+**Ownership contract (ADR-M013-A):** orchestrator is sole writer of these per-milestone files
+(single-writer invariant preserved — agents emit via payload, orchestrator Edit-applies).
+Pre-existing cross-milestone aggregate files (`common-findings.md`, `false-positives.md`) are
+NOT touched by Step 4.7; those are governed by the ADR-M013-A scoped-writer whitelist
+(reviewer, code-reviewer, verifier, plan-checker may append directly).
+
 ## Step 5: Report Completion
 Present to the user:
 ```
