@@ -74,6 +74,12 @@ After a single approval, a coordinated team of 43 specialist agents handles rese
 
 ---
 
+## Archive Status
+
+aihaus-flow is no longer maintained. The install and workflow details below are preserved for existing users, migration work, and historical reference only.
+
+If you are starting fresh, do not install aihaus-flow. Start with [`gsd2`](https://github.com/gsd-build/gsd-2) or [`gsd1`](https://github.com/gsd-build/get-shit-done) instead.
+
 ## Install
 
 Both flows start with one clone of the package:

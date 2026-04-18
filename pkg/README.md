@@ -12,9 +12,9 @@
 
 **You think. ai builds.**
 
-**An autonomous developer workflow for Claude Code. One approval gate, then 43 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
+**Archived workflow package. Kept here as historical reference only.**
 
-**Built for people who'd rather shape an idea than chaperone a model.**
+**Use [`gsd2`](https://github.com/gsd-build/gsd-2) or [`gsd1`](https://github.com/gsd-build/get-shit-done) for ongoing use.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.16.0-181717?style=for-the-badge&logo=github)](VERSION)
