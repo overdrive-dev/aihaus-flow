@@ -1,0 +1,15 @@
+{
+  "name": "aihaus-flow",
+  "owner": {
+    "name": "overdrive-dev",
+    "url": "https://github.com/overdrive-dev/aihaus-flow"
+  },
+  "description": "aihaus agent harness for Claude Code — intent-based skills, specialized agents, and lifecycle hooks for autonomous milestone execution.",
+  "plugins": [
+    {
+      "name": "aihaus",
+      "source": "./plugin",
+      "description": "aihaus agent harness: 11 skills (/aih-init, /aih-plan, /aih-bugfix, /aih-feature, /aih-milestone, /aih-resume, /aih-brainstorm, /aih-help, /aih-quick, /aih-update, /aih-sync-notion), 43 agents, 19 lifecycle hooks."
+    }
+  ]
+}
