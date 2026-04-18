@@ -1304,6 +1304,47 @@ check_memory_readme_seeds() {
   fi
 }
 
+# ---- Check 32: backfill-milestone-history.sh exists, is executable,
+#               and produces >= 12 M0NN rows when milestones dir is present (M013/S03)
+check_backfill_script() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: backfill-milestone-history.sh exists + produces rows (M013/S03)"
+  local script="${SCRIPT_DIR}/backfill-milestone-history.sh"
+  local problems=()
+
+  # (a) script exists
+  if [[ ! -f "$script" ]]; then
+    _fail "$label" "backfill-milestone-history.sh not found at tools/"
+    return
+  fi
+
+  # (b) script is executable
+  if [[ ! -x "$script" ]]; then
+    problems+=("backfill-milestone-history.sh is not executable (run: chmod +x tools/backfill-milestone-history.sh)")
+  fi
+
+  # (c) script passes bash -n syntax check
+  if ! bash -n "$script" 2>/dev/null; then
+    problems+=("backfill-milestone-history.sh failed bash -n syntax check")
+  fi
+
+  # (d) if milestones dir exists, script produces >= 12 M0NN rows
+  local milestones_root="${PACKAGE_ROOT}/../.aihaus/milestones"
+  if [[ -d "$milestones_root" ]]; then
+    local row_count
+    row_count=$(bash "$script" 2>/dev/null | grep -cE '^\| M[0-9]{3} \|' || echo "0")
+    if [[ "$row_count" -lt 12 ]]; then
+      problems+=("backfill-milestone-history.sh produced only ${row_count} M0NN rows (expected >= 12)")
+    fi
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -1339,6 +1380,7 @@ check_cohort_membership_roundtrip
 check_autonomy_gate_fixtures
 check_migration_fixtures
 check_memory_readme_seeds
+check_backfill_script
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
