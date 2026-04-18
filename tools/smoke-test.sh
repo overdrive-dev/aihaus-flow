@@ -57,10 +57,10 @@ check_skills() {
   fi
 }
 
-# ---- Check 2: .aihaus/agents/ has 43 .md files ------------------------------
+# ---- Check 2: .aihaus/agents/ has 44 .md files ------------------------------
 check_agents() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 43 .md files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 44 .md files"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   if [[ ! -d "$agents_root" ]]; then
     _fail "$label" "directory not found: $agents_root"
@@ -68,17 +68,17 @@ check_agents() {
   fi
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 43 ]]; then
+  if [[ "$count" -eq 44 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 43 .md files, found $count"
+    _fail "$label" "expected 44 .md files, found $count"
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 19 .sh files (M011 adds statusline-milestone) --
+# ---- Check 3: .aihaus/hooks/ has 20 .sh files (M013/S05 adds context-inject) --
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 19 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 20 .sh files"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
@@ -87,10 +87,10 @@ check_hooks() {
   # maxdepth 1 excludes hooks/lib/ (M011/S01 shared helpers library).
   local count
   count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 19 ]]; then
+  if [[ "$count" -eq 20 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 19 .sh files, found $count"
+    _fail "$label" "expected 20 .sh files, found $count"
   fi
 }
 
@@ -772,11 +772,11 @@ check_skill_count_and_staleness() {
   fi
 }
 
-# ---- Check 28: cohort membership round-trip + parse contract (M012/S07) ------
-# Seven sub-assertions covering the 6-cohort v0.16.0 taxonomy in cohorts.md:
-#   C1 each of the 43 agents appears under exactly one cohort
-#   C2 cohort counts match: planner-binding=4, planner=13, doer=15, verifier=7,
-#      adversarial-scout=2, adversarial-review=2 (total=43)
+# ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M013/S05) --
+# Seven sub-assertions covering the 6-cohort taxonomy in cohorts.md:
+#   C1 each of the 44 agents appears under exactly one cohort
+#   C2 cohort counts match: planner-binding=4, planner=13, doer=15, verifier=8,
+#      adversarial-scout=2, adversarial-review=2 (total=44)
 #   C3 no :verifier-rich or :investigator cohort name appears in the table
 #   C4 F-006 parse contract: every data row yields NF=7 (awk -F'|' | sort -u == "7")
 #   C5 header row literal match: "| # | Agent | Cohort | Model | Effort |"
@@ -850,8 +850,8 @@ check_cohort_membership_roundtrip() {
   done
 
   local total_agents="${#_seen_agents[@]}"
-  if [[ "$total_agents" -ne 43 ]]; then
-    problems+=("C1: expected 43 agents in membership table; found ${total_agents}")
+  if [[ "$total_agents" -ne 44 ]]; then
+    problems+=("C1: expected 44 agents in membership table; found ${total_agents}")
   fi
 
   # C2: expected cohort counts.
@@ -859,7 +859,7 @@ check_cohort_membership_roundtrip() {
     [":planner-binding"]=4
     [":planner"]=13
     [":doer"]=15
-    [":verifier"]=7
+    [":verifier"]=8
     [":adversarial-scout"]=2
     [":adversarial-review"]=2
   )
@@ -1383,6 +1383,74 @@ check_completion_protocol_step_4_7() {
   fi
 }
 
+# ---- Check 35: context-curator agent + context-inject hook exist (M013/S05) --
+# Asserts Component A of M013 shipped:
+#   (a) pkg/.aihaus/agents/context-curator.md exists with required frontmatter
+#       (name, tools, model, effort, color, memory) and read-only tools whitelist
+#   (b) pkg/.aihaus/hooks/context-inject.sh exists
+#   (c) context-curator model is haiku (cohort :verifier default)
+#   (d) context-curator tools are Read, Grep, Glob (no Write/Edit per ADR-001)
+#   (e) templates/settings.local.json references context-inject.sh under SubagentStart
+check_context_curator() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: context-curator agent + context-inject hook exist (M013/S05)"
+  local agent="${PACKAGE_ROOT}/.aihaus/agents/context-curator.md"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/context-inject.sh"
+  local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
+  local problems=()
+
+  # (a) agent file exists
+  if [[ ! -f "$agent" ]]; then
+    problems+=("context-curator.md missing at agents/context-curator.md")
+  else
+    # check required frontmatter fields
+    local front
+    front=$(awk '/^---$/{c++; next} c==1' "$agent")
+    for field in name tools model effort color memory; do
+      if ! printf '%s\n' "$front" | grep -q "^${field}:"; then
+        problems+=("context-curator.md frontmatter missing '${field}'")
+      fi
+    done
+    # (c) model must be haiku
+    local model
+    model=$(awk '/^---$/{c++; next} c==1 && /^model:/{print $2; exit}' "$agent")
+    if [[ "$model" != "haiku" ]]; then
+      problems+=("context-curator.md: expected model=haiku (cohort :verifier), got model=${model}")
+    fi
+    # (d) tools must include Read, Grep, Glob and must NOT include Write or Edit
+    local tools_line
+    tools_line=$(awk '/^---$/{c++; next} c==1 && /^tools:/{print; exit}' "$agent")
+    for required_tool in Read Grep Glob; do
+      if ! printf '%s' "$tools_line" | grep -q "$required_tool"; then
+        problems+=("context-curator.md: tools missing '${required_tool}'")
+      fi
+    done
+    for forbidden_tool in Write Edit; do
+      if printf '%s' "$tools_line" | grep -q "$forbidden_tool"; then
+        problems+=("context-curator.md: tools must NOT include '${forbidden_tool}' (ADR-001 read-only)")
+      fi
+    done
+  fi
+
+  # (b) hook exists
+  if [[ ! -f "$hook" ]]; then
+    problems+=("context-inject.sh missing at hooks/context-inject.sh")
+  fi
+
+  # (e) template references context-inject.sh under SubagentStart
+  if [[ -f "$tpl" ]]; then
+    if ! grep -q 'context-inject.sh' "$tpl"; then
+      problems+=("templates/settings.local.json does not reference context-inject.sh (SubagentStart hook not registered)")
+    fi
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -1421,6 +1489,7 @@ check_memory_readme_seeds
 check_backfill_script
 check_agent_evolution_scaffold
 check_completion_protocol_step_4_7
+check_context_curator
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

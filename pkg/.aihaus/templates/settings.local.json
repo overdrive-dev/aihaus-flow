@@ -178,6 +178,17 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/context-inject.sh",
+            "timeout": 10,
+            "statusMessage": "Injecting context..."
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit-agent.sh",
             "async": true
           }

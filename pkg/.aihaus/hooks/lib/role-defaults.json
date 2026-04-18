@@ -1,0 +1,38 @@
+{
+  "_comment": "Role-default context paths keyed on cohort (ADR-M013-A). Used by context-inject.sh static path. Each entry is an array of {tier, path, rationale} objects. Paths are relative to the project root (or .aihaus/ base). The token '<story-file>' is resolved at runtime by context-inject.sh.",
+  "_schema": 1,
+  ":planner-binding": [
+    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs gate all architectural decisions and are binding on planners."},
+    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas and patterns prevent repeated mistakes in planning."},
+    {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack, conventions, and milestone history inform planning scope."},
+    {"tier": "HIGH", "path": "<analysis-brief>", "rationale": "Analyst brief is the primary input to binding-tier planners."}
+  ],
+  ":planner": [
+    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs are binding; planners must not contradict existing architecture."},
+    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas and reusable patterns are relevant to research synthesis."},
+    {"tier": "MED",  "path": ".aihaus/project.md", "rationale": "Stack and conventions provide grounding for research and analysis."},
+    {"tier": "MED",  "path": "<analysis-brief>", "rationale": "Prior analysis brief gives context on what has already been investigated."}
+  ],
+  ":doer": [
+    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs are binding on implementation; must not contradict architecture."},
+    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas prevent implementation mistakes."},
+    {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack, conventions, and verification commands required for implementation."},
+    {"tier": "HIGH", "path": "<story-file>", "rationale": "Story spec and acceptance criteria define the implementation target."}
+  ],
+  ":verifier": [
+    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs define what must be verified as implemented correctly."},
+    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas surface verification gaps agents self-report miss."},
+    {"tier": "HIGH", "path": "<story-file>", "rationale": "Acceptance criteria are the ground truth for verification verdicts."},
+    {"tier": "MED",  "path": "<execution-dir>", "rationale": "Execution artifacts and prior summaries provide evidence for verification."}
+  ],
+  ":adversarial-scout": [
+    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs are the binding contract scouts verify plans comply with."},
+    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas are primary adversarial scout targets."},
+    {"tier": "HIGH", "path": "<story-file>", "rationale": "Story spec is the scope boundary for adversarial plan review."}
+  ],
+  ":adversarial-review": [
+    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs are the contract reviewers verify the diff complies with."},
+    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas are the primary adversarial review targets."},
+    {"tier": "MED",  "path": ".aihaus/memory/reviews", "rationale": "Prior review findings inform adversarial review patterns."}
+  ]
+}

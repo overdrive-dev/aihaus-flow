@@ -41,6 +41,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 | assumptions-analyzer | agent | WORKS | Read + Bash + Grep + Glob only. Read-only. | 2026-04-14 |
 | brainstorm-synthesizer | agent | WORKS | Tools: Read, Write, Grep, Glob. Writes synthesis artifacts; no worktree dependency. | 2026-04-14 |
 | code-fixer | agent | NOT-SUPPORTED | Declares `isolation: worktree` + `permissionMode: bypassPermissions`. Cursor subagent frontmatter does not accept `isolation`; no bypassPermissions equivalent. | 2026-04-14 |
+| context-curator | agent | WORKS-WITH-CAVEAT | Read-only agent (tools: Read, Grep, Glob); no worktree dependency. Invoked via `context-inject.sh` SubagentStart hook — SubagentStart fires on Cursor per phase-researcher §4 (less-certain than SubagentStop absence; pending Cursor-platform SubagentStart verification). Agent body works without caveat; hook-trigger path is CONDITIONAL on Cursor SubagentStart support. | 2026-04-17 |
 | code-reviewer | agent | WORKS-WITH-CAVEAT | Tools: Read, Grep, Glob, Bash. No Write, but Cursor inheritance model means a child of this subagent could regain write tools unless `readonly: true` is set on the Cursor side. Read-only discipline is prompt-level. | 2026-04-14 |
 | codebase-mapper | agent | WORKS | Tools: Read, Bash, Grep, Glob, Write. Writes map artifacts; no worktree dependency. | 2026-04-14 |
 | contrarian | agent | WORKS-WITH-CAVEAT | Tools: Read, Grep, Glob (read-only whitelist). On Cursor, subagents inherit all parent tools — the read-only guarantee becomes prompt-level, not tool-level. Functional but weaker safety. | 2026-04-14 |
@@ -81,7 +82,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 ## Summary
 
 - **Skills:** 13 rows — 2 WORKS, 6 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
-- **Agents:** 43 rows — 25 WORKS, 13 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
+- **Agents:** 44 rows — 25 WORKS, 14 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
 
 ## Maintenance
 
