@@ -1,4 +1,4 @@
-# Cohort Taxonomy — 44 Agents → 6 Uniform Cohorts
+# Cohort Taxonomy — 45 Agents → 6 Uniform Cohorts
 
 This annex is the single source of truth for cohort membership, consumed by
 `/aih-effort` (preset filter, sidecar write) and by the restore path in
@@ -192,7 +192,7 @@ Members (alphabetical):
 
 ---
 
-## Membership table (44 agents)
+## Membership table (45 agents)
 
 **Parse contract (F-006 — binding per ADR-M012-A).** This table has exactly
 5 data columns. The header is `| # | Agent | Cohort | Model | Effort |`.
@@ -233,28 +233,29 @@ cohort.
 | 22 | implementer              | :doer             | sonnet | high  |
 | 23 | integration-checker      | :verifier         | haiku  | high  |
 | 24 | intel-updater            | :doer             | sonnet | high  |
-| 25 | notion-sync              | :doer             | sonnet | high  |
-| 26 | nyquist-auditor          | :doer             | sonnet | high  |
-| 27 | pattern-mapper           | :doer             | sonnet | high  |
-| 28 | phase-researcher         | :planner          | opus   | high  |
-| 29 | plan-checker             | :adversarial-scout | opus  | max   |
-| 30 | planner                  | :planner-binding  | opus   | xhigh |
-| 31 | product-manager          | :planner-binding  | opus   | xhigh |
-| 32 | project-analyst          | :doer             | sonnet | high  |
-| 33 | project-researcher       | :planner          | opus   | high  |
-| 34 | research-synthesizer     | :planner          | opus   | high  |
-| 35 | reviewer                 | :adversarial-review | opus | high  |
-| 36 | roadmapper               | :planner-binding  | opus   | xhigh |
-| 37 | security-auditor         | :verifier         | haiku  | high  |
-| 38 | test-writer              | :doer             | sonnet | high  |
-| 39 | ui-auditor               | :verifier         | haiku  | high  |
-| 40 | ui-checker               | :verifier         | haiku  | high  |
-| 41 | ui-researcher            | :planner          | opus   | high  |
-| 42 | user-profiler            | :doer             | sonnet | high  |
-| 43 | ux-designer              | :planner          | opus   | high  |
-| 44 | verifier                 | :verifier         | haiku  | high  |
+| 25 | learning-advisor         | :verifier         | haiku  | high  |
+| 26 | notion-sync              | :doer             | sonnet | high  |
+| 27 | nyquist-auditor          | :doer             | sonnet | high  |
+| 28 | pattern-mapper           | :doer             | sonnet | high  |
+| 29 | phase-researcher         | :planner          | opus   | high  |
+| 30 | plan-checker             | :adversarial-scout | opus  | max   |
+| 31 | planner                  | :planner-binding  | opus   | xhigh |
+| 32 | product-manager          | :planner-binding  | opus   | xhigh |
+| 33 | project-analyst          | :doer             | sonnet | high  |
+| 34 | project-researcher       | :planner          | opus   | high  |
+| 35 | research-synthesizer     | :planner          | opus   | high  |
+| 36 | reviewer                 | :adversarial-review | opus | high  |
+| 37 | roadmapper               | :planner-binding  | opus   | xhigh |
+| 38 | security-auditor         | :verifier         | haiku  | high  |
+| 39 | test-writer              | :doer             | sonnet | high  |
+| 40 | ui-auditor               | :verifier         | haiku  | high  |
+| 41 | ui-checker               | :verifier         | haiku  | high  |
+| 42 | ui-researcher            | :planner          | opus   | high  |
+| 43 | user-profiler            | :doer             | sonnet | high  |
+| 44 | ux-designer              | :planner          | opus   | high  |
+| 45 | verifier                 | :verifier         | haiku  | high  |
 
-**Totals:** :planner-binding=4 · :planner=13 · :doer=15 · :verifier=8 · :adversarial-scout=2 · :adversarial-review=2 · Sum=44
+**Totals:** :planner-binding=4 · :planner=13 · :doer=15 · :verifier=9 · :adversarial-scout=2 · :adversarial-review=2 · Sum=45
 
 ---
 

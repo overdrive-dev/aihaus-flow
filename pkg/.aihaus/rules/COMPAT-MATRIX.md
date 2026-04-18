@@ -58,6 +58,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 | implementer | agent | NOT-SUPPORTED | Declares `isolation: worktree` + `permissionMode: bypassPermissions`. The load-bearing write agent for `/aih-milestone` execution path. | 2026-04-14 |
 | integration-checker | agent | WORKS | Tools: Read, Bash, Grep, Glob. Read-only audit. | 2026-04-14 |
 | intel-updater | agent | WORKS | Tools: Read, Write, Bash, Glob, Grep. No worktree dependency. | 2026-04-14 |
+| learning-advisor | agent | NOT-SUPPORTED | Cursor has no post-agent-return hook equivalent to SubagentStop. Component B (Claude-Code-only) — the SubagentStop event that triggers learning-advisor.sh does not fire on Cursor; agent body is read-only (tools: Read, Grep, Glob) but is never invoked. | 2026-04-17 |
 | notion-sync | agent | WORKS-WITH-CAVEAT | Tools: Read, Write, Edit, Grep, Glob, Bash. No worktree dependency but talks to Notion MCP — Cursor prompts per write and per MCP call. | 2026-04-14 |
 | nyquist-auditor | agent | NOT-SUPPORTED | Declares `isolation: worktree` + `permissionMode: bypassPermissions`. | 2026-04-14 |
 | pattern-mapper | agent | WORKS | Tools: Read, Bash, Glob, Grep, Write. No worktree dependency. | 2026-04-14 |
@@ -82,7 +83,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 ## Summary
 
 - **Skills:** 13 rows — 2 WORKS, 6 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
-- **Agents:** 44 rows — 25 WORKS, 14 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
+- **Agents:** 45 rows — 25 WORKS, 14 WORKS-WITH-CAVEAT, 6 NOT-SUPPORTED.
 
 ## Maintenance
 

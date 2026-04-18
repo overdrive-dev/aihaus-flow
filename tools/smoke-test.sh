@@ -57,10 +57,10 @@ check_skills() {
   fi
 }
 
-# ---- Check 2: .aihaus/agents/ has 44 .md files ------------------------------
+# ---- Check 2: .aihaus/agents/ has 45 .md files (M013/S06 adds learning-advisor) --
 check_agents() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 44 .md files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 45 .md files"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   if [[ ! -d "$agents_root" ]]; then
     _fail "$label" "directory not found: $agents_root"
@@ -68,17 +68,17 @@ check_agents() {
   fi
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 44 ]]; then
+  if [[ "$count" -eq 45 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 44 .md files, found $count"
+    _fail "$label" "expected 45 .md files, found $count"
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 20 .sh files (M013/S05 adds context-inject) --
+# ---- Check 3: .aihaus/hooks/ has 21 .sh files (M013/S06 adds learning-advisor) --
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 20 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 21 .sh files"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
@@ -87,10 +87,10 @@ check_hooks() {
   # maxdepth 1 excludes hooks/lib/ (M011/S01 shared helpers library).
   local count
   count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 20 ]]; then
+  if [[ "$count" -eq 21 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 20 .sh files, found $count"
+    _fail "$label" "expected 21 .sh files, found $count"
   fi
 }
 
@@ -850,8 +850,8 @@ check_cohort_membership_roundtrip() {
   done
 
   local total_agents="${#_seen_agents[@]}"
-  if [[ "$total_agents" -ne 44 ]]; then
-    problems+=("C1: expected 44 agents in membership table; found ${total_agents}")
+  if [[ "$total_agents" -ne 45 ]]; then
+    problems+=("C1: expected 45 agents in membership table; found ${total_agents}")
   fi
 
   # C2: expected cohort counts.
@@ -859,7 +859,7 @@ check_cohort_membership_roundtrip() {
     [":planner-binding"]=4
     [":planner"]=13
     [":doer"]=15
-    [":verifier"]=8
+    [":verifier"]=9
     [":adversarial-scout"]=2
     [":adversarial-review"]=2
   )
@@ -1451,6 +1451,96 @@ check_context_curator() {
   fi
 }
 
+# ---- Check 36: learning-advisor agent + hook exist + COMPAT-MATRIX row (M013/S06) --
+# Asserts Component B of M013 shipped:
+#   (a) pkg/.aihaus/agents/learning-advisor.md exists with required frontmatter
+#       (name, tools, model, effort, color, memory) and read-only tools whitelist
+#   (b) pkg/.aihaus/hooks/learning-advisor.sh exists and is executable
+#   (c) learning-advisor model is haiku (cohort :verifier default)
+#   (d) learning-advisor tools are Read, Grep, Glob (no Write/Edit per ADR-001)
+#   (e) templates/settings.local.json references learning-advisor.sh under SubagentStop
+#   (f) COMPAT-MATRIX.md has a NOT-SUPPORTED row for learning-advisor
+#   (g) agent count reached 45 (context-curator=44, learning-advisor=45)
+check_learning_advisor() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: learning-advisor agent + hook exist + COMPAT-MATRIX row (M013/S06)"
+  local agent="${PACKAGE_ROOT}/.aihaus/agents/learning-advisor.md"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/learning-advisor.sh"
+  local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
+  local compat="${PACKAGE_ROOT}/.aihaus/rules/COMPAT-MATRIX.md"
+  local problems=()
+
+  # (a) agent file exists with required frontmatter
+  if [[ ! -f "$agent" ]]; then
+    problems+=("learning-advisor.md missing at agents/learning-advisor.md")
+  else
+    local front
+    front=$(awk '/^---$/{c++; next} c==1' "$agent")
+    for field in name tools model effort color memory; do
+      if ! printf '%s\n' "$front" | grep -q "^${field}:"; then
+        problems+=("learning-advisor.md frontmatter missing '${field}'")
+      fi
+    done
+    # (c) model must be haiku
+    local model
+    model=$(awk '/^---$/{c++; next} c==1 && /^model:/{print $2; exit}' "$agent")
+    if [[ "$model" != "haiku" ]]; then
+      problems+=("learning-advisor.md: expected model=haiku (cohort :verifier), got model=${model}")
+    fi
+    # (d) tools must include Read, Grep, Glob and must NOT include Write or Edit
+    local tools_line
+    tools_line=$(awk '/^---$/{c++; next} c==1 && /^tools:/{print; exit}' "$agent")
+    for required_tool in Read Grep Glob; do
+      if ! printf '%s' "$tools_line" | grep -q "$required_tool"; then
+        problems+=("learning-advisor.md: tools missing '${required_tool}'")
+      fi
+    done
+    for forbidden_tool in Write Edit; do
+      if printf '%s' "$tools_line" | grep -q "$forbidden_tool"; then
+        problems+=("learning-advisor.md: tools must NOT include '${forbidden_tool}' (ADR-001 read-only)")
+      fi
+    done
+  fi
+
+  # (b) hook exists and is executable
+  if [[ ! -f "$hook" ]]; then
+    problems+=("learning-advisor.sh missing at hooks/learning-advisor.sh")
+  elif [[ ! -x "$hook" ]]; then
+    problems+=("learning-advisor.sh exists but is not executable")
+  fi
+
+  # (e) template references learning-advisor.sh under SubagentStop
+  if [[ -f "$tpl" ]]; then
+    if ! grep -q 'learning-advisor.sh' "$tpl"; then
+      problems+=("templates/settings.local.json does not reference learning-advisor.sh (SubagentStop hook not registered)")
+    fi
+    if ! grep -q 'SubagentStop' "$tpl"; then
+      problems+=("templates/settings.local.json missing SubagentStop hook block")
+    fi
+  fi
+
+  # (f) COMPAT-MATRIX has NOT-SUPPORTED row for learning-advisor
+  if [[ -f "$compat" ]]; then
+    if ! grep -q 'learning-advisor.*NOT-SUPPORTED\|NOT-SUPPORTED.*learning-advisor' "$compat"; then
+      problems+=("COMPAT-MATRIX.md missing NOT-SUPPORTED row for learning-advisor")
+    fi
+  fi
+
+  # (g) agent count at 45
+  local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
+  local count
+  count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
+  if [[ "$count" -ne 45 ]]; then
+    problems+=("expected 45 agents total (learning-advisor bumps from 44); found ${count}")
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -1490,6 +1580,7 @@ check_backfill_script
 check_agent_evolution_scaffold
 check_completion_protocol_step_4_7
 check_context_curator
+check_learning_advisor
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
