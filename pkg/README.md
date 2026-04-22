@@ -41,17 +41,6 @@ Runs anywhere Claude Code runs — macOS, Windows, Linux.
 
 ---
 
-> [!IMPORTANT]
-> ## This project is no longer maintained.
->
-> aihaus-flow is archived in place as historical reference. We are not maintaining it further, and we are not recommending it for new installs.
->
-> **This package is archived — check the main repository for active successor projects.**
->
-> If you are reading the packaged README from an old install or copied package tree, treat it as end-of-life documentation rather than an active release channel.
-
----
-
 ## The Problem
 
 Most of your time with ai-assisted coding gets spent describing *how* instead of deciding *what*. Every prompt re-teaches the model your stack, your conventions, the decisions you already made. Sessions don't share memory, so execution drifts. When something breaks you restart from nothing.

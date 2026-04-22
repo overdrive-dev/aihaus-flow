@@ -48,19 +48,6 @@ Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and s
 
 ---
 
-> [!IMPORTANT]
-> ## This project is no longer maintained.
->
-> aihaus-flow is archived in place as historical reference. We are not maintaining it further, and we are not recommending it for new installs.
->
-> **Use [`gsd2`](https://github.com/gsd-build/gsd-2) or [`gsd1`](https://github.com/gsd-build/get-shit-done) instead.**
->
-> If you're landing here from an older blog post, repo, or command snippet, treat this repository as end-of-life documentation rather than an active workflow.
->
-> Existing users can keep reading the files for ideas or migration context, but should plan to move to `gsd2` or `gsd1` for ongoing use.
-
----
-
 ## The Problem
 
 Most of your time with ai-assisted coding gets spent describing *how* instead of deciding *what*. Every prompt re-teaches the model your stack, your conventions, the decisions you already made. Sessions don't share memory, so execution drifts. When something breaks you restart from nothing.
@@ -72,12 +59,6 @@ aihaus inverts that loop. **Front-load the thinking once; the system runs the re
 After a single approval, a coordinated team of 46 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
 
 ---
-
-## Archive Status
-
-aihaus-flow is no longer maintained. The install and workflow details below are preserved for existing users, migration work, and historical reference only.
-
-If you are starting fresh, do not install aihaus-flow. Start with [`gsd2`](https://github.com/gsd-build/gsd-2) or [`gsd1`](https://github.com/gsd-build/get-shit-done) instead.
 
 ## Install
 
