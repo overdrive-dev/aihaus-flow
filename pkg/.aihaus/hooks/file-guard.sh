@@ -10,14 +10,8 @@ else
   FILE_PATH=$(echo "$INPUT" | grep -oE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"file_path"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || echo "")
 fi
 
-if echo "$FILE_PATH" | grep -qiE \
-  '\.env(\.|$)' \
-  '|credentials' \
-  '|\.git/(config|hooks)' \
-  '|id_rsa' \
-  '|\.pem$' \
-  '|secret' \
-  '|\.key$'; then
+# Sensitive-name deny-list (single combined regex; M014 hotfix from multi-arg-grep bug).
+if echo "$FILE_PATH" | grep -qiE '\.env(\.|$)|credentials|\.git/(config|hooks)|id_rsa|\.pem$|secret|\.key$'; then
   echo "BLOCKED: Sensitive file. Requires explicit user approval." >&2
   exit 2
 fi
@@ -32,32 +26,27 @@ if [[ -z "${CLAUDE_PROJECT_DIR:-}" ]]; then
 fi
 
 if [[ -n "$FILE_PATH" ]]; then
-  # Resolve symlinks for both the target and project root so that worktrees
-  # symlinked inside the project dir don't produce false positives.
-  # Use shell fallback if realpath is unavailable.
   if command -v realpath >/dev/null 2>&1; then
-    # realpath -m: resolve without requiring path to exist (file may be new)
     resolved_file=$(realpath -m "$FILE_PATH" 2>/dev/null || echo "$FILE_PATH")
     resolved_project=$(realpath "$CLAUDE_PROJECT_DIR" 2>/dev/null || echo "$CLAUDE_PROJECT_DIR")
   else
-    # Fallback: use Python (required per README) or cd-based expansion.
     if command -v python3 >/dev/null 2>&1; then
       resolved_file=$(python3 -c "import os,sys; print(os.path.normpath(sys.argv[1]))" "$FILE_PATH" 2>/dev/null || echo "$FILE_PATH")
       resolved_project=$(python3 -c "import os,sys; print(os.path.normpath(sys.argv[1]))" "$CLAUDE_PROJECT_DIR" 2>/dev/null || echo "$CLAUDE_PROJECT_DIR")
-    elif command -v python >/dev/null 2>&1; then
-      resolved_file=$(python -c "import os,sys; print(os.path.normpath(sys.argv[1]))" "$FILE_PATH" 2>/dev/null || echo "$FILE_PATH")
-      resolved_project=$(python -c "import os,sys; print(os.path.normpath(sys.argv[1]))" "$CLAUDE_PROJECT_DIR" 2>/dev/null || echo "$CLAUDE_PROJECT_DIR")
     else
       resolved_file="$FILE_PATH"
       resolved_project="$CLAUDE_PROJECT_DIR"
     fi
   fi
 
-  # Ensure resolved_project has a trailing slash for prefix matching so that
-  # "/project-foo" doesn't match "/project-foobar".
-  case "$resolved_file" in
-    "${resolved_project}/"*|"${resolved_project}")
-      # Inside project dir — allow
+  # Cross-platform normalize: lowercase + forward slashes + drive prefix unify.
+  # Windows realpath returns /c/Users while CLAUDE_PROJECT_DIR may be C:\Users
+  # — string compare without normalization fails. M014 hotfix.
+  norm_file=$(printf '%s' "$resolved_file" | tr '\' '/' | tr '[:upper:]' '[:lower:]' | sed -E 's|^([a-z]):|/\1|')
+  norm_project=$(printf '%s' "$resolved_project" | tr '\' '/' | tr '[:upper:]' '[:lower:]' | sed -E 's|^([a-z]):|/\1|')
+
+  case "$norm_file" in
+    "${norm_project}/"*|"${norm_project}")
       ;;
     *)
       echo "BLOCKED: write outside project dir (path: ${FILE_PATH})" >&2
