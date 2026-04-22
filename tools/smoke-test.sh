@@ -38,11 +38,11 @@ _start_check() {
   CHECK_NUMBER=$((CHECK_NUMBER + 1))
 }
 
-# ---- Check 1: 13 expected SKILL.md files in expected subdirectories ---------
+# ---- Check 1: 12 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 13 expected SKILL.md files"
-  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-resume aih-brainstorm aih-effort aih-automode)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 12 expected SKILL.md files"
+  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-resume aih-brainstorm aih-effort)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -755,24 +755,24 @@ check_purity() {
   fi
 }
 
-# ---- Check 27: skill directory count = 13 (M012/S07) -----------------------
-# Verifies that exactly 13 aih-* skill directories exist under .aihaus/skills/.
-# Note: Check 1 verifies the NAMED SKILL.md files (13 expected names including
-# aih-effort and aih-automode). Check 27 independently verifies the directory
-# count so that unexpected directories (stale renames, extra skill dirs) also
-# cause CI failure. If the count exceeds 13, a stale directory likely remains
-# from the M012/S04 skill rename.
+# ---- Check 27: skill directory count = 12 (M014/S03 deletes aih-automode) ---
+# Verifies that exactly 12 aih-* skill directories exist under .aihaus/skills/.
+# Note: Check 1 verifies the NAMED SKILL.md files (12 expected names including
+# aih-effort; aih-automode deleted in M014/S03). Check 27 independently verifies
+# the directory count so that unexpected directories (stale renames, extra skill
+# dirs) also cause CI failure. If the count exceeds 12, a stale directory likely
+# remains from a prior rename.
 check_skill_count_and_staleness() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: exactly 13 aih-* skill dirs exist (M012/S07)"
+  local label="Check ${CHECK_NUMBER}: exactly 12 aih-* skill dirs exist (M014/S03)"
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   local problems=()
 
   # Count aih-* directories (exclude _shared and any non-aih prefixed dirs).
   local actual_count
   actual_count=$(find "$skills_root" -maxdepth 1 -type d -name 'aih-*' | wc -l | tr -d ' ')
-  if [[ "$actual_count" -ne 13 ]]; then
-    problems+=("expected 13 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
+  if [[ "$actual_count" -ne 12 ]]; then
+    problems+=("expected 12 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
