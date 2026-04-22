@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# manifest-migrate.sh — detect v1 RUN-MANIFEST.md and convert to v2 in place.
-# ADR-004 migration hook. Idempotent; backs up to .v1.bak before first mutation.
+# manifest-migrate.sh — detect v1 RUN-MANIFEST.md and convert to v2 in place;
+# detect v2 and add the optional ## Checkpoints section for v3 (M014/ADR-M014-B).
+# ADR-004 migration hook. Idempotent; backs up to .v1.bak before v1→v2 mutation.
 # Coordinates with manifest-append.sh via the same $MANIFEST_PATH.lock mutex.
 #
 # Usage: MANIFEST_PATH=<path> manifest-migrate.sh
 #
-# Exit codes: 0 ok (migrated or already-v2), 2 invalid args, 3 worktree-refuse,
+# Exit codes: 0 ok (migrated or already-v2/v3), 2 invalid args, 3 worktree-refuse,
 #             4 backup-failed, 5 write-failed, 6 lock-timeout, 7 manifest-missing.
 set -euo pipefail
 
@@ -50,10 +51,66 @@ case "$MANIFEST_PATH" in
     ;;
 esac
 
-# --- detect v2 (idempotent no-op) ---
+# --- detect v3 (already fully migrated — no-op) ---
+if grep -qE '^schema:\s*v3\s*$' "$MANIFEST_PATH"; then
+  echo "manifest-migrate.sh: already-v3 (no-op)"
+  log_audit "already-v3"
+  exit 0
+fi
+
+# --- detect v2 → apply v2→v3 migration (additive: ## Checkpoints section) ---
 if grep -qE '^schema:\s*v2\s*$' "$MANIFEST_PATH"; then
-  echo "manifest-migrate.sh: already-v2 (no-op)"
-  log_audit "already-v2"
+  # Acquire lock before mutation
+  LOCK="$MANIFEST_PATH.lock"
+  tries=0
+  while ! mkdir "$LOCK" 2>/dev/null; do
+    if [ -d "$LOCK" ]; then
+      age=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || stat -f %m "$LOCK" 2>/dev/null || echo 0) ))
+      if [ "$age" -gt "$STALE_LOCK_SEC" ]; then
+        rmdir "$LOCK" 2>/dev/null || true
+        continue
+      fi
+    fi
+    tries=$((tries + 1))
+    [ "$tries" -lt 100 ] || { echo "manifest-migrate.sh: lock timeout (v2→v3)" >&2; log_audit "fail" "lock-timeout-v2v3"; exit 6; }
+    sleep 0.1 2>/dev/null || sleep 1
+  done
+  trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+
+  # Idempotent: only append ## Checkpoints if the heading is absent
+  if grep -q '^## Checkpoints$' "$MANIFEST_PATH"; then
+    # Section exists; bump schema key only if still v2
+    TMP_V3="$(mktemp)"
+    trap 'rmdir "$LOCK" 2>/dev/null || true; rm -f "$TMP_V3"' EXIT INT TERM
+    sed 's/^schema: v2$/schema: v3/' "$MANIFEST_PATH" > "$TMP_V3"
+    if ! mv -f "$TMP_V3" "$MANIFEST_PATH"; then
+      echo "manifest-migrate.sh: write failed (v2→v3 schema bump)" >&2
+      log_audit "fail" "write-failed-v2v3-bump"
+      exit 5
+    fi
+    echo "manifest-migrate.sh: v2→v3 OK (## Checkpoints already present; schema key bumped)"
+    log_audit "migrated-v2v3" "checkpoints-already-present"
+    exit 0
+  fi
+
+  TMP_V3="$(mktemp)"
+  trap 'rmdir "$LOCK" 2>/dev/null || true; rm -f "$TMP_V3"' EXIT INT TERM
+  {
+    # Rewrite schema key from v2 to v3; append ## Checkpoints section at end.
+    sed 's/^schema: v2$/schema: v3/' "$MANIFEST_PATH"
+    echo ""
+    echo "## Checkpoints"
+    echo ""
+    echo "| ts | story | agent | substep | event | result | sha |"
+    echo "|---|---|---|---|---|---|---|"
+  } > "$TMP_V3"
+  if ! mv -f "$TMP_V3" "$MANIFEST_PATH"; then
+    echo "manifest-migrate.sh: write failed (v2→v3)" >&2
+    log_audit "fail" "write-failed-v2v3"
+    exit 5
+  fi
+  echo "manifest-migrate.sh: v2→v3 OK (## Checkpoints section added)"
+  log_audit "migrated-v2v3" "checkpoints-section-added"
   exit 0
 fi
 

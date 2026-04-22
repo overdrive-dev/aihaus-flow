@@ -1665,6 +1665,93 @@ check_verifier_knowledge_consulted() {
   fi
 }
 
+# ---- Check (M014/S06): schema v2→v3 migration fixture (idempotent + additive) -
+# Exercises manifest-migrate.sh v2→v3 path:
+#   R1 takes a v2 fixture manifest (schema: v2, no ## Checkpoints)
+#   R2 runs manifest-migrate.sh → asserts ## Checkpoints heading present
+#   R3 asserts column header present (LD-1 7-column shape)
+#   R4 runs manifest-migrate.sh again → asserts no diff (idempotent)
+# Uses mktemp -d for the fixture; never pollutes the repo.
+check_schema_v3_migration() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: schema v2→v3 migration fixture (idempotent + additive, M014/S06)"
+  local migrate_hook="${PACKAGE_ROOT}/.aihaus/hooks/manifest-migrate.sh"
+  local problems=()
+
+  if [[ ! -f "$migrate_hook" ]]; then
+    _fail "$label" "manifest-migrate.sh not found at hooks/"
+    return
+  fi
+
+  # Create temp dir and a minimal v2 manifest fixture
+  local tmpdir
+  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-smoke)"
+  local fixture="${tmpdir}/RUN-MANIFEST.md"
+
+  cat > "$fixture" <<'MANIFEST_EOF'
+## Metadata
+milestone: M000-test
+branch: test/branch
+started: 2026-04-22T00:00:00Z
+schema: v2
+phase: execute-stories
+status: running
+last_updated: 2026-04-22T00:00:00Z
+
+## Invoke stack
+
+## Story Records
+story_id|status|started_at|commit_sha|verified|notes
+S01|complete|2026-04-22T00:01:00Z|abc1234|true|
+MANIFEST_EOF
+
+  # R2: run migration first time
+  local migrate_out migrate_rc
+  migrate_out=$(MANIFEST_PATH="$fixture" bash "$migrate_hook" 2>&1)
+  migrate_rc=$?
+  if [[ "$migrate_rc" -ne 0 ]]; then
+    problems+=("R2: manifest-migrate.sh exited ${migrate_rc} on first run; output: ${migrate_out:0:200}")
+  fi
+
+  # R2/R3: assert ## Checkpoints heading present
+  if ! grep -q '^## Checkpoints$' "$fixture"; then
+    problems+=("R2: ## Checkpoints heading not added by migration")
+  fi
+
+  # R3: assert LD-1 column header present
+  local expected_header="| ts | story | agent | substep | event | result | sha |"
+  if ! grep -qF "$expected_header" "$fixture"; then
+    problems+=("R3: LD-1 column header not present; expected: '${expected_header}'")
+  fi
+
+  # R4: capture snapshot before second run
+  local snap_before
+  snap_before="$(cat "$fixture")"
+
+  # R4: run migration a second time
+  local migrate_out2 migrate_rc2
+  migrate_out2=$(MANIFEST_PATH="$fixture" bash "$migrate_hook" 2>&1)
+  migrate_rc2=$?
+  if [[ "$migrate_rc2" -ne 0 ]]; then
+    problems+=("R4: manifest-migrate.sh exited ${migrate_rc2} on second run; output: ${migrate_out2:0:200}")
+  fi
+
+  # R4: assert idempotent (file unchanged)
+  local snap_after
+  snap_after="$(cat "$fixture")"
+  if [[ "$snap_before" != "$snap_after" ]]; then
+    problems+=("R4: idempotence violated — manifest changed on second migration run")
+  fi
+
+  rm -rf "$tmpdir" 2>/dev/null || true
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -1707,6 +1794,7 @@ check_context_curator
 check_learning_advisor
 check_knowledge_curator
 check_verifier_knowledge_consulted
+check_schema_v3_migration
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

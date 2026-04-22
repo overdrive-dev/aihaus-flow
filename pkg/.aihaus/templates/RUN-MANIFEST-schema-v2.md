@@ -1,15 +1,17 @@
-# RUN-MANIFEST.md — Schema v2 Specification
+# RUN-MANIFEST schema v3 (backward compatible with v2 readers)
 
 <!-- DO-NOT-EDIT-MANUALLY at runtime: this is the TEMPLATE. Live RUN-MANIFEST.md files are written by manifest-append.sh / phase-advance.sh / manifest-migrate.sh only. Humans MAY read runtime manifests; writes must go through hooks. -->
 
-**Status:** Canonical — ADR-004 (amendment to ADR-001).
-**Introduced:** M003 (2026-04-14).
+**Status:** Canonical — ADR-004 (amendment to ADR-001) + ADR-M014-B (v3 extension).
+**Introduced:** M003 (2026-04-14). **v3 extension:** M014 (2026-04-22).
 
 ## Purpose
 
 `RUN-MANIFEST.md` is the single source of truth for step-update state during aihaus autonomous runs. Every milestone, feature, and bugfix writes one manifest. `STATUS.md` is a derived projection of this file (per ADR-004); never the authoritative state.
 
 v2 adds an `Invoke stack` section (for ADR-003's marker protocol), formalizes `Metadata` as a keyed block, and converts the free-form `Progress Log` into append-only pipe-delimited `Story Records`.
+
+**v3 = v2 + optional `## Checkpoints` section.** v3 is fully backward compatible: a v2 manifest with no `## Checkpoints` section is a valid v3 manifest. v2 readers that do not know about `## Checkpoints` continue to parse the manifest correctly — the new section appears after all v2 sections. The `schema` Metadata key bumps from `v2` to `v3` on migration.
 
 ## Structure
 
@@ -136,3 +138,87 @@ v1 manifests are detected by the ABSENCE of `schema: v2` in Metadata (or absence
 - **No JSON body.** Pipe-delimited is the contract; consumers use grep/awk/sed, not jq. Cross-platform reliable on Git Bash.
 - **No schema version in Story Records rows.** One schema per manifest; migration converts whole files.
 - **No multi-writer coordination across different manifests.** The locking discipline (see ADR-004 + `manifest-append.sh`) protects a single manifest's concurrent appends within one milestone's orchestration.
+
+---
+
+## Schema v3 extension: `## Checkpoints` section (M014 / ADR-M014-B)
+
+> **File path unchanged** — this schema document stays at `pkg/.aihaus/templates/RUN-MANIFEST-schema-v2.md` per F-10 lock. The file name reflects the base schema; the title reflects the current version.
+
+### v3 = v2 + optional `## Checkpoints` section
+
+The `## Checkpoints` section is **optional** and appears after all v2 sections. Its absence does not make a manifest invalid. After `manifest-migrate.sh` v2→v3 migration, the section always exists (at minimum with the column header and separator, no data rows).
+
+`manifest-append.sh` is the SOLE writer of `## Checkpoints` (ADR-004 single-writer rule extends to v3 per ADR-M014-B). Agents MUST NOT write checkpoint rows directly.
+
+### v3 manifest structure
+
+```text
+manifest-v3 := metadata BLANK invoke-stack BLANK story-records BLANK checkpoints
+checkpoints  := "## Checkpoints" "\n" checkpoint-header "\n" checkpoint-sep "\n" checkpoint-row*
+checkpoint-header := "| ts | story | agent | substep | event | result | sha |"
+checkpoint-sep    := "|---|---|---|---|---|---|---|"   (column-width separator)
+checkpoint-row    := ts "|" story "|" agent "|" substep "|" event "|" result "|" sha "|" "\n"
+```
+
+### Column definitions (LD-1 verbatim)
+
+| Column | Type | Required | Constraints |
+|--------|------|----------|-------------|
+| `ts` | ISO-8601 UTC string | yes | Format `YYYY-MM-DDTHH:MM:SSZ`; rows appended in lexicographic order |
+| `story` | string | yes | Matches `^S\d{2}$` (e.g. `S03`) |
+| `agent` | string | yes | Agent slug from `pkg/.aihaus/agents/*.md` (filename without `.md`) |
+| `substep` | string | yes | Free-text; convention `<kind>:<identifier>` (e.g. `file:foo.sh`, `step:cherrypick`, `subtask:run-smoke`) |
+| `event` | enum | yes | `enter` \| `exit` \| `resumed` |
+| `result` | enum | conditional | Required on `exit` and `resumed`; **empty** on `enter`; values: `OK` \| `ERR` \| `SKIP` |
+| `sha` | string | optional | 7-char short git sha; empty if no commit produced |
+
+**Substep convention:** `<kind>:<identifier>` where `kind` is one of `file`, `step`, or `subtask`. Examples: `file:src/foo.sh`, `step:cherry-pick`, `subtask:run-smoke-test`. Free-text is accepted; convention aids `/aih-resume` substep matching.
+
+**Event enum:**
+- `enter` — recorded at the START of a substep (before the work begins). `result` and `sha` are empty.
+- `exit` — recorded at the END of a substep (after the work completes or fails). `result` is required; `sha` is set if a commit was produced.
+- `resumed` — recorded when `/aih-resume` re-dispatches an agent from a prior checkpoint. `result` reflects the resumption outcome.
+
+**Result enum (on `exit` and `resumed` only):**
+- `OK` — substep completed successfully.
+- `ERR` — substep failed; agent may or may not have produced partial output.
+- `SKIP` — substep was intentionally skipped (already complete, out-of-scope, or not applicable).
+
+### Example rows
+
+```markdown
+## Checkpoints
+
+| ts                   | story | agent       | substep             | event   | result | sha     |
+|----------------------|-------|-------------|---------------------|---------|--------|---------|
+| 2026-04-22T15:30:01Z | S03   | implementer | file:foo.sh         | enter   |        |         |
+| 2026-04-22T15:32:14Z | S03   | implementer | file:foo.sh         | exit    | OK     | a1b2c3d |
+| 2026-04-22T15:38:44Z | S03   | implementer | file:bar.sh         | exit    | ERR    |         |
+| 2026-04-22T15:45:09Z | S03   | implementer | file:bar.sh         | resumed | OK     | b2c3d4e |
+```
+
+### Write modes (manifest-append.sh)
+
+- `--checkpoint-enter <story> <agent> <substep>` — appends a row with `event=enter`, empty `result` and `sha`, current ISO-8601 UTC timestamp.
+- `--checkpoint-exit <story> <agent> <substep> <result> [<sha>]` — appends a row with `event=exit`, validated `result` ∈ `{OK,ERR,SKIP}`, optional 7-char sha.
+
+Both modes auto-create the `## Checkpoints` section if absent (defense-in-depth; `manifest-migrate.sh` is the primary creation path).
+
+**Rate-limit guard:** duplicate `enter` events for identical `(story, agent, substep)` within 1 second are silently dropped (anti-spam per Risk table LOW item).
+
+### Migration (v2 → v3)
+
+Run `manifest-migrate.sh` once per manifest. The migration:
+1. Detects the literal heading `## Checkpoints` — if present, no-op.
+2. If absent, appends the heading + column header + separator row. Does NOT add data rows.
+3. Updates `Metadata.schema` from `v2` to `v3`.
+4. Idempotent: running twice produces no diff.
+
+Consumers updated to read v3:
+
+| Consumer | Operation | New field read |
+|----------|-----------|----------------|
+| `aih-resume/SKILL.md` | checkpoint-aware recovery | `## Checkpoints` last data row (`event`, `substep`, `sha`) |
+| `manifest-append.sh` | checkpoint write | `## Checkpoints` section (append-only) |
+| `manifest-migrate.sh` | v2→v3 migration | creates `## Checkpoints` heading if absent |
