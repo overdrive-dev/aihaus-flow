@@ -15,7 +15,6 @@ migration is triggered by `/aih-update` (silent) OR first
 `/aih-effort --status` (idempotent). Schema contract: ADR-M009-A (preserved)
 + ADR-M012-A §4.
 
-Auto-mode state lives in `.aihaus/.automode` — see the `aih-automode` skill.
 
 ## Purpose, location, ownership (ADR-M009-A — preserved verbatim)
 
@@ -148,7 +147,7 @@ Summary of migration actions:
   `adversarial-review`.
 - If the v2 sidecar recorded `last_preset=<the permission-mode preset>`, the
   migration writes `.automode` with `enabled=true` + `last_enabled_at=<iso>`
-  and emits a 3-line `!!` block instructing `/aih-automode --enable` to replay
+  noting that the `.automode` sidecar is now orphaned (ADR-M014-A — use DSP launch via `bash .aihaus/auto.sh`)
   side effects.
 
 ## Absolute-restore semantic (ADR-M009-A — preserved verbatim)

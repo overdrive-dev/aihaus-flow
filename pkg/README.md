@@ -1,4 +1,4 @@
-<div align="center">
+**This package is archived — check the main repository for successor projects.**
 
 # aihaus
 
@@ -14,7 +14,7 @@
 
 **Archived workflow package. Kept here as historical reference only.**
 
-**Use [`gsd2`](https://github.com/gsd-build/gsd-2) or [`gsd1`](https://github.com/gsd-build/get-shit-done) for ongoing use.**
+**This package is archived. See the main aihaus-flow repository for successor project guidance.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.16.0-181717?style=for-the-badge&logo=github)](VERSION)
@@ -46,7 +46,7 @@ Runs anywhere Claude Code runs — macOS, Windows, Linux.
 >
 > aihaus-flow is archived in place as historical reference. We are not maintaining it further, and we are not recommending it for new installs.
 >
-> **Use [`gsd2`](https://github.com/gsd-build/gsd-2) or [`gsd1`](https://github.com/gsd-build/get-shit-done) instead.**
+> **This package is archived — check the main repository for active successor projects.**
 >
 > If you are reading the packaged README from an old install or copied package tree, treat it as end-of-life documentation rather than an active release channel.
 
@@ -384,7 +384,7 @@ Skills that could explode cost enforce hard caps *before* spawning. `/aih-brains
 - **git**
 - **bash** (Unix) or **PowerShell 5+** (Windows)
 - **Claude Code v2.1.111+** recommended to activate Opus 4.7 `effort: xhigh`. Older Claude Code works — `xhigh` falls back to `high` automatically.
-- **Optional:** users on Anthropic API + Max/Team/Enterprise can switch to Claude Code auto mode via `/aih-automode --enable`. See caveats in `pkg/.aihaus/skills/aih-automode/annexes/permission-modes.md`.
+- **Autonomous launch:** use `bash .aihaus/auto.sh` (or `.aihaus/auto.ps1` on Windows) to run Claude Code with `--dangerously-skip-permissions` (DSP mode, v0.18.0+). Bare `claude` is the non-auto path.
 
 No runtime. No build step. No package manager. The entire package is markdown and shell scripts.
 

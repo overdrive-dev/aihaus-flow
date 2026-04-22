@@ -17,7 +17,7 @@ shape of the `schema=3` sidecar write performed in Phase-4 step 17.
 | `--agent <name> --model X --effort Y` | ALLOWED — ADR-M008-A amendment, dual-axis escape |
 | `--agent <name> --model X` alone | REJECTED |
 | bare `--model X` or `--effort Y` | REJECTED |
-| `--permission-mode <m>` | REJECTED — exits nonzero; stderr: `--permission-mode flag removed in v0.16.0; use /aih-automode --enable` |
+| `--permission-mode <m>` | REJECTED — exits nonzero; stderr: `--permission-mode flag removed in v0.16.0; use bash .aihaus/auto.sh for DSP launch` |
 
 Argument parser for `--cohort`: leading `:` is literal (matches docs),
 but accept `:planner` or `planner` defensively (strip optional leading
@@ -108,4 +108,4 @@ time, run the v2→v3 migration documented in `annexes/state-file.md` §
 Migration v2→v3 before writing v3. See also `pkg/scripts/lib/restore-effort.sh`
 for the authoritative migration implementation.
 
-For permission-mode calibration see `/aih-automode`.
+For permission-mode calibration, use `bash .aihaus/auto.sh` (DSP launch via wrapper).

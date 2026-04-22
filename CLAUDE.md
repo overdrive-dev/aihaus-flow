@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-aihaus is a workflow automation package for Claude Code **and** Cursor (multi-platform since v0.10.0 / M006 — see ADR-005). It provides 13 intent-based commands (`init`, `plan`, `bugfix`, `feature`, `milestone`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`, `effort`, `automode`) that users install into their own repositories via `install.sh --platform <claude|cursor|both>`. `/aih-run` and `/aih-plan-to-milestone` were retired in v0.11.0 — their behavior lives in `/aih-milestone` (execution + `--plan` promotion) and `/aih-feature --plan` (inline small-plan execution). `/aih-effort` (the effort-tuning skill, added M008 and renamed in v0.17.0 / M012) handles effort + model tuning; `/aih-automode` (new in v0.17.0 / M012) handles permission-mode enable/disable. There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, rules, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
+aihaus is a workflow automation package for Claude Code **and** Cursor (multi-platform since v0.10.0 / M006 — see ADR-005). It provides 12 intent-based commands (`init`, `plan`, `bugfix`, `feature`, `milestone`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`, `effort`) that users install into their own repositories via `install.sh --platform <claude|cursor|both>`. `/aih-run` and `/aih-plan-to-milestone` were retired in v0.11.0 — their behavior lives in `/aih-milestone` (execution + `--plan` promotion) and `/aih-feature --plan` (inline small-plan execution). `/aih-effort` (the effort-tuning skill, added M008 and renamed in v0.17.0 / M012) handles effort + model tuning. The permission-mode skill was deleted in v0.18.0 / M014 (replaced by DSP wrapper launch — see ADR-M014-A). There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, rules, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
 
 ## Repo Structure
 
@@ -29,10 +29,10 @@ There is no build command, no type checker, and no unit test framework. The smok
 
 ## Package Contents (inside `pkg/`)
 
-- `pkg/.aihaus/skills/*/SKILL.md` — 13 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code (or as a `Task` mention on Cursor).
+- `pkg/.aihaus/skills/*/SKILL.md` — 12 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code (or as a `Task` mention on Cursor).
 - `pkg/.aihaus/skills/_shared/autonomy-protocol.md` — binding execution-autonomy rules (M005 / ADR-bound-to-all-skills): 3-phase rule, TRUE blocker definition, no option menus, no delegated typing. Every SKILL.md references it.
-- `pkg/.aihaus/agents/*.md` — 43 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
-- `pkg/.aihaus/hooks/*.sh` — 17 shell hooks for Claude Code lifecycle events: M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance) plus v0.12.0 runtime autonomy enforcement (autonomy-guard blocks forbidden execution-phase patterns).
+- `pkg/.aihaus/agents/*.md` — 46 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
+- `pkg/.aihaus/hooks/*.sh` — 20 shell hooks for Claude Code lifecycle events: M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance) plus v0.12.0 runtime autonomy enforcement (autonomy-guard blocks forbidden execution-phase patterns).
 - `pkg/.aihaus/rules/` — Cursor plugin rules and compatibility matrix (M006; `aihaus.mdc`, `COMPAT-MATRIX.md`, `README.md`). Consumed by Cursor's plugin subsystem when installed with `--platform cursor` or `--platform both`.
 - `pkg/.aihaus/.cursor-plugin/plugin.json` — Cursor plugin manifest (M006; Strategy B per ADR-005). `pkg/.aihaus/` is the plugin root when installed on Cursor.
 - `pkg/.aihaus/skills/aih-plan/annexes/*.md` — 4 annex files (attachments, intake-discipline, from-brainstorm, guardrails) — M004 enxugamento of the aih-plan core SKILL.md.
@@ -45,7 +45,8 @@ There is no build command, no type checker, and no unit test framework. The smok
 ## Key Conventions
 
 - **Skills must declare `name: aih-<slug>`** in YAML frontmatter and stay under 200 lines. The smoke test enforces both.
-- **Agents declare** `name`, `tools`, `model`, `effort`, `color`, and `memory` in YAML frontmatter (added M008; smoke-test Check 6 enforces all six). `implementer`, `frontend-dev`, and `code-fixer` use `isolation: worktree` and `permissionMode: bypassPermissions`. Default effort tier post-v0.13.0 is `xhigh` on Opus 4.7 coding/agentic agents (requires Claude Code v2.1.111+; older Claude Code falls back to `high` automatically).
+- **Agents declare** `name`, `tools`, `model`, `effort`, `color`, `memory`, `resumable`, and `checkpoint_granularity` in YAML frontmatter (M008 + M014; smoke-test Check 6 enforces all eight). `implementer`, `frontend-dev`, and `code-fixer` use `isolation: worktree` and `permissionMode: bypassPermissions`.
+  Default effort tier post-v0.13.0 is `xhigh` on Opus 4.7 coding/agentic agents (requires Claude Code v2.1.111+; older Claude Code falls back to `high` automatically).
 - **Agents are stack-agnostic.** They read `.aihaus/project.md` at runtime for stack details. Never hardcode languages, frameworks, or directory structures in agent definitions.
 - **The purity check** scans all shipped files for references to foreign framework names. Any match fails the check. See the `FORBIDDEN_TERMS` array in `tools/purity-check.sh` for the full denylist.
 - **`project.md`** uses marker comments (`<!-- AIHAUS:AUTO-GENERATED-START -->` / `<!-- AIHAUS:MANUAL-START -->`) to separate machine-owned and human-owned sections.
@@ -68,19 +69,21 @@ After any change to skills, agents, or hooks, run `bash tools/smoke-test.sh` to 
 
 ## Calibration and Permission Modes
 
-> **BREAKING (v0.17.0 / M012):** The former effort-calibration skill has
-> been renamed to `/aih-effort`; permission-mode calibration is now a
-> separate skill `/aih-automode`. The old skill name is gone — typing it
-> returns skill-not-found. See release notes M012
-> (tools/.out/release-notes-M012.md) for the migration recipe.
+>> **BREAKING (v0.18.0 / M014):** The permission-mode toggle skill has been deleted entirely.
+> DSP launch via `bash .aihaus/auto.sh` is the sole autonomy path. Typing the old skill name
+> returns skill-not-found. See ADR-M014-A in `pkg/.aihaus/decisions.md`.
 
-Users can retune effort tiers via `/aih-effort` and enable auto-mode via
-`/aih-automode` (both added/renamed M012). The default install uses
-`permissionMode: bypassPermissions` + `Bash(*)` + hook-based auto-approve
-— this is the autonomy contract M005 locks in. Auto mode (Claude Code
-≥ v2.1.83) is opt-in via `/aih-automode --enable` — it drops `Bash(*)`
-and ignores subagent `permissionMode`; the skill prints the full caveat
-matrix before applying.
+aihaus runs in auto mode when launched via `bash .aihaus/auto.sh` (which `exec`s
+`claude --dangerously-skip-permissions`). Safety lives entirely in PreToolUse hooks
+(`bash-guard.sh`, `file-guard.sh`, `read-guard.sh`). Bare `claude` invocation is the non-auto
+path — permission prompts appear normally. **No skill toggle exists.** See ADR-M014-A.
+
+On Windows PowerShell: `.aihaus/auto.ps1` is the equivalent wrapper.
+
+Users can retune effort tiers via `/aih-effort` (added M008, cohort taxonomy unaffected by M014).
+The Stop hook `autonomy-guard.sh` (M005 / ADR-bound-to-all-skills) remains active on all
+invocation paths — its execution-phase autonomy rules are **orthogonal** to DSP and still binding.
+See `pkg/.aihaus/skills/_shared/autonomy-protocol.md`.
 
 **Effort presets** (v0.17.0 — cohort-tuple shape, 6 cohorts). Three
 presets, invoked via `/aih-effort --preset <name>`:
@@ -96,7 +99,7 @@ presets, invoked via `/aih-effort --preset <name>`:
   swap; sonnet caps at `high` so xhigh silently clips), `:verifier (haiku, high)`
   (unchanged). Prone to overthinking on `:planner`, use sparingly.
 
-**Cohort aliases** (v0.17.0 / M012 / ADR-M012-A). All 43 agents are
+**Cohort aliases** (v0.17.0 / M012 / ADR-M012-A). All 46 agents are
 grouped into **6** uniform cohorts — one fixed default model per cohort:
 
 | Cohort | Count | Default model | Notes |
@@ -118,22 +121,60 @@ required). Per-agent escape hatch via `/aih-effort --agent <name> --model X
 `:adversarial-review` cohorts are preset-immune — only an explicit
 `--cohort :adversarial-scout` or `--cohort :adversarial-review` (with
 literal-word `adversarial` confirmation) or `--agent <member>` can mutate
-them. Full 43-agent mapping + prose rationale:
+them. Full 46-agent mapping + prose rationale:
 `pkg/.aihaus/skills/aih-effort/annexes/cohorts.md`.
 
 **Sidecars.** Effort calibration survives `/aih-update` via a
 `.aihaus/.effort` sidecar (schema v3; renamed from `.aihaus/.calibration`
-v2 in M012 / ADR-M012-A; ownership preserved per ADR-M009-A). A sibling
-`.aihaus/.automode` sidecar (2 fields: `enabled`, `last_enabled_at`)
-tracks auto-mode opt-in independently. Both files are user-owned, never
-committed, and live at `.aihaus/` root so the refresh loop (which only
-touches `skills/`, `agents/`, `hooks/`, `templates/`) leaves them alone.
-`update.sh` re-applies recorded `(model, effort)` to refreshed agents from
-`.effort`; `merge-settings.sh` preserves `permissions.defaultMode`. If
-`.automode enabled=true`, update prints a loud `!!` warning — hook/worktree
-side effects aren't auto-replayed; re-run `/aih-automode --enable` to
-reapply. Full schema + migration guide:
-`pkg/.aihaus/skills/aih-effort/annexes/state-file.md`.
+v2 in M012 / ADR-M012-A; ownership preserved per ADR-M009-A).
+Both files are user-owned, never committed, and live at `.aihaus/` root so
+the refresh loop (which only touches `skills/`, `agents/`, `hooks/`,
+`templates/`) leaves them alone. `update.sh` re-applies recorded
+`(model, effort)` to refreshed agents from `.effort`. Full schema + migration
+guide: `pkg/.aihaus/skills/aih-effort/annexes/state-file.md`.
+
+## Resume Substrate
+
+Since v0.18.0 / M014, `/aih-resume` uses an authoritative checkpoint substrate rather
+than file-existence heuristics. See ADR-M014-B in `pkg/.aihaus/decisions.md`.
+
+**Schema v3 `## Checkpoints` (LD-1).** RUN-MANIFEST v3 gains an optional `## Checkpoints`
+section (additive — v2 manifests migrate in-place without data loss). 7-column table:
+
+```
+| ts (ISO-8601 UTC) | story (S\d{2}) | agent (slug) | substep (<kind>:<id>) | event (enter|exit|resumed) | result (OK|ERR|SKIP) | sha (7-char) |
+```
+
+`manifest-append.sh` is the sole writer (single-writer discipline from ADR-004 extended).
+New modes: `--checkpoint-enter <story> <agent> <substep>` and
+`--checkpoint-exit <story> <agent> <substep> <result> [<sha>]`.
+
+**Agent frontmatter classification (LD-6).** Every agent in `pkg/.aihaus/agents/*.md`
+declares two new YAML fields (46 agents classified; smoke-test Check 6 enforces both):
+
+```yaml
+resumable: true | false
+checkpoint_granularity: story | file | step
+```
+
+- `(true, story)` — ~42 idempotent agents. Re-spawn is safe; fresh run produces equivalent output.
+- `(false, file)` — `implementer`, `frontend-dev`, `code-fixer` (3 stateful). Dispatch with `--resume-from <substep>`.
+- `(false, step)` — `debug-session-manager` (1 multi-cycle). Per-step state needs explicit recovery.
+
+**`--resume-from <substep>` dispatch (LD-2).** For stateful agents, `/aih-resume` passes the
+free-text substep ID from the last checkpoint row. The agent reads `## Checkpoints`, skips all
+prior substeps, and continues from the next un-completed substep.
+
+**Worktree reconciliation.** `pkg/.aihaus/hooks/worktree-reconcile.sh` runs before dispatch.
+Classifies each non-main worktree as Category A (prune), B (emit cherry-pick recipe), or C
+(dirty — preserve untouched). Safe-default-to-C prevents silent data loss. Hook is
+standalone-safe (`bash worktree-reconcile.sh`).
+
+**Legacy-mode retention policy (LD-10).** The old file-existence heuristic is preserved in
+`aih-resume/SKILL.md` as a `<!-- LEGACY MODE -->` comment block, reachable via
+`/aih-resume --legacy-mode`. **REMOVE in M015 if no usage reported.** If the dogfood
+acceptance test (S10) passes without fallback to legacy mode, the comment block is safe to
+delete in the next milestone.
 
 ## Autonomy Protocol (M011 state gate + statusLine)
 

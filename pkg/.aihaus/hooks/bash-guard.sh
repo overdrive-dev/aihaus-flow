@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# DANGEROUS_PATTERNS migrated from auto-approve-bash.sh M007 baseline (M014/S02);
-# source of truth post-S04. When S04 deletes auto-approve-bash.sh, this hook
-# becomes the sole DANGEROUS_PATTERNS carrier. See ADR-008, ADR-009, K-003.
+# DANGEROUS_PATTERNS: sole carrier since M014/S04 (PermissionRequest layer deleted).
+# Pattern set migrated from M007 baseline; extended with M014/S02 additions.
+# See ADR-008, ADR-009, ADR-M014-A, K-003.
 #
 # Categories (matching ADR-009's prompt-class taxonomy):
 #   destructive-fs, priv-escalation, destructive-git, destructive-sql,

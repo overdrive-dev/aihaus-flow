@@ -1104,7 +1104,7 @@ EOF
 #      → schema=3 .effort; .v2.bak exists; .automode absent; idempotent
 #   F2 auto-mode-safe v2 (last_preset=auto-mode-safe, permission_mode=auto)
 #      → schema=3 .effort; .automode exists with enabled=true;
-#        !! block in stderr pointing at /aih-automode --enable; idempotent
+#        !! block in stderr with DSP launch message; idempotent
 #   F3 investigator-custom v2 (cohort.investigator.effort + .model)
 #      → schema=3 .effort; 3 per-agent overrides; !! warning about FR-M06; idempotent
 # Comparison strips the timestamp line (# Migrated from schema v2 ... on <ts>)
@@ -1192,11 +1192,11 @@ check_migration_fixtures() {
     problems+=("F2: .automode not created for auto-mode-safe fixture")
   fi
 
-  # stderr must contain the !! block pointing at /aih-automode --enable.
+  # stderr must contain the !! block with DSP launch message (M014).
   echo "$f2_stderr" | grep -q '!!' \
     || problems+=("F2: !! warning block not emitted in stderr")
-  echo "$f2_stderr" | grep -q '/aih-automode --enable' \
-    || problems+=("F2: stderr missing /aih-automode --enable reference")
+  echo "$f2_stderr" | grep -q 'DSP launch' \
+    || problems+=("F2: stderr missing DSP launch reference (M014 migration message)")
 
   # .effort content matches golden.
   if [[ -f "$f2_dir/.aihaus/.effort" ]]; then

@@ -73,6 +73,7 @@ grep -rIEHin \
   --include='*.yml' \
   --include='*.yaml' \
   --exclude="$SELF_NAME" \
+  --exclude='CHANGELOG.md' \
   --exclude-dir='.git' \
   --exclude-dir='.claude' \
   --exclude-dir='plans' \

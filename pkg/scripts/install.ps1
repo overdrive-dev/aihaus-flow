@@ -308,7 +308,7 @@ function Invoke-MigrateV2ToV3 {
         Write-Host "  !!  v2 sidecar had last_preset=auto-mode-safe." -ForegroundColor Yellow
         Write-Host "  !!    State migrated to .aihaus\.automode (enabled=true)." -ForegroundColor Yellow
         Write-Host "  !!    Side effects (defaultMode=auto, worktree frontmatter, SAFE_PATTERNS) are NOT replayed." -ForegroundColor Yellow
-        Write-Host "  !!    Run /aih-automode --enable to re-apply." -ForegroundColor Yellow
+        Write-Host "  !!    Permission auto-mode was removed in v0.18.0/M014. Use bash .aihaus/auto.sh for DSP launch." -ForegroundColor Yellow
         Write-Host "" -ForegroundColor Yellow
         $script:AutoModeSafeWarningEmitted = $true
     }
@@ -685,7 +685,7 @@ if (-not (Test-Path $SettingsSrc)) {
                 Write-Host "  !!  v2 sidecar had last_preset=auto-mode-safe." -ForegroundColor Yellow
                 Write-Host "  !!    State migrated to .aihaus\.automode (enabled=true)." -ForegroundColor Yellow
                 Write-Host "  !!    Side effects (defaultMode=auto, worktree frontmatter, SAFE_PATTERNS) are NOT replayed." -ForegroundColor Yellow
-                Write-Host "  !!    Run /aih-automode --enable to re-apply." -ForegroundColor Yellow
+                Write-Host "  !!    Permission auto-mode was removed in v0.18.0/M014. Use bash .aihaus/auto.sh for DSP launch." -ForegroundColor Yellow
                 Write-Host "" -ForegroundColor Yellow
                 $script:AutoModeSafeWarningEmitted = $true
             }

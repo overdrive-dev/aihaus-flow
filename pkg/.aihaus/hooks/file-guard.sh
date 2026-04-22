@@ -24,7 +24,7 @@ fi
 
 # Path-scope check: reject writes that escape $CLAUDE_PROJECT_DIR
 # (including ../ traversal and absolute paths outside the project root).
-# Migrated from auto-approve-writes.sh path-scope logic (M014/S02).
+# Path-scope check added M014/S02 (PermissionRequest layer deleted in S04).
 # Fail-closed: if CLAUDE_PROJECT_DIR is unset, deny to prevent escapes.
 if [[ -z "${CLAUDE_PROJECT_DIR:-}" ]]; then
   echo "BLOCKED: write outside project dir (CLAUDE_PROJECT_DIR is unset)" >&2

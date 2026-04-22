@@ -144,7 +144,7 @@ See ADR-001 in `pkg/.aihaus/decisions.md` for rationale.
 
 If you see lots of permission prompts during autonomous execution:
 
-1. **Check you're on v0.4.1+.** Run `/aih-update --check`. The auto-approve hooks only work silently if `bash-guard.sh` and `file-guard.sh` have the jq-optional fallback (shipped in v0.4.0) AND `auto-approve-bash.sh` + `auto-approve-writes.sh` have it too (shipped in v0.4.1). Older installs prompt every command.
+1. **Check you are on v0.18.0+.** Run `/aih-update --check`. Since M014, aihaus uses DSP (`--dangerously-skip-permissions`) via `bash .aihaus/auto.sh` instead of permission hooks. If you see permission prompts, ensure you launched via the DSP wrapper (not bare `claude`). Run `/aih-update` to migrate to the current hook set.
 
 2. **Some prompts are hardcoded in Claude Code — not aihaus:**
    - `cd <path> && git <cmd>` → "Compound commands with cd and git require approval to prevent bare repo attacks." Post-v0.4.1 agents use `git -C <path> <cmd>` instead, which sidesteps the guard. If you see this prompt, it means an older agent definition is still in play — run `/aih-update`.
