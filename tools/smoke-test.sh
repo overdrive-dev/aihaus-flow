@@ -75,10 +75,10 @@ check_agents() {
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 21 .sh files (M013/S06 adds learning-advisor) --
+# ---- Check 3: .aihaus/hooks/ has 22 .sh files (M014/S08 adds worktree-reconcile) --
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 21 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 22 .sh files"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
@@ -87,10 +87,10 @@ check_hooks() {
   # maxdepth 1 excludes hooks/lib/ (M011/S01 shared helpers library).
   local count
   count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 21 ]]; then
+  if [[ "$count" -eq 22 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 21 .sh files, found $count"
+    _fail "$label" "expected 22 .sh files, found $count"
   fi
 }
 
@@ -1762,6 +1762,112 @@ MANIFEST_EOF
   fi
 }
 
+# ---- Check (M014/S08): worktree-reconcile.sh 3-category fixture -------------
+# Creates a temp git repo with 3 worktrees:
+#   Cat A: clean worktree whose HEAD == main HEAD (merged).
+#   Cat B: clean worktree with 1 extra commit not on main.
+#   Cat C: dirty worktree with 1 uncommitted file.
+# Invokes worktree-reconcile.sh and asserts:
+#   A: worktree no longer listed by `git worktree list`
+#   B: stdout contains "git cherry-pick" recipe
+#   C: worktree still listed; dirty file still present
+# Uses mktemp -d for full isolation; never pollutes the repo.
+check_worktree_reconcile_fixture() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: worktree-reconcile.sh 3-category fixture (M014/S08)"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/worktree-reconcile.sh"
+  local problems=()
+
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "hook missing: ${hook#${PACKAGE_ROOT}/}"
+    return
+  fi
+  if [[ ! -x "$hook" ]]; then
+    problems+=("hook not executable: ${hook#${PACKAGE_ROOT}/}")
+  fi
+
+  # Need git available
+  if ! command -v git >/dev/null 2>&1; then
+    _fail "$label" "git not found; cannot run fixture"
+    return
+  fi
+
+  local tmpdir
+  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-wt-smoke)"
+
+  # ---- Bootstrap a bare git repo as the shared object store ------------------
+  local repo="${tmpdir}/repo"
+  mkdir -p "$repo"
+  git -C "$repo" init -b main >/dev/null 2>&1
+  git -C "$repo" config user.email "smoke@test"
+  git -C "$repo" config user.name  "Smoke Test"
+
+  # Initial commit on main
+  touch "$repo/seed.txt"
+  git -C "$repo" add seed.txt
+  git -C "$repo" commit -m "initial" >/dev/null 2>&1
+
+  # ---- Worktree A: clean + HEAD == main HEAD ---------------------------------
+  # Use a new branch (wt-a-branch) that points to the same SHA as main.
+  # Cannot add a worktree directly on 'main' — git forbids multiple
+  # checkouts of the same branch.
+  local wt_a="${tmpdir}/wt-cat-a"
+  git -C "$repo" branch wt-a-branch main >/dev/null 2>&1
+  git -C "$repo" worktree add "$wt_a" wt-a-branch >/dev/null 2>&1
+
+  # ---- Worktree B: clean + 1 extra commit ------------------------------------
+  local wt_b="${tmpdir}/wt-cat-b"
+  git -C "$repo" worktree add -b wt-b-branch "$wt_b" main >/dev/null 2>&1
+  touch "$wt_b/extra.txt"
+  git -C "$wt_b" add extra.txt
+  git -C "$wt_b" commit -m "extra commit on B" >/dev/null 2>&1
+
+  # ---- Worktree C: dirty (uncommitted file) -----------------------------------
+  local wt_c="${tmpdir}/wt-cat-c"
+  git -C "$repo" worktree add -b wt-c-branch "$wt_c" main >/dev/null 2>&1
+  echo "dirty" > "$wt_c/dirty.txt"
+  # Do NOT git add — leave it untracked so status --porcelain is non-empty
+
+  # ---- Run the hook against the fixture repo ----------------------------------
+  local hook_stdout
+  hook_stdout="$(
+    cd "$repo"
+    AIHAUS_MAIN_BRANCH=main bash "$hook" 2>/dev/null
+  )" || true
+
+  # ---- Assert Category A: worktree removed ------------------------------------
+  # git worktree list --porcelain emits platform-native paths. Match on the
+  # trailing directory name (wt-cat-a / wt-cat-c) which is unambiguous in
+  # the fixture, avoids Unix-vs-Windows path prefix mismatch.
+  local wt_list_after
+  wt_list_after="$(git -C "$repo" worktree list --porcelain 2>/dev/null)"
+  if printf '%s\n' "$wt_list_after" | grep -qE '(worktree .*/|worktree )wt-cat-a$'; then
+    problems+=("A: category-A worktree still listed after reconcile (should have been pruned)")
+  fi
+
+  # ---- Assert Category B: cherry-pick recipe on stdout -----------------------
+  if ! printf '%s\n' "$hook_stdout" | grep -q 'git cherry-pick'; then
+    problems+=("B: stdout missing 'git cherry-pick' recipe for category-B worktree")
+  fi
+
+  # ---- Assert Category C: worktree preserved + dirty file intact --------------
+  if ! printf '%s\n' "$wt_list_after" | grep -qE '(worktree .*/|worktree )wt-cat-c$'; then
+    problems+=("C: category-C worktree was removed (should have been preserved)")
+  fi
+  if [[ ! -f "$wt_c/dirty.txt" ]]; then
+    problems+=("C: dirty file removed from category-C worktree (should be untouched)")
+  fi
+
+  # ---- Cleanup ----------------------------------------------------------------
+  rm -rf "$tmpdir" 2>/dev/null || true
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -1805,6 +1911,7 @@ check_learning_advisor
 check_knowledge_curator
 check_verifier_knowledge_consulted
 check_schema_v3_migration
+check_worktree_reconcile_fixture
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
