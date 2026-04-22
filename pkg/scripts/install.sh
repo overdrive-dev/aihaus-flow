@@ -15,18 +15,15 @@ DSP_MIN_CLAUDE_VERSION="2.0.0"
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--target <path>] [--copy] [--update] [--platform <target>]
+Usage: install.sh [--target <path>] [--copy] [--update]
 
-Installs aihaus into a target git repository.
+Installs aihaus into a target git repository (Claude Code only).
 
 Options:
   --target <path>      Target directory (default: current working directory)
   --copy               Copy files instead of symlinking (fallback for
                        locked-down environments)
   --update             Re-sync package dirs only; preserve local data
-  --platform <name>    Install target: claude only.
-                       cursor and both are rejected (M014+: DSP flag is
-                       Claude-Code-CLI-only). See ADR-M014-A.
   -h, --help           Show this message
 EOF
 }
@@ -40,7 +37,6 @@ PKG_TEMPLATES="${PKG_ROOT}/templates"
 TARGET="${PWD}"
 MODE="link"
 UPDATE="0"
-PLATFORM="claude"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -57,11 +53,6 @@ while [[ $# -gt 0 ]]; do
       UPDATE="1"
       shift
       ;;
-    --platform)
-      [[ $# -ge 2 ]] || { echo "ERROR: --platform requires a value (claude|cursor|both)" >&2; exit 2; }
-      PLATFORM="$2"
-      shift 2
-      ;;
     -h|--help)
       usage; exit 0
       ;;
@@ -72,21 +63,6 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
-
-# Reject Cursor platform (M014+: DSP is Claude-Code-CLI-only per ADR-M014-A)
-case "${PLATFORM}" in
-  cursor|both)
-    echo "ERROR: aihaus M014+ uses claude --dangerously-skip-permissions which is Claude-Code-CLI-only." >&2
-    echo "Cursor install path is rejected. See ADR-M014-A and pkg/.aihaus/rules/COMPAT-MATRIX.md." >&2
-    exit 1
-    ;;
-  claude)
-    : ;;
-  *)
-    echo "ERROR: --platform must be one of: claude, cursor, both" >&2
-    exit 2
-    ;;
-esac
 
 # Absolute path for target
 TARGET="$(cd "${TARGET}" 2>/dev/null && pwd)" || {
@@ -102,7 +78,6 @@ fi
 echo "  package:  ${PKG_ROOT}"
 echo "  target:   ${TARGET}"
 echo "  mode:     ${MODE}"
-echo "  platform: ${PLATFORM}"
 
 # Step 2: require a git repo
 if [[ ! -d "${TARGET}/.git" ]] && ! git -C "${TARGET}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -227,7 +202,6 @@ merge_settings "${SETTINGS_DST}" "${SETTINGS_SRC}"
 
 # Step 8: write install mode marker
 echo "${MODE}" > "${TARGET}/.aihaus/.install-mode"
-echo "${PLATFORM}" > "${TARGET}/.aihaus/.install-platform"
 
 # Step 9: DSP version-gate soft warning (LD-3: soft only, never exit non-zero)
 if command -v claude >/dev/null 2>&1; then
@@ -250,10 +224,10 @@ fi
 # Step 10: success message
 echo ""
 if [[ "${UPDATE}" == "1" ]]; then
-  echo "aihaus updated (${MODE} mode, platform: ${PLATFORM})."
+  echo "aihaus updated (${MODE} mode)."
   echo "Launch with: bash .aihaus/auto.sh"
 else
-  echo "aihaus installed (${MODE} mode, platform: ${PLATFORM})."
+  echo "aihaus installed (${MODE} mode)."
   echo "Launch with: bash .aihaus/auto.sh"
   echo "Run /aih-init inside the launched session to bootstrap project.md"
 fi

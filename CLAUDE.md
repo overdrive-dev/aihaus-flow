@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-aihaus is a workflow automation package for Claude Code **and** Cursor (multi-platform since v0.10.0 / M006 — see ADR-005). It provides 12 intent-based commands (`init`, `plan`, `bugfix`, `feature`, `milestone`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`, `effort`) that users install into their own repositories via `install.sh --platform <claude|cursor|both>`. `/aih-run` and `/aih-plan-to-milestone` were retired in v0.11.0 — their behavior lives in `/aih-milestone` (execution + `--plan` promotion) and `/aih-feature --plan` (inline small-plan execution). `/aih-effort` (the effort-tuning skill, added M008 and renamed in v0.17.0 / M012) handles effort + model tuning. The permission-mode skill was deleted in v0.18.0 / M014 (replaced by DSP wrapper launch — see ADR-M014-A). There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, rules, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
+aihaus is a workflow automation package for Claude Code (Cursor support removed in v0.19.0 / M015 — see ADR-M015-A). It provides 12 intent-based commands (`init`, `plan`, `bugfix`, `feature`, `milestone`, `resume`, `brainstorm`, `help`, `quick`, `update`, `sync-notion`, `effort`) that users install into their own repositories via `install.sh --target <path>`. `/aih-run` and `/aih-plan-to-milestone` were retired in v0.11.0 — their behavior lives in `/aih-milestone` (execution + `--plan` promotion) and `/aih-feature --plan` (inline small-plan execution). `/aih-effort` (the effort-tuning skill, added M008 and renamed in v0.17.0 / M012) handles effort + model tuning. The permission-mode skill was deleted in v0.18.0 / M014 (replaced by DSP wrapper launch — see ADR-M014-A). There is no runtime, no build step, no package manager — the entire package is markdown files (skills, agents, memory) and shell scripts (install/uninstall + hook helpers like manifest-append, phase-advance, invoke-guard, manifest-migrate introduced in M003).
 
 ## Repo Structure
 
@@ -29,12 +29,10 @@ There is no build command, no type checker, and no unit test framework. The smok
 
 ## Package Contents (inside `pkg/`)
 
-- `pkg/.aihaus/skills/*/SKILL.md` — 12 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code (or as a `Task` mention on Cursor).
+- `pkg/.aihaus/skills/*/SKILL.md` — 12 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code.
 - `pkg/.aihaus/skills/_shared/autonomy-protocol.md` — binding execution-autonomy rules (M005 / ADR-bound-to-all-skills): 3-phase rule, TRUE blocker definition, no option menus, no delegated typing. Every SKILL.md references it.
 - `pkg/.aihaus/agents/*.md` — 46 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
 - `pkg/.aihaus/hooks/*.sh` — 20 shell hooks for Claude Code lifecycle events: M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance) plus v0.12.0 runtime autonomy enforcement (autonomy-guard blocks forbidden execution-phase patterns).
-- `pkg/.aihaus/rules/` — Cursor plugin rules and compatibility matrix (M006; `aihaus.mdc`, `COMPAT-MATRIX.md`, `README.md`). Consumed by Cursor's plugin subsystem when installed with `--platform cursor` or `--platform both`.
-- `pkg/.aihaus/.cursor-plugin/plugin.json` — Cursor plugin manifest (M006; Strategy B per ADR-005). `pkg/.aihaus/` is the plugin root when installed on Cursor.
 - `pkg/.aihaus/skills/aih-plan/annexes/*.md` — 4 annex files (attachments, intake-discipline, from-brainstorm, guardrails) — M004 enxugamento of the aih-plan core SKILL.md.
 - `pkg/.aihaus/templates/SESSION-LOG.md` — template for `/aih-update --session-log <slug>` post-hoc retrospective (M004 story L).
 - `pkg/.aihaus/memory/` — Empty memory index and directory structure (populated at runtime in target repos).
@@ -60,12 +58,6 @@ When modifying a skill, preserve the two-phase pattern: (1) ask scoping question
 When modifying an agent, keep it read-only unless it's `implementer`, `frontend-dev`, or `code-fixer` (those have write tools). The `reviewer` and `code-reviewer` agents must never modify code.
 
 After any change to skills, agents, or hooks, run `bash tools/smoke-test.sh` to validate counts and frontmatter.
-
-**Multi-platform authoring (since M006 / ADR-005).** aihaus ships to both Claude Code and Cursor. When adding a new skill or agent, consider cross-platform behavior:
-
-- If the skill/agent relies on `isolation: worktree` or `permissionMode: bypassPermissions`, it cannot run on Cursor (Cursor lacks both primitives). Update `pkg/.aihaus/rules/COMPAT-MATRIX.md` with a NOT-SUPPORTED row in the same commit.
-- If it uses the `Agent` tool for subagent spawning, Cursor users invoke the same surface via `Task` + `/<name>` mentions — the rules file handles tool-name translation, no skill-side change needed.
-- Prefer per-agent `tools:` whitelists even though Cursor inherits parent tools (the read-only discipline is documented in COMPAT-MATRIX.md and still enforced on Claude Code).
 
 ## Calibration and Permission Modes
 
@@ -199,7 +191,7 @@ primitives are ADR-M011-A (state gate) + ADR-M011-B (statusLine).
 
 The install scripts create symlinks (Unix) or directory junctions (Windows) from `.claude/{skills,agents,hooks}` to `.aihaus/{skills,agents,hooks}` in the target repo. The `--copy` flag forces file copies instead. Settings are merged (not overwritten) using `jq` or Python as a fallback.
 
-Since M006, both install.sh and uninstall.sh accept `--platform <claude|cursor|both>`. Default is `claude` (preserves pre-v0.10.0 behavior byte-identical). `cursor` additionally symlinks `~/.cursor/plugins/local/aihaus` → `<target>/.aihaus`. `both` does both. A `.aihaus/.install-platform` marker records the choice for update.sh.
+Since v0.19.0 / M015 (ADR-M015-A), aihaus is Claude Code-only. The `--platform` flag has been removed from install.sh and uninstall.sh. Launch via `bash .aihaus/auto.sh` (M014 DSP wrapper).
 
 ## Dogfooding
 

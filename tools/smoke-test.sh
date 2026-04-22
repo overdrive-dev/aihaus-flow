@@ -682,59 +682,8 @@ check_template_permission_hooks() {
   fi
 }
 
-# ---- Check 16: Cursor plugin manifest + rules (M006 / ADR-005) --------------
-# Validates:
-#   (a) pkg/.aihaus/.cursor-plugin/plugin.json — exists, valid JSON, has "name"
-#   (b) pkg/.aihaus/rules/aihaus.mdc — exists, has frontmatter, NO "PREVIEW" marker
-#   (c) pkg/.aihaus/rules/COMPAT-MATRIX.md — exists (authoritative per-skill verdict)
-# Replaces the pre-v0.10.0 cursor-preview linter (cursor-preview/ is gone).
-check_cursor_plugin() {
-  _start_check
-  local label="Check ${CHECK_NUMBER}: Cursor plugin manifest + rules (M006)"
-  local manifest="${PACKAGE_ROOT}/.aihaus/.cursor-plugin/plugin.json"
-  local mdc="${PACKAGE_ROOT}/.aihaus/rules/aihaus.mdc"
-  local matrix="${PACKAGE_ROOT}/.aihaus/rules/COMPAT-MATRIX.md"
-  local problems=()
-  # (a) manifest exists, is valid JSON, has required "name" field
-  if [[ ! -f "$manifest" ]]; then
-    problems+=("plugin.json missing at .aihaus/.cursor-plugin/plugin.json")
-  else
-    local py_bin=""
-    if command -v python3 >/dev/null 2>&1; then py_bin="$(command -v python3)"
-    elif command -v python  >/dev/null 2>&1; then py_bin="$(command -v python)"
-    elif command -v py      >/dev/null 2>&1; then py_bin="$(command -v py)"
-    fi
-    if [[ -n "$py_bin" ]]; then
-      "$py_bin" -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); sys.exit(0 if isinstance(d.get('name'),str) and d['name'] else 1)" "$manifest" 2>/dev/null || problems+=("plugin.json invalid JSON or missing 'name'")
-    elif command -v jq >/dev/null 2>&1; then
-      jq -e 'has("name") and (.name | type == "string") and (.name | length > 0)' "$manifest" >/dev/null 2>&1 || problems+=("plugin.json invalid JSON or missing 'name'")
-    else
-      problems+=("cannot validate plugin.json — neither python nor jq available")
-    fi
-  fi
-  # (b) rules/aihaus.mdc exists, has frontmatter, NO PREVIEW marker
-  if [[ ! -f "$mdc" ]]; then
-    problems+=("rules/aihaus.mdc missing")
-  else
-    local front
-    front=$(awk '/^---$/{c++; next} c==1' "$mdc")
-    for field in description globs alwaysApply; do
-      if ! printf '%s\n' "$front" | grep -q "^${field}:"; then
-        problems+=("rules/aihaus.mdc frontmatter missing '$field:'")
-      fi
-    done
-    if head -n20 "$mdc" | grep -Fq 'PREVIEW'; then
-      problems+=("rules/aihaus.mdc still contains 'PREVIEW' marker — dropped in M006")
-    fi
-  fi
-  # (c) COMPAT-MATRIX.md exists
-  [[ -f "$matrix" ]] || problems+=("rules/COMPAT-MATRIX.md missing")
-  if [[ ${#problems[@]} -eq 0 ]]; then
-    _pass "$label"
-  else
-    _fail "$label" "${problems[@]}"
-  fi
-}
+# Check 16 was: Cursor plugin manifest + rules (M006 / ADR-005)
+# Removed in M015/ADR-M015-A: Cursor support dropped entirely.
 
 # ---- Check 15: framework purity check --------------------------------------
 check_purity() {
@@ -1458,7 +1407,7 @@ check_context_curator() {
   fi
 }
 
-# ---- Check 36: learning-advisor agent + hook exist + COMPAT-MATRIX row (M013/S06) --
+# ---- Check 36: learning-advisor agent + hook exist (M013/S06) ---------------
 # Asserts Component B of M013 shipped:
 #   (a) pkg/.aihaus/agents/learning-advisor.md exists with required frontmatter
 #       (name, tools, model, effort, color, memory) and read-only tools whitelist
@@ -1466,15 +1415,14 @@ check_context_curator() {
 #   (c) learning-advisor model is haiku (cohort :verifier default)
 #   (d) learning-advisor tools are Read, Grep, Glob (no Write/Edit per ADR-001)
 #   (e) templates/settings.local.json references learning-advisor.sh under SubagentStop
-#   (f) COMPAT-MATRIX.md has a NOT-SUPPORTED row for learning-advisor
-#   (g) agent count reached 45 (context-curator=44, learning-advisor=45)
+#   (f) agent count at 46 (knowledge-curator added in M013/S07)
+# Note: COMPAT-MATRIX check removed in M015/ADR-M015-A (Cursor support dropped).
 check_learning_advisor() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: learning-advisor agent + hook exist + COMPAT-MATRIX row (M013/S06)"
+  local label="Check ${CHECK_NUMBER}: learning-advisor agent + hook exist (M013/S06)"
   local agent="${PACKAGE_ROOT}/.aihaus/agents/learning-advisor.md"
   local hook="${PACKAGE_ROOT}/.aihaus/hooks/learning-advisor.sh"
   local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
-  local compat="${PACKAGE_ROOT}/.aihaus/rules/COMPAT-MATRIX.md"
   local problems=()
 
   # (a) agent file exists with required frontmatter
@@ -1526,14 +1474,7 @@ check_learning_advisor() {
     fi
   fi
 
-  # (f) COMPAT-MATRIX has NOT-SUPPORTED row for learning-advisor
-  if [[ -f "$compat" ]]; then
-    if ! grep -q 'learning-advisor.*NOT-SUPPORTED\|NOT-SUPPORTED.*learning-advisor' "$compat"; then
-      problems+=("COMPAT-MATRIX.md missing NOT-SUPPORTED row for learning-advisor")
-    fi
-  fi
-
-  # (g) agent count at 46 (knowledge-curator added in M013/S07)
+  # (f) agent count at 46 (knowledge-curator added in M013/S07)
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
@@ -2151,7 +2092,6 @@ check_readme_length
 check_license
 check_version
 check_purity
-check_cursor_plugin
 check_aih_plan_annexes
 check_aih_milestone_annexes
 check_m005_canonical_phrases

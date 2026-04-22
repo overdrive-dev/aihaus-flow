@@ -12,14 +12,13 @@
 
 **You think. ai builds.**
 
-**An autonomous developer workflow for Claude Code *and* Cursor. One approval gate, then 46 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
+**An autonomous developer workflow for Claude Code. One approval gate, then 46 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
 
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.18.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.19.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
-[![Cursor](https://img.shields.io/badge/Cursor-first--class-000000?style=for-the-badge)](https://cursor.com)
 
 <br>
 
@@ -89,9 +88,7 @@ git clone https://github.com/overdrive-dev/aihaus-flow ~/tools/aihaus
 cd your-project
 ```
 
-Then pick your target.
-
-### Claude Code (default)
+### Install
 
 ```bash
 bash ~/tools/aihaus/pkg/scripts/install.sh --target .
@@ -101,36 +98,10 @@ bash ~/tools/aihaus/pkg/scripts/install.sh --target .
 
 Creates `.claude/{skills,agents,hooks}` as symlinks (or directory junctions on Windows) pointing at `.aihaus/{skills,agents,hooks}`. Your existing `.claude/settings.local.json` is deep-merged, never clobbered.
 
-### Cursor
-
-```bash
-bash ~/tools/aihaus/pkg/scripts/install.sh --target . --platform cursor
-```
-
-Creates `~/.cursor/plugins/local/aihaus` → `<your-project>/.aihaus/` (the plugin root). Cursor reads the manifest at `.cursor-plugin/plugin.json` and auto-discovers sibling `rules/`, `skills/`, `agents/`, `hooks/`.
-
-**Restart Cursor after install** to pick up the plugin — hot-reload of local plugins is not documented, so restart is the safe default. Then invoke skills via `Task` + `/<name>` mentions (Cursor's equivalent to Claude Code's `Agent` tool). The shipped rules file handles tool-name translation automatically.
-
-Full per-skill compatibility verdict: [`pkg/.aihaus/rules/COMPAT-MATRIX.md`](pkg/.aihaus/rules/COMPAT-MATRIX.md). Some flows (`/aih-milestone` execution, `/aih-feature`, `/aih-bugfix`, `/aih-resume`) stay Claude-Code-only because they depend on `isolation: worktree` + `permissionMode: bypassPermissions` — primitives Cursor doesn't currently offer.
-
-### Both
-
-```bash
-bash ~/tools/aihaus/pkg/scripts/install.sh --target . --platform both
-```
-
-Sets up both targets on a dual-tool machine. Uninstall mirror:
-
-```bash
-bash ~/tools/aihaus/pkg/scripts/uninstall.sh --platform cursor    # just Cursor
-bash ~/tools/aihaus/pkg/scripts/uninstall.sh                      # both (default)
-```
-
 ### Verify
 
 ```bash
-/aih-help                             # on Claude Code
-# or in Cursor: mention @aih-help     # once plugin is loaded
+/aih-help
 ```
 
 ### Keep it current
@@ -141,8 +112,6 @@ aihaus ships often. Re-run the installer or use the skill:
 /aih-update          # Pull latest from remote, re-link, re-run validation
 /aih-update --check  # Just check whether an update is available
 ```
-
-`update.sh` reads `.aihaus/.install-platform` and re-syncs the platform you originally installed for.
 
 <details>
 <summary><strong>Filesystems without symlinks: <code>--copy</code> mode</strong></summary>
@@ -383,35 +352,23 @@ aihaus ships 11 intent-based skills. Every command follows the same pattern: **a
 ```
 your-project/
 ├── .aihaus/                          # aihaus workspace (gitignored by default — your call)
-│   ├── skills/                       # 11 intent-based commands
+│   ├── skills/                       # 12 intent-based commands
 │   │   └── _shared/
 │   │       └── autonomy-protocol.md  # Binding execution-autonomy rules (M005)
-│   ├── agents/                       # 43 specialized agent definitions
-│   ├── hooks/                        # 16 lifecycle + protocol-enforcement hooks
-│   ├── rules/                        # Cursor rules + compatibility matrix (M006)
-│   │   ├── aihaus.mdc
-│   │   ├── COMPAT-MATRIX.md
-│   │   └── README.md
-│   ├── .cursor-plugin/               # Cursor plugin manifest (M006)
-│   │   └── plugin.json
+│   ├── agents/                       # 46 specialized agent definitions
+│   ├── hooks/                        # 20 lifecycle + protocol-enforcement hooks
 │   ├── templates/                    # project.md + settings templates
 │   ├── memory/                       # Persistent agent memory (grows over time)
 │   ├── project.md                    # Your codebase context (created by /aih-init)
-│   ├── decisions.md                  # Architecture Decision Records (ADR-001 to ADR-005)
+│   ├── decisions.md                  # Architecture Decision Records
 │   ├── knowledge.md                  # Accumulated lessons
-│   ├── .install-mode                 # link | copy (set by installer)
-│   └── .install-platform             # claude | cursor | both (set by installer)
+│   └── .install-mode                 # link | copy (set by installer)
 │
-# On Claude Code installs:
 ├── .claude/                          # Claude Code config
 │   ├── settings.local.json           # Permissions + hooks (auto-merged)
 │   ├── skills/   → .aihaus/skills/
 │   ├── agents/   → .aihaus/agents/
 │   └── hooks/    → .aihaus/hooks/
-│
-# On Cursor installs (outside the project):
-~/.cursor/plugins/local/
-└── aihaus → <your-project>/.aihaus/  # Plugin root — Cursor reads .cursor-plugin/plugin.json here
 ```
 
 ---
@@ -429,10 +386,6 @@ After `bash pkg/scripts/update.sh` (or `install.sh --update`):
   granular entries you want. Re-apply after each update.
 
 **Why DSP + bash-guard.sh?** aihaus auto-launches via `bash .aihaus/auto.sh`, which passes `--dangerously-skip-permissions` to Claude Code — eliminating interactive permission prompts for the spawned process tree. The `bash-guard.sh` PreToolUse hook provides sandboxing by blocking catastrophic patterns before they execute. Granular `Bash()` entries are not needed and would break the autonomy-protocol execution-phase contract.
-
-**Cursor users (installed with `--platform cursor`):** the settings
-merge is skipped on Cursor installs — Cursor has its own permission
-UI. The `Bash(*)` template entry has no effect on Cursor.
 
 **Uninstall preserves settings:** `uninstall.sh` removes symlinks
 and hook scripts but leaves `.claude/settings.local.json` intact,
@@ -464,7 +417,7 @@ Skills that could explode cost enforce hard caps *before* spawning. `/aih-brains
 
 ## Requirements
 
-- **Claude Code** (CLI or Desktop) or **Cursor** (with plugin support) — or both
+- **Claude Code** (CLI or Desktop)
 - **git**
 - **bash** (Unix) or **Git Bash / WSL / PowerShell 5+** (Windows)
 - **python** or **jq** for JSON settings merging (optional — installer gracefully degrades)

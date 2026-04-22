@@ -36,8 +36,7 @@ AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
 # Probes `command -v flock` at invocation. POSIX path uses flock -w 2 on a
 # fd-backed lock file; Windows path (MSYS/Cygwin/no-flock) falls through to
 # mkdir-atomic with bounded 2s retry. AIH_USE_MKDIR_LOCK caches the choice
-# for the hook process lifetime — no disk state, zero ADR-005 collision
-# (.aihaus/.install-platform remains reserved for claude|cursor|both).
+# for the hook process lifetime — no disk state, no install-platform dependency.
 detect_platform
 detect_fractional_sleep
 

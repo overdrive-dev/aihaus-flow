@@ -24,7 +24,7 @@ Records absolute restore targets so `/aih-update` can re-apply `effort:` +
 `model:` frontmatter edits.
 
 - **Location:** `.aihaus/.effort` — flat file at `.aihaus/` root alongside
-  `.install-mode`, `.install-platform`, `.install-source`, `.version`.
+  `.install-mode`, `.install-source`, `.version`.
 - **User-owned, never committed.** Written by `/aih-effort` Phase 4 after
   commit + gate pass (never on `--inspect` / `--status` / self-revert fired).
   `git add .aihaus/.effort` is forbidden; `.gitignore` covers it.

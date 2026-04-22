@@ -77,7 +77,7 @@ stack_depth() {
 # --- Platform probe (F-03 / S02) ---
 # Sets AIH_USE_MKDIR_LOCK=1 when flock is unavailable OR we are on MSYS/Cygwin
 # (where flock advisory semantics are unreliable on host NTFS). Runtime only —
-# no file persistence to avoid clobbering ADR-005's .aihaus/.install-platform.
+# no file persistence (in-memory only).
 detect_platform() {
   if [[ "${OSTYPE:-}" == "msys" || "${OSTYPE:-}" == "cygwin" ]] || ! command -v flock >/dev/null 2>&1; then
     AIH_USE_MKDIR_LOCK=1

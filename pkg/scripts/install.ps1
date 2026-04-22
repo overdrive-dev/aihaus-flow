@@ -4,9 +4,6 @@
 #   -Target <path>    Install into <path> instead of $PWD
 #   -Copy             Copy files instead of creating junctions
 #   -Update           Re-sync package dirs only; preserve local data
-#   -Platform <name>  Install target: claude only.
-#                     cursor and both are rejected (M014+: DSP flag is
-#                     Claude-Code-CLI-only). See ADR-M014-A.
 #   -Help             Show usage
 
 [CmdletBinding()]
@@ -14,7 +11,6 @@ param(
     [string]$Target = (Get-Location).Path,
     [switch]$Copy,
     [switch]$Update,
-    [string]$Platform = 'claude',
     [switch]$Help
 )
 
@@ -27,33 +23,19 @@ $DspMinVersion = '2.0.0'
 
 function Show-Usage {
     @'
-Usage: install.ps1 [-Target <path>] [-Copy] [-Update] [-Platform <name>]
+Usage: install.ps1 [-Target <path>] [-Copy] [-Update]
 
-Installs aihaus into a target git repository.
+Installs aihaus into a target git repository (Claude Code only).
 
 Options:
   -Target <path>    Target directory (default: current working directory)
   -Copy             Copy files instead of creating junctions
   -Update           Re-sync package dirs only; preserve local data
-  -Platform <name>  Install target: claude only.
-                    cursor and both are rejected (M014+: DSP is Claude-Code-CLI-only).
-                    See ADR-M014-A and pkg/.aihaus/rules/COMPAT-MATRIX.md.
   -Help             Show this message
 '@ | Write-Host
 }
 
 if ($Help) { Show-Usage; exit 0 }
-
-# Reject Cursor platform (M014+: DSP is Claude-Code-CLI-only per ADR-M014-A)
-if ($Platform -eq 'cursor' -or $Platform -eq 'both') {
-    Write-Host "ERROR: aihaus M014+ uses claude --dangerously-skip-permissions which is Claude-Code-CLI-only." -ForegroundColor Red
-    Write-Host "Cursor install path is rejected. See ADR-M014-A and pkg/.aihaus/rules/COMPAT-MATRIX.md." -ForegroundColor Red
-    exit 1
-}
-if ($Platform -ne 'claude') {
-    Write-Host "ERROR: -Platform must be one of: claude, cursor, both" -ForegroundColor Red
-    exit 2
-}
 
 # Resolve package root (the directory containing this script's parent)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -469,7 +451,6 @@ if ($Update) {
 Write-Host "  package:  $PkgRoot"
 Write-Host "  target:   $Target"
 Write-Host "  mode:     $Mode"
-Write-Host "  platform: $Platform"
 
 # Step 2: require a git repo
 $gitDir = Join-Path $Target '.git'
@@ -695,7 +676,6 @@ if (-not (Test-Path $SettingsSrc)) {
 
 # Step 8: write install mode marker
 Set-Content -Path (Join-Path $TargetAihaus '.install-mode') -Value $Mode -NoNewline
-Set-Content -Path (Join-Path $TargetAihaus '.install-platform') -Value $Platform -NoNewline
 
 # Step 9: DSP version-gate soft warning (LD-3: soft only, never exit non-zero)
 $claudeCmd = Get-Command 'claude' -ErrorAction SilentlyContinue
@@ -724,10 +704,10 @@ if ($claudeCmd) {
 # Step 10: success message
 Write-Host ""
 if ($Update) {
-    Write-Host "aihaus updated ($Mode mode, platform: $Platform)."
+    Write-Host "aihaus updated ($Mode mode)."
     Write-Host "Launch with: .\aihaus\auto.ps1"
 } else {
-    Write-Host "aihaus installed ($Mode mode, platform: $Platform)."
+    Write-Host "aihaus installed ($Mode mode)."
     Write-Host "Launch with: .\aihaus\auto.ps1"
     Write-Host "Run /aih-init inside the launched session to bootstrap project.md"
 }

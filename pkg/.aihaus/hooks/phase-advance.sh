@@ -26,7 +26,7 @@ AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
 # --- runtime platform detect (M011/S02; F-03 no-persistence) ---
 # Probes `command -v flock` at invocation. POSIX → flock -w 2; Windows → mkdir
 # atomic fallback. AIH_USE_MKDIR_LOCK caches the choice for the hook process
-# lifetime — no disk state, zero collision with ADR-005's .install-platform.
+# lifetime — no disk state.
 detect_platform
 detect_fractional_sleep
 
