@@ -75,10 +75,10 @@ check_agents() {
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 23 .sh files (M014/S02 adds read-guard) ----
+# ---- Check 3: .aihaus/hooks/ has 20 .sh files (M014/S04 deletes 3 PermissionRequest hooks) ----
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 23 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 20 .sh files"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
@@ -87,10 +87,10 @@ check_hooks() {
   # maxdepth 1 excludes hooks/lib/ (M011/S01 shared helpers library).
   local count
   count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 23 ]]; then
+  if [[ "$count" -eq 20 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 23 .sh files, found $count"
+    _fail "$label" "expected 20 .sh files, found $count"
   fi
 }
 
@@ -279,7 +279,9 @@ check_project_template() {
   fi
 }
 
-# ---- Check 9: settings.local.json is valid JSON with _aihaus_managed -------
+# ---- Check 9: settings.local.json is valid JSON with required keys ----------
+# M014/S04: permissions block removed (migrated to PreToolUse hooks); check
+# only requires hooks and env keys to be present.
 check_settings_template() {
   _start_check
   local label="Check ${CHECK_NUMBER}: templates/settings.local.json is valid JSON with required keys"
@@ -304,14 +306,14 @@ check_settings_template() {
   fi
   case "$parser" in
     jq)
-      if ! jq -e '.permissions and .hooks and .env' "$settings_file" >/dev/null 2>&1; then
-        _fail "$label" "invalid JSON or missing permissions/hooks/env keys"
+      if ! jq -e '.hooks and .env' "$settings_file" >/dev/null 2>&1; then
+        _fail "$label" "invalid JSON or missing hooks/env keys"
         return
       fi
       ;;
     python3|python|py)
-      if ! "$parser" -c "import json,sys; d=json.load(open(sys.argv[1], encoding='utf-8')); sys.exit(0 if all(k in d for k in ('permissions','hooks','env')) else 1)" "$settings_file" >/dev/null 2>&1; then
-        _fail "$label" "invalid JSON or missing permissions/hooks/env keys"
+      if ! "$parser" -c "import json,sys; d=json.load(open(sys.argv[1], encoding='utf-8')); sys.exit(0 if all(k in d for k in ('hooks','env')) else 1)" "$settings_file" >/dev/null 2>&1; then
+        _fail "$label" "invalid JSON or missing hooks/env keys"
         return
       fi
       ;;
@@ -502,20 +504,19 @@ check_session_log_template() {
   fi
 }
 
-# ---- Template permissions.allow has a wildcard Bash entry -------------------
-# Locks in the autonomy contract: template must ship with wildcard-capable
-# permissions so execution phase doesn't fall through to interactive prompts.
-# Regex match (Bash\(.*\)) accepts "Bash(*)", "Bash(.*)", or future
-# normalizations — not brittle on the literal string.
+# ---- Template PreToolUse registers bash-guard.sh ----------------------------
+# M014/S04: permissions.allow block removed. Autonomy contract is now enforced
+# via PreToolUse hooks (bash-guard + file-guard + read-guard). Assert that
+# bash-guard.sh is referenced in the template's PreToolUse section.
 check_template_bash_wildcard() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: template permissions.allow has a wildcard Bash entry"
+  local label="Check ${CHECK_NUMBER}: template PreToolUse registers bash-guard.sh (M014/S04)"
   local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
   [[ -f "$tpl" ]] || { _fail "$label" "template missing: $tpl"; return; }
-  if grep -Eq '"Bash\(.*\)"' "$tpl"; then
+  if grep -q 'bash-guard.sh' "$tpl"; then
     _pass "$label"
   else
-    _fail "$label" "no Bash(<wildcard>) entry found in $tpl permissions.allow"
+    _fail "$label" "bash-guard.sh not registered in PreToolUse in $tpl"
   fi
 }
 
@@ -644,44 +645,40 @@ print(len(data.get('permissions', {}).get('allow', [])))
   fi
 }
 
-# ---- auto-approve-bash.sh allows expected safe patterns ---------------------
-# Feeds each expanded SAFE_PATTERN through the hook with a synthetic JSON
-# input and asserts allow-decision JSON comes back. Regression gate against
-# accidental SAFE_PATTERNS removal.
+# ---- Deleted PermissionRequest hooks are absent (M014/S04) ------------------
+# M014/S04: auto-approve-bash.sh, auto-approve-writes.sh, and permission-debug.sh
+# were deleted. Assert none of them remain in the hooks directory.
 check_auto_approve_patterns() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: auto-approve-bash allows expected safe patterns"
-  local hook="${PACKAGE_ROOT}/.aihaus/hooks/auto-approve-bash.sh"
-  [[ -f "$hook" ]] || { _fail "$label" "hook missing: $hook"; return; }
-  local patterns=("printf hello" "env" "tree ." "type ls" "tee file" "cut -f1 file" "tr a b" "seq 1 3")
-  local failed=()
-  for cmd in "${patterns[@]}"; do
-    local out
-    out=$(printf '{"tool_input":{"command":"%s"}}' "$cmd" | bash "$hook" 2>/dev/null || true)
-    if ! echo "$out" | grep -q '"behavior":[[:space:]]*"allow"'; then
-      failed+=("$cmd")
-    fi
-  done
-  if [[ ${#failed[@]} -eq 0 ]]; then
+  local label="Check ${CHECK_NUMBER}: deleted PermissionRequest hooks absent (M014/S04)"
+  local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
+  local still_present=()
+  [[ -f "${hooks_root}/auto-approve-bash.sh" ]]   && still_present+=("auto-approve-bash.sh")
+  [[ -f "${hooks_root}/auto-approve-writes.sh" ]]  && still_present+=("auto-approve-writes.sh")
+  [[ -f "${hooks_root}/permission-debug.sh" ]]     && still_present+=("permission-debug.sh")
+  if [[ ${#still_present[@]} -eq 0 ]]; then
     _pass "$label"
   else
-    _fail "$label" "did not approve: ${failed[*]}"
+    _fail "$label" "hooks should have been deleted but still present: ${still_present[*]}"
   fi
 }
 
-# ---- Template PermissionRequest hooks reference auto-approve scripts --------
+# ---- Template PreToolUse registers read-guard.sh (M014/S04) -----------------
+# M014/S04: PermissionRequest block removed. read-guard.sh is now registered
+# under PreToolUse with empty matcher "" (Option 2 fallback; READ_GUARD_MODE=tool_name).
+# Also verifies no PermissionRequest block remains in the template.
 check_template_permission_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: template PermissionRequest hooks reference auto-approve scripts"
+  local label="Check ${CHECK_NUMBER}: template PreToolUse registers read-guard.sh + no PermissionRequest block (M014/S04)"
   local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
   [[ -f "$tpl" ]] || { _fail "$label" "template missing: $tpl"; return; }
-  local missing=()
-  grep -q 'auto-approve-bash.sh' "$tpl" || missing+=("auto-approve-bash.sh")
-  grep -q 'auto-approve-writes.sh' "$tpl" || missing+=("auto-approve-writes.sh")
-  if [[ ${#missing[@]} -eq 0 ]]; then
+  local problems=()
+  grep -q 'read-guard.sh' "$tpl" || problems+=("read-guard.sh not found in template")
+  grep -q 'PermissionRequest' "$tpl" && problems+=("PermissionRequest block still present — should have been removed by M014/S04")
+  if [[ ${#problems[@]} -eq 0 ]]; then
     _pass "$label"
   else
-    _fail "$label" "template missing hook references: ${missing[*]}"
+    _fail "$label" "${problems[@]}"
   fi
 }
 
@@ -2087,12 +2084,12 @@ check_bash_guard_baseline() {
   fi
 }
 
-# ---- Check (M014/S02): read-guard.sh existence, executable, syntax ----------
+# ---- Check (M014/S02+S04): read-guard.sh existence, executable, syntax, registered ----
 # Verifies read-guard.sh is present, executable, and syntactically valid.
-# Also verifies it is NOT yet referenced in settings.local.json (S04 registers it).
+# M014/S04: also verifies it IS registered in settings.local.json under PreToolUse.
 check_read_guard_exists() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: read-guard.sh exists, executable, syntax OK, not yet in template (M014/S02)"
+  local label="Check ${CHECK_NUMBER}: read-guard.sh exists, executable, syntax OK, registered in template (M014/S02+S04)"
   local hook="${PACKAGE_ROOT}/.aihaus/hooks/read-guard.sh"
   local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
   local problems=()
@@ -2123,9 +2120,9 @@ check_read_guard_exists() {
     problems+=("read-guard.sh missing READ_GUARD_MODE constant (LD-4 dual-path gate)")
   fi
 
-  # (f) NOT yet referenced in settings.local.json (S04 registers it)
-  if [[ -f "$tpl" ]] && grep -q 'read-guard.sh' "$tpl"; then
-    problems+=("read-guard.sh is already referenced in settings.local.json — S04 should register it, not S02")
+  # (f) NOW referenced in settings.local.json (S04 registered it under PreToolUse)
+  if [[ -f "$tpl" ]] && ! grep -q 'read-guard.sh' "$tpl"; then
+    problems+=("read-guard.sh is not yet referenced in settings.local.json — S04 should have registered it")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
