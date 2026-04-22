@@ -156,7 +156,8 @@ Read the previous version from `.aihaus/.version` (or treat as `0.0.0` if missin
     /aih-plan-to-milestone  → /aih-milestone --plan <slug> (first-class, no longer DEPRECATED)
   Update muscle memory / CI scripts / keyboard snippets accordingly.
   ```
-
+- **`prev_version < 0.18.0`** — M014 BREAKING (ADR-M014-A/B). `/aih-automode` DELETED; launch via `bash .aihaus/auto.sh` (DSP wrapper); `permissions.{allow,deny,defaultMode}` stripped, safety in PreToolUse hooks; `/aih-resume` rewritten (schema v3 sub-story checkpoints; `--legacy-mode` preserves old).
+- **`prev_version < 0.19.0`** — M015 BREAKING (ADR-M015-A supersedes ADR-002+005). Cursor removed: `--platform` flag dropped, `pkg/.aihaus/{.cursor-plugin,rules}/` deleted.
 Append: "Restart Claude Code to pick up reshuffled skills." when any block fires.
 
 ### 13. Report
@@ -194,6 +195,5 @@ When running inside the aihaus-flow repo itself (detected by `pkg/` existing):
 - If git fetch fails, report the error and stop gracefully.
 - If the smoke test fails after update, warn but don't rollback.
 - Write `.aihaus/.version` and `.aihaus/.install-source` for future updates.
-
 ## Autonomy
-See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
+See `_shared/autonomy-protocol.md` — binding rules; overrides contradictory prose above.

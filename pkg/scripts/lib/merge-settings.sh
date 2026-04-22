@@ -196,12 +196,20 @@ print('granular:' + ('true' if has_granular else 'false'))
     return 0
   fi
 
-  if [[ "$had_wildcard" = "false" && "$had_granular" = "true" ]]; then
+  # Detect legacy permissions.allow → post-M014 strip transition.
+  # The template since v0.18.0 ships with NO permissions.{defaultMode,allow,deny}
+  # — autonomy comes from launching via `bash .aihaus/auto.sh` (DSP wrapper)
+  # and PreToolUse hooks (bash-guard, file-guard, read-guard) provide safety.
+  # If the user's prior settings had any permissions.allow entries, jq's deep
+  # merge keeps them (granular OR wildcard) — the merged result still works,
+  # just carries vestigial keys. Surface the situation so the user knows.
+  if [[ "$had_wildcard" = "true" || "$had_granular" = "true" ]]; then
     echo ""
-    echo "  ℹ Settings migrated: permissions.allow replaced by template defaults"
-    echo "    (includes Bash(*) wildcard). Backup saved at:"
-    echo "    $bak"
-    echo "    If you prefer narrow permissions, edit .claude/settings.local.json"
-    echo "    and re-add your specific Bash(command *) entries."
+    echo "  ℹ Legacy permissions.allow detected in your settings — preserved as-is."
+    echo "    Since v0.18.0 (M014), the template ships with no permissions.{allow,deny,defaultMode}."
+    echo "    Autonomy comes from launching via 'bash .aihaus/auto.sh' (DSP wrapper);"
+    echo "    safety lives in PreToolUse hooks (bash-guard, file-guard, read-guard)."
+    echo "    To complete the migration, you can remove the permissions.allow array entirely."
+    echo "    Backup of prior settings: $bak"
   fi
 }

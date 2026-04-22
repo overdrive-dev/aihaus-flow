@@ -5,6 +5,17 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.1] - 2026-04-22 — Migration messaging fix-ups
+
+Patch release. Two fix-ups discovered during dogfood `/aih-update` from v0.17.0:
+
+- **`pkg/scripts/lib/merge-settings.sh`** — the post-merge "Settings migrated" notice still claimed `permissions.allow replaced by template defaults (includes Bash(*) wildcard)`. That message was true pre-M014 but stale after the v0.18.0 strip. Rewritten to detect legacy `permissions.allow` carried over from older installs and explain that the template no longer ships any `permissions.{allow,deny,defaultMode}` — autonomy now comes from the DSP wrapper + PreToolUse hooks. Includes guidance for completing the migration by removing the vestigial `permissions.allow` array.
+- **`pkg/.aihaus/skills/aih-update/SKILL.md`** — added two new version-gated migration notice blocks:
+  - `prev_version < 0.18.0` — DSP launch boundary (M014, BREAKING): documents `/aih-automode` deletion, the `bash .aihaus/auto.sh` launch path, the permission-stack strip, and the resume-substrate rewrite. Points at ADR-M014-A and ADR-M014-B.
+  - `prev_version < 0.19.0` — Cursor removal boundary (M015, BREAKING): documents the `--platform` flag removal, the deleted plugin/rules dirs, and ADR-M015-A.
+
+No functional code changes; no agent / skill / hook count changes (12 / 46 / 20 unchanged).
+
 ## [0.19.0] - 2026-04-22 — Drop Cursor support (BREAKING)
 
 **BREAKING.** Cursor support is removed entirely. aihaus is Claude Code-only going forward.
