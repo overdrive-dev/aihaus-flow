@@ -116,7 +116,7 @@ Any new hook that fails to implement all 5 will fail under the realistic dev env
 
 **Finding:** A skill whose sole job is to route between two other skills (e.g., `/aih-run` routing small→feature-inline / large→milestone-execution) adds no unique capability. It can be retired cleanly by (a) porting each branch to its natural-home skill, (b) updating invoke-guard ALLOWLIST in the same story that retires the name (never prematurely — the old name must stay live while its last caller still depends on it), (c) shipping a new migration-notice block in `/aih-update` gated to the bump version, (d) accepting dangling symlinks as benign (update.sh bulk-replaces per dir via `rm -rf ${dst}; cp -R ${src}` — targets auto-clean on next update).
 
-**Anti-pattern:** alias-forwarding (`/aih-run` prints "use /aih-milestone" and dispatches). Aliases rot, smoke-test + COMPAT-MATRIX still need updates, users never learn the new commands. Hard-delete + migration notice is cleaner.
+**Anti-pattern:** alias-forwarding (`/aih-run` prints "use /aih-milestone" and dispatches). Aliases rot, smoke-test still needs updates, users never learn the new commands. Hard-delete + migration notice is cleaner.
 
 **Anti-pattern 2:** directory-level tombstone stubs (keep skill dir with redirect notice for 1 release, hard delete later). Zero prior art in this repo; creates new surface (stubs, sunset timer, allow-list churn) for a one-shot deletion. `/aih-update` migration notice delivers the same muscle-memory safety with less complexity.
 

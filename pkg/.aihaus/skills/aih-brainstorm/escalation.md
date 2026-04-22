@@ -10,7 +10,7 @@ The orchestrating assistant (not a spawned agent) watches the ping-pong conversa
 **Spawns:** one of `phase-researcher`, `advisor-researcher`, `domain-researcher`.
 
 **Trigger signals (any one is sufficient):**
-- User asserts a fact-dependent claim the assistant cannot verify from internal knowledge (e.g., "Cursor supports `isolation: worktree`").
+- User asserts a fact-dependent claim the assistant cannot verify from internal knowledge (e.g., "this framework supports feature X").
 - A design branch pivots on unverified external detail — API capability, framework behavior, regulatory rule, version/changelog fact.
 - The assistant has internal uncertainty flagged as ASSUMED in its own reasoning and the decision is load-bearing.
 

@@ -10,6 +10,33 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - 2026-04-22 — Drop Cursor support (BREAKING)
+
+**BREAKING.** Cursor support is removed entirely. aihaus is Claude Code-only going forward.
+
+### Removed
+
+- `pkg/.aihaus/rules/` directory (`aihaus.mdc`, `COMPAT-MATRIX.md`, `README.md`) -- Cursor plugin rules
+- `pkg/.aihaus/.cursor-plugin/` directory (`plugin.json`, `README.md`) -- Cursor plugin manifest
+- `--platform` flag from `install.sh`, `install.ps1`, `uninstall.sh`, `uninstall.ps1`
+- Cursor cleanup block from `uninstall.sh` (no longer removes `~/.cursor/plugins/local/aihaus`)
+- "Multi-platform authoring" section from `CLAUDE.md`
+- Cursor badge and "Claude Code AND Cursor" claims from `README.md`
+
+### Governance
+
+- ADR-M015-A supersedes ADR-002 and ADR-005
+
+### Migration
+
+If you had aihaus installed on Cursor: re-install on Claude Code via `bash pkg/scripts/install.sh --target .` and launch via `bash .aihaus/auto.sh` (M014 v0.18.0 wrapper).
+
+### Inventory unchanged
+
+12 skills / 46 agents / 20 hooks (no change from v0.18.0 -- this feature only deletes the Cursor-specific layer).
+
+---
+
 ## [0.18.0] - 2026-04-22 — M014 Auto-Launch + Resume Substrate (BREAKING)
 
 **BREAKING.** The 7-layer permission stack is collapsed to 1 launch path. The skill `/aih-automode` is deleted (no shim). The `/aih-resume` skill is rewritten with sub-story checkpoint awareness. Re-install + relaunch via the new wrapper is required.

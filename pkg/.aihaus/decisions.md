@@ -491,7 +491,7 @@ milestones).
 ## ADR-005: aihaus is multi-platform — Cursor and Claude Code are both first-class install targets
 
 Date: 2026-04-14
-Status: Accepted
+Status: **Superseded by ADR-M015-A (2026-04-22)** — Cursor support fully removed in v0.19.0.
 
 Supersedes ADR-002 (2026-04-14) which framed aihaus as Claude-Code-primary with Cursor as preview/compat-only.
 
@@ -1411,3 +1411,41 @@ Single-shot during M014 Bloco 2 (S06-S10); no phased rollout for the substrate. 
 - **K-002** (worktree-branched-off-main): formalized into category-A/B/C reconciliation per (c).
 - **K-008** (additive schema versioning): the v2→v3 evolution follows the K-008 reader-accepts-both / writer-emits-latest discipline.
 - **PRD LD-1, LD-2, LD-6, LD-9, LD-10** (locked decisions): this ADR codifies all five into the substrate contract.
+
+## ADR-M015-A: Drop Cursor support -- aihaus is Claude Code-only
+
+**Status:** Accepted
+**Date:** 2026-04-22
+**Milestone:** M015
+**Supersedes:** ADR-002 (Cursor compat-only, 2026-04-14), ADR-005 (Cursor first-class install, 2026-04-14)
+
+### Context
+
+- M014/ADR-M014-A made `claude --dangerously-skip-permissions` (DSP) launch via `bash .aihaus/auto.sh` the sole autonomy path.
+- Cursor has no equivalent CLI flag; M014 already hard-rejected `--platform cursor` for DSP-related installs.
+- Maintenance cost of cross-platform stubs (`rules/`, `.cursor-plugin/`, `--platform` parser, `COMPAT-MATRIX`, multi-platform-authoring section in `CLAUDE.md`) exceeded value for the current single-user / abandoned-upstream context.
+- ADR-M014-B's `--legacy-mode` note flagged M015 as the removal gate; this ADR confirms the decision.
+
+### Decision
+
+- Delete `pkg/.aihaus/rules/` and `pkg/.aihaus/.cursor-plugin/` directories entirely.
+- Remove `--platform` flag from `install.sh`, `install.ps1`, `uninstall.sh`, `uninstall.ps1`.
+- Remove Cursor cleanup block from `uninstall.sh` (the `~/.cursor/plugins/local/aihaus` symlink removal).
+- Remove `.aihaus/.install-platform` sidecar write from installers (sidecar files that persist on existing installs are no longer read or written; harmless if present).
+- Rewrite/strip Cursor mentions in `CLAUDE.md`, `README.md`, `tools/smoke-test.sh`, brainstorm escalation annex, `manifest-append.sh` benign comment.
+- Supersede ADR-002 + ADR-005 explicitly.
+
+### Consequences
+
+- **BREAKING.** Users with `.aihaus/.install-platform` other than `claude` no longer have any Cursor install path.
+- The historical CHANGELOG entries for v0.8.0 (M002 Cursor coexistence) and v0.10.0 (M006 Cursor native install) remain as factual history -- not retroactively edited.
+- `COMPAT-MATRIX.md` is deleted (was the per-skill/per-agent Cursor compatibility table; orphaned without Cursor target).
+- `tools/smoke-test.sh` `check_cursor_plugin` (was Check 16, M002) is removed entirely; remaining checks renumber automatically since `_start_check` auto-increments at runtime — no explicit renumbering needed.
+- Check 36 (learning-advisor) drops its COMPAT-MATRIX sub-assertion; the agent/hook/template checks remain.
+
+### References
+
+- Supersedes ADR-002 (M002, 2026-04-14)
+- Supersedes ADR-005 (M006, 2026-04-14)
+- Reconciles ADR-M014-A (M014/S05 already partially removed Cursor via DSP hard-reject)
+- ADR-M014-B LD-10 note: "REMOVE legacy-mode in M015 if no usage reported" -- this milestone is the removal gate
