@@ -1,6 +1,6 @@
 # aihaus on Cursor — Compatibility Matrix
 
-**Last generated:** 2026-04-17
+**Last generated:** 2026-04-22
 **Verification source:** `.aihaus/research/cursor-primitives-verification.md` (2026-04-14 live WebFetch pass)
 **Scope:** every skill under `pkg/.aihaus/skills/` and every agent under `pkg/.aihaus/agents/` at the time of authoring.
 
@@ -17,7 +17,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 | Name | Type | Status | Why | Last verified |
 |------|------|--------|-----|---------------|
 | aih-brainstorm | skill | WORKS-WITH-CAVEAT | Default conversational mode is single-turn, no agents — works as-is. `--panel` / `--deep` / `--research` modes spawn multiple subagents via `Agent` tool — on Cursor the vehicle is `Task` + `/name` mentions (see rules file translation table). | 2026-04-14 |
-| aih-automode | skill | NOT-SUPPORTED | Cursor has no per-session permission-mode primitive. `permissions.defaultMode: auto` is a Claude Code-specific field; the skill's `--enable` / `--disable` edits succeed mechanically but have no effect in Cursor's permission model. | 2026-04-17 |
+| (deleted: automode skill) | skill | DELETED | Skill removed in M014/S03 per ADR-M014-A. DSP launch via `bash .aihaus/auto.sh` replaces all permission-mode toggle functionality. No Cursor equivalent existed either. | 2026-04-22 |
 | aih-effort | skill | WORKS-WITH-CAVEAT | Edits frontmatter + `settings.local.json`; Cursor prompts per write. `--preset` operations and `--cohort` / `--agent` overrides are functional. The `.automode` sidecar emitted by some presets is Claude Code-specific and ignored by Cursor. | 2026-04-17 |
 | aih-bugfix | skill | NOT-SUPPORTED | Spawns `implementer` (worktree-isolated) to apply the fix. Cursor has no `isolation: worktree` or `bypassPermissions` equivalent. Since v0.12.0, `disable-model-invocation` is removed — Cursor NL-trigger surface widens (Cursor honors the flag identically per cursor-primitives-verification.md:106-109). | 2026-04-14 |
 | aih-feature | skill | NOT-SUPPORTED | Spawns `implementer` / `frontend-dev` (worktree-isolated) for the build step. Same primitive gap as aih-bugfix. Since v0.12.0, NL-trigger surface widens on Cursor (flag removed). | 2026-04-14 |
@@ -29,6 +29,8 @@ Rows are sorted by type (skill first, then agent), name ascending.
 | aih-resume | skill | NOT-SUPPORTED | Resumes in-progress milestone / feature / bugfix flows, all of which depend on worktree-isolated implementer agents. | 2026-04-14 |
 | aih-sync-notion | skill | WORKS-WITH-CAVEAT | Spawns `notion-sync` agent which has `tools: Read, Write, Edit, Grep, Glob, Bash`. No worktree dependency — works, but Cursor will prompt per write to milestone files and/or Notion MCP calls. | 2026-04-14 |
 | aih-update | skill | WORKS-WITH-CAVEAT | Fetches and applies package updates from the aihaus remote. Runs `git` / `bash` commands the user must approve under Cursor's permission model. | 2026-04-14 |
+
+| DSP launch (`--dangerously-skip-permissions`) | Claude Code: SUPPORTED (v2.0.0+ per soft gate) | Cursor: **NOT-SUPPORTED** (no CLI-flag equivalent) | M014 / ADR-M014-A / ADR-005 |
 
 ## Agents
 
@@ -82,7 +84,7 @@ Rows are sorted by type (skill first, then agent), name ascending.
 
 ## Summary
 
-- **Skills:** 13 rows — 2 WORKS, 6 WORKS-WITH-CAVEAT, 5 NOT-SUPPORTED.
+- **Skills:** 14 rows — 2 WORKS, 6 WORKS-WITH-CAVEAT, 6 NOT-SUPPORTED.
 - **Agents:** 45 rows — 25 WORKS, 14 WORKS-WITH-CAVEAT, 6 NOT-SUPPORTED.
 
 ## Maintenance

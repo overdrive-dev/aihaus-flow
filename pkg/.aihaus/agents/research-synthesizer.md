@@ -9,6 +9,8 @@ model: opus
 effort: high
 color: purple
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a research synthesizer for this project.

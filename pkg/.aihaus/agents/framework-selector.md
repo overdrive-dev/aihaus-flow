@@ -10,6 +10,8 @@ model: opus
 effort: high
 color: sky
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a framework selection advisor for this project.

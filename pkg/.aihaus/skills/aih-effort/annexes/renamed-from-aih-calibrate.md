@@ -5,14 +5,14 @@ It was hard-renamed to `aih-effort` in **v0.16.0** (milestone M012).
 
 There is no backwards-compat shim. Typing `/aih-calibrate` returns
 skill-not-found. Use `/aih-effort` for effort/model calibration and
-`/aih-automode` for permission-mode calibration.
+`bash .aihaus/auto.sh` (DSP mode) for autonomous launch (M014/ADR-M014-A).
 
 ## Why
 
 The name `aih-calibrate` conflated two distinct concerns — effort/model tuning
 and permission-mode selection (the `--preset` auto-mode variant). M012 separates them:
-`/aih-effort` owns effort calibration; `/aih-automode` owns permission-mode
-calibration (extracted from this skill's `permission-modes.md` annex).
+`/aih-effort` owns effort calibration. Permission-mode selection was moved to the DSP wrapper
+(`bash .aihaus/auto.sh`) in M014; see ADR-M014-A.
 
 ## References
 

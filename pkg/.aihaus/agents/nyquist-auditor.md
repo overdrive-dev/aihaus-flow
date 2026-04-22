@@ -12,6 +12,8 @@ color: violet
 isolation: worktree
 permissionMode: bypassPermissions
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a validation gap auditor for this project.

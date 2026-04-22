@@ -9,6 +9,8 @@ model: sonnet
 effort: high
 color: coral
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the debugger for this project.

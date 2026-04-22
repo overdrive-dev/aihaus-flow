@@ -6,6 +6,8 @@ model: opus
 effort: high
 color: rose
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the fan-in synthesizer for `/aih-brainstorm`.

@@ -27,11 +27,11 @@
 # v2 field                          v3 destination                      Lossy? Warning shape
 # schema=2                          schema=3                            no     silent
 # permission_mode=bypassPermissions DROPPED                             no     silent
-# permission_mode=auto              DROPPED + .automode enabled=true    yes    !! 4-line block -> /aih-automode --enable
+# permission_mode=auto              DROPPED + .automode enabled=true    yes    !! 4-line block (see restore-effort.sh emit block)
 # last_preset=cost-optimized        last_preset=cost + verbatim effort  yes    !! effort-delta note per shifted cohort (FR-M10)
 # last_preset=balanced              last_preset=balanced                no     silent
 # last_preset=quality-first         last_preset=high + verbatim effort  yes    !! effort-delta note per shifted cohort (FR-M10)
-# last_preset=auto-mode-safe        last_preset=balanced + .automode    yes    3-line !! block -> /aih-automode --enable
+# last_preset=auto-mode-safe        last_preset=balanced + .automode    yes    3-line !! block (see restore-effort.sh emit block)
 # last_preset=performatic/unknown   last_preset=balanced                yes    1-line !! warn
 # last_commit=<sha>                 last_commit=<sha>                   no     silent
 # cohort.planner.model=X            cohort.planner-binding.model=X ONLY yes    !! planner-split warn (FR-M05)
@@ -317,7 +317,7 @@ _migrate_v2_to_v3() {
     echo "  !!  v2 sidecar had last_preset=auto-mode-safe." >&2
     echo "  !!    State migrated to .aihaus/.automode (enabled=true)." >&2
     echo "  !!    Side effects (defaultMode=auto, worktree frontmatter, SAFE_PATTERNS) are NOT replayed." >&2
-    echo "  !!    Run /aih-automode --enable to re-apply." >&2
+    echo "  !!    Permission auto-mode removed in v0.18.0/M014. Use bash .aihaus/auto.sh for DSP launch." >&2
     echo "" >&2
   fi
 

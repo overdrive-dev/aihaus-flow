@@ -11,6 +11,8 @@ model: opus
 effort: high
 color: cyan
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a project researcher for this project.

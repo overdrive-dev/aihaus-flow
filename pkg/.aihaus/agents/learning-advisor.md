@@ -11,6 +11,8 @@ model: haiku
 effort: high
 color: yellow
 memory: none
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the learning-advisor for this project.

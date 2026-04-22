@@ -9,6 +9,8 @@ model: haiku
 effort: high
 color: green
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the goal verifier for this project.

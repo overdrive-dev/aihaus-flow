@@ -1204,3 +1204,210 @@ debug hook is). Shipping all three here would bust M007's
   lands, write a supplementary ADR (or an amendment to this one)
   recording that the deferred P1 items have shipped and promoting
   this ADR's Status to Accepted.
+
+## ADR-M014-A — DSP wrapper supersedes the multi-layer permission stack
+
+**Status:** Accepted
+**Date:** 2026-04-22
+**Milestone:** M014
+**Supersedes:** ADR-M008-B (`bypassPermissions` default + `/aih-automode` opt-in skill)
+**Reconciles:** ADR-008 (M007 3-layer permission surface), ADR-009 (deny-list ordering / prompt-prevention catalog)
+**Pattern:** ADR-M010-A reference-and-extend grammar (ADR-M008-C → M010-A → M012-A precedent)
+
+### Context
+
+Between M007 and M013, aihaus accumulated a 7-layer permission stack: `settings.permissionMode` (L1) + `permissions.allow` (L2) + `permissions.deny` (L3) + 3 PermissionRequest hooks `auto-approve-bash` / `auto-approve-writes` / `permission-debug` (L4-L5) + subagent frontmatter `permissionMode: bypassPermissions` (L6) + `/aih-automode` skill toggling between modes (L7). Each layer addressed a real prompt class catalogued in ADR-009; the cumulative surface, however, became disproportionate to the actual user intent — **autonomous execution under user-explicit acknowledgement of risk**.
+
+Claude Code ships `--dangerously-skip-permissions` (DSP) as a CLI flag that suppresses all permission prompts for the spawned process tree. Launching aihaus via a thin `bash .aihaus/auto.sh` wrapper that `exec`s `claude --dangerously-skip-permissions` collapses L1-L5 into a single user gesture (running the wrapper) and renders L7 (`/aih-automode` toggle) redundant — the wrapper IS the toggle. The remaining safety surface (catastrophic-command blocking, project-dir scope enforcement, sensitive-file read denial) migrates to PreToolUse hooks (`bash-guard` / `file-guard` / `read-guard`), which run BEFORE the suppressed PermissionRequest event and are therefore unaffected by DSP.
+
+This ADR supersedes the M008-B decision that `bypassPermissions` stays the default + `auto` is opt-in via `/aih-automode --enable`. The four caveats M008-B raised against `auto` (`Bash(*)` silent drop; subagent frontmatter ignored; plan/provider/version restrictions; 3-strikes pause) all remain true; M014's answer is to leave `auto` mode entirely unused and instead use DSP, which has none of those caveats. The user's directive — "single-user repo, BREAKING accepted, hard pivot" — locks this as a single-shot replacement, not a phased migration.
+
+This ADR also reconciles ADR-008 (M007 3-layer permission model) and ADR-009 (prompt-prevention catalog) by stating: M007's catalog and layered model REMAIN canonical references for understanding Claude Code's permission surface; M014 changes the **aihaus default response** to the surface from "fence the layers with hooks + a toggle skill" to "shortcircuit the prompt path with DSP and rely on PreToolUse for safety." The ADR-009 prompt classes 1-4 are ALL handled correctly by the new architecture: classes 1-3 (Bash matcher misses) are now moot because DSP prevents the prompt entirely; class 4 (filesystem-sandbox first-time-seen subdir) is also moot under DSP.
+
+### Decision
+
+Adopt DSP via wrapper as the autonomous-launch path; delete the 7-layer stack except the PreToolUse safety net and subagent frontmatter (kept as defense-in-depth):
+
+(a) **Wrapper-as-launcher.** `pkg/scripts/launch-aihaus.sh` (Bash) and `pkg/scripts/launch-aihaus.ps1` (PowerShell) `exec` claude with `--dangerously-skip-permissions`. `install.sh` / `install.ps1` create `<target>/.aihaus/auto.sh` and `<target>/.aihaus/auto.ps1` symlinks (junction / copy on Windows fallback) pointing at the wrappers. `bash .aihaus/auto.sh` is the auto path; bare `claude` is the non-auto path. **No skill toggle exists.**
+
+(b) **PermissionRequest layer DELETED.** `pkg/.aihaus/hooks/auto-approve-bash.sh`, `auto-approve-writes.sh`, `permission-debug.sh` removed. `permissions.{defaultMode,allow,deny}` block removed from `pkg/.aihaus/templates/settings.local.json`. The entire `PermissionRequest` hooks block removed from settings.
+
+(c) **`/aih-automode` skill DELETED.** `pkg/.aihaus/skills/aih-automode/` removed in full. `pkg/scripts/lib/restore-automode.sh` deleted. `update.sh` / `update.ps1` lose the restore-automode chain. Skill count 13 → 12. Typing `/aih-automode` returns skill-not-found (M012 hard-rename precedent — no shim).
+
+(d) **PreToolUse safety migrated.** `bash-guard.sh` absorbs the full M007 DANGEROUS_PATTERNS list (~30 patterns) plus its existing 6 catastrophic patterns. `file-guard.sh` gains a `$CLAUDE_PROJECT_DIR` scope check. NEW `read-guard.sh` covers sensitive-file deny patterns (`.env`, `*.pem`, `*.key`, `id_rsa*`, etc.). All three are PreToolUse hooks — they run BEFORE PermissionRequest (which DSP suppresses) and are unaffected by DSP. The Read matcher syntax ships dual-path (LD-4) gated by `READ_GUARD_MODE` constant; S01 selects the active mode.
+
+(e) **Subagent frontmatter RETAINED as defense-in-depth.** `permissionMode: bypassPermissions` stays on `implementer.md` / `frontend-dev.md` / `code-fixer.md` regardless of A17 outcome. M015 may revisit if S01 confirms full DSP propagation.
+
+(f) **Sidecar dropped.** No `.aihaus/.dsp` or `.aihaus/.automode` sidecar persists DSP state — the wrapper IS the persistence (filesystem presence of `auto.sh`). The `.aihaus/.automode` sidecar from M012/ADR-M012-A is orphaned by the skill deletion; `update.sh` no longer reads or writes it.
+
+(g) **Cursor incompatibility.** `install.sh` / `install.ps1` hard-reject `--platform cursor` and `--platform both` (when cursor is included). DSP is Claude-Code-CLI-only; ADR-005 boundary applies. `pkg/.aihaus/rules/COMPAT-MATRIX.md` gains a NOT-SUPPORTED row citing this ADR + ADR-005.
+
+### Rationale
+
+DSP collapses the user-intent surface ("I am running aihaus autonomously and accept the risk") into a single, observable, reversible gesture. The wrapper is a 1-line script — auditable in seconds; the launch path is a single grep across the user's shell history. Compare this to the prior 7-layer state, which required reading `settings.local.json`, three hook bodies, four agent frontmatters, and the `/aih-automode` SKILL.md to fully understand what the user had opted into. The reduction is not just code-line; it is mental-model debt being repaid.
+
+The PreToolUse migration preserves every safety property M007/ADR-008 captured. The DANGEROUS_PATTERNS coverage (catastrophic commands, sandbox-escape shapes, supply-chain destructives, privilege escalation, fork bomb) lands in `bash-guard.sh` byte-equivalent. The `$CLAUDE_PROJECT_DIR` scope check in `file-guard.sh` reproduces the `auto-approve-writes.sh` semantic. The new `read-guard.sh` reproduces the `permissions.deny` Read coverage that M008 added. **Net safety surface is unchanged**; the suppression of L1-L5 is a representational change, not a relaxation. This matches ADR-009's spirit (systemic mitigations over reactive whack-a-mole) by reducing the count of layers a future contributor must reason about.
+
+The BREAKING acceptance is licensed by the user-locked threshold gate (single-user repo, active testing context). M012 set the precedent for hard-rename without shim; M014 extends the same discipline to skill DELETE.
+
+### Consequences
+
+**Positive.**
+- Autonomy contract reduced to 1 line: `bash .aihaus/auto.sh`.
+- 7 layers → 2 layers (PreToolUse safety net + subagent frontmatter defense-in-depth).
+- Skill count 13 → 12 (deletion of `/aih-automode`).
+- Hook count: −3 PermissionRequest hooks deleted, +1 PreToolUse `read-guard.sh` added; net −2.
+- Faster cold-start (DSP path bypasses classifier-style mode switching from M008-B's `auto`).
+- `.aihaus/.automode` sidecar abandoned (orphaned and ignored — `update.sh` no longer reads/writes it; user can delete manually).
+- Mental model: one directory grep (`grep -r dangerously-skip pkg/`) tells a contributor the entire autonomy story.
+
+**Negative — BREAKING.**
+- `/aih-automode` typing returns skill-not-found (no shim; M012 precedent).
+- Users on pre-DSP Claude Code versions see a soft warning at install (LD-3); install completes but autonomous launch may behave differently.
+- MCP server tool calls under DSP: future-only concern (no MCP in current aihaus); CLAUDE.md gets a caveat note.
+- Cursor users on `--platform cursor` see a hard-reject on install; documented in COMPAT-MATRIX.md.
+
+**Neutral.**
+- Subagent frontmatter `bypassPermissions` retained — same byte-state as pre-M014 (defense-in-depth pending A17 outcome). M015 may drop it if A17 confirms full propagation.
+- ADR-008 / ADR-009 catalog remains valid as historical documentation of Claude Code's permission surface.
+- No data migration needed (no sidecar carries forward).
+
+### Migration
+
+Single-shot during M014; no phased rollout. Order:
+
+1. **S01 GATING** — live A17 + A31 test in scratch repo; outcome selects `READ_GUARD_MODE` and informs whether subagent frontmatter is strictly necessary (kept either way per (e)).
+2. **S02** — install full PreToolUse safety net (bash-guard expansion + file-guard scope + NEW read-guard); register read-guard NOT YET in settings (S04 does it).
+3. **S03** — ship `launch-aihaus.{sh,ps1}` wrapper; DELETE `/aih-automode` skill, `restore-automode.sh`, restore-automode invocation in update scripts; K-009 grep sweep BEFORE delete.
+4. **S04** — strip permissions block from settings.local.json; DELETE 3 PermissionRequest hooks; register read-guard in settings PreToolUse. **Hard-ordering: requires S02 green** (safety-regression window mitigation).
+5. **S05** — installer changes (symlink wrapper, hard-reject `--platform cursor`, soft-warn on DSP version mismatch); dogfood `bash install.sh --target . --update`.
+6. **S10** — append THIS ADR + ADR-M014-B to `pkg/.aihaus/decisions.md`; rewrite CLAUDE.md "Calibration and Permission Modes" section; rewrite README.md quickstart to `bash install.sh && bash .aihaus/auto.sh`.
+7. **Rollback recipe** (PLAN.md): bare `claude` (no wrapper) restores pre-DSP launch behavior; `git revert <S04 commit-range>` restores the permission template; `bash install.sh --update` re-applies.
+
+Single-user repo: no migration assistant needed; no SAFE_PATTERNS user-customization carry-over.
+
+### Related
+
+- **ADR-M008-B** (superseded): `bypassPermissions` default + `/aih-automode` opt-in. Both halves of that contract are obsolete under M014.
+- **ADR-008** (reconciled — kept as historical reference): M007 3-layer permission model. M014 does not remove the document; it changes the default response from "fence each layer with hooks" to "shortcircuit prompts with DSP and rely on PreToolUse for safety."
+- **ADR-009** (reconciled — kept as historical reference): prompt-prevention catalog. Classes 1-4 are now moot under DSP; class 5-10 remain documented behavior of Claude Code.
+- **ADR-M014-B** (sibling): Resume substrate. Cross-link: M014 ships both ADRs in one commit (S10).
+- **ADR-005** (reconciled): Cursor multi-platform support; install.sh hard-rejects `--platform cursor` for DSP per (g).
+- **K-009** (driven): exhaustive grep target list per LD-7 enforces stale-reference cleanup before delete.
+
+## ADR-M014-B — Resume substrate: schema v3 Checkpoints + agent classification + worktree reconciliation
+
+**Status:** Accepted
+**Date:** 2026-04-22
+**Milestone:** M014
+**Extends:** ADR-004 (RUN-MANIFEST.md schema v2 + single-writer discipline) — additive v2→v3 evolution
+**Pattern:** ADR-M010-A reference-and-extend grammar; K-008 additive-schema-versioning
+
+### Context
+
+`/aih-resume` (`pkg/.aihaus/skills/aih-resume/SKILL.md:50-66`) operated at story-level granularity and used file-existence heuristics to infer past phase. Five concrete failure modes (analysis-brief §1.2):
+
+1. **Sub-story crash → re-spawn from zero.** Implementer wrote 3 of 7 files of a story; resume re-spawned implementer from file 1; collisions or silent overwrites on the partially-completed work.
+2. **Phase inference fragile.** "PRD exists → past PM" — partial PRD from a crashed architect breaks the heuristic; resume skips the architect and dispatches the next phase against an incomplete artifact.
+3. **Worktrees opaque.** K-002: implementer worktrees branch off `main`. Resume did not run `git worktree list`, did not know about orphan branches, uncommitted work, or unmerged commits.
+4. **TaskCreate/TaskList state evaporates cross-session.** Manifest and TaskList desynchronise; cross-check fails silently.
+5. **Stateless re-spawn ≠ continuation.** Each agent is stateless by design; "resume" meant "re-spawn at same phase with same input", not "continue from byte where we stopped."
+
+ADR-004 already locked RUN-MANIFEST.md as the single source of truth for milestone state via schema v2. The defect is not in ADR-004's discipline — it is in the granularity. Schema v2 records `Metadata.phase` and `## Story Records` (one row per story); it has no sub-story checkpoint mechanism. Resume cannot do better than story-level because there is no finer-grained ground truth to read.
+
+This ADR introduces sub-story checkpoints as an **additive** schema v3 evolution — preserving every v2 invariant (single-writer discipline, append-only Story Records, manifest-migrate idempotency) and layering a new optional `## Checkpoints` section on top. Combined with two new agent frontmatter fields (`resumable` + `checkpoint_granularity`) and a new `worktree-reconcile.sh` hook, the substrate enables `/aih-resume` to read authoritative state and dispatch stateful agents with a `--resume-from <substep>` continuation contract.
+
+### Decision
+
+Adopt the resume substrate as four orthogonal but interlocking components:
+
+(a) **Schema v3 = v2 + optional `## Checkpoints` section.** 7-column table; column types and enums per LD-1:
+
+```
+| ts (ISO-8601 UTC) | story (S\d{2}) | agent (slug) | substep (<kind>:<id>) | event (enter|exit|resumed) | result (OK|ERR|SKIP) | sha (7-char) |
+```
+
+`## Checkpoints` is optional — a v2 manifest with no Checkpoints section is a valid v3 manifest after `manifest-migrate.sh` v2→v3 (which appends only the heading + column header + separator if absent). v2 ADR-004 single-writer discipline EXTENDS to the new section: `manifest-append.sh` is the sole writer; two new modes `--checkpoint-enter <story> <agent> <substep>` and `--checkpoint-exit <story> <agent> <substep> <result> [<sha>]` append rows. Rate-limit guard: drop duplicate `enter` events for identical `(story, agent, substep)` within 1 second (mitigates emission spam). **Missing-section rule (F-09):** if the `## Checkpoints` section is missing when `--checkpoint-enter` / `--checkpoint-exit` fires, the hook MUST either (i) auto-create the section under a file-lock (`flock` on the manifest path) to preserve the single-writer invariant, OR (ii) fail-closed with stderr message `run manifest-migrate.sh first` and non-zero exit. Implementer picks (i) by default (defense-in-depth); (ii) is the explicit override if the file-lock primitive is unavailable.
+
+(b) **Agent frontmatter classification.** Two new YAML frontmatter fields on every agent in `pkg/.aihaus/agents/*.md`:
+
+```yaml
+resumable: true | false
+checkpoint_granularity: story | file | step
+```
+
+Default classification per LD-6:
+- **Idempotent** `(true, story)` — ~42 agents (analyst, architect, planner, plan-checker, contrarian, reviewer, code-reviewer, security-auditor, integration-checker, verifier, eval-auditor, ui-checker, ui-auditor, doc-verifier, debugger, project-analyst, codebase-mapper, intel-updater, pattern-mapper, assumptions-analyzer, framework-selector, advisor-researcher, ai-researcher, brainstorm-synthesizer, context-curator, knowledge-curator, learning-advisor, doc-writer, domain-researcher, executor, eval-planner, notion-sync, nyquist-auditor, phase-researcher, project-researcher, research-synthesizer, roadmapper, test-writer, ui-researcher, user-profiler, ux-designer, product-manager). Re-spawn is safe; fresh run produces equivalent output; partial work loss acceptable.
+- **Stateful** `(false, file)` — `implementer`, `frontend-dev`, `code-fixer` (3). Atomic per-file writes; re-spawn risks collision or silent overwrite.
+- **Multi-cycle** `(false, step)` — `debug-session-manager` (1). Loop-driven; per-step state needs explicit recovery.
+
+`tools/smoke-test.sh` Check 6 (frontmatter validation) is extended to require both new fields and validate the enums (`resumable` in `{true,false}`; `checkpoint_granularity` in `{story,file,step}`).
+
+(c) **Worktree reconciliation as a dedicated hook.** NEW `pkg/.aihaus/hooks/worktree-reconcile.sh` iterates `git worktree list --porcelain` and classifies each non-main worktree:
+- **Category A** (clean + HEAD reachable from main): silently prune via `git worktree remove`.
+- **Category B** (clean + commits not on main): emit a fenced-block cherry-pick recipe to stdout; **never auto-execute** — user is the executor.
+- **Category C** (dirty — `git status --porcelain` non-empty): preserve untouched; emit 1-line summary `[CATEGORY C] <path> — <N> uncommitted file(s); preserved.`
+
+Ambiguity falls through to category C (safe default). Hook is safe to invoke standalone (`bash worktree-reconcile.sh`) and via `/aih-resume` dispatch.
+
+(d) **`/aih-resume` rewrite.** Phase 1 reads checkpoints authoritatively (no more file-existence inference): glob RUN-MANIFEST → migrate v1/v2 → v3 → read `## Checkpoints` last row → invoke `worktree-reconcile.sh` → cross-check checkpoint vs worktree state. Phase 2 branches on `agent.frontmatter.resumable`: `true` → re-spawn agent normally; `false` → dispatch with `--resume-from <substep>` (free-text echo per LD-2). After dispatch, append `event=resumed` checkpoint via `manifest-append.sh`. Stateful agent SKILL.md / agent.md prose includes a top-of-file "Resume handling" section: "If `--resume-from` is provided, read RUN-MANIFEST `## Checkpoints` for the matching substep, skip all prior substeps, continue from the next un-completed substep." Legacy logic preserved as a `<!-- LEGACY MODE — REMOVE in M015 if no usage reported -->` comment block at the bottom of SKILL.md (or `annexes/legacy-mode.md` if the 200-line cap is hit per M004 annex pattern); reachable only via `--legacy-mode` flag (LD-10).
+
+### Rationale
+
+Five failure modes (Context §1-5) all have one root cause: **resume reads a coarser ground truth than the work it is resuming**. Story-level state cannot answer "where in story S03 did the implementer stop?". The fix is to record finer-grained ground truth + give resume a structured way to consume it; everything else (worktree reconciliation, agent classification, `--resume-from` contract) flows from that primitive.
+
+Schema v3 is **additive** — the rationale is identical to K-008 (additive schema versioning) and ADR-M010-A's schema-bump approach (v1 readers degrade gracefully; v2 readers parse both). A v2 manifest with no Checkpoints section migrates to v3 by gaining a header-only Checkpoints table; behavior is byte-identical to v2 until a checkpoint is appended. ADR-004's single-writer discipline EXTENDS naturally — `manifest-append.sh` was already the sole writer of `## Story Records`; gaining `--checkpoint-enter` / `--checkpoint-exit` modes preserves the invariant.
+
+Agent classification via frontmatter (LD-6) chooses **declarative-per-agent** over **central-registry-of-stateful-agents**. This matches the existing `tools:` and `permissionMode:` patterns — those are also per-agent declarations consumed by orchestration.
+
+Worktree reconciliation as a separate hook keeps the classification logic testable in isolation and lets future skills reuse the hook. Safe-default-to-C prevents a misclassified dirty worktree from being silently destroyed.
+
+The `--resume-from <substep>` contract is **free-text echo** of the manifest substep column (LD-2). The substep ID is whatever the agent itself wrote when entering the sub-step; round-trip equality is the simplest possible parse contract.
+
+Finally, the `--legacy-mode` retention (LD-10) buys cheap insurance. The legacy code path is preserved as comment block (zero-runtime-cost); a future M015 may delete if dogfood proves the new path stable.
+
+### Consequences
+
+**Positive.**
+- Sub-story resume is now possible. The CORE deliverable of M014 (Bloco 2) becomes a measurable acceptance criterion (S10 dogfood).
+- ADR-004 single-writer discipline extends cleanly; no new write-path discipline introduced.
+- Schema v3 is forward+backward compatible (additive).
+- Worktree opacity (failure mode 3) becomes explicit: every worktree is classified and surfaced. K-002 worktree-branched-off-main pattern gets a first-class reconciliation primitive.
+- Agent frontmatter classification is auditable (smoke-test Check 6) and self-documenting.
+- `/aih-resume` no longer relies on file-existence heuristics — every state transition is read from manifest or computed from git, never inferred.
+- Legacy-mode escape buys safe rollout.
+
+**Negative.**
+- 46 agents gain 2 new frontmatter fields each (mass mechanical edit; S07). Risk: 1+ agent missed → Check 6 fails → revert + re-edit.
+- Stateful agents (implementer, frontend-dev, code-fixer, debug-session-manager) gain a new "Resume handling" prose section.
+- `## Checkpoints` rows are append-only and grow without bound. Acceptable per analyst (resume reads the LAST row only).
+- `manifest-append.sh` gains 2 new modes — surface area grows. Rate-limit guard prevents emission spam.
+- Checkpoint emission requires agent prose discipline. Mitigation: `_shared/checkpoint-protocol.md` is binding; S10 dogfood is the gate.
+
+**Neutral.**
+- ADR-004 schema v2 contract preserved verbatim — v3 adds a new section; nothing in v2 is removed or renamed.
+- `/aih-resume --legacy-mode` flag retains the old behavior indefinitely (LD-10); zero-runtime-cost.
+- `worktree-reconcile.sh` is invoked by `/aih-resume` but standalone-safe; future skills may reuse.
+
+### Migration
+
+Single-shot during M014 Bloco 2 (S06-S10); no phased rollout for the substrate. Order:
+
+1. **S06 (CORE-1)** — schema v3 doc + `manifest-migrate.sh` v2→v3 (additive, idempotent) + `manifest-append.sh` `--checkpoint-{enter,exit}` modes + NEW `_shared/checkpoint-protocol.md` binding annex + smoke-test Check 24 (v2→v3 migration fixture).
+2. **S07 (CORE-2)** — 46 agents gain `resumable` + `checkpoint_granularity` frontmatter per LD-6; smoke-test Check 6 extended to enforce both new fields with enum validation.
+3. **S08 (CORE-3)** — NEW `pkg/.aihaus/hooks/worktree-reconcile.sh` with A/B/C classification; smoke-test fixture covering all 3 categories. Hook is standalone-safe.
+4. **S09 (CORE-4)** — REWRITE `aih-resume/SKILL.md` Phase 1+2; add "Resume handling" prose to implementer / frontend-dev / code-fixer / debug-session-manager; preserve legacy as commented block (or `annexes/legacy-mode.md` if 200-line cap hit); smoke-test Check 25 (crash-mid-implementer + resume fixture).
+5. **S10** — append THIS ADR + ADR-M014-A to `pkg/.aihaus/decisions.md`; new CLAUDE.md "Resume Substrate" section; dogfood resume on a real follow-up milestone (acceptance gate).
+
+**Existing manifests:** `manifest-migrate.sh` is idempotent + additive — running it on a v2 manifest produces a v3 manifest with header-only `## Checkpoints` section; running again is a no-op.
+
+**Rollback:** `/aih-resume --legacy-mode` flag bypasses the new substrate and runs the file-existence heuristic preserved in the comment block (LD-10). For full rollback, `git revert <S06 commit>` + `git revert <S09 commit>` restores both the schema and the skill.
+
+### Related
+
+- **ADR-004** (extended, not superseded): RUN-MANIFEST.md schema v2 + single-writer discipline. Schema v2 → v3 is additive; manifest-append.sh remains the sole writer; new modes preserve the invariant. ADR-004 Decision body is unchanged.
+- **ADR-M014-A** (sibling): DSP wrapper supersedes permission stack. Cross-link: M014 ships both ADRs in one commit (S10); the substrate (this ADR) is the user-facing payoff promised in CONTEXT.md "Problem 2."
+- **ADR-M011-A / B** (analog substrate): state-driven gates + statusLine reads RUN-MANIFEST as ground truth. M014's resume substrate extends the same "manifest-as-ground-truth" architecture to sub-story granularity.
+- **K-002** (worktree-branched-off-main): formalized into category-A/B/C reconciliation per (c).
+- **K-008** (additive schema versioning): the v2→v3 evolution follows the K-008 reader-accepts-both / writer-emits-latest discipline.
+- **PRD LD-1, LD-2, LD-6, LD-9, LD-10** (locked decisions): this ADR codifies all five into the substrate contract.

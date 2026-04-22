@@ -120,11 +120,7 @@ done
 # ---- Restore per-agent effort from sidecar -----------------------------------
 # Dispatch order (binding per architecture.md):
 #   1. restore_effort   -- migrates v2 .calibration -> v3 .effort (if needed)
-#                          or idempotent v3 restore. May write .automode during
-#                          v2->v3 migration (auto-mode-safe case).
-#   2. restore_automode -- reads .automode (written by restore_effort if it just
-#                          migrated) and emits /aih-automode --enable pointer if
-#                          enabled=true. Does NOT replay permission-mode side effects.
+#                          or idempotent v3 restore.
 # Call site pinned between refresh loop and link_or_copy so both .aihaus/agents/
 # (physical) and .claude/agents/ (symlink or copy) pick up restored frontmatter.
 # Missing sidecar = silent no-op. Schema contract: pkg/.aihaus/skills/
@@ -132,9 +128,6 @@ done
 # shellcheck source=lib/restore-effort.sh
 source "$(dirname "$0")/lib/restore-effort.sh"
 restore_effort "${AIHAUS}"
-# shellcheck source=lib/restore-automode.sh
-source "$(dirname "$0")/lib/restore-automode.sh"
-restore_automode "${AIHAUS}"
 
 # Count what was updated
 if [[ -d "${AIHAUS}/skills" ]]; then

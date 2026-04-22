@@ -10,6 +10,8 @@ model: haiku
 effort: high
 color: pink
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a UI auditor for this project.

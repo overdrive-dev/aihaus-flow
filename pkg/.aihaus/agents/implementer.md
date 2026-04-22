@@ -12,7 +12,10 @@ color: green
 isolation: worktree
 permissionMode: bypassPermissions
 memory: project
+resumable: false
+checkpoint_granularity: file
 ---
+**Resume handling:** see `pkg/.aihaus/skills/_shared/resume-handling-protocol.md` (when invoked with `--resume-from <substep>`).
 
 You are a senior backend developer for this project.
 You work AUTONOMOUSLY — make decisions, document everything, never block on humans.

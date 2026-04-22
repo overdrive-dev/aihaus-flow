@@ -11,6 +11,8 @@ model: opus
 effort: xhigh
 color: green
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a plan author for this project.

@@ -10,6 +10,8 @@ model: haiku
 effort: high
 color: red
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are an AI evaluation auditor for this project.

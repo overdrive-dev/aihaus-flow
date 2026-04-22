@@ -96,9 +96,7 @@ foreach ($name in @('skills', 'agents', 'hooks', 'templates')) {
 # ---- Restore per-agent effort from sidecar -----------------------------------
 # Dispatch order (binding per architecture.md):
 #   1. Restore-Effort   -- migrates v2 .calibration -> v3 .effort (if needed)
-#                          or idempotent v3 restore. May write .automode.
-#   2. Restore-Automode -- reads .automode; prints /aih-automode --enable pointer
-#                          if enabled=true. Does NOT replay side effects.
+#                          or idempotent v3 restore.
 # Pinned between refresh loop and re-link so both .aihaus\agents\ (physical)
 # and .claude\agents\ (junction or copy) pick up restored frontmatter.
 # Schema contract: <aihaus_root>\skills\aih-effort\annexes\state-file.md
@@ -239,7 +237,7 @@ function Invoke-MigrateV2ToV3 {
         Write-Host "  !!  v2 sidecar had last_preset=auto-mode-safe." -ForegroundColor Yellow
         Write-Host "  !!    State migrated to .aihaus\.automode (enabled=true)." -ForegroundColor Yellow
         Write-Host "  !!    Side effects (defaultMode=auto, worktree frontmatter, SAFE_PATTERNS) are NOT replayed." -ForegroundColor Yellow
-        Write-Host "  !!    Run /aih-automode --enable to re-apply." -ForegroundColor Yellow
+        Write-Host "  !!    Permission auto-mode removed in v0.18.0/M014. Use bash .aihaus/auto.sh for DSP launch." -ForegroundColor Yellow
         Write-Host "" -ForegroundColor Yellow
     }
     if ($presetDriftNote) {
@@ -346,32 +344,7 @@ function Restore-Effort-Update {
     }
 }
 
-function Restore-Automode-Update {
-    param([string]$AihausRoot)
-    $automodeFile = Join-Path $AihausRoot '.automode'
-    if (-not (Test-Path $automodeFile)) { return }
-    $enabled = ''; $lastEnabledAt = ''
-    foreach ($line in (Get-Content -LiteralPath $automodeFile)) {
-        if ([string]::IsNullOrWhiteSpace($line) -or $line -match '^\s*#') { continue }
-        $parts = $line -split '=', 2
-        $k = ($parts[0] -replace "`r", '').Trim()
-        $v = if ($parts.Count -gt 1) { ($parts[1] -replace "`r", '').Trim() } else { '' }
-        if ($k -eq 'enabled') { $enabled = $v }
-        elseif ($k -eq 'last_enabled_at') { $lastEnabledAt = $v }
-    }
-    if ($enabled -eq 'true') {
-        $tsNote = if ($lastEnabledAt) { " (last enabled: $lastEnabledAt)" } else { '' }
-        Write-Host "" -ForegroundColor Yellow
-        Write-Host "  !!  .aihaus\.automode shows enabled=true$tsNote." -ForegroundColor Yellow
-        Write-Host "  !!  Permission-mode side effects are NOT auto-replayed after /aih-update." -ForegroundColor Yellow
-        Write-Host "  !!  Run /aih-automode --enable to re-apply defaultMode=auto and worktree" -ForegroundColor Yellow
-        Write-Host "  !!  agent frontmatter changes." -ForegroundColor Yellow
-        Write-Host "" -ForegroundColor Yellow
-    }
-}
-
 Restore-Effort-Update  -AihausRoot $Aihaus
-Restore-Automode-Update -AihausRoot $Aihaus
 
 # Count what was updated
 $countSkills = 0

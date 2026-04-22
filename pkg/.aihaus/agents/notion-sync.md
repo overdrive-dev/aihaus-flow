@@ -12,6 +12,8 @@ model: sonnet
 effort: high
 color: pink
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the Notion Kanban sync agent for this project. You keep the

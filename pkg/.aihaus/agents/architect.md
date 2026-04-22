@@ -10,6 +10,8 @@ model: opus
 effort: xhigh
 color: orange
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the lead architect for this project.

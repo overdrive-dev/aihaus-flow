@@ -9,7 +9,10 @@ model: sonnet
 effort: high
 color: orange
 memory: project
+resumable: false
+checkpoint_granularity: step
 ---
+**Resume handling:** see `pkg/.aihaus/skills/_shared/resume-handling-protocol.md` (when invoked with `--resume-from <substep>`).
 
 You are the debug session manager for this project.
 You work AUTONOMOUSLY — run the full debug loop in isolation so the main

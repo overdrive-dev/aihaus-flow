@@ -38,11 +38,11 @@ _start_check() {
   CHECK_NUMBER=$((CHECK_NUMBER + 1))
 }
 
-# ---- Check 1: 13 expected SKILL.md files in expected subdirectories ---------
+# ---- Check 1: 12 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 13 expected SKILL.md files"
-  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-resume aih-brainstorm aih-effort aih-automode)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 12 expected SKILL.md files"
+  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-resume aih-brainstorm aih-effort)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -75,10 +75,10 @@ check_agents() {
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 21 .sh files (M013/S06 adds learning-advisor) --
+# ---- Check 3: .aihaus/hooks/ has 20 .sh files (M014/S04 deletes 3 PermissionRequest hooks) ----
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 21 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 20 .sh files"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
@@ -87,10 +87,10 @@ check_hooks() {
   # maxdepth 1 excludes hooks/lib/ (M011/S01 shared helpers library).
   local count
   count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 21 ]]; then
+  if [[ "$count" -eq 20 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 21 .sh files, found $count"
+    _fail "$label" "expected 20 .sh files, found $count"
   fi
 }
 
@@ -171,20 +171,30 @@ _get_cohort_members() {
 
 check_agent_frontmatter() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: every agent declares name/tools/model/effort/color/memory; model: matches cohort default"
+  local label="Check ${CHECK_NUMBER}: every agent declares name/tools/model/effort/color/memory/resumable/checkpoint_granularity; model: matches cohort default"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   local cohorts_file="${PACKAGE_ROOT}/.aihaus/skills/aih-effort/annexes/cohorts.md"
   local offenders=()
 
-  # ---- Part A: presence check (all 6 required fields) -----------------------
+  # ---- Part A: presence check (all 8 required fields, M014/S07 +2) ----------
   while IFS= read -r -d '' file; do
     local front
     front=$(awk '/^---$/{c++; next} c==1' "$file")
-    for field in name tools model effort color memory; do
+    for field in name tools model effort color memory resumable checkpoint_granularity; do
       if ! printf '%s\n' "$front" | grep -q "^${field}:"; then
         offenders+=("${file#${PACKAGE_ROOT}/} missing '$field'")
       fi
     done
+    # ---- Part A2: enum validation for resumable and checkpoint_granularity ---
+    local resumable_val cg_val
+    resumable_val=$(printf '%s\n' "$front" | awk '/^resumable:/{print $2; exit}')
+    cg_val=$(printf '%s\n' "$front" | awk '/^checkpoint_granularity:/{print $2; exit}')
+    if [[ -n "$resumable_val" && "$resumable_val" != "true" && "$resumable_val" != "false" ]]; then
+      offenders+=("${file#${PACKAGE_ROOT}/} resumable: invalid value '$resumable_val' (must be true|false)")
+    fi
+    if [[ -n "$cg_val" && "$cg_val" != "story" && "$cg_val" != "file" && "$cg_val" != "step" ]]; then
+      offenders+=("${file#${PACKAGE_ROOT}/} checkpoint_granularity: invalid value '$cg_val' (must be story|file|step)")
+    fi
   done < <(find "$agents_root" -maxdepth 1 -type f -name '*.md' -print0)
 
   # ---- Part B: per-cohort model value-validation ----------------------------
@@ -269,7 +279,9 @@ check_project_template() {
   fi
 }
 
-# ---- Check 9: settings.local.json is valid JSON with _aihaus_managed -------
+# ---- Check 9: settings.local.json is valid JSON with required keys ----------
+# M014/S04: permissions block removed (migrated to PreToolUse hooks); check
+# only requires hooks and env keys to be present.
 check_settings_template() {
   _start_check
   local label="Check ${CHECK_NUMBER}: templates/settings.local.json is valid JSON with required keys"
@@ -294,14 +306,14 @@ check_settings_template() {
   fi
   case "$parser" in
     jq)
-      if ! jq -e '.permissions and .hooks and .env' "$settings_file" >/dev/null 2>&1; then
-        _fail "$label" "invalid JSON or missing permissions/hooks/env keys"
+      if ! jq -e '.hooks and .env' "$settings_file" >/dev/null 2>&1; then
+        _fail "$label" "invalid JSON or missing hooks/env keys"
         return
       fi
       ;;
     python3|python|py)
-      if ! "$parser" -c "import json,sys; d=json.load(open(sys.argv[1], encoding='utf-8')); sys.exit(0 if all(k in d for k in ('permissions','hooks','env')) else 1)" "$settings_file" >/dev/null 2>&1; then
-        _fail "$label" "invalid JSON or missing permissions/hooks/env keys"
+      if ! "$parser" -c "import json,sys; d=json.load(open(sys.argv[1], encoding='utf-8')); sys.exit(0 if all(k in d for k in ('hooks','env')) else 1)" "$settings_file" >/dev/null 2>&1; then
+        _fail "$label" "invalid JSON or missing hooks/env keys"
         return
       fi
       ;;
@@ -492,20 +504,19 @@ check_session_log_template() {
   fi
 }
 
-# ---- Template permissions.allow has a wildcard Bash entry -------------------
-# Locks in the autonomy contract: template must ship with wildcard-capable
-# permissions so execution phase doesn't fall through to interactive prompts.
-# Regex match (Bash\(.*\)) accepts "Bash(*)", "Bash(.*)", or future
-# normalizations — not brittle on the literal string.
+# ---- Template PreToolUse registers bash-guard.sh ----------------------------
+# M014/S04: permissions.allow block removed. Autonomy contract is now enforced
+# via PreToolUse hooks (bash-guard + file-guard + read-guard). Assert that
+# bash-guard.sh is referenced in the template's PreToolUse section.
 check_template_bash_wildcard() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: template permissions.allow has a wildcard Bash entry"
+  local label="Check ${CHECK_NUMBER}: template PreToolUse registers bash-guard.sh (M014/S04)"
   local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
   [[ -f "$tpl" ]] || { _fail "$label" "template missing: $tpl"; return; }
-  if grep -Eq '"Bash\(.*\)"' "$tpl"; then
+  if grep -q 'bash-guard.sh' "$tpl"; then
     _pass "$label"
   else
-    _fail "$label" "no Bash(<wildcard>) entry found in $tpl permissions.allow"
+    _fail "$label" "bash-guard.sh not registered in PreToolUse in $tpl"
   fi
 }
 
@@ -634,44 +645,40 @@ print(len(data.get('permissions', {}).get('allow', [])))
   fi
 }
 
-# ---- auto-approve-bash.sh allows expected safe patterns ---------------------
-# Feeds each expanded SAFE_PATTERN through the hook with a synthetic JSON
-# input and asserts allow-decision JSON comes back. Regression gate against
-# accidental SAFE_PATTERNS removal.
+# ---- Deleted PermissionRequest hooks are absent (M014/S04) ------------------
+# M014/S04: auto-approve-bash.sh, auto-approve-writes.sh, and permission-debug.sh
+# were deleted. Assert none of them remain in the hooks directory.
 check_auto_approve_patterns() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: auto-approve-bash allows expected safe patterns"
-  local hook="${PACKAGE_ROOT}/.aihaus/hooks/auto-approve-bash.sh"
-  [[ -f "$hook" ]] || { _fail "$label" "hook missing: $hook"; return; }
-  local patterns=("printf hello" "env" "tree ." "type ls" "tee file" "cut -f1 file" "tr a b" "seq 1 3")
-  local failed=()
-  for cmd in "${patterns[@]}"; do
-    local out
-    out=$(printf '{"tool_input":{"command":"%s"}}' "$cmd" | bash "$hook" 2>/dev/null || true)
-    if ! echo "$out" | grep -q '"behavior":[[:space:]]*"allow"'; then
-      failed+=("$cmd")
-    fi
-  done
-  if [[ ${#failed[@]} -eq 0 ]]; then
+  local label="Check ${CHECK_NUMBER}: deleted PermissionRequest hooks absent (M014/S04)"
+  local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
+  local still_present=()
+  [[ -f "${hooks_root}/auto-approve-bash.sh" ]]   && still_present+=("auto-approve-bash.sh")
+  [[ -f "${hooks_root}/auto-approve-writes.sh" ]]  && still_present+=("auto-approve-writes.sh")
+  [[ -f "${hooks_root}/permission-debug.sh" ]]     && still_present+=("permission-debug.sh")
+  if [[ ${#still_present[@]} -eq 0 ]]; then
     _pass "$label"
   else
-    _fail "$label" "did not approve: ${failed[*]}"
+    _fail "$label" "hooks should have been deleted but still present: ${still_present[*]}"
   fi
 }
 
-# ---- Template PermissionRequest hooks reference auto-approve scripts --------
+# ---- Template PreToolUse registers read-guard.sh (M014/S04) -----------------
+# M014/S04: PermissionRequest block removed. read-guard.sh is now registered
+# under PreToolUse with empty matcher "" (Option 2 fallback; READ_GUARD_MODE=tool_name).
+# Also verifies no PermissionRequest block remains in the template.
 check_template_permission_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: template PermissionRequest hooks reference auto-approve scripts"
+  local label="Check ${CHECK_NUMBER}: template PreToolUse registers read-guard.sh + no PermissionRequest block (M014/S04)"
   local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
   [[ -f "$tpl" ]] || { _fail "$label" "template missing: $tpl"; return; }
-  local missing=()
-  grep -q 'auto-approve-bash.sh' "$tpl" || missing+=("auto-approve-bash.sh")
-  grep -q 'auto-approve-writes.sh' "$tpl" || missing+=("auto-approve-writes.sh")
-  if [[ ${#missing[@]} -eq 0 ]]; then
+  local problems=()
+  grep -q 'read-guard.sh' "$tpl" || problems+=("read-guard.sh not found in template")
+  grep -q 'PermissionRequest' "$tpl" && problems+=("PermissionRequest block still present — should have been removed by M014/S04")
+  if [[ ${#problems[@]} -eq 0 ]]; then
     _pass "$label"
   else
-    _fail "$label" "template missing hook references: ${missing[*]}"
+    _fail "$label" "${problems[@]}"
   fi
 }
 
@@ -745,24 +752,24 @@ check_purity() {
   fi
 }
 
-# ---- Check 27: skill directory count = 13 (M012/S07) -----------------------
-# Verifies that exactly 13 aih-* skill directories exist under .aihaus/skills/.
-# Note: Check 1 verifies the NAMED SKILL.md files (13 expected names including
-# aih-effort and aih-automode). Check 27 independently verifies the directory
-# count so that unexpected directories (stale renames, extra skill dirs) also
-# cause CI failure. If the count exceeds 13, a stale directory likely remains
-# from the M012/S04 skill rename.
+# ---- Check 27: skill directory count = 12 (M014/S03 deletes aih-automode) ---
+# Verifies that exactly 12 aih-* skill directories exist under .aihaus/skills/.
+# Note: Check 1 verifies the NAMED SKILL.md files (12 expected names including
+# aih-effort; aih-automode deleted in M014/S03). Check 27 independently verifies
+# the directory count so that unexpected directories (stale renames, extra skill
+# dirs) also cause CI failure. If the count exceeds 12, a stale directory likely
+# remains from a prior rename.
 check_skill_count_and_staleness() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: exactly 13 aih-* skill dirs exist (M012/S07)"
+  local label="Check ${CHECK_NUMBER}: exactly 12 aih-* skill dirs exist (M014/S03)"
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   local problems=()
 
   # Count aih-* directories (exclude _shared and any non-aih prefixed dirs).
   local actual_count
   actual_count=$(find "$skills_root" -maxdepth 1 -type d -name 'aih-*' | wc -l | tr -d ' ')
-  if [[ "$actual_count" -ne 13 ]]; then
-    problems+=("expected 13 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
+  if [[ "$actual_count" -ne 12 ]]; then
+    problems+=("expected 12 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -1097,7 +1104,7 @@ EOF
 #      → schema=3 .effort; .v2.bak exists; .automode absent; idempotent
 #   F2 auto-mode-safe v2 (last_preset=auto-mode-safe, permission_mode=auto)
 #      → schema=3 .effort; .automode exists with enabled=true;
-#        !! block in stderr pointing at /aih-automode --enable; idempotent
+#        !! block in stderr with DSP launch message; idempotent
 #   F3 investigator-custom v2 (cohort.investigator.effort + .model)
 #      → schema=3 .effort; 3 per-agent overrides; !! warning about FR-M06; idempotent
 # Comparison strips the timestamp line (# Migrated from schema v2 ... on <ts>)
@@ -1185,11 +1192,11 @@ check_migration_fixtures() {
     problems+=("F2: .automode not created for auto-mode-safe fixture")
   fi
 
-  # stderr must contain the !! block pointing at /aih-automode --enable.
+  # stderr must contain the !! block with DSP launch message (M014).
   echo "$f2_stderr" | grep -q '!!' \
     || problems+=("F2: !! warning block not emitted in stderr")
-  echo "$f2_stderr" | grep -q '/aih-automode --enable' \
-    || problems+=("F2: stderr missing /aih-automode --enable reference")
+  echo "$f2_stderr" | grep -q 'DSP launch' \
+    || problems+=("F2: stderr missing DSP launch reference (M014 migration message)")
 
   # .effort content matches golden.
   if [[ -f "$f2_dir/.aihaus/.effort" ]]; then
@@ -1665,6 +1672,466 @@ check_verifier_knowledge_consulted() {
   fi
 }
 
+# ---- Check (M014/S06): schema v2→v3 migration fixture (idempotent + additive) -
+# Exercises manifest-migrate.sh v2→v3 path:
+#   R1 takes a v2 fixture manifest (schema: v2, no ## Checkpoints)
+#   R2 runs manifest-migrate.sh → asserts ## Checkpoints heading present
+#   R3 asserts column header present (LD-1 7-column shape)
+#   R4 runs manifest-migrate.sh again → asserts no diff (idempotent)
+# Uses mktemp -d for the fixture; never pollutes the repo.
+check_schema_v3_migration() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: schema v2→v3 migration fixture (idempotent + additive, M014/S06)"
+  local migrate_hook="${PACKAGE_ROOT}/.aihaus/hooks/manifest-migrate.sh"
+  local problems=()
+
+  if [[ ! -f "$migrate_hook" ]]; then
+    _fail "$label" "manifest-migrate.sh not found at hooks/"
+    return
+  fi
+
+  # Create temp dir and a minimal v2 manifest fixture
+  local tmpdir
+  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-smoke)"
+  local fixture="${tmpdir}/RUN-MANIFEST.md"
+
+  cat > "$fixture" <<'MANIFEST_EOF'
+## Metadata
+milestone: M000-test
+branch: test/branch
+started: 2026-04-22T00:00:00Z
+schema: v2
+phase: execute-stories
+status: running
+last_updated: 2026-04-22T00:00:00Z
+
+## Invoke stack
+
+## Story Records
+story_id|status|started_at|commit_sha|verified|notes
+S01|complete|2026-04-22T00:01:00Z|abc1234|true|
+MANIFEST_EOF
+
+  # R2: run migration first time
+  local migrate_out migrate_rc
+  migrate_out=$(MANIFEST_PATH="$fixture" bash "$migrate_hook" 2>&1)
+  migrate_rc=$?
+  if [[ "$migrate_rc" -ne 0 ]]; then
+    problems+=("R2: manifest-migrate.sh exited ${migrate_rc} on first run; output: ${migrate_out:0:200}")
+  fi
+
+  # R2/R3: assert ## Checkpoints heading present
+  if ! grep -q '^## Checkpoints$' "$fixture"; then
+    problems+=("R2: ## Checkpoints heading not added by migration")
+  fi
+
+  # R3: assert LD-1 column header present
+  local expected_header="| ts | story | agent | substep | event | result | sha |"
+  if ! grep -qF "$expected_header" "$fixture"; then
+    problems+=("R3: LD-1 column header not present; expected: '${expected_header}'")
+  fi
+
+  # R4: capture snapshot before second run
+  local snap_before
+  snap_before="$(cat "$fixture")"
+
+  # R4: run migration a second time
+  local migrate_out2 migrate_rc2
+  migrate_out2=$(MANIFEST_PATH="$fixture" bash "$migrate_hook" 2>&1)
+  migrate_rc2=$?
+  if [[ "$migrate_rc2" -ne 0 ]]; then
+    problems+=("R4: manifest-migrate.sh exited ${migrate_rc2} on second run; output: ${migrate_out2:0:200}")
+  fi
+
+  # R4: assert idempotent (file unchanged)
+  local snap_after
+  snap_after="$(cat "$fixture")"
+  if [[ "$snap_before" != "$snap_after" ]]; then
+    problems+=("R4: idempotence violated — manifest changed on second migration run")
+  fi
+
+  rm -rf "$tmpdir" 2>/dev/null || true
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- Check (M014/S08): worktree-reconcile.sh 3-category fixture -------------
+# Creates a temp git repo with 3 worktrees:
+#   Cat A: clean worktree whose HEAD == main HEAD (merged).
+#   Cat B: clean worktree with 1 extra commit not on main.
+#   Cat C: dirty worktree with 1 uncommitted file.
+# Invokes worktree-reconcile.sh and asserts:
+#   A: worktree no longer listed by `git worktree list`
+#   B: stdout contains "git cherry-pick" recipe
+#   C: worktree still listed; dirty file still present
+# Uses mktemp -d for full isolation; never pollutes the repo.
+check_worktree_reconcile_fixture() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: worktree-reconcile.sh 3-category fixture (M014/S08)"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/worktree-reconcile.sh"
+  local problems=()
+
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "hook missing: ${hook#${PACKAGE_ROOT}/}"
+    return
+  fi
+  if [[ ! -x "$hook" ]]; then
+    problems+=("hook not executable: ${hook#${PACKAGE_ROOT}/}")
+  fi
+
+  # Need git available
+  if ! command -v git >/dev/null 2>&1; then
+    _fail "$label" "git not found; cannot run fixture"
+    return
+  fi
+
+  local tmpdir
+  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-wt-smoke)"
+
+  # ---- Bootstrap a bare git repo as the shared object store ------------------
+  local repo="${tmpdir}/repo"
+  mkdir -p "$repo"
+  git -C "$repo" init -b main >/dev/null 2>&1
+  git -C "$repo" config user.email "smoke@test"
+  git -C "$repo" config user.name  "Smoke Test"
+
+  # Initial commit on main
+  touch "$repo/seed.txt"
+  git -C "$repo" add seed.txt
+  git -C "$repo" commit -m "initial" >/dev/null 2>&1
+
+  # ---- Worktree A: clean + HEAD == main HEAD ---------------------------------
+  # Use a new branch (wt-a-branch) that points to the same SHA as main.
+  # Cannot add a worktree directly on 'main' — git forbids multiple
+  # checkouts of the same branch.
+  local wt_a="${tmpdir}/wt-cat-a"
+  git -C "$repo" branch wt-a-branch main >/dev/null 2>&1
+  git -C "$repo" worktree add "$wt_a" wt-a-branch >/dev/null 2>&1
+
+  # ---- Worktree B: clean + 1 extra commit ------------------------------------
+  local wt_b="${tmpdir}/wt-cat-b"
+  git -C "$repo" worktree add -b wt-b-branch "$wt_b" main >/dev/null 2>&1
+  touch "$wt_b/extra.txt"
+  git -C "$wt_b" add extra.txt
+  git -C "$wt_b" commit -m "extra commit on B" >/dev/null 2>&1
+
+  # ---- Worktree C: dirty (uncommitted file) -----------------------------------
+  local wt_c="${tmpdir}/wt-cat-c"
+  git -C "$repo" worktree add -b wt-c-branch "$wt_c" main >/dev/null 2>&1
+  echo "dirty" > "$wt_c/dirty.txt"
+  # Do NOT git add — leave it untracked so status --porcelain is non-empty
+
+  # ---- Run the hook against the fixture repo ----------------------------------
+  local hook_stdout
+  hook_stdout="$(
+    cd "$repo"
+    AIHAUS_MAIN_BRANCH=main bash "$hook" 2>/dev/null
+  )" || true
+
+  # ---- Assert Category A: worktree removed ------------------------------------
+  # git worktree list --porcelain emits platform-native paths. Match on the
+  # trailing directory name (wt-cat-a / wt-cat-c) which is unambiguous in
+  # the fixture, avoids Unix-vs-Windows path prefix mismatch.
+  local wt_list_after
+  wt_list_after="$(git -C "$repo" worktree list --porcelain 2>/dev/null)"
+  if printf '%s\n' "$wt_list_after" | grep -qE '(worktree .*/|worktree )wt-cat-a$'; then
+    problems+=("A: category-A worktree still listed after reconcile (should have been pruned)")
+  fi
+
+  # ---- Assert Category B: cherry-pick recipe on stdout -----------------------
+  if ! printf '%s\n' "$hook_stdout" | grep -q 'git cherry-pick'; then
+    problems+=("B: stdout missing 'git cherry-pick' recipe for category-B worktree")
+  fi
+
+  # ---- Assert Category C: worktree preserved + dirty file intact --------------
+  if ! printf '%s\n' "$wt_list_after" | grep -qE '(worktree .*/|worktree )wt-cat-c$'; then
+    problems+=("C: category-C worktree was removed (should have been preserved)")
+  fi
+  if [[ ! -f "$wt_c/dirty.txt" ]]; then
+    problems+=("C: dirty file removed from category-C worktree (should be untouched)")
+  fi
+
+  # ---- Cleanup ----------------------------------------------------------------
+  rm -rf "$tmpdir" 2>/dev/null || true
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- Check (M014/S09): crash-mid-implementer + resume substep fixture -------
+# Simulates a crash after 2 of 4 files are written. The fixture RUN-MANIFEST
+# has ## Checkpoints with:
+#   file:a.sh enter + exit OK
+#   file:b.sh enter + exit OK
+#   file:c.sh enter          (orphan — no exit; crash point)
+# A bash parsing helper reads the last ## Checkpoints row and returns the
+# substep the agent should resume from.
+# Assert: resume substep == file:c.sh
+#
+# Coupling note: this check tests the checkpoint-parsing logic inline (no
+# external helper invoked) per LD-9 "unit-test-style invocation". The parsing
+# routine is a local bash function inside this check. It mirrors what
+# /aih-resume Phase 2 step 6 does: find the last row where event is 'enter'
+# with no matching 'exit OK' row.
+check_resume_substep_fixture() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: crash-mid-implementer + resume substep fixture (M014/S09)"
+  local problems=()
+
+  # ---- Create temp dir + fixture manifest ------------------------------------
+  local tmpdir
+  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-resume-smoke)"
+  local fixture="${tmpdir}/RUN-MANIFEST.md"
+
+  # Write a v3 RUN-MANIFEST with ## Checkpoints simulating a crash after
+  # 2 of 4 expected files. The 4 planned substeps are:
+  #   file:a.sh, file:b.sh, file:c.sh, file:d.sh
+  # After the crash: a.sh and b.sh are fully done (enter+exit OK).
+  # c.sh has an orphan enter (crash before exit). d.sh is untouched.
+  cat > "$fixture" <<'FIXTURE_EOF'
+## Metadata
+milestone: M000-test
+branch: test/branch
+started: 2026-04-22T00:00:00Z
+schema: v3
+phase: execute-stories
+status: running
+last_updated: 2026-04-22T00:00:00Z
+
+## Invoke stack
+
+## Story Records
+story_id|status|started_at|commit_sha|verified|notes
+S03|running|2026-04-22T00:01:00Z|||
+
+## Checkpoints
+
+| ts | story | agent | substep | event | result | sha |
+|---|---|---|---|---|---|---|
+| 2026-04-22T10:00:00Z | S03 | implementer | file:a.sh | enter |  |  |
+| 2026-04-22T10:01:00Z | S03 | implementer | file:a.sh | exit | OK | a1b2c3d |
+| 2026-04-22T10:02:00Z | S03 | implementer | file:b.sh | enter |  |  |
+| 2026-04-22T10:03:00Z | S03 | implementer | file:b.sh | exit | OK | b2c3d4e |
+| 2026-04-22T10:04:00Z | S03 | implementer | file:c.sh | enter |  |  |
+FIXTURE_EOF
+
+  # ---- Inline parsing helper -------------------------------------------------
+  # Reads the ## Checkpoints table from the fixture and determines the next
+  # substep to resume from. Algorithm:
+  #   1. Collect all substeps that have an 'exit OK' or 'exit SKIP' row.
+  #   2. Find the first substep with an 'enter' row but no 'exit OK'/'exit SKIP'.
+  #   3. That is the resume point (orphan enter = crash point).
+  # Returns the substep string on stdout, or empty if none found.
+  _find_resume_substep() {
+    local manifest_path="$1"
+    awk -F'|' '
+      /^## Checkpoints/ { in_sec=1; next }
+      /^## / && in_sec { in_sec=0; next }
+      in_sec && NF==9 {
+        # Columns (1-indexed after split on |, leading blank col = $1):
+        # $2=ts $3=story $4=agent $5=substep $6=event $7=result $8=sha $9=trailing
+        sub(/^[[:space:]]+/, "", $5); sub(/[[:space:]]+$/, "", $5)
+        sub(/^[[:space:]]+/, "", $6); sub(/[[:space:]]+$/, "", $6)
+        sub(/^[[:space:]]+/, "", $7); sub(/[[:space:]]+$/, "", $7)
+        substep = $5
+        event   = $6
+        result  = $7
+        # Track enter and exit-ok separately
+        if (event == "enter") entered[substep] = 1
+        if (event == "exit" && (result == "OK" || result == "SKIP")) exited[substep] = 1
+      }
+      END {
+        # Find the first entered-but-not-exited substep.
+        # Use insertion-order trick: store order in an array.
+        # Since awk associative arrays dont guarantee order, re-scan for first match.
+        # (We already processed the file top-down; a second pass preserves order.)
+        # Print the first substep that was entered but not exited-ok.
+        for (s in entered) {
+          if (!(s in exited)) { print s; exit }
+        }
+      }
+    ' "$manifest_path"
+  }
+
+  # Variant that preserves insertion order by scanning the file twice:
+  # first pass builds the exited set, second pass finds first orphan enter.
+  _find_resume_substep_ordered() {
+    local manifest_path="$1"
+    # Pass 1: collect all exit-OK substeps
+    local exited_set
+    exited_set=$(awk -F'|' '
+      /^## Checkpoints/ { in_sec=1; next }
+      /^## / && in_sec { in_sec=0; next }
+      in_sec && NF==9 {
+        sub(/^[[:space:]]+/, "", $5); sub(/[[:space:]]+$/, "", $5)
+        sub(/^[[:space:]]+/, "", $6); sub(/[[:space:]]+$/, "", $6)
+        sub(/^[[:space:]]+/, "", $7); sub(/[[:space:]]+$/, "", $7)
+        if ($6 == "exit" && ($7 == "OK" || $7 == "SKIP")) print $5
+      }
+    ' "$manifest_path")
+
+    # Pass 2: find first enter row whose substep is not in exited_set
+    awk -F'|' -v exited="$exited_set" '
+      BEGIN {
+        n = split(exited, arr, "\n")
+        for (i=1; i<=n; i++) done[arr[i]] = 1
+      }
+      /^## Checkpoints/ { in_sec=1; next }
+      /^## / && in_sec { in_sec=0; next }
+      in_sec && NF==9 {
+        sub(/^[[:space:]]+/, "", $5); sub(/[[:space:]]+$/, "", $5)
+        sub(/^[[:space:]]+/, "", $6); sub(/[[:space:]]+$/, "", $6)
+        if ($6 == "enter" && !($5 in done)) { print $5; exit }
+      }
+    ' "$manifest_path"
+  }
+
+  # ---- Invoke the ordered helper and assert ----------------------------------
+  local resume_substep
+  resume_substep="$(_find_resume_substep_ordered "$fixture")"
+
+  if [[ "$resume_substep" == "file:c.sh" ]]; then
+    _pass "$label"
+  else
+    if [[ -z "$resume_substep" ]]; then
+      problems+=("parsing helper returned empty string; expected 'file:c.sh'")
+    else
+      problems+=("expected resume substep 'file:c.sh'; got '${resume_substep}'")
+    fi
+    _fail "$label" "${problems[@]}"
+  fi
+
+  rm -rf "$tmpdir" 2>/dev/null || true
+}
+
+# ---- Check (M014/S02): bash-guard DANGEROUS_PATTERNS baseline ----------------
+# Verifies bash-guard.sh contains the full DANGEROUS_PATTERNS set migrated from
+# auto-approve-bash.sh M007 baseline (LD-4/S02). Each expected pattern fragment
+# is regex-asserted present in bash-guard.sh.
+#
+# Post-S04 note: when auto-approve-bash.sh is deleted, this check becomes the
+# standalone bash-guard DANGEROUS_PATTERNS baseline assertion per LD-9.
+check_bash_guard_baseline() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: bash-guard.sh contains M007 DANGEROUS_PATTERNS baseline (M014/S02)"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/bash-guard.sh"
+
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "hook missing: ${hook#${PACKAGE_ROOT}/}"
+    return
+  fi
+
+  # Expected pattern fragments — one per M007 DANGEROUS_PATTERNS category.
+  # Using plain grep -F (fixed string) or -q (substring) against the hook source
+  # so that ERE metacharacter differences across grep implementations
+  # (GNU vs BSD vs git-bash) don't cause false negatives.
+  # Each fragment is a literal substring that must appear in bash-guard.sh.
+  local -a expected_fragments=(
+    # destructive filesystem
+    'rm\s+-rf'
+    'shred\b'
+    'dd\s+if='
+    'mkfs\.'
+    '/dev/s[dr]'
+    # privilege escalation
+    'sudo\b'
+    'doas\b'
+    '^su\s'
+    # destructive git
+    'git\s+push\s+--force'
+    'git\s+clean\s+-fd'
+    # destructive SQL
+    'drop\s+(table|database)'
+    'truncate\s+table'
+    # Windows destructive
+    'del\s+/[FSQfsq]'
+    'rmdir\s+/[Ss]'
+    'format\s+[A-Za-z]:'
+    # code injection
+    "awk\\\\s+'"
+    'sed\s+-i'
+    # code-via-pipe
+    'curl\s+'
+    'wget\s+'
+    # supply chain
+    'npm\s+publish'
+    'pip\s+publish'
+    'cargo\s+publish'
+    # nuclear docker
+    'docker\s+system\s+prune'
+    # fork bomb
+    ':\(\)\s*\{'
+  )
+
+  local missing=()
+  for fragment in "${expected_fragments[@]}"; do
+    if ! grep -qF "$fragment" "$hook"; then
+      missing+=("$fragment")
+    fi
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "bash-guard.sh missing pattern fragments: ${missing[*]}"
+  fi
+}
+
+# ---- Check (M014/S02+S04): read-guard.sh existence, executable, syntax, registered ----
+# Verifies read-guard.sh is present, executable, and syntactically valid.
+# M014/S04: also verifies it IS registered in settings.local.json under PreToolUse.
+check_read_guard_exists() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: read-guard.sh exists, executable, syntax OK, registered in template (M014/S02+S04)"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/read-guard.sh"
+  local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
+  local problems=()
+
+  # (a) file exists
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "read-guard.sh missing at hooks/read-guard.sh"
+    return
+  fi
+
+  # (b) executable
+  if [[ ! -x "$hook" ]]; then
+    problems+=("read-guard.sh is not executable (run: chmod +x)")
+  fi
+
+  # (c) bash -n syntax check
+  if ! bash -n "$hook" 2>/dev/null; then
+    problems+=("read-guard.sh failed bash -n syntax check")
+  fi
+
+  # (d) shebang present
+  if ! head -1 "$hook" | grep -q '^#!/'; then
+    problems+=("read-guard.sh missing shebang on line 1")
+  fi
+
+  # (e) READ_GUARD_MODE constant declared
+  if ! grep -q 'READ_GUARD_MODE' "$hook"; then
+    problems+=("read-guard.sh missing READ_GUARD_MODE constant (LD-4 dual-path gate)")
+  fi
+
+  # (f) NOW referenced in settings.local.json (S04 registered it under PreToolUse)
+  if [[ -f "$tpl" ]] && ! grep -q 'read-guard.sh' "$tpl"; then
+    problems+=("read-guard.sh is not yet referenced in settings.local.json — S04 should have registered it")
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -1707,6 +2174,11 @@ check_context_curator
 check_learning_advisor
 check_knowledge_curator
 check_verifier_knowledge_consulted
+check_schema_v3_migration
+check_worktree_reconcile_fixture
+check_resume_substep_fixture
+check_bash_guard_baseline
+check_read_guard_exists
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

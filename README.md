@@ -12,27 +12,27 @@
 
 **You think. ai builds.**
 
-**An autonomous developer workflow for Claude Code *and* Cursor. One approval gate, then 43 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
+**An autonomous developer workflow for Claude Code *and* Cursor. One approval gate, then 46 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
 
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.15.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.18.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 [![Cursor](https://img.shields.io/badge/Cursor-first--class-000000?style=for-the-badge)](https://cursor.com)
 
 <br>
 
 ```bash
-# Claude Code (default)
+# Install aihaus into your repo
 git clone https://github.com/overdrive-dev/aihaus-flow ~/tools/aihaus
 bash ~/tools/aihaus/pkg/scripts/install.sh --target .
 
-# Cursor
-bash ~/tools/aihaus/pkg/scripts/install.sh --target . --platform cursor
+# Launch with full autonomy (DSP mode)
+bash .aihaus/auto.sh
 
-# Both (dual-tool machines)
-bash ~/tools/aihaus/pkg/scripts/install.sh --target . --platform both
+# Or on Windows PowerShell
+.aihaus/auto.ps1
 ```
 
 Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and shell scripts.
@@ -70,7 +70,7 @@ Most of your time with ai-assisted coding gets spent describing *how* instead of
 
 aihaus inverts that loop. **Front-load the thinking once; the system runs the rest.**
 
-After a single approval, a coordinated team of 43 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
+After a single approval, a coordinated team of 46 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
 
 ---
 
@@ -428,10 +428,7 @@ After `bash pkg/scripts/update.sh` (or `install.sh --update`):
   `.claude/settings.local.json` and replace `"Bash(*)"` with the
   granular entries you want. Re-apply after each update.
 
-**Why `Bash(*)`?** The `auto-approve-bash.sh` + `bash-guard.sh` hook
-pair provides sandboxing; granular `Bash()` entries force interactive
-prompts for any command that isn't exact-matched, which breaks the
-autonomy-protocol execution-phase contract.
+**Why DSP + bash-guard.sh?** aihaus auto-launches via `bash .aihaus/auto.sh`, which passes `--dangerously-skip-permissions` to Claude Code — eliminating interactive permission prompts for the spawned process tree. The `bash-guard.sh` PreToolUse hook provides sandboxing by blocking catastrophic patterns before they execute. Granular `Bash()` entries are not needed and would break the autonomy-protocol execution-phase contract.
 
 **Cursor users (installed with `--platform cursor`):** the settings
 merge is skipped on Cursor installs — Cursor has its own permission

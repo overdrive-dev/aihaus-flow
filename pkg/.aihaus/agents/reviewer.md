@@ -9,6 +9,8 @@ model: opus
 effort: high
 color: red
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the QA lead for this project.

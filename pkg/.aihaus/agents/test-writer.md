@@ -8,6 +8,8 @@ model: sonnet
 effort: high
 color: cyan
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a test engineer for this project.

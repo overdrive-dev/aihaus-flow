@@ -11,6 +11,8 @@ model: haiku
 effort: high
 color: cyan
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a UI spec checker for this project.
