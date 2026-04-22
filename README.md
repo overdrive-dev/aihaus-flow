@@ -286,7 +286,7 @@ Nothing is fine-tuned and no weights move. What changes is the markdown that gui
 
 ## Commands
 
-aihaus ships 11 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**. Since v0.9.0 the autonomy contract is codified in a shared annex (`pkg/.aihaus/skills/_shared/autonomy-protocol.md`) that every skill references — no mid-execution option menus, no honest checkpoints, no delegated typing.
+aihaus ships 12 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**. Since v0.9.0 the autonomy contract is codified in a shared annex (`pkg/.aihaus/skills/_shared/autonomy-protocol.md`) that every skill references — no mid-execution option menus, no honest checkpoints, no delegated typing.
 
 ### Core workflow
 
@@ -322,6 +322,7 @@ aihaus ships 11 intent-based skills. Every command follows the same pattern: **a
 |---------|--------------|
 | `/aih-help` | List all commands and conventions |
 | `/aih-update [--check] [--force]` | Pull latest aihaus from remote, re-link, re-validate |
+| `/aih-effort` | Retune agent effort tiers and model assignments (cohort-driven) |
 | `/aih-sync-notion` | Optional Notion Kanban sync for milestones |
 
 ---
@@ -377,15 +378,29 @@ your-project/
 
 After `bash pkg/scripts/update.sh` (or `install.sh --update`):
 
-- `permissions.allow` is replaced by the template's default
-  (includes `Bash(*)`). Your prior file is saved at
-  `.claude/settings.local.json.bak.<timestamp>`.
+- The settings template (`pkg/.aihaus/templates/settings.local.json`)
+  is deep-merged into your `.claude/settings.local.json`. Your prior
+  file is backed up at `.claude/settings.local.json.bak.<timestamp>`.
 - `hooks` blocks are deep-merged — custom user hooks survive.
-- If you prefer narrow Bash permissions, edit
-  `.claude/settings.local.json` and replace `"Bash(*)"` with the
-  granular entries you want. Re-apply after each update.
+- Since **v0.18.0 (M014)** the template no longer ships
+  `permissions.{defaultMode,allow,deny}` — autonomy comes from
+  launching via `bash .aihaus/auto.sh` (DSP wrapper). Safety lives
+  in PreToolUse hooks (`bash-guard.sh`, `file-guard.sh`,
+  `read-guard.sh`) instead of permission rules.
 
-**Why DSP + bash-guard.sh?** aihaus auto-launches via `bash .aihaus/auto.sh`, which passes `--dangerously-skip-permissions` to Claude Code — eliminating interactive permission prompts for the spawned process tree. The `bash-guard.sh` PreToolUse hook provides sandboxing by blocking catastrophic patterns before they execute. Granular `Bash()` entries are not needed and would break the autonomy-protocol execution-phase contract.
+**Why DSP + PreToolUse hooks?** `bash .aihaus/auto.sh` `exec`s
+`claude --dangerously-skip-permissions`, eliminating interactive
+permission prompts for the spawned process tree. The PreToolUse
+hooks provide sandboxing by blocking catastrophic patterns before
+they execute (M007 baseline `DANGEROUS_PATTERNS` migrated into
+`bash-guard.sh` in M014/S02). Adding granular `Bash()` rules back
+would not change behavior under DSP launch but would re-introduce
+maintenance overhead the M014 pivot deliberately removed.
+
+**Bare `claude` is the non-auto path.** If you want classic
+permission prompts, launch `claude` directly without the wrapper —
+the absence of the M014 permission stack means Claude Code falls
+back to its built-in defaults.
 
 **Uninstall preserves settings:** `uninstall.sh` removes symlinks
 and hook scripts but leaves `.claude/settings.local.json` intact,
@@ -393,7 +408,12 @@ so re-install doesn't wipe user prefs.
 
 ## Stack Agnostic
 
-aihaus works with **any** language, framework, or toolchain. Agents read `project.md` at runtime — they never assume Python, Node, Go, or anything else. Settings ship with `Bash(*)` permissions so every dev tool works without prompts. Install in a Rust project, a Rails app, or a Go microservice — it adapts.
+aihaus works with **any** language, framework, or toolchain. Agents
+read `project.md` at runtime — they never assume Python, Node, Go,
+or anything else. Under DSP launch (`bash .aihaus/auto.sh`) every
+dev tool runs without prompts; PreToolUse hooks block only the
+short list of catastrophic patterns. Install in a Rust project, a
+Rails app, or a Go microservice — it adapts.
 
 ## Conflict Prevention
 
@@ -417,7 +437,7 @@ Skills that could explode cost enforce hard caps *before* spawning. `/aih-brains
 
 ## Requirements
 
-- **Claude Code** (CLI or Desktop)
+- **Claude Code** v2.0.0+ (CLI; the `--dangerously-skip-permissions` flag is required for `bash .aihaus/auto.sh` to dispatch correctly. Older versions trigger a soft warning during install but the rest of the toolkit still works under bare `claude`.)
 - **git**
 - **bash** (Unix) or **Git Bash / WSL / PowerShell 5+** (Windows)
 - **python** or **jq** for JSON settings merging (optional — installer gracefully degrades)
