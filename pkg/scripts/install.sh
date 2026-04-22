@@ -8,6 +8,11 @@
 #   -h, --help        Show usage
 set -euo pipefail
 
+# Minimum Claude Code version supporting --dangerously-skip-permissions (DSP).
+# TODO: Update this floor if the Claude Code changelog confirms a stricter minimum.
+# Conservative default: 2.0.0 (DSP flag was present well before this release).
+DSP_MIN_CLAUDE_VERSION="2.0.0"
+
 usage() {
   cat <<'EOF'
 Usage: install.sh [--target <path>] [--copy] [--update] [--platform <target>]
@@ -19,10 +24,9 @@ Options:
   --copy               Copy files instead of symlinking (fallback for
                        locked-down environments)
   --update             Re-sync package dirs only; preserve local data
-  --platform <name>    Install target: claude | cursor | both
-                       Default: claude (preserves pre-v0.10.0 behavior).
-                       cursor: also link ~/.cursor/plugins/local/aihaus.
-                       both:   install for Claude Code AND Cursor.
+  --platform <name>    Install target: claude only.
+                       cursor and both are rejected (M014+: DSP flag is
+                       Claude-Code-CLI-only). See ADR-M014-A.
   -h, --help           Show this message
 EOF
 }
@@ -55,10 +59,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --platform)
       [[ $# -ge 2 ]] || { echo "ERROR: --platform requires a value (claude|cursor|both)" >&2; exit 2; }
-      case "$2" in
-        claude|cursor|both) PLATFORM="$2" ;;
-        *) echo "ERROR: --platform must be one of: claude, cursor, both" >&2; exit 2 ;;
-      esac
+      PLATFORM="$2"
       shift 2
       ;;
     -h|--help)
@@ -71,6 +72,21 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Reject Cursor platform (M014+: DSP is Claude-Code-CLI-only per ADR-M014-A)
+case "${PLATFORM}" in
+  cursor|both)
+    echo "ERROR: aihaus M014+ uses claude --dangerously-skip-permissions which is Claude-Code-CLI-only." >&2
+    echo "Cursor install path is rejected. See ADR-M014-A and pkg/.aihaus/rules/COMPAT-MATRIX.md." >&2
+    exit 1
+    ;;
+  claude)
+    : ;;
+  *)
+    echo "ERROR: --platform must be one of: claude, cursor, both" >&2
+    exit 2
+    ;;
+esac
 
 # Absolute path for target
 TARGET="$(cd "${TARGET}" 2>/dev/null && pwd)" || {
@@ -122,18 +138,13 @@ if [[ "${UPDATE}" == "1" ]]; then
     cp -R "${src}" "${dst}"
     echo "  refreshed: .aihaus/${name}"
   done
-  # Restore per-agent effort from sidecar after agents/ wipe — pinned
+  # Restore per-agent effort from sidecar after agents/ wipe -- pinned
   # between the refresh loop above and the .claude/ link_or_copy loop below,
   # mirroring update.sh's call site so both .aihaus/agents/ (physical) and
   # .claude/agents/ (symlink or copy) pick up restored frontmatter.
-  # Dispatch order matches update.sh: restore_effort may write .automode during
-  # v2->v3 migration, which restore_automode then reads.
   # shellcheck source=lib/restore-effort.sh
   source "$(dirname "$0")/lib/restore-effort.sh"
   restore_effort "${TARGET}/.aihaus"
-  # shellcheck source=lib/restore-automode.sh
-  source "$(dirname "$0")/lib/restore-automode.sh"
-  restore_automode "${TARGET}/.aihaus"
 else
   # Step 3: existing .aihaus/ prompt
   if [[ -e "${TARGET}/.aihaus" ]]; then
@@ -179,60 +190,70 @@ link_or_copy() {
   echo "  copy: .claude/${name}"
 }
 
-if [[ "${PLATFORM}" == "claude" || "${PLATFORM}" == "both" ]]; then
-  mkdir -p "${TARGET}/.claude"
-  for name in skills agents hooks; do
-    link_or_copy "${name}"
-  done
+mkdir -p "${TARGET}/.claude"
+for name in skills agents hooks; do
+  link_or_copy "${name}"
+done
+
+# Step 6.5: create auto.sh wrapper symlink / copy (M014/S05)
+WRAPPER_SRC="${SCRIPT_DIR}/launch-aihaus.sh"
+WRAPPER_LINK="${TARGET}/.aihaus/auto.sh"
+if [[ -f "${WRAPPER_SRC}" ]]; then
+  if [[ "${MODE}" == "link" ]]; then
+    if ln -sf "${WRAPPER_SRC}" "${WRAPPER_LINK}" 2>/dev/null; then
+      echo "  link: .aihaus/auto.sh -> ${WRAPPER_SRC}"
+    else
+      echo "  warn: symlink failed for auto.sh, falling back to copy"
+      cp -f "${WRAPPER_SRC}" "${WRAPPER_LINK}"
+      chmod +x "${WRAPPER_LINK}" 2>/dev/null || true
+      echo "  copy: .aihaus/auto.sh"
+    fi
+  else
+    cp -f "${WRAPPER_SRC}" "${WRAPPER_LINK}"
+    chmod +x "${WRAPPER_LINK}" 2>/dev/null || true
+    echo "  copy: .aihaus/auto.sh"
+  fi
+else
+  echo "  warn: launch-aihaus.sh not found at ${WRAPPER_SRC}, skipping auto.sh creation"
 fi
 
 # Step 7: merge settings template into .claude/settings.local.json (Claude target only)
 SETTINGS_SRC="${PKG_TEMPLATES}/settings.local.json"
 SETTINGS_DST="${TARGET}/.claude/settings.local.json"
 
-if [[ "${PLATFORM}" == "cursor" ]]; then
-  : # skip settings merge on Cursor-only install
-else
-  # shellcheck source=lib/merge-settings.sh
-  source "$(dirname "$0")/lib/merge-settings.sh"
-  merge_settings "${SETTINGS_DST}" "${SETTINGS_SRC}"
-fi
-
-# Step 7.5: Cursor plugin setup (platform in {cursor, both})
-if [[ "${PLATFORM}" == "cursor" || "${PLATFORM}" == "both" ]]; then
-  CURSOR_PLUGINS_DIR="${HOME}/.cursor/plugins/local"
-  CURSOR_LINK="${CURSOR_PLUGINS_DIR}/aihaus"
-  PLUGIN_ROOT="${TARGET}/.aihaus"
-  mkdir -p "${CURSOR_PLUGINS_DIR}"
-  if [[ -L "${CURSOR_LINK}" || -e "${CURSOR_LINK}" ]]; then
-    rm -rf "${CURSOR_LINK}"
-  fi
-  if [[ "${MODE}" == "link" ]]; then
-    if ln -s "${PLUGIN_ROOT}" "${CURSOR_LINK}" 2>/dev/null; then
-      echo "  link: ~/.cursor/plugins/local/aihaus -> ${PLUGIN_ROOT}"
-    else
-      echo "  warn: cursor symlink failed, falling back to copy"
-      cp -R "${PLUGIN_ROOT}" "${CURSOR_LINK}"
-      echo "  copy: ~/.cursor/plugins/local/aihaus"
-    fi
-  else
-    cp -R "${PLUGIN_ROOT}" "${CURSOR_LINK}"
-    echo "  copy: ~/.cursor/plugins/local/aihaus"
-  fi
-fi
+# shellcheck source=lib/merge-settings.sh
+source "$(dirname "$0")/lib/merge-settings.sh"
+merge_settings "${SETTINGS_DST}" "${SETTINGS_SRC}"
 
 # Step 8: write install mode marker
 echo "${MODE}" > "${TARGET}/.aihaus/.install-mode"
 echo "${PLATFORM}" > "${TARGET}/.aihaus/.install-platform"
 
-# Step 9: success message
+# Step 9: DSP version-gate soft warning (LD-3: soft only, never exit non-zero)
+if command -v claude >/dev/null 2>&1; then
+  _claude_ver_raw="$(claude --version 2>/dev/null || true)"
+  # Extract version number (e.g. "2.1.117 (Claude Code)" -> "2.1.117")
+  _claude_ver="$(echo "${_claude_ver_raw}" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true)"
+  if [[ -n "${_claude_ver}" ]]; then
+    # Compare using sort -V (version sort)
+    _lower="$(printf '%s\n%s\n' "${DSP_MIN_CLAUDE_VERSION}" "${_claude_ver}" | sort -V | head -1)"
+    if [[ "${_lower}" != "${DSP_MIN_CLAUDE_VERSION}" ]] && [[ "${_claude_ver}" != "${DSP_MIN_CLAUDE_VERSION}" ]]; then
+      echo ""
+      echo "  !! WARNING: claude --version reports ${_claude_ver}."
+      echo "  !! aihaus requires Claude Code >= ${DSP_MIN_CLAUDE_VERSION} for --dangerously-skip-permissions."
+      echo "  !! Update Claude Code if you encounter permission errors when launching via auto.sh."
+      echo "  !! (This is a soft warning -- install continues regardless.)"
+    fi
+  fi
+fi
+
+# Step 10: success message
 echo ""
 if [[ "${UPDATE}" == "1" ]]; then
   echo "aihaus updated (${MODE} mode, platform: ${PLATFORM})."
+  echo "Launch with: bash .aihaus/auto.sh"
 else
   echo "aihaus installed (${MODE} mode, platform: ${PLATFORM})."
-  if [[ "${PLATFORM}" == "cursor" || "${PLATFORM}" == "both" ]]; then
-    echo "Restart Cursor to pick up the aihaus plugin."
-  fi
-  echo "Run /aih-init to bootstrap project.md"
+  echo "Launch with: bash .aihaus/auto.sh"
+  echo "Run /aih-init inside the launched session to bootstrap project.md"
 fi

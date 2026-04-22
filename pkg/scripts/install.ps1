@@ -1,36 +1,59 @@
 # aihaus install script (Windows PowerShell)
 # Copies .aihaus/ into target repo and links .claude/{skills,agents,hooks}.
 # Flags:
-#   -Target <path>   Install into <path> instead of $PWD
-#   -Copy            Copy files instead of creating junctions
-#   -Update          Re-sync package dirs only; preserve local data
-#   -Help            Show usage
+#   -Target <path>    Install into <path> instead of $PWD
+#   -Copy             Copy files instead of creating junctions
+#   -Update           Re-sync package dirs only; preserve local data
+#   -Platform <name>  Install target: claude only.
+#                     cursor and both are rejected (M014+: DSP flag is
+#                     Claude-Code-CLI-only). See ADR-M014-A.
+#   -Help             Show usage
 
 [CmdletBinding()]
 param(
     [string]$Target = (Get-Location).Path,
     [switch]$Copy,
     [switch]$Update,
+    [string]$Platform = 'claude',
     [switch]$Help
 )
 
 $ErrorActionPreference = 'Stop'
 
+# Minimum Claude Code version supporting --dangerously-skip-permissions (DSP).
+# TODO: Update this floor if the Claude Code changelog confirms a stricter minimum.
+# Conservative default: 2.0.0 (DSP flag was present well before this release).
+$DspMinVersion = '2.0.0'
+
 function Show-Usage {
     @'
-Usage: install.ps1 [-Target <path>] [-Copy] [-Update]
+Usage: install.ps1 [-Target <path>] [-Copy] [-Update] [-Platform <name>]
 
 Installs aihaus into a target git repository.
 
 Options:
-  -Target <path>   Target directory (default: current working directory)
-  -Copy            Copy files instead of creating junctions
-  -Update          Re-sync package dirs only; preserve local data
-  -Help            Show this message
+  -Target <path>    Target directory (default: current working directory)
+  -Copy             Copy files instead of creating junctions
+  -Update           Re-sync package dirs only; preserve local data
+  -Platform <name>  Install target: claude only.
+                    cursor and both are rejected (M014+: DSP is Claude-Code-CLI-only).
+                    See ADR-M014-A and pkg/.aihaus/rules/COMPAT-MATRIX.md.
+  -Help             Show this message
 '@ | Write-Host
 }
 
 if ($Help) { Show-Usage; exit 0 }
+
+# Reject Cursor platform (M014+: DSP is Claude-Code-CLI-only per ADR-M014-A)
+if ($Platform -eq 'cursor' -or $Platform -eq 'both') {
+    Write-Host "ERROR: aihaus M014+ uses claude --dangerously-skip-permissions which is Claude-Code-CLI-only." -ForegroundColor Red
+    Write-Host "Cursor install path is rejected. See ADR-M014-A and pkg/.aihaus/rules/COMPAT-MATRIX.md." -ForegroundColor Red
+    exit 1
+}
+if ($Platform -ne 'claude') {
+    Write-Host "ERROR: -Platform must be one of: claude, cursor, both" -ForegroundColor Red
+    exit 2
+}
 
 # Resolve package root (the directory containing this script's parent)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -47,7 +70,7 @@ $Mode = if ($Copy) { 'copy' } else { 'link' }
 
 # ============================================================================
 # Test-PresetImmune -- PowerShell equivalent of is_preset_immune() in
-# restore-effort.sh (architecture.md §is_preset_immune). Returns $true iff
+# restore-effort.sh (architecture.md section is_preset_immune). Returns $true iff
 # cohort is :adversarial-scout or :adversarial-review.
 # All preset-write call sites MUST use this helper (R3 / ADR-M012-A).
 # Post-S06 grep: rg 'Test-PresetImmune' pkg/scripts/ returns >= 2 matches.
@@ -435,39 +458,6 @@ function Restore-EffortV3 {
     }
 }
 
-# ============================================================================
-# Restore-Automode -- reads .automode (if present). If enabled=true, emits
-# informational stderr block pointing at /aih-automode --enable.
-# Does NOT auto-replay side effects (ADR-M009-A record-defer discipline).
-# ============================================================================
-function Restore-Automode {
-    param([string]$AihausRoot)
-
-    $automodeFile = Join-Path $AihausRoot '.automode'
-    if (-not (Test-Path $automodeFile)) { return }
-
-    $enabled = ''; $lastEnabledAt = ''
-    foreach ($line in (Get-Content -LiteralPath $automodeFile)) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        if ($line -match '^\s*#') { continue }
-        $parts = $line -split '=', 2
-        $k = ($parts[0] -replace "`r", '').Trim()
-        $v = if ($parts.Count -gt 1) { ($parts[1] -replace "`r", '').Trim() } else { '' }
-        if ($k -eq 'enabled')         { $enabled = $v }
-        elseif ($k -eq 'last_enabled_at') { $lastEnabledAt = $v }
-    }
-
-    if ($enabled -eq 'true') {
-        $tsNote = if ($lastEnabledAt) { " (last enabled: $lastEnabledAt)" } else { '' }
-        Write-Host "" -ForegroundColor Yellow
-        Write-Host "  !!  .aihaus\.automode shows enabled=true$tsNote." -ForegroundColor Yellow
-        Write-Host "  !!  Permission-mode side effects are NOT auto-replayed after /aih-update." -ForegroundColor Yellow
-        Write-Host "  !!  Run /aih-automode --enable to re-apply defaultMode=auto and worktree" -ForegroundColor Yellow
-        Write-Host "  !!  agent frontmatter changes." -ForegroundColor Yellow
-        Write-Host "" -ForegroundColor Yellow
-    }
-}
-
 # Dedupe flag for auto-mode-safe warning across both blocks.
 $script:AutoModeSafeWarningEmitted = $false
 
@@ -476,9 +466,10 @@ if ($Update) {
 } else {
     Write-Host "aihaus installer"
 }
-Write-Host "  package: $PkgRoot"
-Write-Host "  target:  $Target"
-Write-Host "  mode:    $Mode"
+Write-Host "  package:  $PkgRoot"
+Write-Host "  target:   $Target"
+Write-Host "  mode:     $Mode"
+Write-Host "  platform: $Platform"
 
 # Step 2: require a git repo
 $gitDir = Join-Path $Target '.git'
@@ -527,16 +518,14 @@ if ($Update) {
 
     # Restore per-agent effort from sidecar.
     # Dispatch order (binding per architecture.md):
-    #   1. Restore-Effort   -- migrates v2 .calibration -> v3 .effort (if needed)
-    #                          or idempotent v3 restore. May write .automode.
-    #   2. Restore-Automode -- reads .automode; prints /aih-automode --enable pointer
-    #                          if enabled=true. Does NOT replay side effects.
+    #   1. Restore-Effort -- migrates v2 .calibration -> v3 .effort (if needed)
+    #                        or idempotent v3 restore. May write .automode.
+    # Note: Restore-Automode removed in M014/S03 (DSP pivot; automode skill deleted).
     # Pinned between agents refresh and .claude\ re-link so both layers pick up
     # restored frontmatter.
     # Schema contract: <aihaus_root>\skills\aih-effort\annexes\state-file.md
     # Cohort membership (v3): <aihaus_root>\skills\aih-effort\annexes\cohorts.md
-    Restore-Effort  -AihausRoot $TargetAihaus
-    Restore-Automode -AihausRoot $TargetAihaus
+    Restore-Effort -AihausRoot $TargetAihaus
 } else {
     # Step 3: existing .aihaus prompt
     if (Test-Path $TargetAihaus) {
@@ -593,6 +582,28 @@ function Link-Or-Copy {
 
 foreach ($name in @('skills','agents','hooks')) {
     Link-Or-Copy -Name $name
+}
+
+# Step 6.5: create auto.ps1 wrapper symlink / junction / copy (M014/S05)
+$WrapperSrc = Join-Path $ScriptDir 'launch-aihaus.ps1'
+$WrapperLink = Join-Path $TargetAihaus 'auto.ps1'
+if (Test-Path $WrapperSrc) {
+    if ($script:Mode -eq 'link') {
+        try {
+            # Try symbolic link first (requires Developer Mode or admin on Windows)
+            New-Item -ItemType SymbolicLink -Path $WrapperLink -Target $WrapperSrc -Force | Out-Null
+            Write-Host "  link: .aihaus\auto.ps1 -> $WrapperSrc"
+        } catch {
+            # Fall back to copy
+            Copy-Item -Path $WrapperSrc -Destination $WrapperLink -Force
+            Write-Host "  copy: .aihaus\auto.ps1"
+        }
+    } else {
+        Copy-Item -Path $WrapperSrc -Destination $WrapperLink -Force
+        Write-Host "  copy: .aihaus\auto.ps1"
+    }
+} else {
+    Write-Host "  warn: launch-aihaus.ps1 not found at $WrapperSrc, skipping auto.ps1 creation"
 }
 
 # Step 7: merge settings template into .claude/settings.local.json
@@ -684,12 +695,39 @@ if (-not (Test-Path $SettingsSrc)) {
 
 # Step 8: write install mode marker
 Set-Content -Path (Join-Path $TargetAihaus '.install-mode') -Value $Mode -NoNewline
+Set-Content -Path (Join-Path $TargetAihaus '.install-platform') -Value $Platform -NoNewline
 
-# Step 9: success
+# Step 9: DSP version-gate soft warning (LD-3: soft only, never exit non-zero)
+$claudeCmd = Get-Command 'claude' -ErrorAction SilentlyContinue
+if ($claudeCmd) {
+    try {
+        $claudeVerRaw = & claude --version 2>$null
+        # Extract version number (e.g. "2.1.117 (Claude Code)" -> "2.1.117")
+        if ($claudeVerRaw -match '(\d+\.\d+(?:\.\d+)?)') {
+            $claudeVer = $Matches[1]
+            # Compare using System.Version for reliable semver comparison
+            $currentVer = [System.Version]$claudeVer
+            $minVer = [System.Version]$DspMinVersion
+            if ($currentVer -lt $minVer) {
+                Write-Host ""
+                Write-Host "  !! WARNING: claude --version reports $claudeVer." -ForegroundColor Yellow
+                Write-Host "  !! aihaus requires Claude Code >= $DspMinVersion for --dangerously-skip-permissions." -ForegroundColor Yellow
+                Write-Host "  !! Update Claude Code if you encounter permission errors when launching via auto.ps1." -ForegroundColor Yellow
+                Write-Host "  !! (This is a soft warning -- install continues regardless.)" -ForegroundColor Yellow
+            }
+        }
+    } catch {
+        # Version check failed -- silent no-op per LD-3.
+    }
+}
+
+# Step 10: success message
 Write-Host ""
 if ($Update) {
-    Write-Host "aihaus updated ($Mode mode)."
+    Write-Host "aihaus updated ($Mode mode, platform: $Platform)."
+    Write-Host "Launch with: .\aihaus\auto.ps1"
 } else {
-    Write-Host "aihaus installed ($Mode mode)."
-    Write-Host "Run /aih-init to bootstrap project.md"
+    Write-Host "aihaus installed ($Mode mode, platform: $Platform)."
+    Write-Host "Launch with: .\aihaus\auto.ps1"
+    Write-Host "Run /aih-init inside the launched session to bootstrap project.md"
 }
