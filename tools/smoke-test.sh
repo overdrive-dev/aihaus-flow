@@ -1868,6 +1868,152 @@ check_worktree_reconcile_fixture() {
   fi
 }
 
+# ---- Check (M014/S09): crash-mid-implementer + resume substep fixture -------
+# Simulates a crash after 2 of 4 files are written. The fixture RUN-MANIFEST
+# has ## Checkpoints with:
+#   file:a.sh enter + exit OK
+#   file:b.sh enter + exit OK
+#   file:c.sh enter          (orphan — no exit; crash point)
+# A bash parsing helper reads the last ## Checkpoints row and returns the
+# substep the agent should resume from.
+# Assert: resume substep == file:c.sh
+#
+# Coupling note: this check tests the checkpoint-parsing logic inline (no
+# external helper invoked) per LD-9 "unit-test-style invocation". The parsing
+# routine is a local bash function inside this check. It mirrors what
+# /aih-resume Phase 2 step 6 does: find the last row where event is 'enter'
+# with no matching 'exit OK' row.
+check_resume_substep_fixture() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: crash-mid-implementer + resume substep fixture (M014/S09)"
+  local problems=()
+
+  # ---- Create temp dir + fixture manifest ------------------------------------
+  local tmpdir
+  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-resume-smoke)"
+  local fixture="${tmpdir}/RUN-MANIFEST.md"
+
+  # Write a v3 RUN-MANIFEST with ## Checkpoints simulating a crash after
+  # 2 of 4 expected files. The 4 planned substeps are:
+  #   file:a.sh, file:b.sh, file:c.sh, file:d.sh
+  # After the crash: a.sh and b.sh are fully done (enter+exit OK).
+  # c.sh has an orphan enter (crash before exit). d.sh is untouched.
+  cat > "$fixture" <<'FIXTURE_EOF'
+## Metadata
+milestone: M000-test
+branch: test/branch
+started: 2026-04-22T00:00:00Z
+schema: v3
+phase: execute-stories
+status: running
+last_updated: 2026-04-22T00:00:00Z
+
+## Invoke stack
+
+## Story Records
+story_id|status|started_at|commit_sha|verified|notes
+S03|running|2026-04-22T00:01:00Z|||
+
+## Checkpoints
+
+| ts | story | agent | substep | event | result | sha |
+|---|---|---|---|---|---|---|
+| 2026-04-22T10:00:00Z | S03 | implementer | file:a.sh | enter |  |  |
+| 2026-04-22T10:01:00Z | S03 | implementer | file:a.sh | exit | OK | a1b2c3d |
+| 2026-04-22T10:02:00Z | S03 | implementer | file:b.sh | enter |  |  |
+| 2026-04-22T10:03:00Z | S03 | implementer | file:b.sh | exit | OK | b2c3d4e |
+| 2026-04-22T10:04:00Z | S03 | implementer | file:c.sh | enter |  |  |
+FIXTURE_EOF
+
+  # ---- Inline parsing helper -------------------------------------------------
+  # Reads the ## Checkpoints table from the fixture and determines the next
+  # substep to resume from. Algorithm:
+  #   1. Collect all substeps that have an 'exit OK' or 'exit SKIP' row.
+  #   2. Find the first substep with an 'enter' row but no 'exit OK'/'exit SKIP'.
+  #   3. That is the resume point (orphan enter = crash point).
+  # Returns the substep string on stdout, or empty if none found.
+  _find_resume_substep() {
+    local manifest_path="$1"
+    awk -F'|' '
+      /^## Checkpoints/ { in_sec=1; next }
+      /^## / && in_sec { in_sec=0; next }
+      in_sec && NF==9 {
+        # Columns (1-indexed after split on |, leading blank col = $1):
+        # $2=ts $3=story $4=agent $5=substep $6=event $7=result $8=sha $9=trailing
+        sub(/^[[:space:]]+/, "", $5); sub(/[[:space:]]+$/, "", $5)
+        sub(/^[[:space:]]+/, "", $6); sub(/[[:space:]]+$/, "", $6)
+        sub(/^[[:space:]]+/, "", $7); sub(/[[:space:]]+$/, "", $7)
+        substep = $5
+        event   = $6
+        result  = $7
+        # Track enter and exit-ok separately
+        if (event == "enter") entered[substep] = 1
+        if (event == "exit" && (result == "OK" || result == "SKIP")) exited[substep] = 1
+      }
+      END {
+        # Find the first entered-but-not-exited substep.
+        # Use insertion-order trick: store order in an array.
+        # Since awk associative arrays dont guarantee order, re-scan for first match.
+        # (We already processed the file top-down; a second pass preserves order.)
+        # Print the first substep that was entered but not exited-ok.
+        for (s in entered) {
+          if (!(s in exited)) { print s; exit }
+        }
+      }
+    ' "$manifest_path"
+  }
+
+  # Variant that preserves insertion order by scanning the file twice:
+  # first pass builds the exited set, second pass finds first orphan enter.
+  _find_resume_substep_ordered() {
+    local manifest_path="$1"
+    # Pass 1: collect all exit-OK substeps
+    local exited_set
+    exited_set=$(awk -F'|' '
+      /^## Checkpoints/ { in_sec=1; next }
+      /^## / && in_sec { in_sec=0; next }
+      in_sec && NF==9 {
+        sub(/^[[:space:]]+/, "", $5); sub(/[[:space:]]+$/, "", $5)
+        sub(/^[[:space:]]+/, "", $6); sub(/[[:space:]]+$/, "", $6)
+        sub(/^[[:space:]]+/, "", $7); sub(/[[:space:]]+$/, "", $7)
+        if ($6 == "exit" && ($7 == "OK" || $7 == "SKIP")) print $5
+      }
+    ' "$manifest_path")
+
+    # Pass 2: find first enter row whose substep is not in exited_set
+    awk -F'|' -v exited="$exited_set" '
+      BEGIN {
+        n = split(exited, arr, "\n")
+        for (i=1; i<=n; i++) done[arr[i]] = 1
+      }
+      /^## Checkpoints/ { in_sec=1; next }
+      /^## / && in_sec { in_sec=0; next }
+      in_sec && NF==9 {
+        sub(/^[[:space:]]+/, "", $5); sub(/[[:space:]]+$/, "", $5)
+        sub(/^[[:space:]]+/, "", $6); sub(/[[:space:]]+$/, "", $6)
+        if ($6 == "enter" && !($5 in done)) { print $5; exit }
+      }
+    ' "$manifest_path"
+  }
+
+  # ---- Invoke the ordered helper and assert ----------------------------------
+  local resume_substep
+  resume_substep="$(_find_resume_substep_ordered "$fixture")"
+
+  if [[ "$resume_substep" == "file:c.sh" ]]; then
+    _pass "$label"
+  else
+    if [[ -z "$resume_substep" ]]; then
+      problems+=("parsing helper returned empty string; expected 'file:c.sh'")
+    else
+      problems+=("expected resume substep 'file:c.sh'; got '${resume_substep}'")
+    fi
+    _fail "$label" "${problems[@]}"
+  fi
+
+  rm -rf "$tmpdir" 2>/dev/null || true
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -1912,6 +2058,7 @@ check_knowledge_curator
 check_verifier_knowledge_consulted
 check_schema_v3_migration
 check_worktree_reconcile_fixture
+check_resume_substep_fixture
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

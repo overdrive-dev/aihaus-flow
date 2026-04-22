@@ -1,98 +1,158 @@
 ---
 name: aih-resume
-description: "Resume an interrupted autonomous run. Detects in-progress milestones, features, or bugfixes via RUN-MANIFEST.md and picks up where execution stopped."
+description: "Resume an interrupted autonomous run. Reads ## Checkpoints (schema v3) as authoritative truth; dispatches stateful agents with --resume-from. Pass --legacy-mode to fall back to heuristic detection."
 disable-model-invocation: true
 allowed-tools: Read Grep Glob Bash Write Edit Agent TaskCreate TaskUpdate
-argument-hint: "[slug (optional)]"
+argument-hint: "[slug (optional)] [--legacy-mode]"
 ---
 
 ## Task
-Pick up an interrupted autonomous run and continue it. No slug required — detects candidates from RUN-MANIFEST.md files across `.aihaus/milestones/`, `.aihaus/features/`, `.aihaus/bugfixes/`.
+Pick up an interrupted autonomous run and continue it. No slug required — detects candidates
+from RUN-MANIFEST.md files across `.aihaus/milestones/`, `.aihaus/features/`, `.aihaus/bugfixes/`.
 
 $ARGUMENTS
 
+## Flag parsing
+
+Parse `$ARGUMENTS` before any other step.
+
+**`--legacy-mode` flag:** If present, dispatch to `annexes/legacy-mode.md` and stop. That
+annex contains the pre-v0.18.0 heuristic Phase 1+2 logic (file-existence inference, stateless
+re-spawn). Use it only if the new checkpoint-based flow is not working for your manifest.
+
 ## Phase 1 — Detection
 
-### 1. Scan for interrupted runs
+### 1. Schema migration
 
 `Glob` for RUN-MANIFEST.md files in:
 - `.aihaus/milestones/*/RUN-MANIFEST.md`
 - `.aihaus/features/*/RUN-MANIFEST.md`
 - `.aihaus/bugfixes/*/RUN-MANIFEST.md`
 
-**For each, FIRST call `bash .aihaus/hooks/manifest-migrate.sh` with `MANIFEST_PATH=<path>`** (ADR-004 / story B.3). Migrates v1 → v2 in place (backup to `.v1.bak`); no-op if already v2. Required before parsing — v2 uses `Metadata` block not `**Status:**` bullets.
+For each manifest found, run:
+```bash
+MANIFEST_PATH=<path> bash .aihaus/hooks/manifest-migrate.sh
+```
+This brings v1 → v2 → v3 idempotently. Required before reading `## Checkpoints` — only v3
+manifests have the section.
 
-Then read Metadata `status:` field (v2) or fallback to `**Status:**` line (legacy, pre-migration). Collect those where status is `running`, `paused`, or any value that is NOT `completed`.
+### 2. Read authoritative checkpoint state
 
-### 2. Legacy fallback (pre-manifest milestones)
+For each manifest, read the **last data row** of the `## Checkpoints` section (7-column LD-1
+table: `ts | story | agent | substep | event | result | sha`). This row is the authoritative
+source of truth for where execution stopped. Do **not** use file-existence heuristics.
 
-For milestone dirs WITHOUT a RUN-MANIFEST.md, check for presence of `execution/MILESTONE-SUMMARY.md`. If missing, treat as "legacy interrupted" and include with a flag.
+If `## Checkpoints` is absent or has no data rows (header-only), fall through to reading
+`## Story Records` last row + `Metadata.phase` (legacy-compatible path within the new flow).
 
-### 3. Present candidates
+Collect manifests where the last checkpoint's `event` is not `exit OK` for the final planned
+substep — i.e., there is unfinished work.
 
-**When slug is given:** look up directly, error if not found or already completed.
+### 3. Worktree reconciliation
+
+Invoke:
+```bash
+bash .aihaus/hooks/worktree-reconcile.sh
+```
+
+Collect stdout:
+- **Category B** entries: cherry-pick recipes — surface to user (do not auto-execute).
+- **Category C** entries: dirty preserved worktrees — surface to user (do not auto-resolve).
+
+Category A pruning occurs silently inside the hook.
+
+### 4. Cross-check checkpoint vs worktree state
+
+Compare the last checkpoint's `sha` and `substep` against `git worktree list` HEAD shas.
+If mismatch is detected (e.g., manifest records `sha: a1b2c3d` but that worktree no longer
+exists or has a different HEAD), flag it as an **informational warning** in your output.
+Never auto-resolve mismatches — user decides.
+
+### 5. Candidate selection
+
+**When slug is given:** look up directly; error if not found or already completed.
 
 **When no slug given:**
-- **One interrupted run** → proceed silently; log one line: *"Resuming [slug] at [phase]."* (No Y/n — see `_shared/autonomy-protocol.md`.)
-- **Multiple** → present a table:
+- **One candidate** → proceed silently; log one line: *"Resuming [slug] at [substep]."*
+- **Multiple** → present a table and ask which to resume:
   ```
-  # | Type      | Slug                 | Phase            | Status   | Last updated
-  1 | milestone | M001-user-auth       | execute-stories  | running  | [mtime]
-  2 | feature   | 260411-rate-limit    | implement        | paused   | [mtime]
+  # | Type      | Slug               | Last substep         | Last event | ts
+  1 | milestone | M001-user-auth     | file:src/foo.sh      | enter      | 2026-04-22T15:30Z
   ```
-  Ask user to pick.
 - **Zero** → "Nothing to resume." Stop.
 
 ## Phase 2 — Resumption
 
-### 4. Read manifest
+### 6. Identify next substep
 
-Parse RUN-MANIFEST.md for:
-- Phase (planning | execute-stories | completion | implement | verify | commit)
-- Current story/task (for milestones)
-- Progress log (what's been done)
+From the last checkpoint row:
+- If `event == enter` with no matching `exit` → that substep crashed mid-execution; **resume
+  from this substep** (the agent must retry it; may need to clean up partial writes).
+- If `event == exit OK` → look ahead to the next substep declared by the agent's story plan
+  or the next `enter` without a matching `exit`.
+- If `event == resumed` → same as `enter` without exit; still in-progress.
 
-For legacy milestones without a manifest, inspect artifact files to infer phase:
-- `analysis-brief.md` exists? → past analyst
-- `PRD.md` exists? → past product-manager
-- `architecture.md` exists? → past architect
-- `stories/` has files AND execution/*-SUMMARY.md exists? → mid-execution
-- No MILESTONE-SUMMARY.md? → not done
-If the inferred phase is unambiguous (only one plausible stopping point) proceed silently and log *"Resuming at [phase]."*. Only ask when genuinely ambiguous (e.g., analyst output exists but incomplete and stories also partially written — unclear whether to re-spawn PM or resume implementation). See `_shared/autonomy-protocol.md`.
+### 7. Look up agent resumable field
 
-### 5. Cross-check with Claude Code tasks
+Read the agent's frontmatter from `pkg/.aihaus/agents/<agent>.md`:
+```yaml
+resumable: true | false
+checkpoint_granularity: story | file | step
+```
 
-Call TaskList. Match against manifest's task IDs. If tasks are `in_progress` or `pending`, those need to complete. Re-create any task that's missing but should exist per manifest.
+### 8. Dispatch branch
 
-### 6. Continue execution
+**If `resumable: true`** → re-spawn the agent normally (no `--resume-from`). Re-spawn is safe;
+the agent is idempotent. Prior completed work may be redone but produces equivalent output.
 
-Based on phase:
-- **planning** → re-spawn missing planning agents (skip those whose artifacts exist).
-- **execute-stories** → re-assign incomplete stories to teammates. Create TaskCreate entries for missing story tasks.
-- **completion** → re-run completion protocol.
-- **implement / verify / commit** (feature/bugfix) → resume from next uncompleted step.
+**If `resumable: false`** → dispatch with `--resume-from <substep>` argument, where `<substep>`
+is the verbatim echo of the manifest `substep` column (free-text per LD-2). The agent reads
+`_shared/resume-handling-protocol.md` to skip completed substeps and resume at the right point.
 
-### 7. Update manifest + refresh Active Milestones
+Before dispatching, record the resume event:
+```bash
+MANIFEST_PATH=<path> bash .aihaus/hooks/manifest-append.sh \
+  --checkpoint-enter <story> aih-resume <substep>
+```
+Then after the agent is spawned, record with `event=resumed`:
+```bash
+MANIFEST_PATH=<path> bash .aihaus/hooks/manifest-append.sh \
+  --checkpoint-exit <story> aih-resume <substep> SKIP
+```
+(The SKIP result indicates aih-resume itself transferred control; the agent's own checkpoints
+record its progress.)
 
-Append to Progress Log: `[ts] — Resumed by /aih-resume`. Update Status to `running` and Phase as appropriate.
-
-If `.aihaus/project.md` exists, spawn `project-analyst` with `--refresh-active-milestones` and merge the scratch file into `project.md` between the `ACTIVE-MILESTONES-START/END` markers. This removes the entry from the Paused table and adds it to Running.
+Append to the manifest progress log:
+```bash
+MANIFEST_PATH=<path> bash .aihaus/hooks/manifest-append.sh \
+  --field progress-log \
+  --payload "[<ts>] — Resumed by /aih-resume at <substep> (resumable=<value>)"
+```
 
 ## Phase 3 — Finalize
 
-### 8. Continue to completion
+### 9. Continue to completion
 
-Follow the normal execution flow from the checkpoint forward (see `aih-milestone/annexes/execution.md` for milestone execution steps, or the respective skill for feature/bugfix).
+Follow the normal execution flow from the checkpoint forward (see `aih-milestone/annexes/execution.md`
+for milestone execution steps, or the respective skill for feature/bugfix).
 
-### 9. Report
+### 10. Report
 
 When done, report the resume point and the final outcome.
 
 ## Guardrails
 - NEVER re-run completed planning steps (reading their artifacts is enough).
 - NEVER re-create completed TaskCreate tasks (check TaskList before creating).
-- If legacy milestone detection is ambiguous, ask the user.
-- If RUN-MANIFEST.md is corrupted or unreadable, fall back to legacy detection + user confirmation.
+- NEVER auto-execute cherry-pick recipes from Category B worktrees — user is the executor.
+- NEVER auto-resolve checkpoint/worktree sha mismatches — flag and continue.
+- If RUN-MANIFEST.md is corrupted or unreadable, use `--legacy-mode` path.
+- The `--resume-from` argument is a verbatim echo of the manifest substep column — do not
+  transform or shorten it.
+
+## Annexes
+- `annexes/legacy-mode.md` — legacy heuristic Phase 1+2 (pre-v0.18.0); dispatched only on
+  `--legacy-mode` flag; contains `REMOVE in M015 if no usage reported` marker.
 
 ## Autonomy
-See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
+See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases,
+no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
