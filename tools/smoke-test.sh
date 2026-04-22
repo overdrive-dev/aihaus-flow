@@ -75,10 +75,10 @@ check_agents() {
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 22 .sh files (M014/S08 adds worktree-reconcile) --
+# ---- Check 3: .aihaus/hooks/ has 23 .sh files (M014/S02 adds read-guard) ----
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 22 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 23 .sh files"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
@@ -87,10 +87,10 @@ check_hooks() {
   # maxdepth 1 excludes hooks/lib/ (M011/S01 shared helpers library).
   local count
   count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 22 ]]; then
+  if [[ "$count" -eq 23 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 22 .sh files, found $count"
+    _fail "$label" "expected 23 .sh files, found $count"
   fi
 }
 
@@ -2014,6 +2014,127 @@ FIXTURE_EOF
   rm -rf "$tmpdir" 2>/dev/null || true
 }
 
+# ---- Check (M014/S02): bash-guard DANGEROUS_PATTERNS baseline ----------------
+# Verifies bash-guard.sh contains the full DANGEROUS_PATTERNS set migrated from
+# auto-approve-bash.sh M007 baseline (LD-4/S02). Each expected pattern fragment
+# is regex-asserted present in bash-guard.sh.
+#
+# Post-S04 note: when auto-approve-bash.sh is deleted, this check becomes the
+# standalone bash-guard DANGEROUS_PATTERNS baseline assertion per LD-9.
+check_bash_guard_baseline() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: bash-guard.sh contains M007 DANGEROUS_PATTERNS baseline (M014/S02)"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/bash-guard.sh"
+
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "hook missing: ${hook#${PACKAGE_ROOT}/}"
+    return
+  fi
+
+  # Expected pattern fragments — one per M007 DANGEROUS_PATTERNS category.
+  # Using plain grep -F (fixed string) or -q (substring) against the hook source
+  # so that ERE metacharacter differences across grep implementations
+  # (GNU vs BSD vs git-bash) don't cause false negatives.
+  # Each fragment is a literal substring that must appear in bash-guard.sh.
+  local -a expected_fragments=(
+    # destructive filesystem
+    'rm\s+-rf'
+    'shred\b'
+    'dd\s+if='
+    'mkfs\.'
+    '/dev/s[dr]'
+    # privilege escalation
+    'sudo\b'
+    'doas\b'
+    '^su\s'
+    # destructive git
+    'git\s+push\s+--force'
+    'git\s+clean\s+-fd'
+    # destructive SQL
+    'drop\s+(table|database)'
+    'truncate\s+table'
+    # Windows destructive
+    'del\s+/[FSQfsq]'
+    'rmdir\s+/[Ss]'
+    'format\s+[A-Za-z]:'
+    # code injection
+    "awk\\\\s+'"
+    'sed\s+-i'
+    # code-via-pipe
+    'curl\s+'
+    'wget\s+'
+    # supply chain
+    'npm\s+publish'
+    'pip\s+publish'
+    'cargo\s+publish'
+    # nuclear docker
+    'docker\s+system\s+prune'
+    # fork bomb
+    ':\(\)\s*\{'
+  )
+
+  local missing=()
+  for fragment in "${expected_fragments[@]}"; do
+    if ! grep -qF "$fragment" "$hook"; then
+      missing+=("$fragment")
+    fi
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "bash-guard.sh missing pattern fragments: ${missing[*]}"
+  fi
+}
+
+# ---- Check (M014/S02): read-guard.sh existence, executable, syntax ----------
+# Verifies read-guard.sh is present, executable, and syntactically valid.
+# Also verifies it is NOT yet referenced in settings.local.json (S04 registers it).
+check_read_guard_exists() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: read-guard.sh exists, executable, syntax OK, not yet in template (M014/S02)"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/read-guard.sh"
+  local tpl="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
+  local problems=()
+
+  # (a) file exists
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "read-guard.sh missing at hooks/read-guard.sh"
+    return
+  fi
+
+  # (b) executable
+  if [[ ! -x "$hook" ]]; then
+    problems+=("read-guard.sh is not executable (run: chmod +x)")
+  fi
+
+  # (c) bash -n syntax check
+  if ! bash -n "$hook" 2>/dev/null; then
+    problems+=("read-guard.sh failed bash -n syntax check")
+  fi
+
+  # (d) shebang present
+  if ! head -1 "$hook" | grep -q '^#!/'; then
+    problems+=("read-guard.sh missing shebang on line 1")
+  fi
+
+  # (e) READ_GUARD_MODE constant declared
+  if ! grep -q 'READ_GUARD_MODE' "$hook"; then
+    problems+=("read-guard.sh missing READ_GUARD_MODE constant (LD-4 dual-path gate)")
+  fi
+
+  # (f) NOT yet referenced in settings.local.json (S04 registers it)
+  if [[ -f "$tpl" ]] && grep -q 'read-guard.sh' "$tpl"; then
+    problems+=("read-guard.sh is already referenced in settings.local.json — S04 should register it, not S02")
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -2059,6 +2180,8 @@ check_verifier_knowledge_consulted
 check_schema_v3_migration
 check_worktree_reconcile_fixture
 check_resume_substep_fixture
+check_bash_guard_baseline
+check_read_guard_exists
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
