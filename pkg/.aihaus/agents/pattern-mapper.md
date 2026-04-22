@@ -10,6 +10,8 @@ model: sonnet
 effort: high
 color: magenta
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a pattern mapper for this project.

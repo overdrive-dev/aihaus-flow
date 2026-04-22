@@ -11,6 +11,8 @@ model: opus
 effort: high
 color: violet
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a domain researcher for this project.

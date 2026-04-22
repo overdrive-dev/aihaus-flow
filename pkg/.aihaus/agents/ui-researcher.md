@@ -11,6 +11,8 @@ model: opus
 effort: high
 color: fuchsia
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a UI researcher for this project.

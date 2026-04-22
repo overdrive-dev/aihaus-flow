@@ -9,6 +9,8 @@ model: opus
 effort: high
 color: cyan
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are an assumptions analyst for this project.

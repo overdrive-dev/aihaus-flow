@@ -9,6 +9,8 @@ model: haiku
 effort: high
 color: blue
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the integration checker for this project.

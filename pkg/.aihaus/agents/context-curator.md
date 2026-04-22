@@ -10,6 +10,8 @@ model: haiku
 effort: high
 color: cyan
 memory: none
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the context-curator for this project.

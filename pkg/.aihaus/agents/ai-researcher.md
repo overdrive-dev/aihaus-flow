@@ -10,6 +10,8 @@ model: opus
 effort: high
 color: emerald
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are an AI framework researcher for this project.

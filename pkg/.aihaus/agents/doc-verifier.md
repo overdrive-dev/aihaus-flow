@@ -9,6 +9,8 @@ model: haiku
 effort: high
 color: orange
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a documentation verifier for this project.

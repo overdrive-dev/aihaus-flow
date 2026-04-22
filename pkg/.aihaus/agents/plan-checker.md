@@ -9,6 +9,8 @@ model: opus
 effort: max
 color: amber
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the adversarial plan reviewer for this project.

@@ -9,6 +9,8 @@ model: haiku
 effort: high
 color: red
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the security auditor for this project.

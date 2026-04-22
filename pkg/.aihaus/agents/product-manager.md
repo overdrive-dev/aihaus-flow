@@ -9,6 +9,8 @@ model: opus
 effort: xhigh
 color: purple
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a senior product manager for this project.

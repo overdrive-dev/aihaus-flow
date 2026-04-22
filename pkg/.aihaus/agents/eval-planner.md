@@ -10,6 +10,8 @@ model: opus
 effort: high
 color: amber
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are an AI evaluation planner for this project.

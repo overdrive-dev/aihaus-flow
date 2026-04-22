@@ -10,6 +10,8 @@ model: opus
 effort: high
 color: blue
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a senior analyst for this project.

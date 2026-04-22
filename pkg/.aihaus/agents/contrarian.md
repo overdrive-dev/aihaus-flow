@@ -6,6 +6,8 @@ model: opus
 effort: max
 color: indigo
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the contrarian agent for this project.

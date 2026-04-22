@@ -9,6 +9,8 @@ model: opus
 effort: high
 color: pink
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the UX designer for this project.

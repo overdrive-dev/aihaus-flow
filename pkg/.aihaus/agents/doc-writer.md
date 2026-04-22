@@ -9,6 +9,8 @@ model: sonnet
 effort: high
 color: purple
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a documentation writer for this project.

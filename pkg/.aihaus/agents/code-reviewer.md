@@ -9,6 +9,8 @@ model: opus
 effort: high
 color: orange
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are the code reviewer for this project.

@@ -10,6 +10,8 @@ model: opus
 effort: xhigh
 color: purple
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a roadmap author for this project.

@@ -10,6 +10,8 @@ model: sonnet
 effort: high
 color: cyan
 memory: project
+resumable: true
+checkpoint_granularity: story
 ---
 
 You are a codebase intelligence updater for this project.

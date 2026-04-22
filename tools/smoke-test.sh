@@ -171,20 +171,30 @@ _get_cohort_members() {
 
 check_agent_frontmatter() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: every agent declares name/tools/model/effort/color/memory; model: matches cohort default"
+  local label="Check ${CHECK_NUMBER}: every agent declares name/tools/model/effort/color/memory/resumable/checkpoint_granularity; model: matches cohort default"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   local cohorts_file="${PACKAGE_ROOT}/.aihaus/skills/aih-effort/annexes/cohorts.md"
   local offenders=()
 
-  # ---- Part A: presence check (all 6 required fields) -----------------------
+  # ---- Part A: presence check (all 8 required fields, M014/S07 +2) ----------
   while IFS= read -r -d '' file; do
     local front
     front=$(awk '/^---$/{c++; next} c==1' "$file")
-    for field in name tools model effort color memory; do
+    for field in name tools model effort color memory resumable checkpoint_granularity; do
       if ! printf '%s\n' "$front" | grep -q "^${field}:"; then
         offenders+=("${file#${PACKAGE_ROOT}/} missing '$field'")
       fi
     done
+    # ---- Part A2: enum validation for resumable and checkpoint_granularity ---
+    local resumable_val cg_val
+    resumable_val=$(printf '%s\n' "$front" | awk '/^resumable:/{print $2; exit}')
+    cg_val=$(printf '%s\n' "$front" | awk '/^checkpoint_granularity:/{print $2; exit}')
+    if [[ -n "$resumable_val" && "$resumable_val" != "true" && "$resumable_val" != "false" ]]; then
+      offenders+=("${file#${PACKAGE_ROOT}/} resumable: invalid value '$resumable_val' (must be true|false)")
+    fi
+    if [[ -n "$cg_val" && "$cg_val" != "story" && "$cg_val" != "file" && "$cg_val" != "step" ]]; then
+      offenders+=("${file#${PACKAGE_ROOT}/} checkpoint_granularity: invalid value '$cg_val' (must be story|file|step)")
+    fi
   done < <(find "$agents_root" -maxdepth 1 -type f -name '*.md' -print0)
 
   # ---- Part B: per-cohort model value-validation ----------------------------
