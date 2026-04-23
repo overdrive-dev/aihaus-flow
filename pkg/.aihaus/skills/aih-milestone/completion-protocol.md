@@ -217,3 +217,6 @@ Runs AFTER the completion report. Skips cleanly when `.aihaus/project.md` is abs
 8. **Report.** Print a concise summary of what was refreshed:
    `"project.md refreshed: inventory + history + active-milestones + recent-decisions"`
    or the subset that actually ran.
+
+## Step 6.5: Invalidate context-inject cache
+`rm -f .claude/audit/context-inject.cache 2>/dev/null` — ensures M+1 milestone starts with fresh cache (M015-S07).

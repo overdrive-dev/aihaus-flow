@@ -16,6 +16,10 @@
 #   checked at hook entry) mirrors M011 autonomy-guard.sh shape.
 #
 # Audit: .claude/audit/context-inject.jsonl (ADR-M011-A rotation).
+# Cache: .claude/audit/context-inject.cache (M015-S07 5-min memoization).
+#   Cache key: hash(target_agent_name | cohort_name).
+#   Cache hit skips S05 warning-recurrence read + S06 budget parse.
+#   Cache invalidated at milestone close (completion-protocol Step 6.5).
 # Architecture ref: M013 architecture.md §2.1, §4.1, §9.
 set -uo pipefail
 
@@ -49,6 +53,7 @@ fi
 # 3. Config
 # ---------------------------------------------------------------------------
 AUDIT_LOG="${AIHAUS_CONTEXT_INJECT_LOG:-.claude/audit/context-inject.jsonl}"
+INJECT_CACHE=".claude/audit/context-inject.cache"
 SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo ".")"
 ROLE_DEFAULTS_JSON="${SCRIPT_DIR}/lib/role-defaults.json"
 COHORTS_MD_REL=".aihaus/skills/aih-effort/annexes/cohorts.md"
@@ -141,17 +146,64 @@ _rotate_audit_if_needed() {
 _write_audit() {
   local target_agent="$1" cohort="$2" static_or_haiku="$3" \
         payload_bytes="$4" truncated="$5" duration_ms="$6" \
-        milestone="${7:-}" story="${8:-}"
+        milestone="${7:-}" story="${8:-}" cache_hit="${9:-false}"
   mkdir -p "$(dirname "$AUDIT_LOG")" 2>/dev/null || return 0
   _rotate_audit_if_needed
   local ts; ts="$(ts_iso)"
   # Escape quotes in string fields.
   _eq() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-  printf '{"ts":"%s","milestone":"%s","story":"%s","target_agent":"%s","cohort":"%s","static_or_haiku":"%s","payload_bytes":%s,"truncated":"%s","duration_ms":%s}\n' \
+  printf '{"ts":"%s","milestone":"%s","story":"%s","target_agent":"%s","cohort":"%s","static_or_haiku":"%s","payload_bytes":%s,"truncated":"%s","duration_ms":%s,"cache_hit":%s}\n' \
     "$ts" "$(_eq "$milestone")" "$(_eq "$story")" "$(_eq "$target_agent")" \
     "$(_eq "$cohort")" "$(_eq "$static_or_haiku")" \
     "${payload_bytes:-0}" "${truncated:-false}" "${duration_ms:-0}" \
+    "${cache_hit}" \
     >> "$AUDIT_LOG" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# 4b. Cache helpers (M015-S07 — 5-min hash cache for context-inject)
+#     Byte-identical transplant from learning-advisor.sh compute_hash +
+#     append_cache_entry; variable names changed: ADVISOR_* → INJECT_*.
+#     Cache key: hash(target_agent_name | cohort_name).
+#     Cache file: .claude/audit/context-inject.cache
+#     Cache row:  <unix_ts>|<hash>|<base64-encoded-payload>
+#     Rotation:   10 KB OR 100 lines (lighter than 10 MB/10000 in advisor)
+# ---------------------------------------------------------------------------
+compute_hash() {
+  local combined="${target_agent_name:-}|${cohort:-}"
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$combined" | sha256sum | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$combined" | shasum -a 256 | awk '{print $1}'
+  else
+    printf '%s' "$combined" | md5sum 2>/dev/null | awk '{print $1}' || printf 'nohash'
+  fi
+}
+
+append_cache_entry() {
+  local entry="$1"
+  mkdir -p "$(dirname "$INJECT_CACHE")" 2>/dev/null || return 0
+  local now; now="$(date +%s 2>/dev/null || echo 0)"
+  if [ -f "$INJECT_CACHE" ]; then
+    local tmp="${INJECT_CACHE}.tmp.$$"
+    awk -F'|' -v now="$now" 'NF>=1 && (now - ($1+0)) <= 300 {print}' "$INJECT_CACHE" > "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$INJECT_CACHE" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+  fi
+  printf '%s\n' "$entry" >> "$INJECT_CACHE" 2>/dev/null || true
+}
+
+_rotate_cache_if_needed() {
+  [ -f "$INJECT_CACHE" ] || return 0
+  local bytes lines
+  bytes="$(stat -c%s "$INJECT_CACHE" 2>/dev/null || stat -f%z "$INJECT_CACHE" 2>/dev/null || echo 0)"
+  if [ "$bytes" -ge 10240 ]; then
+    mv -f "$INJECT_CACHE" "${INJECT_CACHE}.old" 2>/dev/null || true
+    return 0
+  fi
+  lines="$(wc -l < "$INJECT_CACHE" 2>/dev/null | tr -d ' ')"
+  if [ -n "$lines" ] && [ "$lines" -ge 100 ]; then
+    mv -f "$INJECT_CACHE" "${INJECT_CACHE}.old" 2>/dev/null || true
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -219,6 +271,60 @@ _resolve_cohort() {
 cohort="$(_resolve_cohort "$target_agent_name")"
 # Default to :doer if cohort cannot be resolved.
 [ -z "$cohort" ] && cohort=":doer"
+
+# ---------------------------------------------------------------------------
+# 6b. Cache lookup (M015-S07) — cache key: hash(target_agent_name | cohort)
+#     Hit: skip S05 warning-recurrence read + S06 budget parse; emit cached
+#          payload directly and exit.  Miss: fall through to full S05+S06 path.
+# ---------------------------------------------------------------------------
+_inject_cache_hit="false"
+_inject_cache_payload=""
+INJECT_MSG_HASH="$(compute_hash)"
+_inject_now_unix="$(date +%s 2>/dev/null || echo 0)"
+_rotate_cache_if_needed
+mkdir -p "$(dirname "$INJECT_CACHE")" 2>/dev/null || true
+
+if [ -f "$INJECT_CACHE" ]; then
+  while IFS='|' read -r c_ts c_hash c_payload_b64; do
+    [ -z "$c_ts" ] && continue
+    _inject_age=$(( _inject_now_unix - c_ts ))
+    if [ "$_inject_age" -le 300 ] && [ "$c_hash" = "$INJECT_MSG_HASH" ]; then
+      _inject_cache_hit="true"
+      # Decode base64 payload; fall back to empty string on decode failure.
+      if command -v base64 >/dev/null 2>&1; then
+        _inject_cache_payload="$(printf '%s' "$c_payload_b64" | base64 -d 2>/dev/null || echo "")"
+      fi
+      break
+    fi
+  done < "$INJECT_CACHE"
+fi
+
+if [ "$_inject_cache_hit" = "true" ] && [ -n "$_inject_cache_payload" ]; then
+  _write_audit "$target_agent_name" "$cohort" "cache-hit" \
+    "${#_inject_cache_payload}" "false" "0" \
+    "$(basename "${milestone_dir:-}")" "$story_id" "true"
+  # Emit cached payload directly.
+  if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
+    py_bin="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo "")"
+    if [ -n "$py_bin" ]; then
+      "$py_bin" - "$_inject_cache_payload" <<'PYEOF' 2>/dev/null
+import json, sys
+ctx = sys.argv[1]
+out = {"hookSpecificOutput": {"hookEventName": "SubagentStart", "additionalContext": ctx}}
+print(json.dumps(out))
+PYEOF
+      exit 0
+    fi
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    jq -n --arg ctx "$_inject_cache_payload" \
+      '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":$ctx}}'
+    exit 0
+  fi
+  ctx_escaped="$(printf '%s' "$_inject_cache_payload" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | awk '{printf "%s\\n", $0}' | sed '$ s/\\n$//')"
+  printf '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"%s"}}\n' "$ctx_escaped"
+  exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # 7. Static role-default map lookup
@@ -481,11 +587,24 @@ if [ "$payload_bytes" -gt "$char_budget" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 12b. Cache-write (M015-S07) — store full_context payload in cache
+#      Cache row: <unix_ts>|<hash>|<base64-encoded-payload>
+#      Only write when base64 is available; skip silently on failure.
+# ---------------------------------------------------------------------------
+if command -v base64 >/dev/null 2>&1; then
+  _encoded_payload="$(printf '%s' "$full_context" | base64 2>/dev/null | tr -d '\n' || echo "")"
+  if [ -n "$_encoded_payload" ]; then
+    _cache_row="${_inject_now_unix}|${INJECT_MSG_HASH}|${_encoded_payload}"
+    append_cache_entry "$_cache_row"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # 13. Audit log entry
 # ---------------------------------------------------------------------------
 _write_audit "$target_agent_name" "$cohort" "$path_method" \
   "$payload_bytes" "$truncated" "$duration_ms" \
-  "$(basename "${milestone_dir:-}")" "$story_id"
+  "$(basename "${milestone_dir:-}")" "$story_id" "false"
 
 # ---------------------------------------------------------------------------
 # 14. Emit SubagentStart hook output (additionalContext)
