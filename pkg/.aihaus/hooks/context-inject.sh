@@ -52,8 +52,74 @@ AUDIT_LOG="${AIHAUS_CONTEXT_INJECT_LOG:-.claude/audit/context-inject.jsonl}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo ".")"
 ROLE_DEFAULTS_JSON="${SCRIPT_DIR}/lib/role-defaults.json"
 COHORTS_MD_REL=".aihaus/skills/aih-effort/annexes/cohorts.md"
+BUDGET_CONF="${SCRIPT_DIR}/context-budget.conf"
 
 ts_iso() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
+
+# ---------------------------------------------------------------------------
+# 3b. Per-cohort token budget loading (M015-S06)
+#     Loads shipped defaults from context-budget.conf, then overlays
+#     .aihaus/.context-budgets sidecar (user-owned, never committed).
+#     Format (both files): key=value pairs; # comment lines skipped.
+#     Sidecar cohort keys: planner-binding=N  (no colon prefix on disk)
+#     Sidecar agent keys:  agent:architect=N  (agent: prefix)
+#     Missing sidecar = silent skip; unknown cohort = doer default (2500).
+# ---------------------------------------------------------------------------
+declare -A _CB_COHORT   # cohort-name → token budget
+declare -A _CB_AGENT    # agent-name  → token budget override
+
+_load_budget_file() {
+  local fpath="$1"
+  [ -f "$fpath" ] || return 0
+  while IFS= read -r raw_line; do
+    # Strip CRLF and leading/trailing whitespace; skip blank + comment lines.
+    local line="${raw_line%$'\r'}"
+    line="$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    # Agent override: agent:architect=5000
+    if [[ "$line" =~ ^agent:([A-Za-z0-9_-]+)=([0-9]+)$ ]]; then
+      _CB_AGENT["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+      continue
+    fi
+    # Cohort default: planner-binding=4000
+    if [[ "$line" =~ ^([a-z-]+)=([0-9]+)$ ]]; then
+      _CB_COHORT["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+    fi
+  done < "$fpath"
+}
+
+# Load shipped defaults first.
+_load_budget_file "$BUDGET_CONF"
+
+# Overlay user sidecar (wins over defaults).
+_SIDECAR_BUDGETS=""
+for _cand in \
+  "${CLAUDE_PROJECT_DIR:-.}/.aihaus/.context-budgets" \
+  "$(git rev-parse --show-toplevel 2>/dev/null || echo ".")/.aihaus/.context-budgets"; do
+  if [ -f "$_cand" ]; then
+    _SIDECAR_BUDGETS="$_cand"
+    break
+  fi
+done
+[ -n "$_SIDECAR_BUDGETS" ] && _load_budget_file "$_SIDECAR_BUDGETS"
+
+# Resolve budget for a given agent + cohort (strips leading colon from cohort).
+_resolve_budget() {
+  local agent_nm="$1" cohort_nm="$2"
+  # Per-agent override wins (guard: skip empty name to avoid bad subscript).
+  if [[ -n "$agent_nm" ]] && [[ -n "${_CB_AGENT[$agent_nm]:-}" ]]; then
+    echo "${_CB_AGENT[$agent_nm]}"
+    return
+  fi
+  # Strip leading colon from cohort name (e.g. :doer → doer).
+  local cohort_key="${cohort_nm#:}"
+  if [[ -n "${_CB_COHORT[$cohort_key]:-}" ]]; then
+    echo "${_CB_COHORT[$cohort_key]}"
+    return
+  fi
+  # Unknown cohort: default to doer (2500).
+  echo "2500"
+}
 
 # ---------------------------------------------------------------------------
 # 4. Audit JSONL write with rotation (ADR-M011-A)
@@ -367,7 +433,7 @@ MED:.aihaus/memory/MEMORY.md — Agent memory index for cross-task context."
 fi
 
 # ---------------------------------------------------------------------------
-# 12. Build additionalContext block (≤ 200 tokens heuristic)
+# 12. Build additionalContext block with per-cohort budget enforcement (M015-S06)
 # ---------------------------------------------------------------------------
 header="## Required pre-read (context-inject.sh, M013)
 
@@ -378,14 +444,38 @@ footer="
 > Context provided by context-inject.sh — SubagentStart hook (M013/S05).
 > Tier: HIGH = binding | MED = useful | LOW = if capacity allows."
 
-full_context="${header}${payload_lines}${recurring_warnings_section}${footer}"
+# Resolve token budget for spawning agent (chars/4 heuristic per Anthropic docs).
+token_budget="$(_resolve_budget "$target_agent_name" "$cohort")"
+char_budget=$(( token_budget * 4 ))
 
-# Truncation guard: if payload exceeds ~1600 chars, trim LOW lines first.
+# Priority-ordered assembly (highest priority first so trim-from-end is safe):
+#   1. recurring_warnings_section  (S05 feedback loop — actionable, high signal)
+#   2. payload_lines               (file list — core context)
+# Footer appended last (lowest priority if we must trim).
+full_context="${header}${recurring_warnings_section}${payload_lines}${footer}"
+
 payload_bytes=${#full_context}
 truncated="false"
-if [ "$payload_bytes" -gt 1600 ]; then
+
+# Phase 1 — shed LOW-tier file lines if over budget.
+if [ "$payload_bytes" -gt "$char_budget" ]; then
   trimmed_lines="$(printf '%s' "$payload_lines" | grep -v '^LOW:')"
-  full_context="${header}${trimmed_lines}${footer}"
+  full_context="${header}${recurring_warnings_section}${trimmed_lines}${footer}"
+  payload_bytes=${#full_context}
+  truncated="true"
+fi
+
+# Phase 2 — hard char-cap: truncate payload_lines to fit within budget.
+#   Preserves recurring_warnings + header/footer; drops tail of file list.
+if [ "$payload_bytes" -gt "$char_budget" ]; then
+  # Budget consumed by fixed parts (header + recurring_warnings + footer).
+  local_fixed="${header}${recurring_warnings_section}${footer}"
+  fixed_bytes=${#local_fixed}
+  remaining=$(( char_budget - fixed_bytes ))
+  if [ "$remaining" -lt 0 ]; then remaining=0; fi
+  # Truncate payload_lines to remaining chars.
+  trimmed_lines="$(printf '%s' "$payload_lines" | head -c "$remaining")"
+  full_context="${header}${recurring_warnings_section}${trimmed_lines}${footer}"
   payload_bytes=${#full_context}
   truncated="true"
 fi
