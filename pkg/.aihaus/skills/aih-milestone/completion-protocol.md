@@ -220,3 +220,8 @@ Runs AFTER the completion report. Skips cleanly when `.aihaus/project.md` is abs
 
 ## Step 6.5: Invalidate context-inject cache
 `rm -f .claude/audit/context-inject.cache 2>/dev/null` — ensures M+1 milestone starts with fresh cache (M015-S07).
+
+## Step 6.7: Append telemetry row (M015-S08)
+Run `bash tools/telemetry-collect.sh <M0XX>` (maintainer-only; script lives in `tools/`, not shipped to downstream installs — R15 known limitation).
+Capture stdout (one markdown table row). Append to `.aihaus/memory/global/architecture.md` under the `<!-- telemetry-summary -->` marker.
+The script handles marker creation, idempotency, and row rotation autonomously; the orchestrator need only invoke it and confirm exit 0.
