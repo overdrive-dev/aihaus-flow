@@ -177,6 +177,74 @@ MANIFEST_PATH="<abs-path-to-main-repo>/.aihaus/milestones/M0XX-<slug>/RUN-MANIFE
 
 Resolve `<abs-path>` from the milestone directory at spawn time (same variable the dispatcher itself uses for `manifest-append.sh` calls). Inherited by the spawned Agent's bash processes so `statusline-milestone.sh` and `autonomy-guard.sh` (paused short-circuit) see Q-4 case 1 hit even when the hook fires inside a git worktree.
 
+### Step E5.5 — Mid-milestone adversarial gate (ADR-M015-A governed)
+
+Invoked once per milestone, between Story Group N/2 and Story Group N/2+1
+(in milestones with >= 12 stories; skipped in smaller milestones).
+
+**Governing ADR:** ADR-M015-A (data-plane + file-plane evolution contracts). This step is
+the enforcement point where ADR-M015-A's mid-milestone reconciliation discipline fires.
+
+**Trigger condition:** after the N/2-th story's commit lands and `git status --porcelain` is
+clean, before spawning the N/2+1-th story's teammate. In M015's specific invocation,
+this fires after S10 (data-plane review stories) and before S11a (file-plane stories start).
+
+**Sequential spawn** (same per-cohort budget constraints as Step E3 and Step E7;
+agent model/effort tiers governed by `/aih-effort` cohort calibration):
+
+1. **plan-checker** (`subagent_type: "plan-checker"`) → verifies coherence of completed
+   stories' Owned-files vs. ADR commitments (ADR-001, ADR-004, and this milestone's ADRs).
+   Writes `<milestone-dir>/execution/reviews/E5.5-plan-checker.md`.
+
+2. **reviewer** (`subagent_type: "reviewer"`) → reviews shipped code surface for ADR-001
+   + this milestone's ADRs; flags regressions or missing cross-references.
+   Writes `<milestone-dir>/execution/reviews/E5.5-reviewer.md`.
+
+3. **code-reviewer** (`subagent_type: "code-reviewer"`) → static-analysis pass on all
+   hooks and scripts shipped in the first N/2 stories; checks for bash safety, purity,
+   and hook-call-reference-table compliance.
+   Writes `<milestone-dir>/execution/reviews/E5.5-code-reviewer.md`.
+
+Wait for each agent to complete before spawning the next (sequential, not parallel).
+
+**Verdict aggregation:** after all three write their outputs, synthesize into a single
+verdict file at `<milestone-dir>/execution/reviews/E5.5-verdict.md`:
+
+```
+## E5.5 Mid-milestone verdict
+Gate fired: [ISO timestamp]
+Stories reviewed: S01 – S[N/2]
+
+plan-checker: PASS | FAIL | WARN
+reviewer:     PASS | FAIL | WARN
+code-reviewer: PASS | FAIL | WARN
+
+Overall: proceed | halt-with-findings
+```
+
+**Proceed path:** if all three are PASS or WARN (no FAIL), log one progress line to
+RUN-MANIFEST and continue to Step E6 / Story Group N/2+1:
+
+```bash
+bash .aihaus/hooks/manifest-append.sh --field progress-log \
+  --payload "E5.5 mid-milestone gate: PASS — proceeding to story group N/2+1"
+```
+
+**Halt path:** if any agent returns FAIL, do NOT spawn the next story. Surface the
+`E5.5-verdict.md` file to the user. This is a TRUE blocker per `_shared/autonomy-protocol.md`.
+Resume via `/aih-resume` after findings are resolved.
+
+**Skip semantics:** milestones with < 12 stories may set `AIHAUS_SKIP_E5.5=1`; the skip
+is logged to RUN-MANIFEST progress:
+
+```bash
+bash .aihaus/hooks/manifest-append.sh --field progress-log \
+  --payload "E5.5 mid-milestone gate: SKIPPED (AIHAUS_SKIP_E5.5=1 or story-count < 12)"
+```
+
+**MANIFEST_PATH env injection:** inject `MANIFEST_PATH` into each agent spawn prompt
+(same rule as Steps E5 / E6 / E7 above) so checkpoint rows resolve Q-4 case 1.
+
 ### Step E6 — Execute stories (Wave 2 task creation)
 
 Read story files from `stories/`. For each story, TaskCreate with:
@@ -237,11 +305,13 @@ Each hook invocation below MUST land in the annex with the `--field` / `--payloa
 | Before Agent spawn (dispatcher mode, ADR-003) | `manifest-append.sh` | `--field invoke-push --payload "<skill>|<args>|<rationale>|<blocking>|<depth>"` |
 | After Agent returns | `manifest-append.sh` | `--field invoke-pop --payload "<skill>"` |
 | Per-story progress (Step E6) | `manifest-append.sh` | `--field progress-log --payload "<1-line msg>"` |
+| E5.5 gate pass (Step E5.5) | `manifest-append.sh` | `--field progress-log --payload "E5.5 mid-milestone gate: PASS — proceeding to story group N/2+1"` |
+| E5.5 gate skip (Step E5.5) | `manifest-append.sh` | `--field progress-log --payload "E5.5 mid-milestone gate: SKIPPED (AIHAUS_SKIP_E5.5=1 or story-count < 12)"` |
 | End of milestone loop (Step F1) | `manifest-append.sh` | `--field status --payload completed` |
 | End of milestone loop (Step F1) | `manifest-append.sh` | `--field phase --payload completed` |
 | End of milestone loop (Step F1) | `phase-advance.sh` | `--to complete --dir <milestone-dir>` |
 | Agent-return parsing (Step E3) | `invoke-guard.sh` | stdin = agent return text; consumed by parent skill for dispatch decision |
-| Before every Agent spawn (Steps E5/E6/E7) | (env hint) | Inject `MANIFEST_PATH=<abs-path>` into the prompt body so worktree-isolated subagents resolve Q-4 case 1 deterministically (M011/S03 F-04). |
+| Before every Agent spawn (Steps E5/E5.5/E6/E7) | (env hint) | Inject `MANIFEST_PATH=<abs-path>` into the prompt body so worktree-isolated subagents resolve Q-4 case 1 deterministically (M011/S03 F-04). |
 
 ---
 
