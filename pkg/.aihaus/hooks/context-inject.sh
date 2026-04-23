@@ -219,6 +219,30 @@ novel_task="0"
 [ -n "$task_description" ] && novel_task="$(_is_novel_task "$task_description" "$static_lines")"
 
 # ---------------------------------------------------------------------------
+# 8b. Recurring-warnings feedback loop (M015-S05)
+#     Reads .claude/audit/warning-recurrence.jsonl (written by S03/warning-
+#     recurrence-tracker.sh). Filters rows with recurrence_count >= 3.
+#     Builds a labeled section injected into the pre-spawn context payload.
+#     Graceful degradation: file absent / empty / jq missing → skip silently.
+#     No new audit write — preserves ADR-M013-A single-writer discipline.
+# ---------------------------------------------------------------------------
+RECURRENCE_LOG=".claude/audit/warning-recurrence.jsonl"
+recurring_warnings_section=""
+if [ -f "$RECURRENCE_LOG" ] && command -v jq >/dev/null 2>&1; then
+  # Build bullets: one per qualifying row, grouped by source_agent annotation.
+  # Format: "- [<category>] <source_agent>: <summary truncated to 120 chars>"
+  RECURRING_BULLETS="$(jq -r '
+    select(.recurrence_count >= 3) |
+    "- [" + (.category // "unknown") + "] " +
+    (.source_agent // "unknown") + ": " +
+    ((.summary // "") | .[0:120])
+  ' "$RECURRENCE_LOG" 2>/dev/null || true)"
+  if [ -n "$RECURRING_BULLETS" ]; then
+    recurring_warnings_section="$(printf '\n## Recurring warnings (>=3 occurrences)\n%s' "$RECURRING_BULLETS")"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # 9. Haiku delta path (novel tasks only)
 # ---------------------------------------------------------------------------
 haiku_lines=""
@@ -354,7 +378,7 @@ footer="
 > Context provided by context-inject.sh — SubagentStart hook (M013/S05).
 > Tier: HIGH = binding | MED = useful | LOW = if capacity allows."
 
-full_context="${header}${payload_lines}${footer}"
+full_context="${header}${payload_lines}${recurring_warnings_section}${footer}"
 
 # Truncation guard: if payload exceeds ~1600 chars, trim LOW lines first.
 payload_bytes=${#full_context}
