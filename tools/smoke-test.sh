@@ -2073,6 +2073,42 @@ check_read_guard_exists() {
   fi
 }
 
+# ---- Check: /aih-init §2.5 migration regex does not false-positive on EVOLVING markers ----
+# PURPOSE: Regression guard (M016-S13 / R7 mitigation). Confirms that the §2.5 migration
+# regex inside aih-init SKILL.md is keyed off ACTIVE-MILESTONES, RECENT-DECISIONS, and
+# RECENT-KNOWLEDGE only — and does NOT mention AIHAUS:EVOLVING. If /aih-init ever gained
+# an EVOLVING-aware migration branch, it would need explicit gating logic; this check
+# catches accidental inclusion early.
+check_init_evolving_no_false_positive() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: /aih-init §2.5 migration regex does not false-positive on nested EVOLVING markers (M016-S13 R7)"
+  local skill="${PACKAGE_ROOT}/.aihaus/skills/aih-init/SKILL.md"
+  local problems=()
+
+  if [[ ! -f "$skill" ]]; then
+    _fail "$label" "aih-init/SKILL.md not found at expected path"
+    return
+  fi
+
+  # (a) The known migration markers MUST be referenced (confirms §2.5 migration logic is present)
+  # Note: SKILL.md prose uses the bare marker names (ACTIVE-MILESTONES-START/END etc.) without
+  # the AIHAUS: prefix — match the prose pattern, not the HTML comment marker form.
+  if ! grep -qE 'ACTIVE-MILESTONES|RECENT-DECISIONS|RECENT-KNOWLEDGE' "$skill"; then
+    problems+=("aih-init SKILL.md does not reference ACTIVE-MILESTONES/RECENT-DECISIONS/RECENT-KNOWLEDGE — §2.5 migration section may have moved; review manually")
+  fi
+
+  # (b) AIHAUS:EVOLVING must NOT appear in the migration regex / init skill
+  if grep -qE 'AIHAUS:EVOLVING' "$skill"; then
+    problems+=("aih-init SKILL.md contains AIHAUS:EVOLVING reference — risk of false-positive match on nested EVOLVING markers; review and isolate")
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Selectable sub-mode dispatcher (--check <name> --skill <slug>) ---------
 # PURPOSE: invoked by completion-protocol Step 4.6 pre-apply gate before each
 # skill evolution is committed. Runs only the named check against the named skill;
@@ -2190,6 +2226,7 @@ check_worktree_reconcile_fixture
 check_resume_substep_fixture
 check_bash_guard_baseline
 check_read_guard_exists
+check_init_evolving_no_false_positive
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
