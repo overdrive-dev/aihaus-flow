@@ -61,8 +61,21 @@ Before curating:
 - **No speculation:** only promote entries with evidence in the milestone artifacts.
 - **Number sequentially:** ADR-MNNN continues from the highest existing number; K-NNN
   continues from the highest K-NNN in `.aihaus/knowledge.md`.
-- **Empty is valid for blocks 1–4:** if there is nothing worth promoting, emit the block
-  with only the start/end markers and a comment `<!-- nothing to promote -->`.
+- **Empty is valid for blocks 1–4:** if there is nothing worth promoting this milestone,
+  emit the block with the body `<!-- no-signal-this-milestone -->` — do NOT silently omit
+  the block and do NOT collapse multiple empty blocks into one. Every block (decisions-append,
+  knowledge-append, memory-append, history-append) MUST appear even when empty, each with
+  its own `<!-- no-signal-this-milestone -->` body. Example empty memory-append:
+  ```
+  <!-- aihaus:memory-append -->
+  path: .aihaus/memory/global/architecture.md
+  ---
+  <!-- no-signal-this-milestone -->
+  <!-- aihaus:memory-append:end -->
+  ```
+  Downstream telemetry (S08 awk filter) matches the literal string
+  `<!-- no-signal-this-milestone -->` to exclude no-signal blocks from rotation counts.
+  Do NOT interpret "no input signal" as "I should skip emission" — emit the marker.
 - **Empty is NOT valid for block 5** if LEARNING-WARNINGS.jsonl has any entries for this
   milestone — every UUID must appear in exactly one receipt line.
 
@@ -166,7 +179,7 @@ warning-dismissed: <uuid-3> reason: <1-sentence rationale>
 - NEVER skip block 5 if the JSONL has entries for the current milestone.
 - If LEARNING-WARNINGS.jsonl is absent or has zero rows for this milestone, emit
   block 5 with only the markers and `<!-- no warnings for this milestone -->`.
-- Emit all 5 blocks even if some are empty (use `<!-- nothing to promote -->`).
+- Emit all 5 blocks even if some are empty (use `<!-- no-signal-this-milestone -->` per Curation Rules above — NOT `<!-- nothing to promote -->`).
 - Cost budget: one opus run per milestone. Be thorough but focused.
 
 ## Per-agent memory (optional)

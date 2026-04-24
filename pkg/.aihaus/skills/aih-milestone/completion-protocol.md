@@ -44,6 +44,11 @@ If `.aihaus/knowledge.md` does not yet exist, create it with a
 **Recursion guard:** if `AIHAUS_KNOWLEDGE_CURATOR_ACTIVE=1` is set, skip this step
 silently (prevents self-invocation during M013's own completion).
 
+Spawn knowledge-curator at every milestone close. Do NOT gate this spawn on whether
+LEARNING-WARNINGS.jsonl has rows or DECISIONS-LOG/KNOWLEDGE-LOG have entries — the
+curator runs unconditionally and emits explicit `<!-- no-signal-this-milestone -->` markers
+when inputs are empty (ADR-M013-B gate condition B requires the curator to have run).
+
 Spawn the `knowledge-curator` agent with the following inputs:
 - `{milestone_dir}/execution/DECISIONS-LOG.md`
 - `{milestone_dir}/execution/KNOWLEDGE-LOG.md`
