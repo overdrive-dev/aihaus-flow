@@ -2292,6 +2292,88 @@ check_memory_scores_single_writer_prose() {
   fi
 }
 
+# ---- Check (M017/S08): M017 new hooks bash-n syntax aggregate ---------------
+# Validates bash -n over all 5 M017 hooks (worktree-release, worktree-release-all,
+# worktree-reap, merge-back, git-add-guard). worktree-branch-from.sh is absent
+# (S05 Path B — not shipped). Aggregate single check, not 5 separate checks.
+check_m017_hooks_bash_n() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: M017 new hooks bash-n syntax (5 files, M017/S08)"
+  local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
+  local -a m017_hooks=(
+    "${hooks_root}/worktree-release.sh"
+    "${hooks_root}/worktree-release-all.sh"
+    "${hooks_root}/worktree-reap.sh"
+    "${hooks_root}/merge-back.sh"
+    "${hooks_root}/git-add-guard.sh"
+  )
+  local fail_flag=0
+  local count=0
+  for h in "${m017_hooks[@]}"; do
+    if [[ ! -f "$h" ]]; then
+      _fail "$label" "${h#${PACKAGE_ROOT}/} missing"
+      return
+    fi
+    if ! bash -n "$h" 2>/dev/null; then
+      _fail "$label" "${h#${PACKAGE_ROOT}/} failed bash -n syntax check"
+      return
+    fi
+    count=$((count+1))
+  done
+  _pass "$label ($count files)"
+}
+
+# ---- Check (M017/S08): merge-back.sh refusal fixture (unexpected-file) ------
+# Exercises the 2026-04-12 incident scenario: worktree has one Owned file but
+# also has an unexpected staged file in the main repo. Asserts:
+#   - exit code 3
+#   - stderr contains MERGE_BACK_REFUSED
+#   - stderr contains all 5 required fields: story, reason, expected, actual, worktree
+# Self-contained: delegates to tools/fixtures/M017/merge-back-refusal/fixture.sh
+# (which sets up + tears down its own temp git repo).
+check_m017_merge_back_refusal() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: merge-back.sh refusal fixture (unexpected-file, M017/S08)"
+  local fixture="${SCRIPT_DIR}/fixtures/M017/merge-back-refusal/fixture.sh"
+  if [[ ! -f "$fixture" ]]; then
+    _fail "$label" "fixture missing: tools/fixtures/M017/merge-back-refusal/fixture.sh"
+    return
+  fi
+  if bash "$fixture" >/dev/null 2>&1; then
+    _pass "$label"
+  else
+    # Re-run to capture output for diagnostics
+    local out
+    out="$(bash "$fixture" 2>&1 || true)"
+    _fail "$label" "$out"
+  fi
+}
+
+# ---- Check (M017/S08): git-add-guard.sh deny/allow fixture -------------------
+# Asserts the 4 canonical cases:
+#   C1: git add -A on milestone branch → denied (exit 2)
+#   C2: git commit -am on milestone branch → denied (exit 2)
+#   C3: git add explicit-file.txt on milestone branch → allowed (exit 0)
+#   C4: git add -A on main branch → allowed (exit 0, off-milestone bypass)
+# Self-contained: delegates to tools/fixtures/M017/git-add-guard-cases/fixture.sh
+# (which sets up + tears down its own temp git repo).
+check_m017_git_add_guard_cases() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: git-add-guard.sh deny/allow fixture (4 cases, M017/S08)"
+  local fixture="${SCRIPT_DIR}/fixtures/M017/git-add-guard-cases/fixture.sh"
+  if [[ ! -f "$fixture" ]]; then
+    _fail "$label" "fixture missing: tools/fixtures/M017/git-add-guard-cases/fixture.sh"
+    return
+  fi
+  if bash "$fixture" >/dev/null 2>&1; then
+    _pass "$label"
+  else
+    local out
+    out="$(bash "$fixture" 2>&1 || true)"
+    _fail "$label" "$out"
+  fi
+}
+
 # ---- Selectable sub-mode dispatcher (--check <name> --skill <slug>) ---------
 # PURPOSE: invoked by completion-protocol Step 4.6 pre-apply gate before each
 # skill evolution is committed. Runs only the named check against the named skill;
@@ -2414,6 +2496,9 @@ check_agent_memory_filename_prefix_guard
 check_evolving_block_well_formed
 check_skill_evolution_post_apply_sub_modes
 check_memory_scores_single_writer_prose
+check_m017_hooks_bash_n
+check_m017_merge_back_refusal
+check_m017_git_add_guard_cases
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
