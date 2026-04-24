@@ -5,6 +5,51 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-04-24 — M016: agent memory + context passing + self-recycling evolution
+
+Operationalizes M013's substrate end-to-end across data-plane (recurrence + composite scoring + per-cohort budgets + cache + telemetry) and file-plane (EVOLVING blocks in `project.md` + `CLAUDE.md`, per-agent memory pattern, SKILL-EVOLUTION ledger, unconditional curator cadence). Mid-milestone gate caught two BLOCKERs in flight (ADR-M015-A ID collision → renumbered M015→M016; telemetry single-writer violation → refactored stdout-only).
+
+### Added
+
+- **Hooks:** `pkg/.aihaus/hooks/warning-recurrence.sh` (185 LOC, Jaccard-similarity clustering primary per S00 noise-floor verdict 100%), `composite-score.sh` (299 LOC, 3 deterministic subscores), `scaffold-assert.sh` (62 LOC, exit-13 gate on `planning→running`)
+- **Hook config:** `pkg/.aihaus/hooks/context-budget.conf` (6-cohort defaults: planner-binding=4000, planner=3000, doer=2500, verifier=1500, adversarial-scout=3000, adversarial-review=3000)
+- **Skills annexes:** `pkg/.aihaus/skills/_shared/per-agent-memory.md` (parse contract + Q2 emission threshold), `pkg/.aihaus/skills/aih-milestone/annexes/milestone-scoped/SKILL-EVOLUTION.md` (template scaffold)
+- **Templates:** `pkg/.aihaus/templates/gitignore-fragment` (manual fallback)
+- **Memory README:** `pkg/.aihaus/memory/agents/README.md` (per-agent contract doc)
+- **Tools:** `tools/telemetry-collect.sh` (maintainer-only, stdout-only post-BLOCKER-2), `tools/s00-noise-floor-check.sh` (synthetic-fixture noise-floor analysis)
+- **Smoke-test checks (5 net new):** Check 43 `/aih-init` regression test (S13), Check 44 filename-prefix guard on per-agent memory tree (S15a), Check 45 EVOLVING block well-formed (S16), Check 46 SKILL-EVOLUTION post-apply sub-modes accessible (S16), Check 47 `memory-scores.jsonl` single-writer prose assertion (S16). All PURPOSE-labeled (no integer hardcoding per R12).
+- **JSONL audit files (3 new):** `.claude/audit/warning-recurrence.jsonl`, `.claude/audit/memory-scores.jsonl`, `.claude/audit/evolution-apply.jsonl` — all single-writer per ADR-M016-A writer table.
+- **Sidecar:** `.aihaus/.context-budgets` (user-owned, ADR-M009-A precedent; per-agent budget overrides)
+- **ADRs:** ADR-M016-A (data-plane: scoring, supersession blocks, writer discipline, α-discrepancy disclosure, M017 kill-switch), ADR-M016-B (file-plane: EVOLVING blocks, per-agent memory writer, scaffold-assert.sh as Step E2 gate, 4 PURPOSE-labeled smoke-test checks). ADR-M013-A row-additive amendment via S13 (Cluster A reconciliation byte-identical with ADR-M016-B).
+
+### Changed
+
+- **`pkg/.aihaus/hooks/learning-advisor.sh`:** schema v1→v2 (additive — `recurrence_count`, `last_seen_milestone`, `recurrence_hash`, `schema_version`). Existing fields preserved; v1 readers tolerate.
+- **`pkg/.aihaus/hooks/context-inject.sh`:** +247 LOC across S05 (recurring-warnings feedback loop) + S06 (per-cohort budgets + sidecar overrides) + S07 (5-min cache mirroring learning-advisor pattern + `cache_hit` audit field).
+- **`pkg/.aihaus/hooks/phase-advance.sh`:** wired `scaffold-assert.sh` invocation on `planning→running` transition (exit 13 propagates).
+- **`pkg/.aihaus/skills/aih-milestone/annexes/execution.md`:** Step E2 prose updated to scaffold both AGENT-EVOLUTION.md AND SKILL-EVOLUTION.md unconditionally; new Step E5.5 (mid-milestone adversarial gate primitive, ADR-M016-A governed).
+- **`pkg/.aihaus/skills/aih-milestone/completion-protocol.md`:** Step 4.5 audit emission unconditional (closes M014 silent-skip class); new Step 4.6 (skill-evolution apply with smoke-test gate); existing Step 4.6 renamed to 4.6b; new Step 4.7b (per-agent memory apply); Step 6.5 cache invalidation; Step 6.7 telemetry-collect orchestrator-Edit pattern (post-BLOCKER-2).
+- **`pkg/.aihaus/agents/*.md` (46 files):** `## Per-agent memory (optional)` template appended; opt-in emission contract per Q2 (prose-only threshold).
+- **`pkg/.aihaus/agents/knowledge-curator.md`:** prompt amended for unconditional cadence + Q1 `<!-- no-signal-this-milestone -->` marker on empty inputs (S15b).
+- **`pkg/scripts/install.sh` + `install.ps1`:** idempotent `.gitignore` injection with guard-comment block (S04.5).
+- **`pkg/scripts/update.sh` + `update.ps1`:** new `--no-gitignore` flag + explicit user-prompt gate for one-shot backfill on existing installs (S04.6).
+- **`pkg/.aihaus/templates/project.md`:** nested EVOLVING block inside MANUAL section (S13).
+- **`CLAUDE.md`:** EVOLVING block appended at EOF (S14; CRLF-preserving).
+
+### Mid-flight saves
+
+- **BLOCKER 1 (commit `9a75840`):** ADR-M015-A ID collision with shipped v0.19.0 cursor-removal ADR. Renumbered the entire milestone M015→M016 (all hook headers, ADR cross-refs, story files, branch name, dir name).
+- **BLOCKER 2 (commit `6c41847`):** `tools/telemetry-collect.sh` violated ADR-M013-A's single-writer invariant by writing `.aihaus/memory/global/architecture.md` directly. Refactored stdout-only; orchestrator captures + Edit-applies at completion-protocol Step 6.7.
+- **CRITICAL bootstrap (S17 catch):** M016's own `SKILL-EVOLUTION.md` scaffold missing because `scaffold-assert.sh` didn't exist when M016 transitioned `planning→running`. Trivial fix; future milestones gated correctly.
+
+### Upgrade impact
+
+Downstream users running `bash pkg/scripts/update.sh --target /path` will be prompted to backfill `.gitignore` with `.aihaus/audit/` + `.claude/audit/` paths (`--no-gitignore` flag bypasses). New installs get the injection automatically. Pre-existing user content in `project.md` MANUAL section (outside the new nested EVOLVING block) and in `CLAUDE.md` (outside the new appended EVOLVING block) remains entirely untouched.
+
+### Verification
+
+`bash tools/smoke-test.sh` 47/47 PASS. `bash tools/purity-check.sh` PASS. E7 verifier=PASS (10/10 PRD acceptance criteria with evidence). E7 integration-checker=PASS (15/15 e2e chains intact).
+
 ## [0.19.1] - 2026-04-22 — Migration messaging fix-ups
 
 Patch release. Two fix-ups discovered during dogfood `/aih-update` from v0.17.0:

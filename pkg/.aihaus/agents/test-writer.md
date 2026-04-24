@@ -34,3 +34,19 @@ For each acceptance criterion:
 - Tests must pass before you report done
 - One test file per story: `tests/test_[story_slug].[ext]` (where ext matches project convention)
 - Follow existing test patterns in `tests/`
+
+## Per-agent memory (optional)
+
+At return, you MAY emit an aihaus:agent-memory fenced block when your work
+produced a finding, decision, or gotcha the next invocation of your role
+would benefit from. When in doubt, omit. See pkg/.aihaus/skills/_shared/per-agent-memory.md for contract.
+
+Format:
+
+    <!-- aihaus:agent-memory -->
+    path: .aihaus/memory/agents/<your-agent-name>.md
+    ## <date> <slug>
+    **Role context:** <what this agent learned about this project>
+    **Recurring patterns:** <...>
+    **Gotchas:** <...>
+    <!-- aihaus:agent-memory:end -->

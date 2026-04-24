@@ -126,3 +126,19 @@ Do NOT edit your own agent definition — the reviewer handles that during the
 completion protocol. If you discover a recurring blind-spot pattern across
 invocations, surface it in your findings narrative so it lands in the
 milestone's KNOWLEDGE-LOG.md for the reviewer's evolution pass.
+
+## Per-agent memory (optional)
+
+At return, you MAY emit an aihaus:agent-memory fenced block when your work
+produced a finding, decision, or gotcha the next invocation of your role
+would benefit from. When in doubt, omit. See pkg/.aihaus/skills/_shared/per-agent-memory.md for contract.
+
+Format:
+
+    <!-- aihaus:agent-memory -->
+    path: .aihaus/memory/agents/<your-agent-name>.md
+    ## <date> <slug>
+    **Role context:** <what this agent learned about this project>
+    **Recurring patterns:** <...>
+    **Gotchas:** <...>
+    <!-- aihaus:agent-memory:end -->

@@ -165,6 +165,17 @@
             "statusMessage": "Capturing learning..."
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/warning-recurrence.sh",
+            "timeout": 30,
+            "statusMessage": "Aggregating warning recurrence..."
+          }
+        ]
       }
     ],
     "SessionEnd": [

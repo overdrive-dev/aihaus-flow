@@ -112,3 +112,19 @@ When the user's request mentions visible UI text (buttons, labels, messages, toa
 3. **Template literals** — grep for the pattern `\`[^\`]*\$\{[^}]+\}[^\`]*\`` across `.tsx`, `.jsx`, `.vue`, `.svelte` files. Catches dynamically-composed strings (e.g., `` `Exibindo ${n} profission${n !== 1 ? 'ais' : 'al'}` ``).
 
 Only mark "not found" when all 3 passes return zero. Example: `'Exibindo N profissionais'` → grep 'profissional' (pass 1, zero) AND template-literal grep for 'profission' (pass 3 → finds ProfessionalsTable.tsx:676 template expression).
+
+## Per-agent memory (optional)
+
+At return, you MAY emit an aihaus:agent-memory fenced block when your work
+produced a finding, decision, or gotcha the next invocation of your role
+would benefit from. When in doubt, omit. See pkg/.aihaus/skills/_shared/per-agent-memory.md for contract.
+
+Format:
+
+    <!-- aihaus:agent-memory -->
+    path: .aihaus/memory/agents/<your-agent-name>.md
+    ## <date> <slug>
+    **Role context:** <what this agent learned about this project>
+    **Recurring patterns:** <...>
+    **Gotchas:** <...>
+    <!-- aihaus:agent-memory:end -->

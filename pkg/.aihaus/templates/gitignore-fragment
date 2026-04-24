@@ -1,0 +1,17 @@
+# aihaus .gitignore fragment -- for manual application if install.sh is unavailable.
+# Copy the block below (including the marker comments) into your repo's .gitignore.
+# install.sh / update.sh manage this block automatically; the markers prevent duplication.
+
+# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers
+/.aihaus/audit/
+/.claude/audit/
+/.aihaus/.context-budgets
+/.aihaus/.effort
+/.aihaus/.calibration
+/.aihaus/.install-mode
+/.aihaus/.install-source
+/.aihaus/.install-platform
+/.aihaus/.version
+/.aihaus/.enforcement
+/.aihaus/.automode
+# AIHAUS:GITIGNORE-END

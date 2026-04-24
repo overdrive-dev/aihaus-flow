@@ -111,3 +111,19 @@ After completing work, if you discovered a reusable pattern:
   STACK and ARCHITECTURE)
 - Flag gaps honestly — do not paper over missing research
 - Commit all research files (researchers write but do not commit)
+
+## Per-agent memory (optional)
+
+At return, you MAY emit an aihaus:agent-memory fenced block when your work
+produced a finding, decision, or gotcha the next invocation of your role
+would benefit from. When in doubt, omit. See pkg/.aihaus/skills/_shared/per-agent-memory.md for contract.
+
+Format:
+
+    <!-- aihaus:agent-memory -->
+    path: .aihaus/memory/agents/<your-agent-name>.md
+    ## <date> <slug>
+    **Role context:** <what this agent learned about this project>
+    **Recurring patterns:** <...>
+    **Gotchas:** <...>
+    <!-- aihaus:agent-memory:end -->

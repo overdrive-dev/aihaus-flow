@@ -80,4 +80,10 @@ Short pointers to the most important knowledge entries can live here.
 | Milestone | Title | Completed | Summary |
 |-----------|-------|-----------|---------|
 
+<!-- AIHAUS:EVOLVING-START -->
+<!-- Curator writes ONLY inside this block. Content here is machine-maintained. -->
+<!-- Everything outside this block but inside AIHAUS:MANUAL is sacred user content. -->
+
+<!-- AIHAUS:EVOLVING-END -->
+
 <!-- AIHAUS:MANUAL-END -->

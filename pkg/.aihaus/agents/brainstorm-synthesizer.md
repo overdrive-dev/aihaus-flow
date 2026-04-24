@@ -136,3 +136,19 @@ After completing work, if you discovered a reusable pattern:
 - Preserve contrarian severity tags in Challenges.
 - Be opinionated in Synthesis.
 - Pick exactly one Suggested Next Command; justify in one sentence.
+
+## Per-agent memory (optional)
+
+At return, you MAY emit an aihaus:agent-memory fenced block when your work
+produced a finding, decision, or gotcha the next invocation of your role
+would benefit from. When in doubt, omit. See pkg/.aihaus/skills/_shared/per-agent-memory.md for contract.
+
+Format:
+
+    <!-- aihaus:agent-memory -->
+    path: .aihaus/memory/agents/<your-agent-name>.md
+    ## <date> <slug>
+    **Role context:** <what this agent learned about this project>
+    **Recurring patterns:** <...>
+    **Gotchas:** <...>
+    <!-- aihaus:agent-memory:end -->

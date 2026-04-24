@@ -75,10 +75,10 @@ check_agents() {
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 20 .sh files (M014/S04 deletes 3 PermissionRequest hooks) ----
+# ---- Check 3: .aihaus/hooks/ has 23 .sh files (M016/S11a adds scaffold-assert.sh) ----
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 20 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 23 .sh files"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
@@ -87,10 +87,10 @@ check_hooks() {
   # maxdepth 1 excludes hooks/lib/ (M011/S01 shared helpers library).
   local count
   count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 20 ]]; then
+  if [[ "$count" -eq 23 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 20 .sh files, found $count"
+    _fail "$label" "expected 23 .sh files, found $count"
   fi
 }
 
@@ -2073,6 +2073,296 @@ check_read_guard_exists() {
   fi
 }
 
+# ---- Check: /aih-init §2.5 migration regex does not false-positive on EVOLVING markers ----
+# PURPOSE: Regression guard (M016-S13 / R7 mitigation). Confirms that the §2.5 migration
+# regex inside aih-init SKILL.md is keyed off ACTIVE-MILESTONES, RECENT-DECISIONS, and
+# RECENT-KNOWLEDGE only — and does NOT mention AIHAUS:EVOLVING. If /aih-init ever gained
+# an EVOLVING-aware migration branch, it would need explicit gating logic; this check
+# catches accidental inclusion early.
+check_init_evolving_no_false_positive() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: /aih-init §2.5 migration regex does not false-positive on nested EVOLVING markers (M016-S13 R7)"
+  local skill="${PACKAGE_ROOT}/.aihaus/skills/aih-init/SKILL.md"
+  local problems=()
+
+  if [[ ! -f "$skill" ]]; then
+    _fail "$label" "aih-init/SKILL.md not found at expected path"
+    return
+  fi
+
+  # (a) The known migration markers MUST be referenced (confirms §2.5 migration logic is present)
+  # Note: SKILL.md prose uses the bare marker names (ACTIVE-MILESTONES-START/END etc.) without
+  # the AIHAUS: prefix — match the prose pattern, not the HTML comment marker form.
+  if ! grep -qE 'ACTIVE-MILESTONES|RECENT-DECISIONS|RECENT-KNOWLEDGE' "$skill"; then
+    problems+=("aih-init SKILL.md does not reference ACTIVE-MILESTONES/RECENT-DECISIONS/RECENT-KNOWLEDGE — §2.5 migration section may have moved; review manually")
+  fi
+
+  # (b) AIHAUS:EVOLVING must NOT appear in the migration regex / init skill
+  if grep -qE 'AIHAUS:EVOLVING' "$skill"; then
+    problems+=("aih-init SKILL.md contains AIHAUS:EVOLVING reference — risk of false-positive match on nested EVOLVING markers; review and isolate")
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- filename-prefix guard on per-agent memory tree (M016-S15a) -------------
+# PURPOSE: Asserts no file in pkg/.aihaus/memory/agents/** or .aihaus/memory/agents/**
+# matches the reserved prefixes feedback_* or user_* (underscore). Agent filenames
+# use hyphens only (e.g. user-profiler.md); underscore prefixes are reserved for
+# the persistent agent memory system and must not bleed into per-agent memory files.
+# Hyphen distinction: user-profiler.md (hyphen) does NOT trigger; user_*.md (underscore) does.
+check_agent_memory_filename_prefix_guard() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: filename-prefix guard on per-agent memory tree (M016-S15a)"
+  local problems=()
+
+  # Check pkg/.aihaus/memory/agents/** (shipped package source)
+  local pkg_agents_mem="${PACKAGE_ROOT}/.aihaus/memory/agents"
+  if [[ -d "$pkg_agents_mem" ]]; then
+    local pkg_violations
+    pkg_violations=$(find "$pkg_agents_mem" -maxdepth 2 \( -name 'feedback_*' -o -name 'user_*' \) 2>/dev/null | head -20)
+    if [[ -n "$pkg_violations" ]]; then
+      while IFS= read -r v; do
+        problems+=("pkg reserved prefix violation: ${v#${PACKAGE_ROOT}/}")
+      done <<< "$pkg_violations"
+    fi
+  fi
+
+  # Check .aihaus/memory/agents/** (dogfood install — repo root, sibling of pkg/)
+  local repo_root="${PACKAGE_ROOT}/.."
+  local dogfood_agents_mem="${repo_root}/.aihaus/memory/agents"
+  if [[ -d "$dogfood_agents_mem" ]]; then
+    local df_violations
+    df_violations=$(find "$dogfood_agents_mem" -maxdepth 2 \( -name 'feedback_*' -o -name 'user_*' \) 2>/dev/null | head -20)
+    if [[ -n "$df_violations" ]]; then
+      while IFS= read -r v; do
+        problems+=("dogfood reserved prefix violation: ${v#${repo_root}/}")
+      done <<< "$df_violations"
+    fi
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- EVOLVING block well-formed in project.md template AND CLAUDE.md (M016-S16) --
+# PURPOSE: Asserts both files contain matched <!-- AIHAUS:EVOLVING-START --> and
+# <!-- AIHAUS:EVOLVING-END --> markers, exactly one pair each, START appearing before
+# END. Empty body inside markers is acceptable — a milestone with no curator emit is a
+# valid no-op state. Checks:
+#   (a) pkg/.aihaus/templates/project.md (nested inside MANUAL block, per ADR-M016-B)
+#   (b) CLAUDE.md at repo root (at EOF, per ADR-M016-B)
+check_evolving_block_well_formed() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: EVOLVING block well-formed in project.md template AND CLAUDE.md (M016-S16)"
+  local repo_root="${PACKAGE_ROOT}/.."
+  local project_tmpl="${PACKAGE_ROOT}/.aihaus/templates/project.md"
+  local claude_md="${repo_root}/CLAUDE.md"
+  local problems=()
+
+  _check_evolving_markers() {
+    local file="$1"
+    local display_name="$2"
+    if [[ ! -f "$file" ]]; then
+      problems+=("${display_name}: file not found")
+      return
+    fi
+    local start_count end_count
+    start_count=$(grep -c '<!-- AIHAUS:EVOLVING-START -->' "$file" 2>/dev/null || echo "0")
+    end_count=$(grep -c '<!-- AIHAUS:EVOLVING-END -->' "$file" 2>/dev/null || echo "0")
+    if [[ "$start_count" -ne 1 ]]; then
+      problems+=("${display_name}: expected exactly 1 AIHAUS:EVOLVING-START marker; found ${start_count}")
+    fi
+    if [[ "$end_count" -ne 1 ]]; then
+      problems+=("${display_name}: expected exactly 1 AIHAUS:EVOLVING-END marker; found ${end_count}")
+    fi
+    # Verify START appears before END (line number order)
+    if [[ "$start_count" -eq 1 && "$end_count" -eq 1 ]]; then
+      local start_line end_line
+      start_line=$(grep -n '<!-- AIHAUS:EVOLVING-START -->' "$file" | head -1 | cut -d: -f1)
+      end_line=$(grep -n '<!-- AIHAUS:EVOLVING-END -->' "$file" | head -1 | cut -d: -f1)
+      if [[ -n "$start_line" && -n "$end_line" && "$start_line" -ge "$end_line" ]]; then
+        problems+=("${display_name}: AIHAUS:EVOLVING-START (line ${start_line}) must appear before AIHAUS:EVOLVING-END (line ${end_line})")
+      fi
+    fi
+  }
+
+  _check_evolving_markers "$project_tmpl" "templates/project.md"
+  _check_evolving_markers "$claude_md" "CLAUDE.md"
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- SKILL-EVOLUTION post-apply validation: sub-mode accessibility check (M016-S16) --
+# PURPOSE: Verifies that the smoke-test --check sub-modes introduced in S12
+# (skill-line-cap and skill-frontmatter) are accessible and functional. This is the
+# static backstop for Step 4.6's pre-apply gate — even if the gate is bypassed by some
+# future code path, the sub-modes themselves must be reachable and return correct results.
+# Runs both sub-modes against an existing SKILL.md (aih-plan) that is known-good;
+# asserts exit 0. Catches any regression in the --check dispatcher logic.
+check_skill_evolution_post_apply_sub_modes() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: SKILL-EVOLUTION post-apply sub-modes accessible (skill-line-cap + skill-frontmatter, M016-S16)"
+  local this_script="${SCRIPT_DIR}/smoke-test.sh"
+  local test_skill="aih-plan"
+  local problems=()
+
+  if [[ ! -f "$this_script" ]]; then
+    _fail "$label" "smoke-test.sh not found at $this_script"
+    return
+  fi
+
+  # Sub-mode 1: skill-line-cap on aih-plan (known ≤200 lines)
+  local cap_out cap_rc
+  cap_out=$(bash "$this_script" --check skill-line-cap --skill "$test_skill" 2>&1)
+  cap_rc=$?
+  if [[ "$cap_rc" -ne 0 ]]; then
+    problems+=("skill-line-cap sub-mode returned exit ${cap_rc} for ${test_skill}: ${cap_out:0:120}")
+  elif ! printf '%s' "$cap_out" | grep -q '\[PASS\]'; then
+    problems+=("skill-line-cap sub-mode did not emit [PASS] for ${test_skill}: ${cap_out:0:120}")
+  fi
+
+  # Sub-mode 2: skill-frontmatter on aih-plan (known valid name: aih-plan)
+  local fm_out fm_rc
+  fm_out=$(bash "$this_script" --check skill-frontmatter --skill "$test_skill" 2>&1)
+  fm_rc=$?
+  if [[ "$fm_rc" -ne 0 ]]; then
+    problems+=("skill-frontmatter sub-mode returned exit ${fm_rc} for ${test_skill}: ${fm_out:0:120}")
+  elif ! printf '%s' "$fm_out" | grep -q '\[PASS\]'; then
+    problems+=("skill-frontmatter sub-mode did not emit [PASS] for ${test_skill}: ${fm_out:0:120}")
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- memory-scores.jsonl single-writer prose assertion (M016-S16) -----------
+# PURPOSE: Greps .aihaus/decisions.md (dogfood ADR ledger) to confirm exactly one
+# named writer (composite-score.sh) is registered for memory-scores.jsonl. This is
+# the F6 single-writer resolution mechanically guarded — any future ADR that names a
+# second writer for memory-scores.jsonl would fail this check before merge. Prose
+# assertion only; does not test runtime behavior.
+check_memory_scores_single_writer_prose() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: memory-scores.jsonl single-writer prose assertion (composite-score.sh, M016-S16)"
+  local repo_root="${PACKAGE_ROOT}/.."
+  local decisions_md="${repo_root}/.aihaus/decisions.md"
+  local problems=()
+
+  if [[ ! -f "$decisions_md" ]]; then
+    # decisions.md is gitignored (dogfood install); skip gracefully if absent.
+    _pass "${label} [skipped — .aihaus/decisions.md not present in this environment]"
+    return
+  fi
+
+  # Assert composite-score.sh is mentioned as writer of memory-scores.jsonl
+  if ! grep -q 'composite-score\.sh' "$decisions_md"; then
+    problems+=("composite-score.sh not found in .aihaus/decisions.md — single-writer prose assertion missing (ADR-M016-A F6)")
+  fi
+
+  # Assert memory-scores.jsonl appears in the writer table
+  if ! grep -q 'memory-scores\.jsonl' "$decisions_md"; then
+    problems+=("memory-scores.jsonl not found in .aihaus/decisions.md — writer table entry missing")
+  fi
+
+  # Assert the co-occurrence: composite-score.sh is the named writer FOR memory-scores.jsonl
+  # (both strings appear in the same writer-table row)
+  if ! grep 'memory-scores\.jsonl' "$decisions_md" | grep -q 'composite-score\.sh'; then
+    problems+=("composite-score.sh not found on the same line as memory-scores.jsonl in .aihaus/decisions.md — single-writer registration may be missing or split across lines")
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
+# ---- Selectable sub-mode dispatcher (--check <name> --skill <slug>) ---------
+# PURPOSE: invoked by completion-protocol Step 4.6 pre-apply gate before each
+# skill evolution is committed. Runs only the named check against the named skill;
+# exits 0 on pass, 1 on fail. Does NOT bump CHECK_NUMBER or affect FAILURES.
+#
+# Usage:
+#   bash tools/smoke-test.sh --check skill-line-cap --skill aih-milestone
+#   bash tools/smoke-test.sh --check skill-frontmatter --skill aih-plan
+#
+# skill-line-cap    : asserts pkg/.aihaus/skills/<slug>/SKILL.md is <= 200 lines
+# skill-frontmatter : asserts SKILL.md declares `name: aih-<slug>` in frontmatter
+_run_check_submode() {
+  local check_name="$1"
+  local skill_slug="$2"
+  local skill_file="${PACKAGE_ROOT}/.aihaus/skills/${skill_slug}/SKILL.md"
+
+  if [[ ! -f "$skill_file" ]]; then
+    printf "[FAIL] --check %s: SKILL.md not found at %s\n" "$check_name" "$skill_file" >&2
+    exit 1
+  fi
+
+  case "$check_name" in
+    skill-line-cap)
+      local lines
+      lines=$(wc -l < "$skill_file" | tr -d ' ')
+      if [[ "$lines" -le 200 ]]; then
+        printf "[PASS] skill-line-cap: %s (%s lines)\n" "$skill_slug" "$lines"
+        exit 0
+      else
+        printf "[FAIL] skill-line-cap: %s has %s lines (max 200)\n" "$skill_slug" "$lines" >&2
+        exit 1
+      fi
+      ;;
+    skill-frontmatter)
+      if head -20 "$skill_file" | grep -Eq "^name:[[:space:]]*aih-${skill_slug#aih-}"; then
+        printf "[PASS] skill-frontmatter: %s declares name: aih-*\n" "$skill_slug"
+        exit 0
+      else
+        printf "[FAIL] skill-frontmatter: %s missing or malformed 'name: aih-<slug>'\n" "$skill_slug" >&2
+        exit 1
+      fi
+      ;;
+    *)
+      printf "[FAIL] unknown --check value '%s' (known: skill-line-cap, skill-frontmatter)\n" "$check_name" >&2
+      exit 1
+      ;;
+  esac
+}
+
+# Parse --check / --skill flags before the full-suite run
+_CHECK_NAME=""
+_CHECK_SKILL=""
+_remaining_args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check) _CHECK_NAME="$2"; shift 2 ;;
+    --skill) _CHECK_SKILL="$2"; shift 2 ;;
+    *) _remaining_args+=("$1"); shift ;;
+  esac
+done
+
+if [[ -n "$_CHECK_NAME" ]]; then
+  if [[ -z "$_CHECK_SKILL" ]]; then
+    printf "[FAIL] --check requires --skill <slug>\n" >&2
+    exit 1
+  fi
+  _run_check_submode "$_CHECK_NAME" "$_CHECK_SKILL"
+  # _run_check_submode always exits; unreachable
+  exit 1
+fi
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"
@@ -2119,6 +2409,11 @@ check_worktree_reconcile_fixture
 check_resume_substep_fixture
 check_bash_guard_baseline
 check_read_guard_exists
+check_init_evolving_no_false_positive
+check_agent_memory_filename_prefix_guard
+check_evolving_block_well_formed
+check_skill_evolution_post_apply_sub_modes
+check_memory_scores_single_writer_prose
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

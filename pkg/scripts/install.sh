@@ -221,6 +221,46 @@ if command -v claude >/dev/null 2>&1; then
   fi
 fi
 
+# Step 11: idempotent .gitignore injection (soft-fail per LD-3)
+# Manual fallback: pkg/.aihaus/templates/gitignore-fragment
+_inject_gitignore() {
+  local target="$1"
+  local gitignore="${target}/.gitignore"
+  # Primary idempotency check: guard-comment anchor already present?
+  if grep -q "^# AIHAUS:GITIGNORE-START" "${gitignore}" 2>/dev/null; then
+    echo "  .gitignore: aihaus block already present (no-op)"
+    return 0
+  fi
+  # Secondary idempotency check: hand-edited variant without the full guard comment?
+  if grep -q "\.aihaus/audit" "${gitignore}" 2>/dev/null; then
+    echo "  .gitignore: .aihaus/audit entry detected (skipping injection to avoid duplication)"
+    return 0
+  fi
+  # Append guard block (create .gitignore if absent)
+  {
+    printf '\n'
+    printf '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers\n'
+    printf '/.aihaus/audit/\n'
+    printf '/.claude/audit/\n'
+    printf '/.aihaus/.context-budgets\n'
+    printf '/.aihaus/.effort\n'
+    printf '/.aihaus/.calibration\n'
+    printf '/.aihaus/.install-mode\n'
+    printf '/.aihaus/.install-source\n'
+    printf '/.aihaus/.install-platform\n'
+    printf '/.aihaus/.version\n'
+    printf '/.aihaus/.enforcement\n'
+    printf '/.aihaus/.automode\n'
+    printf '# AIHAUS:GITIGNORE-END\n'
+  } >> "${gitignore}" 2>/dev/null || {
+    echo "  !! WARNING: could not write .gitignore at ${gitignore}" >&2
+    echo "  !!          Apply manually from pkg/.aihaus/templates/gitignore-fragment" >&2
+    return 0
+  }
+  echo "  .gitignore: aihaus block injected"
+}
+_inject_gitignore "${TARGET}"
+
 # Step 10: success message
 echo ""
 if [[ "${UPDATE}" == "1" ]]; then

@@ -4,6 +4,13 @@
 # + output for patterns worth capturing, then appends per-warning rows to
 # .claude/audit/LEARNING-WARNINGS.jsonl.
 #
+# LEARNING-WARNINGS.jsonl schema v2 (M016/S02 additive):
+#   v1 fields (9): warning_uuid, timestamp, milestone, story, source_agent,
+#                  category, summary, evidence, suggested_entry
+#   v2 additions (4): recurrence_count, last_seen_milestone, recurrence_hash,
+#                     schema_version
+#   v1 readers tolerate new fields via optional-field reads (forward-compat).
+#
 # Pattern mirrors autonomy-guard.sh (ADR-M011-A):
 #   - 3s haiku timeout (fail-safe allow on every error path)
 #   - 5-min hash cache (key = hash(task_prompt + output_head_256_bytes))
@@ -16,7 +23,8 @@
 # Audit trail:   .claude/audit/learning-advisor-audit.jsonl (per-fire record)
 #
 # ADR references: ADR-M011-A (haiku probe + JSONL pattern), ADR-001 (writes
-#   from orchestrator process only), ADR-M013-A (memory-ownership).
+#   from orchestrator process only), ADR-M013-A (memory-ownership),
+#   ADR-M016-A (schema v2 additive fields — M016/S02).
 # Architecture ref: M013 architecture.md §2.2, §4.1, §9.
 set -uo pipefail
 
@@ -150,6 +158,21 @@ compute_hash() {
     printf '%s' "$combined" | shasum -a 256 | awk '{print $1}'
   else
     printf '%s' "$combined" | md5sum 2>/dev/null | awk '{print $1}' || printf 'nohash'
+  fi
+}
+
+# compute_recurrence_hash — schema v2 (M016/S02)
+# Produces a 16-char hex fingerprint of category|summary|source_agent.
+# Used by warning-recurrence.sh (S03) for dedup / recurrence counting.
+# sha256 → shasum -a 256 → md5 fallback (mirrors compute_hash shape).
+compute_recurrence_hash() {
+  local combined="${1}|${2}|${3}"
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$combined" | sha256sum | awk '{print $1}' | head -c 16
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$combined" | shasum -a 256 | awk '{print $1}' | head -c 16
+  else
+    printf '%s' "$combined" | md5sum 2>/dev/null | awk '{print $1}' | head -c 16 || printf 'nohash000000000'
   fi
 }
 
@@ -336,13 +359,20 @@ while IFS= read -r line; do
   # JSON-safe escaping helper
   _esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/ /g'; }
 
-  # Emit JSONL row
+  # Compute recurrence_hash for schema v2 (M016/S02)
+  # Hash of category|summary|source_agent — first 16 hex chars only.
+  # recurrence_count is always 0 at emit time; warning-recurrence.sh (S03)
+  # is responsible for incrementing via aggregation, not this writer.
+  RECURRENCE_HASH="$(compute_recurrence_hash "${CATEGORY:-$KIND}" "$SUMMARY" "$AGENT_NAME")"
+
+  # Emit JSONL row (schema v2: 9 original fields + 4 additive fields appended)
   _rotate_if_needed "$WARNINGS_LOG"
-  printf '{"warning_uuid":"%s","timestamp":"%s","milestone":"%s","story":"%s","source_agent":"%s","category":"%s","summary":"%s","evidence":"%s","suggested_entry":"%s"}\n' \
+  printf '{"warning_uuid":"%s","timestamp":"%s","milestone":"%s","story":"%s","source_agent":"%s","category":"%s","summary":"%s","evidence":"%s","suggested_entry":"%s","recurrence_count":%d,"last_seen_milestone":"%s","recurrence_hash":"%s","schema_version":%d}\n' \
     "$WARNING_UUID" "$TS" \
     "$(_esc "$MILESTONE_ID")" "$(_esc "$STORY_ID")" "$(_esc "$AGENT_NAME")" \
     "$(_esc "${CATEGORY:-$KIND}")" "$(_esc "$SUMMARY")" \
     "$(_esc "$EVIDENCE")" "$(_esc "$SUGGESTED")" \
+    0 "$(_esc "$MILESTONE_ID")" "$(_esc "$RECURRENCE_HASH")" 2 \
     >> "$WARNINGS_LOG" 2>/dev/null || true
 
   WARNING_COUNT=$((WARNING_COUNT + 1))

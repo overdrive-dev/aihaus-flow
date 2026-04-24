@@ -44,6 +44,11 @@ If `.aihaus/knowledge.md` does not yet exist, create it with a
 **Recursion guard:** if `AIHAUS_KNOWLEDGE_CURATOR_ACTIVE=1` is set, skip this step
 silently (prevents self-invocation during M013's own completion).
 
+Spawn knowledge-curator at every milestone close. Do NOT gate this spawn on whether
+LEARNING-WARNINGS.jsonl has rows or DECISIONS-LOG/KNOWLEDGE-LOG have entries — the
+curator runs unconditionally and emits explicit `<!-- no-signal-this-milestone -->` markers
+when inputs are empty (ADR-M013-B gate condition B requires the curator to have run).
+
 Spawn the `knowledge-curator` agent with the following inputs:
 - `{milestone_dir}/execution/DECISIONS-LOG.md`
 - `{milestone_dir}/execution/KNOWLEDGE-LOG.md`
@@ -127,19 +132,72 @@ Write to `.aihaus/memory/` only.
 - Update `.aihaus/memory/MEMORY.md` index for each addition
 
 ## Step 4.5: Apply Agent Evolutions
-If `{milestone_dir}/execution/AGENT-EVOLUTION.md` exists and has proposals:
-1. Read each proposal
+For each milestone, read `{milestone_dir}/execution/AGENT-EVOLUTION.md` (scaffold
+guaranteed by `scaffold-assert.sh` per S11a — no existence check needed):
+
+1. Count proposal blocks in AGENT-EVOLUTION.md (`proposal_count`).
+   A proposal block is a `## Proposal:` heading and its body.
+   If `proposal_count` == 0, set `decision=empty`; skip to the audit-emit sub-step.
 2. For each proposal with clear evidence (not speculative):
    - Edit the agent's `.aihaus/agents/[name].md` file
    - Add the new rule, read directive, or protocol step
    - Preserve YAML frontmatter structure (do not change name, tools, model)
    - Do NOT remove Conflict Prevention reads or Self-Evolution sections
    - Log the change: "Agent [name] evolved: [one-line summary]"
-3. Skip proposals that are speculative or lack evidence
-4. Run `[[ -f tools/purity-check.sh ]] && bash tools/purity-check.sh || echo "purity-check unavailable (maintainer-only) — skipping"` — revert any evolution that fails
-5. Report: "[N] agent evolutions applied, [M] deferred"
+   - Increment `applied_count`
+3. Skip proposals that are speculative or lack evidence; increment `rejected_count` for each.
+4. Run `[[ -f tools/purity-check.sh ]] && bash tools/purity-check.sh || echo "purity-check unavailable (maintainer-only) — skipping"` — revert any evolution that fails (move reverted count from `applied_count` to `rejected_count`).
+5. Set `decision`:
+   - `applied` if `applied_count` >= 1
+   - `rejected` if `proposal_count` >= 1 and `applied_count` == 0
+   - `empty` if `proposal_count` == 0
+6. **Emit audit row** (unconditional — runs for all three outcomes):
+   Rotation check: if `.claude/audit/evolution-apply.jsonl` exists and has >= 10 000 lines
+   (or is >= 10 MB), atomically `mv .claude/audit/evolution-apply.jsonl .claude/audit/evolution-apply.jsonl.old` first.
+   Then append exactly one JSONL row via Edit tool:
+   ```json
+   {"ts":"<iso8601-utc>","milestone":"<M0XX>","decision":"applied|empty|rejected","proposal_count":<N>,"applied_count":<M>,"rejected_count":<K>,"schema_version":1}
+   ```
+   Single writer: orchestrator main thread at this step (ADR-M016-A writer-table).
+   Never emit from a hook or sub-agent.
+7. Report: "[N] agent evolutions applied, [M] deferred"
 
-## Step 4.6: Update Living Architecture
+## Step 4.6: Apply Skill Evolutions (M016-S12)
+Read `{milestone_dir}/execution/SKILL-EVOLUTION.md` (scaffold guaranteed by `scaffold-assert.sh`
+per S11a — no existence check needed). Each proposal block is a `## Proposal:` heading and its body.
+
+1. Count proposal blocks (`proposal_count`).
+   If `proposal_count` == 0, set `decision=empty`; skip to the audit-emit sub-step.
+2. For each proposal with clear evidence (not speculative):
+   a. Stage the proposed `pkg/.aihaus/skills/<slug>/SKILL.md` edit (do not commit yet).
+   b. **PRE-APPLY SMOKE-TEST GATE (mandatory — no `--skip-gate` opt-out):**
+      - Run: `bash tools/smoke-test.sh --check skill-line-cap --skill <slug>`
+      - Run: `bash tools/smoke-test.sh --check skill-frontmatter --skill <slug>`
+      - On **either FAIL**: revert the staged edit (restore the file to its pre-edit content
+        via a counter-Edit), write a `.claude/audit/skill-evolution-apply.jsonl` row with
+        `"decision":"rejected"`, and log "Skill [slug] evolution rejected: [check that failed]".
+        Increment `rejected_count`.
+   c. On **both checks PASS**: commit the staged edit, write a
+      `.claude/audit/skill-evolution-apply.jsonl` row with `"decision":"applied"`,
+      and log "Skill [slug] evolved: [one-line summary]".
+      Increment `applied_count`.
+3. Skip proposals that are speculative or lack evidence; increment `rejected_count` for each.
+4. Set `decision`:
+   - `applied` if `applied_count` >= 1
+   - `rejected` if `proposal_count` >= 1 and `applied_count` == 0
+   - `empty` if `proposal_count` == 0
+5. **Emit audit row** (unconditional — runs for all three outcomes):
+   Rotation check: if `.claude/audit/skill-evolution-apply.jsonl` exists and has >= 10 000 lines
+   (or is >= 10 MB), atomically `mv .claude/audit/skill-evolution-apply.jsonl .claude/audit/skill-evolution-apply.jsonl.old` first.
+   Then append exactly one JSONL summary row via Edit tool:
+   ```json
+   {"ts":"<iso8601-utc>","milestone":"<M0XX>","decision":"applied|empty|rejected","proposal_count":<N>,"applied_count":<M>,"rejected_count":<K>,"schema_version":1}
+   ```
+   Single writer: orchestrator main thread at this step (ADR-M016-A writer-table).
+   Never emit from a hook or sub-agent.
+6. Report: "[N] skill evolutions applied, [M] deferred"
+
+## Step 4.6b: Update Living Architecture
 If any ADR was superseded during execution, or a new convention emerged:
 1. Update `.aihaus/decisions.md` with superseded status on old ADRs
 2. Update `.aihaus/knowledge.md` with new conventions
@@ -172,6 +230,20 @@ of their Task-tool payload; the orchestrator parses and applies.
 Pre-existing cross-milestone aggregate files (`common-findings.md`, `false-positives.md`) are
 NOT touched by Step 4.7; those are governed by the ADR-M013-A scoped-writer whitelist
 (reviewer, code-reviewer, verifier, plan-checker may append directly).
+
+## Step 4.7b: Apply Per-Agent Memory Blocks
+For each agent that returned an aihaus:agent-memory block during this milestone:
+1. Parse the block (awk range-match between <!-- aihaus:agent-memory --> markers)
+2. Verify path: line targets .aihaus/memory/agents/<agent-name>.md
+3. Verify <agent-name> is hyphen-only (no underscore — filename-prefix-guard precondition)
+4. If file does not exist: create it with the body
+5. If file exists: append with ISO-8601 timestamp separator (`\n\n---\n_appended <ts>_\n\n`)
+6. Audit: append row to .claude/audit/curator-apply.jsonl (existing writer; same schema)
+
+Empty block (no body lines): treat as no-op; do not emit empty file.
+
+**Orchestrator is SOLE writer** of `.aihaus/memory/agents/**`. ADR-M013-A amendment (S13)
++ ADR-M016-B (S16) name this writer. Never delegate file writes to the emitting agent.
 
 ## Step 5: Report Completion
 Present to the user:
@@ -217,3 +289,19 @@ Runs AFTER the completion report. Skips cleanly when `.aihaus/project.md` is abs
 8. **Report.** Print a concise summary of what was refreshed:
    `"project.md refreshed: inventory + history + active-milestones + recent-decisions"`
    or the subset that actually ran.
+
+## Step 6.5: Invalidate context-inject cache
+`rm -f .claude/audit/context-inject.cache 2>/dev/null` — ensures M+1 milestone starts with fresh cache (M016-S07).
+
+## Step 6.7: Append telemetry row (M016-S08; ADR-M013-A compliant per BLOCKER-2 fix)
+Run `row=$(bash tools/telemetry-collect.sh <M0XX>)` (maintainer-only; script lives in `tools/`, not shipped to downstream installs — R15 known limitation).
+
+The script is **stdout-only** — it does NOT write to `.aihaus/memory/global/architecture.md`. The orchestrator (this main thread) is the SOLE writer of `.aihaus/memory/**` per ADR-M013-A. Apply the captured row via the Edit tool:
+
+1. Read `.aihaus/memory/global/architecture.md` (create if absent with `## Telemetry Summary` header + `<!-- telemetry-summary -->` marker + table header row).
+2. Inside the marker section, find any row matching `^| <M0XX> |` and remove it (idempotent replace).
+3. Append the new `$row` at the end of the table.
+4. If data rows now exceed 50, drop the oldest 10 (FIFO — preserves trend visibility, prevents unbounded growth per R4).
+5. Single Edit call rewrites the file.
+
+This pattern preserves single-writer discipline by construction — the script analyzes/aggregates, the orchestrator persists. Per BLOCKER-2 mitigation surfaced at S10 mid-milestone gate (Step E5.5 first invocation).

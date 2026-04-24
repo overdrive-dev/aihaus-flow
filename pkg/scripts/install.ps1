@@ -701,6 +701,57 @@ if ($claudeCmd) {
     }
 }
 
+# Step 11: idempotent .gitignore injection (soft-fail per LD-3)
+# Manual fallback: pkg\.aihaus\templates\gitignore-fragment
+function Invoke-InjectGitignore {
+    param([string]$TargetDir)
+
+    $gitignore = Join-Path $TargetDir '.gitignore'
+
+    # Primary idempotency check -- guard-comment anchor already present?
+    if (Test-Path $gitignore) {
+        $guardHit = Select-String -LiteralPath $gitignore -Pattern '^# AIHAUS:GITIGNORE-START' -Quiet
+        if ($guardHit) {
+            Write-Host "  .gitignore: aihaus block already present (no-op)"
+            return
+        }
+        # Secondary idempotency check -- hand-edited variant without full guard comment?
+        $auditHit = Select-String -LiteralPath $gitignore -Pattern '\.aihaus/audit' -Quiet
+        if ($auditHit) {
+            Write-Host "  .gitignore: .aihaus/audit entry detected (skipping injection to avoid duplication)"
+            return
+        }
+    }
+
+    # Build the guard block (LF line endings -- universal .gitignore convention)
+    $block = @(
+        '',
+        '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers',
+        '/.aihaus/audit/',
+        '/.claude/audit/',
+        '/.aihaus/.context-budgets',
+        '/.aihaus/.effort',
+        '/.aihaus/.calibration',
+        '/.aihaus/.install-mode',
+        '/.aihaus/.install-source',
+        '/.aihaus/.install-platform',
+        '/.aihaus/.version',
+        '/.aihaus/.enforcement',
+        '/.aihaus/.automode',
+        '# AIHAUS:GITIGNORE-END'
+    )
+
+    try {
+        # Add-Content appends; creates file if absent. -Encoding UTF8 = UTF-8 with BOM (K-004).
+        Add-Content -LiteralPath $gitignore -Value $block -Encoding UTF8
+        Write-Host "  .gitignore: aihaus block injected"
+    } catch {
+        Write-Host "  !! WARNING: could not write .gitignore at $gitignore" -ForegroundColor Yellow
+        Write-Host "  !!          Apply manually from pkg\.aihaus\templates\gitignore-fragment" -ForegroundColor Yellow
+    }
+}
+Invoke-InjectGitignore -TargetDir $Target
+
 # Step 10: success message
 Write-Host ""
 if ($Update) {

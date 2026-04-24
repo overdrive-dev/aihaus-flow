@@ -8,20 +8,24 @@
 [CmdletBinding()]
 param(
     [string]$Target = (Get-Location).Path,
-    [switch]$Help
+    [switch]$Help,
+    [switch]$NoGitignore
 )
 
 $ErrorActionPreference = 'Stop'
 
 function Show-Usage {
     @'
-Usage: update.ps1 [-Target <path>]
+Usage: update.ps1 [-Target <path>] [-NoGitignore]
 
 Re-syncs package-managed files in .aihaus/ from the aihaus package source.
 Local data (project.md, plans/, milestones/, memory/, etc.) is preserved.
 
 Options:
   -Target <path>   Target directory (default: current working directory)
+  -NoGitignore     Skip the .gitignore backfill prompt entirely (non-interactive
+                   CI runs, or users who have already declined and don't want
+                   to be asked again).
   -Help            Show this message
 '@ | Write-Host
 }
@@ -446,6 +450,76 @@ if (-not (Test-Path $SettingsSrc)) {
 
 # ---- Update install mode marker ----------------------------------------------
 Set-Content -Path (Join-Path $Aihaus '.install-mode') -Value $Mode -NoNewline
+
+# ---- Gitignore backfill (existing-install gate) ------------------------------
+# TODO: Document this carve-out prominently in v0.19.2 release notes --
+#       update.ps1 scope expanded to write repo-root .gitignore behind explicit
+#       user prompt gate. First time update.ps1 writes to repo root.
+#
+# Design: prompt fires once when the guard block is absent and -NoGitignore
+# is not set. Idempotent: guard present -> skip silently. Non-interactive CI:
+# pass -NoGitignore to suppress. Per ADR-M016-B R3 mitigation.
+function Invoke-BackfillGitignore {
+    param([string]$TargetDir)
+
+    $gitignore = Join-Path $TargetDir '.gitignore'
+
+    # Step 1: idempotency -- guard-comment block already present?
+    if (Test-Path $gitignore) {
+        $guardHit = Select-String -LiteralPath $gitignore -Pattern '^# AIHAUS:GITIGNORE-START' -Quiet
+        if ($guardHit) {
+            # Already present -- no prompt, no write.
+            return
+        }
+        # Secondary idempotency: hand-edited variant without the full guard comment?
+        $auditHit = Select-String -LiteralPath $gitignore -Pattern '\.aihaus/audit' -Quiet
+        if ($auditHit) {
+            # Already has the relevant entries -- skip to avoid duplication.
+            return
+        }
+    }
+
+    # Step 2: -NoGitignore flag bypasses prompt entirely
+    if ($script:NoGitignore) {
+        return
+    }
+
+    # Step 3: prompt user (explicit gate -- existing users may have intentional choices)
+    Write-Host ""
+    $answer = Read-Host -Prompt 'aihaus v0.19.2+ recommends adding .aihaus/audit/ and .claude/audit/ to your .gitignore. Add now? [y/N] (skip with -NoGitignore)'
+
+    # Step 4: on y/Y -> inject guard block (idempotent write)
+    if ($answer -eq 'y' -or $answer -eq 'Y') {
+        $block = @(
+            '',
+            '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers',
+            '/.aihaus/audit/',
+            '/.claude/audit/',
+            '/.aihaus/.context-budgets',
+            '/.aihaus/.effort',
+            '/.aihaus/.calibration',
+            '/.aihaus/.install-mode',
+            '/.aihaus/.install-source',
+            '/.aihaus/.install-platform',
+            '/.aihaus/.version',
+            '/.aihaus/.enforcement',
+            '/.aihaus/.automode',
+            '# AIHAUS:GITIGNORE-END'
+        )
+        try {
+            Add-Content -LiteralPath $gitignore -Value $block -Encoding UTF8
+            Write-Host "  .gitignore: aihaus block injected"
+        } catch {
+            Write-Host "  !! WARNING: could not write .gitignore at $gitignore" -ForegroundColor Yellow
+            Write-Host "  !!          Apply manually from pkg\.aihaus\templates\gitignore-fragment" -ForegroundColor Yellow
+        }
+        return
+    }
+
+    # Step 5: on N / empty -> skip silently with one-line note
+    Write-Host "  Skipped -- re-run with -NoGitignore to suppress this prompt next time, or rerun update.ps1 and answer y to add later."
+}
+Invoke-BackfillGitignore -TargetDir $Target
 
 # ---- Summary -----------------------------------------------------------------
 Write-Host ""

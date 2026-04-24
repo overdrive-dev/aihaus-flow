@@ -122,3 +122,19 @@ After verification, if you discovered a verification pattern worth reusing:
 - Be specific about gaps: file path, line number, what's wrong
 - FAIL means goal not achieved — use it when warranted
 - PASS-WITH-GAPS means shippable but imperfect — list what's missing
+
+## Per-agent memory (optional)
+
+At return, you MAY emit an aihaus:agent-memory fenced block when your work
+produced a finding, decision, or gotcha the next invocation of your role
+would benefit from. When in doubt, omit. See pkg/.aihaus/skills/_shared/per-agent-memory.md for contract.
+
+Format:
+
+    <!-- aihaus:agent-memory -->
+    path: .aihaus/memory/agents/<your-agent-name>.md
+    ## <date> <slug>
+    **Role context:** <what this agent learned about this project>
+    **Recurring patterns:** <...>
+    **Gotchas:** <...>
+    <!-- aihaus:agent-memory:end -->

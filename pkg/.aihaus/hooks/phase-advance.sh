@@ -131,6 +131,12 @@ if [ -f "$MANIFEST" ]; then
   fi
 fi
 
+# --- scaffold-assert gate (M016/S11a): planning→running transition only ---
+# ADR-M016-B: scaffold-assert.sh is the Step E2 gate. Exit 13 propagates gate failure.
+if [[ "$TO" == "running" && "$FROM_PHASE" == "planning" ]]; then
+  bash "$(dirname "$0")/scaffold-assert.sh" "$DIR" || exit 13
+fi
+
 # --- detect handwritten (legacy) STATUS.md (no DO-NOT-EDIT marker) ---
 BACKUP_CREATED="false"
 if [ -f "$STATUS_FILE" ] && ! grep -q "DO-NOT-EDIT" "$STATUS_FILE"; then

@@ -8,7 +8,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: update.sh [--target <path>] [--migrate-memory]
+Usage: update.sh [--target <path>] [--migrate-memory] [--no-gitignore]
 
 Re-syncs package-managed files in .aihaus/ from the aihaus package source.
 Local data (project.md, plans/, milestones/, memory/, etc.) is preserved.
@@ -18,6 +18,9 @@ Options:
   --migrate-memory  Seed missing memory/*/README.md files from package source.
                     Existing files are NEVER overwritten (idempotent, opt-in).
                     Does NOT run as part of the default refresh loop.
+  --no-gitignore    Skip the .gitignore backfill prompt entirely (non-interactive
+                    CI runs, or users who have already declined and don't want
+                    to be asked again).
   -h, --help        Show this message
 EOF
 }
@@ -30,6 +33,7 @@ PKG_TEMPLATES="${PKG_ROOT}/templates"
 
 TARGET="${PWD}"
 MIGRATE_MEMORY=0
+NO_GITIGNORE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -40,6 +44,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --migrate-memory)
       MIGRATE_MEMORY=1
+      shift
+      ;;
+    --no-gitignore)
+      NO_GITIGNORE=1
       shift
       ;;
     -h|--help)
@@ -224,6 +232,70 @@ migrate_memory() {
 if [[ "${MIGRATE_MEMORY}" -eq 1 ]]; then
   migrate_memory
 fi
+
+# ---- Gitignore backfill (existing-install gate) ------------------------------
+# TODO: Document this carve-out prominently in v0.19.2 release notes —
+#       update.sh scope expanded to write repo-root .gitignore behind explicit
+#       user prompt gate. First time update.sh writes to repo root.
+#
+# Design: prompt fires once when the guard block is absent and --no-gitignore
+# is not set. Idempotent: guard present → skip silently. Non-interactive CI:
+# pass --no-gitignore to suppress. Per ADR-M016-B R3 mitigation.
+_backfill_gitignore() {
+  local target="$1"
+  local gitignore="${target}/.gitignore"
+
+  # Step 1: idempotency — guard-comment block already present?
+  if grep -q "^# AIHAUS:GITIGNORE-START" "${gitignore}" 2>/dev/null; then
+    # Already present — no prompt, no write.
+    return 0
+  fi
+  # Secondary idempotency: hand-edited variant without the full guard comment?
+  if grep -q "\.aihaus/audit" "${gitignore}" 2>/dev/null; then
+    # Already has the relevant entries — skip to avoid duplication.
+    return 0
+  fi
+
+  # Step 2: --no-gitignore flag bypasses prompt entirely
+  if [[ "${NO_GITIGNORE}" -eq 1 ]]; then
+    return 0
+  fi
+
+  # Step 3: prompt user (explicit gate — existing users may have intentional choices)
+  echo ""
+  printf 'aihaus v0.19.2+ recommends adding .aihaus/audit/ and .claude/audit/ to your .gitignore. Add now? [y/N] (skip with --no-gitignore): '
+  read -r _answer </dev/tty 2>/dev/null || _answer=""
+
+  # Step 4: on y/Y → inject guard block (idempotent write)
+  if [[ "${_answer}" == "y" || "${_answer}" == "Y" ]]; then
+    {
+      printf '\n'
+      printf '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers\n'
+      printf '/.aihaus/audit/\n'
+      printf '/.claude/audit/\n'
+      printf '/.aihaus/.context-budgets\n'
+      printf '/.aihaus/.effort\n'
+      printf '/.aihaus/.calibration\n'
+      printf '/.aihaus/.install-mode\n'
+      printf '/.aihaus/.install-source\n'
+      printf '/.aihaus/.install-platform\n'
+      printf '/.aihaus/.version\n'
+      printf '/.aihaus/.enforcement\n'
+      printf '/.aihaus/.automode\n'
+      printf '# AIHAUS:GITIGNORE-END\n'
+    } >> "${gitignore}" 2>/dev/null || {
+      echo "  !! WARNING: could not write .gitignore at ${gitignore}" >&2
+      echo "  !!          Apply manually from pkg/.aihaus/templates/gitignore-fragment" >&2
+      return 0
+    }
+    echo "  .gitignore: aihaus block injected"
+    return 0
+  fi
+
+  # Step 5: on N / empty → skip silently with one-line note
+  echo "  Skipped — re-run with --no-gitignore to suppress this prompt next time, or rerun update.sh and answer y to add later."
+}
+_backfill_gitignore "${TARGET}"
 
 # ---- Summary -----------------------------------------------------------------
 echo ""
