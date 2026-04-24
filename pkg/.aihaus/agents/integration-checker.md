@@ -4,7 +4,7 @@ description: >
   Cross-phase integration verifier. Checks that components connect
   properly — exports are imported, APIs are consumed, data flows
   end-to-end. Existence is not integration.
-tools: Read, Bash, Grep, Glob
+tools: Read, Write, Bash, Grep, Glob
 model: haiku
 effort: high
 color: blue
