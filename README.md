@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.19.1-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.20.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -338,7 +338,7 @@ your-project/
 │   │   └── _shared/
 │   │       └── autonomy-protocol.md  # Binding execution-autonomy rules (M005)
 │   ├── agents/                       # 46 specialized agent definitions
-│   ├── hooks/                        # 20 lifecycle + protocol-enforcement hooks
+│   ├── hooks/                        # 23 lifecycle + protocol-enforcement hooks
 │   ├── templates/                    # project.md + settings templates
 │   ├── memory/                       # Persistent agent memory (grows over time)
 │   ├── project.md                    # Your codebase context (created by /aih-init)
