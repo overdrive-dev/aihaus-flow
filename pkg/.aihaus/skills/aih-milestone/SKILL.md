@@ -42,6 +42,18 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, run before Step 1. Otherwis
 
 ## Step 1 — Handle Flags
 
+**If `--abort` is present:** Orchestrate user-invoked abort of the current milestone. (M017/S02c — L3 prevention layer.)
+
+1. **L3 env bypass:** If `AIHAUS_L3_DISABLED=1`, print `--abort disabled via env` and exit 0.
+2. Resolve `<milestone-dir>` — glob `.aihaus/milestones/M0*/RUN-MANIFEST.md` and pick the entry whose `status:` is `running` or `paused`.
+3. Capture `<reason>` from `--reason "<text>"` CLI arg; default `user-invoked abort via /aih-milestone --abort` if missing.
+4. `bash .aihaus/hooks/phase-advance.sh --to aborted --reason "<reason>" --dir <milestone-dir>` — atomic state flip.
+5. `bash .aihaus/hooks/worktree-release-all.sh` — sweep this session's owned worktrees (Category A pruned, B pending-merge, C preserved-dirty).
+6. `bash .aihaus/hooks/manifest-append.sh --field progress-log --payload "Aborted by /aih-milestone --abort: <reason>"` — single-writer audit trail.
+7. Print: `Milestone <slug> aborted. Resume via /aih-resume to continue at paused state.`
+
+<!-- S02d: pre-dispatch worktree-reap scan + .session-<pid>.owned sentinel write + --skip-reap flag appends here -->
+
 **If `--execute` is present:** Skip Steps 2–5. Create a minimal draft from $ARGUMENTS, then follow `annexes/execution.md` (milestone execution pipeline — so `/aih-resume` can recover if interrupted). Print: "Executing directly (--execute flag). Use `/aih-milestone` without the flag for conversational gathering."
 
 **If `--plan [slug]` is present:** Follow `annexes/promotion.md` Steps P1–P5 to seed a milestone draft from the plan (M### auto-propose, force-split gate, PLAN→CONTEXT mapping, attachment reference, backlink footer, threshold gate). Skip Step 2 (drafts listing). Threshold gate in P5 either dispatches execution or hands back to Step 5 gathering here.

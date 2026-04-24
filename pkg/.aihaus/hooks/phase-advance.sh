@@ -3,18 +3,23 @@
 # ADR-004 projection of Metadata.phase from RUN-MANIFEST.md. Sole writer of STATUS.md post-M003.
 #
 # Usage: phase-advance.sh --to <phase> --dir <milestone_or_plan_dir>
-#   <phase> ∈ gathering | planning | ready | running | complete | paused
+#   <phase> ∈ gathering | planning | ready | running | complete | paused | aborted
 #
 # M011/S01: wraps the STATUS.md + metadata writes in a coarse flock-w-2 on
 # $DIR/RUN-MANIFEST.md.lock (POSIX) or mkdir-atomic fallback (Windows) so
 # concurrent writers from manifest-append.sh and phase-advance.sh serialize
 # on the same lock target.
 #
+# M017/S02c: adds `aborted` terminal state. `--reason` required for both
+# `paused` and `aborted`. Legal resurrection: `aborted → paused` only
+# (exit PHASE_ADVANCE_REJECTED from=aborted to=<x> reason=terminal otherwise).
+#
 # Env: AIHAUS_AUDIT_LOG (optional; default .claude/audit/hook.jsonl)
 #
 # Exit codes: 0 ok, 2 invalid args, 3 worktree-refuse, 6 lock-timeout,
 #             10 invoke-stack-non-empty, 11 atomic-replace-failed,
-#             12 target-dir-missing.
+#             12 target-dir-missing, 13 scaffold-assert-failed,
+#             14 terminal-state-rejected.
 set -euo pipefail
 
 AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
@@ -47,13 +52,13 @@ done
 [ -d "$DIR" ] || { echo "phase-advance.sh: dir not found: $DIR" >&2; exit 12; }
 
 case "$TO" in
-  gathering|planning|ready|running|complete|paused) ;;
+  gathering|planning|ready|running|complete|paused|aborted) ;;
   *) echo "phase-advance.sh: invalid phase $TO" >&2; exit 2 ;;
 esac
 
-# --- --reason required when --to paused (M011/S04) ---
-if [ "$TO" = "paused" ] && [ -z "$REASON" ]; then
-  echo "phase-advance.sh: --reason required when --to paused" >&2
+# --- --reason required when --to paused or --to aborted (M011/S04 + M017/S02c) ---
+if { [ "$TO" = "paused" ] || [ "$TO" = "aborted" ]; } && [ -z "$REASON" ]; then
+  echo "phase-advance.sh: --reason required when --to $TO" >&2
   exit 2
 fi
 
@@ -67,13 +72,15 @@ if [ -n "$REASON" ]; then
   fi
 fi
 
-# --- worktree refusal (M011/S04 F-02 bypass for --to paused) ---
+# --- worktree refusal (M011/S04 F-02 bypass for --to paused; M017/S02c extends to aborted) ---
 # paused IS the escape hatch worktree-isolated agents must be able to emit
 # when hitting a TRUE blocker — the paused write targets the absolute
-# $MANIFEST_PATH in the main repo, not the worktree tree. Bypass applies
-# ONLY to paused; gathering|planning|ready|running|complete keep exit 3.
-if [ "$TO" = "paused" ]; then
-  : # skip worktree refusal — paused is the escape hatch (F-02 / ADR-M011-A)
+# $MANIFEST_PATH in the main repo, not the worktree tree. aborted shares the
+# same bypass: /aih-milestone --abort may be invoked from inside a worktree
+# and must reach the main manifest. Bypass applies to paused + aborted;
+# gathering|planning|ready|running|complete keep exit 3.
+if [ "$TO" = "paused" ] || [ "$TO" = "aborted" ]; then
+  : # skip worktree refusal — paused/aborted are escape hatches (F-02 / ADR-M011-A / M017/S02c)
 else
   if command -v git >/dev/null 2>&1; then
     SUPER="$(git rev-parse --show-superproject-working-tree 2>/dev/null || true)"
@@ -122,13 +129,22 @@ MANIFEST="$DIR/RUN-MANIFEST.md"
 STACK_ROWS=0
 if [ -f "$MANIFEST" ]; then
   STACK_ROWS="$(awk '/^## Invoke stack$/ {on=1; next} /^## / {on=0} on && /[^[:space:]]/' "$MANIFEST" | wc -l | tr -d ' ')"
-  if [ "$TO" = "paused" ]; then
-    : # paused allowed mid-execution; audit note emitted below
+  if [ "$TO" = "paused" ] || [ "$TO" = "aborted" ]; then
+    : # paused/aborted allowed mid-execution (escape hatch semantics; M017/S02c extends to aborted)
   elif [ "$STACK_ROWS" -gt 0 ]; then
     echo "phase-advance.sh: refused — Invoke stack non-empty ($STACK_ROWS rows). Complete active invocation first." >&2
     log_audit "refused-invoke-active" "$FROM_PHASE"
     exit 10
   fi
+fi
+
+# --- terminal-state rejection: aborted → anything except paused (M017/S02c) ---
+# aborted is a terminal state. Only aborted → paused is legal (resurrection via /aih-resume).
+# aborted → complete and all other edges are REJECTED.
+if [ "$FROM_PHASE" = "aborted" ] && [ "$TO" != "paused" ]; then
+  echo "PHASE_ADVANCE_REJECTED from=aborted to=$TO reason=terminal" >&2
+  log_audit "refused-terminal-aborted" "$FROM_PHASE"
+  exit 14
 fi
 
 # --- scaffold-assert gate (M016/S11a): planning→running transition only ---
@@ -190,6 +206,16 @@ if [ "$TO" = "paused" ] && [ -f "$MANIFEST" ]; then
   update_metadata_kv "pause_reason" "$REASON"
   update_metadata_kv "last_updated" "$(ts_iso)"
   append_progress_log "paused: $REASON (active-stack-rows=$STACK_ROWS)"
+fi
+
+# --- M017/S02c: aborted writes Metadata.status + Metadata.abort_reason + progress log ---
+if [ "$TO" = "aborted" ] && [ -f "$MANIFEST" ]; then
+  MANIFEST_PATH="$MANIFEST"
+  export MANIFEST_PATH
+  update_metadata_kv "status" "aborted"
+  update_metadata_kv "abort_reason" "$REASON"
+  update_metadata_kv "last_updated" "$(ts_iso)"
+  append_progress_log "aborted: $REASON (active-stack-rows=$STACK_ROWS)"
 fi
 
 log_audit "ok" "$FROM_PHASE" "$FALLBACK_USED" "$BACKUP_CREATED"
