@@ -176,6 +176,17 @@
             "statusMessage": "Aggregating warning recurrence..."
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/worktree-release.sh",
+            "timeout": 30,
+            "statusMessage": "Releasing worktree lock (L1)..."
+          }
+        ]
       }
     ],
     "SessionEnd": [
