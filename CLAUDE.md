@@ -55,7 +55,7 @@ There is no build command, no type checker, and no unit test framework. The smok
 
 When modifying a skill, preserve the two-phase pattern: (1) ask scoping questions upfront, (2) get one approval, (3) run autonomously. The `quick` skill is the exception — it skips planning entirely.
 
-When modifying an agent, keep it read-only unless it's `implementer`, `frontend-dev`, or `code-fixer` (those have write tools). The `reviewer` and `code-reviewer` agents must never modify code.
+When modifying an agent, scope edits to the permission/write-isolation profile the agent declares. 28 agents have `Write` in their tools; 9 also have `Edit`; 5 declare `isolation: worktree` + `permissionMode: bypassPermissions` (the stateful trio `implementer` / `frontend-dev` / `code-fixer` plus `executor` and `nyquist-auditor`). The `reviewer` and `code-reviewer` agents must never modify code regardless of tools declaration.
 
 After any change to skills, agents, or hooks, run `bash tools/smoke-test.sh` to validate counts and frontmatter.
 
@@ -185,7 +185,26 @@ decision enum, rotated at 10 MB OR 10 000 lines atomically to
 visibility rides the same substrate: `statusline-milestone.sh`
 reads RUN-MANIFEST on every TUI turn (per-turn ~5ms) and renders
 `M0XX · SNN/total · phase:X · agents:N · sha:abc1234`. Both
-primitives are ADR-M011-A (state gate) + ADR-M011-B (statusLine).
+primitives are ADR-M011-A (state gate) + ADR-M011-B (statusLine). M017
+adds `git-add-guard.sh` PreToolUse — rejects `git add -A` / `<dir>/` /
+`-u` / `-p` + `git commit -am` on `milestone/*` / `feature/*` branches;
+opt-out `AIHAUS_GIT_ADD_GUARD=0`.
+
+## Merge-Back (M017 / ADR-M017-A)
+
+Merge-back from `isolation: worktree` agents to the milestone branch is driven by
+`pkg/.aihaus/hooks/merge-back.sh` (the sole path). Per-file `cp` + explicit
+`git add <file>` loop; refuses on file-set mismatch (exit 3, stable stderr grammar
+`MERGE_BACK_REFUSED story=S<NN> reason=<unexpected-files|missing-files|cross-story-spill> expected=<...> actual=<...> worktree=<...>`).
+Recovery paths (`--drop <file>`, `--abort`, or user MANIFEST edit + retry) documented at
+`pkg/.aihaus/skills/aih-milestone/annexes/merge-back-recovery.md`. Checkpoint wrapping via
+`manifest-append.sh --checkpoint-enter/exit merge-back:S<NN>` preserves ADR-004 single-writer
+discipline. Companion defense: `pkg/.aihaus/hooks/git-add-guard.sh` (PreToolUse) blocks
+destructive stage shapes on `milestone/*` / `feature/*` branches. 4-layer lock-leak
+prevention stack (L1 SubagentStop + L2 SessionEnd + L3 `/aih-milestone --abort` + L4 reap)
+lives in ADR-M017-B. Both guards opt-out via `AIHAUS_MERGE_BACK_GUARD=0` /
+`AIHAUS_GIT_ADD_GUARD=0`; L1-L4 opt-out via `AIHAUS_RELEASE_L1=0` / `_L2=0` /
+`AIHAUS_L3_DISABLED=1` / `AIHAUS_REAP_DISABLED=1`.
 
 ## Installer Behavior
 
