@@ -216,3 +216,9 @@ The generator filters maintainer-only `tools/` paths and omits any Validation se
 ```bash
 gh release create vX.Y.Z --title "vX.Y.Z — <milestone title>" --notes-file tools/.out/release-notes-M0XX.md
 ```
+
+<!-- AIHAUS:EVOLVING-START -->
+<!-- Curator writes ONLY inside this block. Content here is machine-maintained. -->
+<!-- Do not edit manually — /aih-* skills append here during milestone completion. -->
+
+<!-- AIHAUS:EVOLVING-END -->
