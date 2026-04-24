@@ -270,7 +270,9 @@ Read story files from `stories/`. For each story, TaskCreate with:
 
 Chain by story dependency order. First story blocked by "Verify plan coherence"; last story blocks completion. After all story tasks, create final task `Run completion protocol`. Assign stories to teammates, monitor progress, handle QA cycles.
 
-**Story serialization (prevents commit attribution race):** complete each story's full cycle — implement → QA pass → merge-back → commit → `git status` clean — BEFORE spawning the next story's teammate. Between stories, verify `git status --porcelain` is empty. If unexpected files appear (orphans from a prior worktree merge-back), STOP and surface to user; do not sweep them into the next commit. Commits must use explicit file lists from the story's `Owned files` (never `git add <dir>/`, never `git add -A`). See `team-template.md` → Commit Discipline and Worktree Merge-Back Protocol.
+**Story serialization (prevents commit attribution race):** complete each story's full cycle — implement → QA pass → merge-back → commit → `git status` clean — BEFORE spawning the next story's teammate.
+
+**Merge-back:** after each story's QA passes, invoke `bash .aihaus/hooks/merge-back.sh --story S<NN> --manifest <path> --worktree <path>`. On exit 0, proceed to next story. On non-zero exit, HALT and surface refusal grammar to user per `aih-milestone/annexes/merge-back-recovery.md`.
 
 Update RUN-MANIFEST.md after each story: `manifest-append.sh --field story-record --payload "<story_id>|complete|<started>|<sha>|<verified>|<notes>"` + `manifest-append.sh --field progress-log --payload "Story [N] complete: [title]"`.
 
@@ -334,6 +336,6 @@ Each hook invocation below MUST land in the annex with the `--field` / `--payloa
 ## Guardrails
 
 - NEVER execute story code in the coordinator. Delegate everything via Agent tool to `implementer` / `frontend-dev` / `code-fixer` (worktree-isolated).
-- NEVER use `git add -A` or `git add <dir>/` during story commits. Always explicit file list from `Owned files`.
+- NEVER use `git add -A` or `git add <dir>/` during story commits. Use `merge-back.sh` (M017-S03) — it enforces per-file staging automatically.
 - NEVER edit RUN-MANIFEST.md or STATUS.md inline. Use `manifest-append.sh` + `phase-advance.sh` hooks (ADR-004).
 - Pause ONLY on TRUE blockers (see `_shared/autonomy-protocol.md`). "Estimate was wrong" is not a blocker.

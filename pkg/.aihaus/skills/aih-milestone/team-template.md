@@ -35,33 +35,17 @@ Owned files: [exact list from story — no overlaps]
 3. Teammates message lead before `git commit` to coordinate order
 4. Milestones with >5 stories: use `story/[slug]` branches merged by lead after QA
 
-## Commit Discipline (prevents cross-story attribution bugs)
-The coordinator MUST NEVER blanket-add during story commits. Specifically:
+## Commit Discipline + Worktree Merge-Back
 
-1. **Explicit file add only** — stage every file by name from the story's `Owned files` list:
-   ```bash
-   git add frontend/app/login.tsx frontend/components/LoginForm.tsx
-   ```
-   NEVER `git add frontend/`, `git add .`, or `git add -A`. Directory-level adds sweep pending work from other agents that merged back during the same window.
+Merge-back is driven by `merge-back.sh` (M017-S03 / ADR-M017-A). Invoke it after each story's QA passes:
 
-2. **Pre-commit verification** — before `git commit`, run `git status --porcelain` and confirm that exactly the Owned files are staged. Any extra files are orphans — stash them and surface to user:
-   ```bash
-   git status --porcelain | grep -v "^(M |A |D )" || echo "clean"
-   # If unstaged files exist outside Owned files, stash them first:
-   #   git stash push -m "unowned-during-S[N]" -- <unowned-files>
-   ```
+```bash
+bash .aihaus/hooks/merge-back.sh --story S<NN> --manifest <path> --worktree <path>
+```
 
-3. **Post-commit verification** — after `git commit`, `git status` must show a clean working tree before releasing the next story's teammate. If dirty, the coordinator must reconcile before proceeding.
+If the hook exits non-zero (exit 3=file-set mismatch, 12=worktree-missing, 6=lock-timeout), HALT the story and surface to user. Recovery paths: `aih-milestone/annexes/merge-back-recovery.md`.
 
-## Worktree Merge-Back Protocol
-Agents with `isolation: worktree` do their work in an isolated worktree. Merge-back into main tree must be precise:
-
-1. **Per-file copy** — coordinator copies only the exact files listed in `Owned files` from the worktree to main. Never `cp -R <worktree>/* <main>/`.
-   ```bash
-   cp /path/to/worktree/frontend/app/login.tsx /path/to/main/frontend/app/login.tsx
-   ```
-2. **Verify merge-back isolation** — after copy, `git -C <main> status` should show only the intended files changed. If other files appear modified, another agent's merge-back interleaved — serialize them.
-3. **Commit immediately after merge-back** — don't let merge-backed files sit uncommitted while a next story spawns. The gap is the race window that caused the attribution bug.
+Never `git add <dir>/`, `git add .`, or `git add -A` — `git-add-guard.sh` (M017-S04) blocks these on milestone branches.
 
 ## Path Override (CRITICAL)
 Every task must anchor the agent to the milestone directory so it never writes to
