@@ -240,7 +240,7 @@ fi
 #
 # Design: prompt fires once when the guard block is absent and --no-gitignore
 # is not set. Idempotent: guard present → skip silently. Non-interactive CI:
-# pass --no-gitignore to suppress. Per ADR-M015-B R3 mitigation.
+# pass --no-gitignore to suppress. Per ADR-M016-B R3 mitigation.
 _backfill_gitignore() {
   local target="$1"
   local gitignore="${target}/.gitignore"

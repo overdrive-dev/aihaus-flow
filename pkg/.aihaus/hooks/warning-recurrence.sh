@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# warning-recurrence.sh — SubagentStop hook (M015/S03)
+# warning-recurrence.sh — SubagentStop hook (M016/S03)
 # Fires on every SubagentStop; file-timestamp guard fires aggregation only once
 # per milestone close. Reads LEARNING-WARNINGS.jsonl rows for the current
 # milestone and rewrites warning-recurrence.jsonl (one row per distinct cluster).
 #
 # S00 verdict: noise_floor=100% → Jaccard-similarity primary grouping strategy.
 # Hash composition (sha256 of category|summary|source_agent[:16]) is the M016
-# real-data recheck fallback per ADR-M015-A Follow-up.
+# real-data recheck fallback per ADR-M016-A Follow-up.
 #
 # Jaccard clustering: tokenize `summary` field into 5-char n-grams;
 # compare against each cluster representative; threshold 0.8 = same cluster.
@@ -17,13 +17,13 @@
 #   last_seen_milestone, warning_uuids (list), schema_version
 #
 # Single-writer: this hook is the SOLE writer of .claude/audit/warning-recurrence.jsonl
-# (ADR-M015-A writer-table row). Mirrors ADR-M011-A rotation discipline.
+# (ADR-M016-A writer-table row). Mirrors ADR-M011-A rotation discipline.
 #
 # Opt-out:        AIHAUS_WARNING_RECURRENCE=0
 # Recursion guard: AIHAUS_WARNING_RECURRENCE_ACTIVE=1
 # Writer:         .claude/audit/warning-recurrence.jsonl
 #
-# ADR references: ADR-M015-A (data-plane single-writer), ADR-M011-A (JSONL
+# ADR references: ADR-M016-A (data-plane single-writer), ADR-M011-A (JSONL
 #   rotation), ADR-001 (orchestrator-only writes), ADR-M013-A (memory-ownership).
 set -uo pipefail
 

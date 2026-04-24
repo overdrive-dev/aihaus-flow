@@ -4,7 +4,7 @@
 # + output for patterns worth capturing, then appends per-warning rows to
 # .claude/audit/LEARNING-WARNINGS.jsonl.
 #
-# LEARNING-WARNINGS.jsonl schema v2 (M015/S02 additive):
+# LEARNING-WARNINGS.jsonl schema v2 (M016/S02 additive):
 #   v1 fields (9): warning_uuid, timestamp, milestone, story, source_agent,
 #                  category, summary, evidence, suggested_entry
 #   v2 additions (4): recurrence_count, last_seen_milestone, recurrence_hash,
@@ -24,7 +24,7 @@
 #
 # ADR references: ADR-M011-A (haiku probe + JSONL pattern), ADR-001 (writes
 #   from orchestrator process only), ADR-M013-A (memory-ownership),
-#   ADR-M015-A (schema v2 additive fields — M015/S02).
+#   ADR-M016-A (schema v2 additive fields — M016/S02).
 # Architecture ref: M013 architecture.md §2.2, §4.1, §9.
 set -uo pipefail
 
@@ -161,7 +161,7 @@ compute_hash() {
   fi
 }
 
-# compute_recurrence_hash — schema v2 (M015/S02)
+# compute_recurrence_hash — schema v2 (M016/S02)
 # Produces a 16-char hex fingerprint of category|summary|source_agent.
 # Used by warning-recurrence.sh (S03) for dedup / recurrence counting.
 # sha256 → shasum -a 256 → md5 fallback (mirrors compute_hash shape).
@@ -359,7 +359,7 @@ while IFS= read -r line; do
   # JSON-safe escaping helper
   _esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/ /g'; }
 
-  # Compute recurrence_hash for schema v2 (M015/S02)
+  # Compute recurrence_hash for schema v2 (M016/S02)
   # Hash of category|summary|source_agent — first 16 hex chars only.
   # recurrence_count is always 0 at emit time; warning-recurrence.sh (S03)
   # is responsible for incrementing via aggregation, not this writer.

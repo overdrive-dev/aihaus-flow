@@ -458,7 +458,7 @@ Set-Content -Path (Join-Path $Aihaus '.install-mode') -Value $Mode -NoNewline
 #
 # Design: prompt fires once when the guard block is absent and -NoGitignore
 # is not set. Idempotent: guard present -> skip silently. Non-interactive CI:
-# pass -NoGitignore to suppress. Per ADR-M015-B R3 mitigation.
+# pass -NoGitignore to suppress. Per ADR-M016-B R3 mitigation.
 function Invoke-BackfillGitignore {
     param([string]$TargetDir)
 

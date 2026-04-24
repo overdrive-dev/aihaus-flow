@@ -75,7 +75,7 @@ check_agents() {
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 22 .sh files (M015/S03 adds warning-recurrence.sh) ----
+# ---- Check 3: .aihaus/hooks/ has 22 .sh files (M016/S03 adds warning-recurrence.sh) ----
 check_hooks() {
   _start_check
   local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 22 .sh files"

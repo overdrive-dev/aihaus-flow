@@ -368,7 +368,7 @@ ${S03_IMPLICATION}
 - Fixture: tools/.out/s00-fixture.jsonl
 - Prompt SHA256: ${PROMPT_SHA256}
 - Output SHA256: ${OUTPUT_SHA256}
-- Story: S00 -- Synthetic-fixture noise-floor pre-check (M015)
+- Story: S00 -- Synthetic-fixture noise-floor pre-check (M016)
 VERDICT_EOF
 
 echo "==> Verdict written: ${VERDICT}"

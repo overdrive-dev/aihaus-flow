@@ -13,7 +13,7 @@
 # Exit 0 always (advisory tool — callers should not fail on telemetry errors).
 #
 # ADR references: ADR-M013-A (single-writer), ADR-001 (files-as-state),
-#   ADR-M015-B Follow-up (rotation rationale — length-cap prose).
+#   ADR-M016-B Follow-up (rotation rationale — length-cap prose).
 
 set -euo pipefail
 

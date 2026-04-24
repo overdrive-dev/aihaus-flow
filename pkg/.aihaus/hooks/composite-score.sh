@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# composite-score.sh — completion-protocol helper (M015/S04)
+# composite-score.sh — completion-protocol helper (M016/S04)
 # Computes 3 deterministic subscores per memory target and rewrites
 # .claude/audit/memory-scores.jsonl atomically (temp + mv).
 #
@@ -13,7 +13,7 @@
 #
 # Output: rewrites .claude/audit/memory-scores.jsonl (9-field schema v1).
 #         NEVER appends after first write — single-writer discipline per
-#         ADR-M015-A (F6 resolution).
+#         ADR-M016-A (F6 resolution).
 #
 # Schema (9 fields, schema_version 1):
 #   {"ts":"<iso8601>","milestone":"<M0XX>","target_kind":"<knowledge|decision|memory>",
@@ -37,16 +37,16 @@
 # is NOT written to JSONL. Composite lives only in curator fenced block.
 # Relevance is curator-judged at Step 3.6.
 #
-# decay_rate is hardcoded 0.0 at M015 (M018 calibrates from M017 snapshot).
+# decay_rate is hardcoded 0.0 at M016 (M018 calibrates from M017 snapshot).
 #
 # JSONL rotation: 10 MB / 10 000 lines per ADR-M011-A.
 #
 # Opt-out:     AIHAUS_COMPOSITE_SCORE=0
 # Writer guard: sole writer; set -uo pipefail; exit 0 always.
 #
-# ADR references: ADR-M015-A (single-writer F6), ADR-M011-A (rotation),
+# ADR references: ADR-M016-A (single-writer F6), ADR-M011-A (rotation),
 #   ADR-001 (orchestrator-only writes), ADR-M013-A (memory-ownership).
-# Architecture ref: M015 architecture.md §2.1, §7 S04 entry.
+# Architecture ref: M016 architecture.md §2.1, §7 S04 entry.
 set -uo pipefail
 
 # ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ _resolve_manifest() {
   [ -n "$m" ] || return 0
   MILESTONE_ID="$(awk '/^## Metadata$/ {on=1; next} /^## / {on=0} on && /^milestone:/ {sub(/^milestone:[[:space:]]*/, ""); gsub(/[[:space:]]/, ""); print; exit}' "$m" 2>/dev/null || echo "unknown")"
   [ -z "$MILESTONE_ID" ] && MILESTONE_ID="unknown"
-  # Extract numeric suffix from milestone id (e.g. M015 -> 15)
+  # Extract numeric suffix from milestone id (e.g. M016 -> 15)
   MILESTONE_NUMBER="$(printf '%s' "$MILESTONE_ID" | grep -oE '[0-9]+' | head -1 || echo 0)"
   [ -z "$MILESTONE_NUMBER" ] && MILESTONE_NUMBER=0
 }
@@ -270,7 +270,7 @@ TS="$(ts_iso)"
 
     # ------------------------------------------------------------------
     # 9.4 Emit JSONL row (9 fields; schema_version 1)
-    #     decay_rate hardcoded 0.0 per M015 lock (M018 calibrates).
+    #     decay_rate hardcoded 0.0 per M016 lock (M018 calibrates).
     #     No relevance_score, no composite_score — F6 resolution.
     # ------------------------------------------------------------------
     printf '{"ts":"%s","milestone":"%s","target_kind":"%s","target_id":"%s","recency_score":%s,"frequency_score":%s,"citation_score":%s,"decay_rate":0.0,"schema_version":1}\n' \

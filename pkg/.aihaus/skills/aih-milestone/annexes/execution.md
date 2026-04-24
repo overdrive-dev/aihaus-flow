@@ -177,16 +177,16 @@ MANIFEST_PATH="<abs-path-to-main-repo>/.aihaus/milestones/M0XX-<slug>/RUN-MANIFE
 
 Resolve `<abs-path>` from the milestone directory at spawn time (same variable the dispatcher itself uses for `manifest-append.sh` calls). Inherited by the spawned Agent's bash processes so `statusline-milestone.sh` and `autonomy-guard.sh` (paused short-circuit) see Q-4 case 1 hit even when the hook fires inside a git worktree.
 
-### Step E5.5 — Mid-milestone adversarial gate (ADR-M015-A governed)
+### Step E5.5 — Mid-milestone adversarial gate (ADR-M016-A governed)
 
 Invoked once per milestone, between Story Group N/2 and Story Group N/2+1
 (in milestones with >= 12 stories; skipped in smaller milestones).
 
-**Governing ADR:** ADR-M015-A (data-plane + file-plane evolution contracts). This step is
-the enforcement point where ADR-M015-A's mid-milestone reconciliation discipline fires.
+**Governing ADR:** ADR-M016-A (data-plane + file-plane evolution contracts). This step is
+the enforcement point where ADR-M016-A's mid-milestone reconciliation discipline fires.
 
 **Trigger condition:** after the N/2-th story's commit lands and `git status --porcelain` is
-clean, before spawning the N/2+1-th story's teammate. In M015's specific invocation,
+clean, before spawning the N/2+1-th story's teammate. In M016's specific invocation,
 this fires after S10 (data-plane review stories) and before S11a (file-plane stories start).
 
 **Sequential spawn** (same per-cohort budget constraints as Step E3 and Step E7;

@@ -16,7 +16,7 @@
 #   checked at hook entry) mirrors M011 autonomy-guard.sh shape.
 #
 # Audit: .claude/audit/context-inject.jsonl (ADR-M011-A rotation).
-# Cache: .claude/audit/context-inject.cache (M015-S07 5-min memoization).
+# Cache: .claude/audit/context-inject.cache (M016-S07 5-min memoization).
 #   Cache key: hash(target_agent_name | cohort_name).
 #   Cache hit skips S05 warning-recurrence read + S06 budget parse.
 #   Cache invalidated at milestone close (completion-protocol Step 6.5).
@@ -62,7 +62,7 @@ BUDGET_CONF="${SCRIPT_DIR}/context-budget.conf"
 ts_iso() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
 
 # ---------------------------------------------------------------------------
-# 3b. Per-cohort token budget loading (M015-S06)
+# 3b. Per-cohort token budget loading (M016-S06)
 #     Loads shipped defaults from context-budget.conf, then overlays
 #     .aihaus/.context-budgets sidecar (user-owned, never committed).
 #     Format (both files): key=value pairs; # comment lines skipped.
@@ -161,7 +161,7 @@ _write_audit() {
 }
 
 # ---------------------------------------------------------------------------
-# 4b. Cache helpers (M015-S07 — 5-min hash cache for context-inject)
+# 4b. Cache helpers (M016-S07 — 5-min hash cache for context-inject)
 #     Byte-identical transplant from learning-advisor.sh compute_hash +
 #     append_cache_entry; variable names changed: ADVISOR_* → INJECT_*.
 #     Cache key: hash(target_agent_name | cohort_name).
@@ -273,7 +273,7 @@ cohort="$(_resolve_cohort "$target_agent_name")"
 [ -z "$cohort" ] && cohort=":doer"
 
 # ---------------------------------------------------------------------------
-# 6b. Cache lookup (M015-S07) — cache key: hash(target_agent_name | cohort)
+# 6b. Cache lookup (M016-S07) — cache key: hash(target_agent_name | cohort)
 #     Hit: skip S05 warning-recurrence read + S06 budget parse; emit cached
 #          payload directly and exit.  Miss: fall through to full S05+S06 path.
 # ---------------------------------------------------------------------------
@@ -391,7 +391,7 @@ novel_task="0"
 [ -n "$task_description" ] && novel_task="$(_is_novel_task "$task_description" "$static_lines")"
 
 # ---------------------------------------------------------------------------
-# 8b. Recurring-warnings feedback loop (M015-S05)
+# 8b. Recurring-warnings feedback loop (M016-S05)
 #     Reads .claude/audit/warning-recurrence.jsonl (written by S03/warning-
 #     recurrence-tracker.sh). Filters rows with recurrence_count >= 3.
 #     Builds a labeled section injected into the pre-spawn context payload.
@@ -539,7 +539,7 @@ MED:.aihaus/memory/MEMORY.md — Agent memory index for cross-task context."
 fi
 
 # ---------------------------------------------------------------------------
-# 12. Build additionalContext block with per-cohort budget enforcement (M015-S06)
+# 12. Build additionalContext block with per-cohort budget enforcement (M016-S06)
 # ---------------------------------------------------------------------------
 header="## Required pre-read (context-inject.sh, M013)
 
@@ -587,7 +587,7 @@ if [ "$payload_bytes" -gt "$char_budget" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 12b. Cache-write (M015-S07) — store full_context payload in cache
+# 12b. Cache-write (M016-S07) — store full_context payload in cache
 #      Cache row: <unix_ts>|<hash>|<base64-encoded-payload>
 #      Only write when base64 is available; skip silently on failure.
 # ---------------------------------------------------------------------------
