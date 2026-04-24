@@ -52,7 +52,11 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, run before Step 1. Otherwis
 6. `bash .aihaus/hooks/manifest-append.sh --field progress-log --payload "Aborted by /aih-milestone --abort: <reason>"` — single-writer audit trail.
 7. Print: `Milestone <slug> aborted. Resume via /aih-resume to continue at paused state.`
 
-<!-- S02d: pre-dispatch worktree-reap scan + .session-<pid>.owned sentinel write + --skip-reap flag appends here -->
+**If `--skip-reap` is present or `AIHAUS_SKIP_REAP=1`:** suppress the pre-dispatch reap scan below.
+
+**Pre-dispatch housekeeping** (runs before `--execute` / start-intent dispatch; skipped by `--skip-reap`):
+- L4 reap scan: `bash .aihaus/hooks/worktree-reap.sh` — reports stale locked worktrees (>14d mtime); no-op if none.
+- Sentinel write: `mkdir -p .claude/worktrees && printf '' > ".claude/worktrees/.session-$$.owned"` — empty file created at skill entry; L1/coordinator appends worktree paths as they spawn; S02b L2 reader parses on session exit.
 
 **If `--execute` is present:** Skip Steps 2–5. Create a minimal draft from $ARGUMENTS, then follow `annexes/execution.md` (milestone execution pipeline — so `/aih-resume` can recover if interrupted). Print: "Executing directly (--execute flag). Use `/aih-milestone` without the flag for conversational gathering."
 

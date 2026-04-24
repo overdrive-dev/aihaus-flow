@@ -81,6 +81,8 @@ Present the triage summary. Ask:
 
 ## Phase 2 — Autonomous Execution
 
+**Pre-dispatch (L4/sentinel):** `bash .aihaus/hooks/worktree-reap.sh` — scans for stale locked worktrees (>14d mtime), no-op if none. Then write session sentinel: `mkdir -p .claude/worktrees && printf '' > ".claude/worktrees/.session-$$.owned"` — S02b L2 reader parses this on session exit.
+
 After the user approves:
 
 ### Phase 2 Task Tracking
