@@ -88,6 +88,7 @@ execution/reviews/
 execution/DECISIONS-LOG.md
 execution/KNOWLEDGE-LOG.md
 execution/AGENT-EVOLUTION.md    ← scaffolded here; Step 4.5 consume-check is non-trivially true
+execution/SKILL-EVOLUTION.md    ← scaffolded here unconditionally (M016/S11a); Step 4.6 consume-check
 RUN-MANIFEST.md       ← new checkpoint file
 ```
 
@@ -103,6 +104,21 @@ Each proposal must include: agent name, evidence (file path + symptom), proposed
 
 <!-- proposals appended below during execution -->
 ```
+
+`execution/SKILL-EVOLUTION.md` initial content (scaffold only; content accumulates during milestone execution via implementer/reviewer proposals):
+```markdown
+# Skill Evolution Proposals — [M0XX]-[slug]
+
+Skill-evolution proposals accumulated during milestone execution.
+Applied at completion-protocol Step 4.6 by the orchestrator.
+Each proposal must include: skill name, evidence (file path + symptom), proposed change, story that surfaced it.
+
+---
+
+<!-- proposals appended below during execution -->
+```
+
+Both `AGENT-EVOLUTION.md` and `SKILL-EVOLUTION.md` scaffolds are mechanically asserted by `scaffold-assert.sh` on the `planning→running` phase transition (exit 13 on absence or empty content — ADR-M016-B Step E2 gate).
 
 RUN-MANIFEST.md initial content (schema v2 per ADR-004 — see `pkg/.aihaus/templates/RUN-MANIFEST-schema-v2.md`):
 ```markdown
