@@ -221,7 +221,15 @@ Runs AFTER the completion report. Skips cleanly when `.aihaus/project.md` is abs
 ## Step 6.5: Invalidate context-inject cache
 `rm -f .claude/audit/context-inject.cache 2>/dev/null` — ensures M+1 milestone starts with fresh cache (M016-S07).
 
-## Step 6.7: Append telemetry row (M016-S08)
-Run `bash tools/telemetry-collect.sh <M0XX>` (maintainer-only; script lives in `tools/`, not shipped to downstream installs — R15 known limitation).
-Capture stdout (one markdown table row). Append to `.aihaus/memory/global/architecture.md` under the `<!-- telemetry-summary -->` marker.
-The script handles marker creation, idempotency, and row rotation autonomously; the orchestrator need only invoke it and confirm exit 0.
+## Step 6.7: Append telemetry row (M016-S08; ADR-M013-A compliant per BLOCKER-2 fix)
+Run `row=$(bash tools/telemetry-collect.sh <M0XX>)` (maintainer-only; script lives in `tools/`, not shipped to downstream installs — R15 known limitation).
+
+The script is **stdout-only** — it does NOT write to `.aihaus/memory/global/architecture.md`. The orchestrator (this main thread) is the SOLE writer of `.aihaus/memory/**` per ADR-M013-A. Apply the captured row via the Edit tool:
+
+1. Read `.aihaus/memory/global/architecture.md` (create if absent with `## Telemetry Summary` header + `<!-- telemetry-summary -->` marker + table header row).
+2. Inside the marker section, find any row matching `^| <M0XX> |` and remove it (idempotent replace).
+3. Append the new `$row` at the end of the table.
+4. If data rows now exceed 50, drop the oldest 10 (FIFO — preserves trend visibility, prevents unbounded growth per R4).
+5. Single Edit call rewrites the file.
+
+This pattern preserves single-writer discipline by construction — the script analyzes/aggregates, the orchestrator persists. Per BLOCKER-2 mitigation surfaced at S10 mid-milestone gate (Step E5.5 first invocation).

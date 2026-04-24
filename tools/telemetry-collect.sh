@@ -114,66 +114,18 @@ fi
 ROW="| ${MILESTONE_ID} | warnings:${warning_count} | recurrences:${recurrence_count} | cache_hit:${cache_hit_pct}% | curator_blocks:${curator_blocks} | adversarial_findings:${adversarial_count} |"
 printf '%s\n' "$ROW"
 
-# ---- 7. Append + rotate in architecture.md ------------------------------------
-# Creates the telemetry-summary section + marker if absent.
-# Idempotent: replaces existing row for same MILESTONE_ID.
-# Rotation: at 50 rows, removes the oldest 10 (FIFO — preserves trend visibility).
-if [ ! -f "$ARCH_FILE" ]; then
-  exit 0
-fi
-
-MARKER="<!-- telemetry-summary -->"
-HEADER="## Telemetry Summary"
-
-# Ensure the marker + table exist
-if ! grep -q "$MARKER" "$ARCH_FILE" 2>/dev/null; then
-  printf '\n%s\n%s\n\n| Milestone | Warnings | Recurrences | Cache Hit | Curator Blocks | Adversarial Findings |\n|-----------|----------|-------------|-----------|----------------|----------------------|\n' \
-    "$HEADER" "$MARKER" >> "$ARCH_FILE"
-fi
-
-TMP="${ARCH_FILE}.telemetry.tmp.$$"
-
-# Remove any existing row for this milestone (idempotent), then append new row.
-# Also enforce rotation: after append, if data rows > 50 drop oldest 10.
-awk -v milestone="$MILESTONE_ID" -v new_row="$ROW" \
-  -v marker="<!-- telemetry-summary -->" \
-  -v max_rows=50 -v drop_rows=10 '
-  BEGIN { in_table=0; wrote_row=0; row_count=0 }
-  {
-    # Once we see the marker, we are inside the telemetry table
-    if ($0 == marker) { in_table=1; print; next }
-    if (!in_table) { print; next }
-
-    # Skip existing row for this milestone (idempotency)
-    if ($0 ~ "^\\| " milestone " \\|") next
-
-    # Count data rows (lines starting with "| M")
-    if ($0 ~ /^\| M[0-9]/) row_count++
-
-    print
-  }
-  END {
-    # Append new row at the end of the table section
-    print new_row
-  }
-' "$ARCH_FILE" > "$TMP"
-
-# Rotation: count data rows; if > max_rows, drop oldest 10
-row_count_after=$(grep -cE '^\| M[0-9]' "$TMP" 2>/dev/null || echo 0)
-if [ "$row_count_after" -gt 50 ]; then
-  # Find first data row line number and remove 10 oldest data rows
-  python3 - "$TMP" "$drop_rows" <<'PYEOF' 2>/dev/null || true
-import sys
-fname = sys.argv[1]
-drop = int(sys.argv[2])
-lines = open(fname).readlines()
-data_indices = [i for i, l in enumerate(lines) if l.startswith('| M')]
-to_remove = set(data_indices[:drop])
-kept = [l for i, l in enumerate(lines) if i not in to_remove]
-open(fname, 'w').writelines(kept)
-PYEOF
-fi
-
-mv -f "$TMP" "$ARCH_FILE"
-
+# ---- 7. Stdout-only emit (BLOCKER-2 mitigation; ADR-M013-A compliance) -------
+# This script is now stdout-only. The orchestrator (completion-protocol Step 6.7)
+# captures stdout and applies the row to .aihaus/memory/global/architecture.md
+# via the Edit tool — preserving ADR-M013-A's single-writer invariant
+# (orchestrator main thread is the SOLE writer of .aihaus/memory/**).
+#
+# Orchestrator pattern at Step 6.7:
+#   row=$(bash tools/telemetry-collect.sh M0XX) || exit 1
+#   <orchestrator parses row, opens architecture.md via Edit tool, applies row
+#    inside <!-- telemetry-summary --> marker section with idempotent replace +
+#    50-row FIFO rotation policy>
+#
+# This script's responsibility ends with row emission. Architecture.md mutation,
+# marker creation, idempotency, and rotation are all orchestrator concerns.
 exit 0
