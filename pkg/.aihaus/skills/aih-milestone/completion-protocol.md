@@ -127,17 +127,35 @@ Write to `.aihaus/memory/` only.
 - Update `.aihaus/memory/MEMORY.md` index for each addition
 
 ## Step 4.5: Apply Agent Evolutions
-If `{milestone_dir}/execution/AGENT-EVOLUTION.md` exists and has proposals:
-1. Read each proposal
+For each milestone, read `{milestone_dir}/execution/AGENT-EVOLUTION.md` (scaffold
+guaranteed by `scaffold-assert.sh` per S11a — no existence check needed):
+
+1. Count proposal blocks in AGENT-EVOLUTION.md (`proposal_count`).
+   A proposal block is a `## Proposal:` heading and its body.
+   If `proposal_count` == 0, set `decision=empty`; skip to the audit-emit sub-step.
 2. For each proposal with clear evidence (not speculative):
    - Edit the agent's `.aihaus/agents/[name].md` file
    - Add the new rule, read directive, or protocol step
    - Preserve YAML frontmatter structure (do not change name, tools, model)
    - Do NOT remove Conflict Prevention reads or Self-Evolution sections
    - Log the change: "Agent [name] evolved: [one-line summary]"
-3. Skip proposals that are speculative or lack evidence
-4. Run `[[ -f tools/purity-check.sh ]] && bash tools/purity-check.sh || echo "purity-check unavailable (maintainer-only) — skipping"` — revert any evolution that fails
-5. Report: "[N] agent evolutions applied, [M] deferred"
+   - Increment `applied_count`
+3. Skip proposals that are speculative or lack evidence; increment `rejected_count` for each.
+4. Run `[[ -f tools/purity-check.sh ]] && bash tools/purity-check.sh || echo "purity-check unavailable (maintainer-only) — skipping"` — revert any evolution that fails (move reverted count from `applied_count` to `rejected_count`).
+5. Set `decision`:
+   - `applied` if `applied_count` >= 1
+   - `rejected` if `proposal_count` >= 1 and `applied_count` == 0
+   - `empty` if `proposal_count` == 0
+6. **Emit audit row** (unconditional — runs for all three outcomes):
+   Rotation check: if `.claude/audit/evolution-apply.jsonl` exists and has >= 10 000 lines
+   (or is >= 10 MB), atomically `mv .claude/audit/evolution-apply.jsonl .claude/audit/evolution-apply.jsonl.old` first.
+   Then append exactly one JSONL row via Edit tool:
+   ```json
+   {"ts":"<iso8601-utc>","milestone":"<M0XX>","decision":"applied|empty|rejected","proposal_count":<N>,"applied_count":<M>,"rejected_count":<K>,"schema_version":1}
+   ```
+   Single writer: orchestrator main thread at this step (ADR-M016-A writer-table).
+   Never emit from a hook or sub-agent.
+7. Report: "[N] agent evolutions applied, [M] deferred"
 
 ## Step 4.6: Update Living Architecture
 If any ADR was superseded during execution, or a new convention emerged:
