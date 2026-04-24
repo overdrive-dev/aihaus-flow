@@ -199,6 +199,17 @@
             "async": true
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/worktree-release-all.sh",
+            "timeout": 60,
+            "statusMessage": "Releasing session worktrees (L2)..."
+          }
+        ]
       }
     ],
     "Stop": [
