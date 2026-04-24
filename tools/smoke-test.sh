@@ -2109,6 +2109,49 @@ check_init_evolving_no_false_positive() {
   fi
 }
 
+# ---- filename-prefix guard on per-agent memory tree (M016-S15a) -------------
+# PURPOSE: Asserts no file in pkg/.aihaus/memory/agents/** or .aihaus/memory/agents/**
+# matches the reserved prefixes feedback_* or user_* (underscore). Agent filenames
+# use hyphens only (e.g. user-profiler.md); underscore prefixes are reserved for
+# the persistent agent memory system and must not bleed into per-agent memory files.
+# Hyphen distinction: user-profiler.md (hyphen) does NOT trigger; user_*.md (underscore) does.
+check_agent_memory_filename_prefix_guard() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: filename-prefix guard on per-agent memory tree (M016-S15a)"
+  local problems=()
+
+  # Check pkg/.aihaus/memory/agents/** (shipped package source)
+  local pkg_agents_mem="${PACKAGE_ROOT}/.aihaus/memory/agents"
+  if [[ -d "$pkg_agents_mem" ]]; then
+    local pkg_violations
+    pkg_violations=$(find "$pkg_agents_mem" -maxdepth 2 \( -name 'feedback_*' -o -name 'user_*' \) 2>/dev/null | head -20)
+    if [[ -n "$pkg_violations" ]]; then
+      while IFS= read -r v; do
+        problems+=("pkg reserved prefix violation: ${v#${PACKAGE_ROOT}/}")
+      done <<< "$pkg_violations"
+    fi
+  fi
+
+  # Check .aihaus/memory/agents/** (dogfood install — repo root, sibling of pkg/)
+  local repo_root="${PACKAGE_ROOT}/.."
+  local dogfood_agents_mem="${repo_root}/.aihaus/memory/agents"
+  if [[ -d "$dogfood_agents_mem" ]]; then
+    local df_violations
+    df_violations=$(find "$dogfood_agents_mem" -maxdepth 2 \( -name 'feedback_*' -o -name 'user_*' \) 2>/dev/null | head -20)
+    if [[ -n "$df_violations" ]]; then
+      while IFS= read -r v; do
+        problems+=("dogfood reserved prefix violation: ${v#${repo_root}/}")
+      done <<< "$df_violations"
+    fi
+  fi
+
+  if [[ ${#problems[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${problems[@]}"
+  fi
+}
+
 # ---- Selectable sub-mode dispatcher (--check <name> --skill <slug>) ---------
 # PURPOSE: invoked by completion-protocol Step 4.6 pre-apply gate before each
 # skill evolution is committed. Runs only the named check against the named skill;
@@ -2227,6 +2270,7 @@ check_resume_substep_fixture
 check_bash_guard_baseline
 check_read_guard_exists
 check_init_evolving_no_false_positive
+check_agent_memory_filename_prefix_guard
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then

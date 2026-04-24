@@ -226,6 +226,20 @@ Pre-existing cross-milestone aggregate files (`common-findings.md`, `false-posit
 NOT touched by Step 4.7; those are governed by the ADR-M013-A scoped-writer whitelist
 (reviewer, code-reviewer, verifier, plan-checker may append directly).
 
+## Step 4.7b: Apply Per-Agent Memory Blocks
+For each agent that returned an aihaus:agent-memory block during this milestone:
+1. Parse the block (awk range-match between <!-- aihaus:agent-memory --> markers)
+2. Verify path: line targets .aihaus/memory/agents/<agent-name>.md
+3. Verify <agent-name> is hyphen-only (no underscore — filename-prefix-guard precondition)
+4. If file does not exist: create it with the body
+5. If file exists: append with ISO-8601 timestamp separator (`\n\n---\n_appended <ts>_\n\n`)
+6. Audit: append row to .claude/audit/curator-apply.jsonl (existing writer; same schema)
+
+Empty block (no body lines): treat as no-op; do not emit empty file.
+
+**Orchestrator is SOLE writer** of `.aihaus/memory/agents/**`. ADR-M013-A amendment (S13)
++ ADR-M016-B (S16) name this writer. Never delegate file writes to the emitting agent.
+
 ## Step 5: Report Completion
 Present to the user:
 ```

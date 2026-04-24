@@ -58,3 +58,19 @@ If the invocation prompt includes an Attachments block, Read the files (mockups,
 - Read `.aihaus/project.md` for the project's component and route directories
 - Follow existing component patterns in the project's frontend directory
 - Minimize friction: users are often in a hurry — minimize tap count
+
+## Per-agent memory (optional)
+
+At return, you MAY emit an aihaus:agent-memory fenced block when your work
+produced a finding, decision, or gotcha the next invocation of your role
+would benefit from. When in doubt, omit. See pkg/.aihaus/skills/_shared/per-agent-memory.md for contract.
+
+Format:
+
+    <!-- aihaus:agent-memory -->
+    path: .aihaus/memory/agents/<your-agent-name>.md
+    ## <date> <slug>
+    **Role context:** <what this agent learned about this project>
+    **Recurring patterns:** <...>
+    **Gotchas:** <...>
+    <!-- aihaus:agent-memory:end -->

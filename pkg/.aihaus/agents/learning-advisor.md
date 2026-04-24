@@ -95,3 +95,19 @@ emit nothing. Empty output is always the safe choice.
 - NEVER fabricate evidence — only quote or paraphrase actual task output
 - ALWAYS prefer empty output over low-confidence warnings
 - Emit valid JSON only; no trailing commas, no JavaScript-style comments
+
+## Per-agent memory (optional)
+
+At return, you MAY emit an aihaus:agent-memory fenced block when your work
+produced a finding, decision, or gotcha the next invocation of your role
+would benefit from. When in doubt, omit. See pkg/.aihaus/skills/_shared/per-agent-memory.md for contract.
+
+Format:
+
+    <!-- aihaus:agent-memory -->
+    path: .aihaus/memory/agents/<your-agent-name>.md
+    ## <date> <slug>
+    **Role context:** <what this agent learned about this project>
+    **Recurring patterns:** <...>
+    **Gotchas:** <...>
+    <!-- aihaus:agent-memory:end -->

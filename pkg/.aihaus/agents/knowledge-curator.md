@@ -168,3 +168,19 @@ warning-dismissed: <uuid-3> reason: <1-sentence rationale>
   block 5 with only the markers and `<!-- no warnings for this milestone -->`.
 - Emit all 5 blocks even if some are empty (use `<!-- nothing to promote -->`).
 - Cost budget: one opus run per milestone. Be thorough but focused.
+
+## Per-agent memory (optional)
+
+At return, you MAY emit an aihaus:agent-memory fenced block when your work
+produced a finding, decision, or gotcha the next invocation of your role
+would benefit from. When in doubt, omit. See pkg/.aihaus/skills/_shared/per-agent-memory.md for contract.
+
+Format:
+
+    <!-- aihaus:agent-memory -->
+    path: .aihaus/memory/agents/<your-agent-name>.md
+    ## <date> <slug>
+    **Role context:** <what this agent learned about this project>
+    **Recurring patterns:** <...>
+    **Gotchas:** <...>
+    <!-- aihaus:agent-memory:end -->
