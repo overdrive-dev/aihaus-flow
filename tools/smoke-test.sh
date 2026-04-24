@@ -2073,6 +2073,77 @@ check_read_guard_exists() {
   fi
 }
 
+# ---- Selectable sub-mode dispatcher (--check <name> --skill <slug>) ---------
+# PURPOSE: invoked by completion-protocol Step 4.6 pre-apply gate before each
+# skill evolution is committed. Runs only the named check against the named skill;
+# exits 0 on pass, 1 on fail. Does NOT bump CHECK_NUMBER or affect FAILURES.
+#
+# Usage:
+#   bash tools/smoke-test.sh --check skill-line-cap --skill aih-milestone
+#   bash tools/smoke-test.sh --check skill-frontmatter --skill aih-plan
+#
+# skill-line-cap    : asserts pkg/.aihaus/skills/<slug>/SKILL.md is <= 200 lines
+# skill-frontmatter : asserts SKILL.md declares `name: aih-<slug>` in frontmatter
+_run_check_submode() {
+  local check_name="$1"
+  local skill_slug="$2"
+  local skill_file="${PACKAGE_ROOT}/.aihaus/skills/${skill_slug}/SKILL.md"
+
+  if [[ ! -f "$skill_file" ]]; then
+    printf "[FAIL] --check %s: SKILL.md not found at %s\n" "$check_name" "$skill_file" >&2
+    exit 1
+  fi
+
+  case "$check_name" in
+    skill-line-cap)
+      local lines
+      lines=$(wc -l < "$skill_file" | tr -d ' ')
+      if [[ "$lines" -le 200 ]]; then
+        printf "[PASS] skill-line-cap: %s (%s lines)\n" "$skill_slug" "$lines"
+        exit 0
+      else
+        printf "[FAIL] skill-line-cap: %s has %s lines (max 200)\n" "$skill_slug" "$lines" >&2
+        exit 1
+      fi
+      ;;
+    skill-frontmatter)
+      if head -20 "$skill_file" | grep -Eq "^name:[[:space:]]*aih-${skill_slug#aih-}"; then
+        printf "[PASS] skill-frontmatter: %s declares name: aih-*\n" "$skill_slug"
+        exit 0
+      else
+        printf "[FAIL] skill-frontmatter: %s missing or malformed 'name: aih-<slug>'\n" "$skill_slug" >&2
+        exit 1
+      fi
+      ;;
+    *)
+      printf "[FAIL] unknown --check value '%s' (known: skill-line-cap, skill-frontmatter)\n" "$check_name" >&2
+      exit 1
+      ;;
+  esac
+}
+
+# Parse --check / --skill flags before the full-suite run
+_CHECK_NAME=""
+_CHECK_SKILL=""
+_remaining_args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check) _CHECK_NAME="$2"; shift 2 ;;
+    --skill) _CHECK_SKILL="$2"; shift 2 ;;
+    *) _remaining_args+=("$1"); shift ;;
+  esac
+done
+
+if [[ -n "$_CHECK_NAME" ]]; then
+  if [[ -z "$_CHECK_SKILL" ]]; then
+    printf "[FAIL] --check requires --skill <slug>\n" >&2
+    exit 1
+  fi
+  _run_check_submode "$_CHECK_NAME" "$_CHECK_SKILL"
+  # _run_check_submode always exits; unreachable
+  exit 1
+fi
+
 # ---- Run everything ---------------------------------------------------------
 printf "aihaus package smoke test\n"
 printf "Package root: %s\n\n" "$PACKAGE_ROOT"

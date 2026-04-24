@@ -157,7 +157,42 @@ guaranteed by `scaffold-assert.sh` per S11a — no existence check needed):
    Never emit from a hook or sub-agent.
 7. Report: "[N] agent evolutions applied, [M] deferred"
 
-## Step 4.6: Update Living Architecture
+## Step 4.6: Apply Skill Evolutions (M016-S12)
+Read `{milestone_dir}/execution/SKILL-EVOLUTION.md` (scaffold guaranteed by `scaffold-assert.sh`
+per S11a — no existence check needed). Each proposal block is a `## Proposal:` heading and its body.
+
+1. Count proposal blocks (`proposal_count`).
+   If `proposal_count` == 0, set `decision=empty`; skip to the audit-emit sub-step.
+2. For each proposal with clear evidence (not speculative):
+   a. Stage the proposed `pkg/.aihaus/skills/<slug>/SKILL.md` edit (do not commit yet).
+   b. **PRE-APPLY SMOKE-TEST GATE (mandatory — no `--skip-gate` opt-out):**
+      - Run: `bash tools/smoke-test.sh --check skill-line-cap --skill <slug>`
+      - Run: `bash tools/smoke-test.sh --check skill-frontmatter --skill <slug>`
+      - On **either FAIL**: revert the staged edit (restore the file to its pre-edit content
+        via a counter-Edit), write a `.claude/audit/skill-evolution-apply.jsonl` row with
+        `"decision":"rejected"`, and log "Skill [slug] evolution rejected: [check that failed]".
+        Increment `rejected_count`.
+   c. On **both checks PASS**: commit the staged edit, write a
+      `.claude/audit/skill-evolution-apply.jsonl` row with `"decision":"applied"`,
+      and log "Skill [slug] evolved: [one-line summary]".
+      Increment `applied_count`.
+3. Skip proposals that are speculative or lack evidence; increment `rejected_count` for each.
+4. Set `decision`:
+   - `applied` if `applied_count` >= 1
+   - `rejected` if `proposal_count` >= 1 and `applied_count` == 0
+   - `empty` if `proposal_count` == 0
+5. **Emit audit row** (unconditional — runs for all three outcomes):
+   Rotation check: if `.claude/audit/skill-evolution-apply.jsonl` exists and has >= 10 000 lines
+   (or is >= 10 MB), atomically `mv .claude/audit/skill-evolution-apply.jsonl .claude/audit/skill-evolution-apply.jsonl.old` first.
+   Then append exactly one JSONL summary row via Edit tool:
+   ```json
+   {"ts":"<iso8601-utc>","milestone":"<M0XX>","decision":"applied|empty|rejected","proposal_count":<N>,"applied_count":<M>,"rejected_count":<K>,"schema_version":1}
+   ```
+   Single writer: orchestrator main thread at this step (ADR-M016-A writer-table).
+   Never emit from a hook or sub-agent.
+6. Report: "[N] skill evolutions applied, [M] deferred"
+
+## Step 4.6b: Update Living Architecture
 If any ADR was superseded during execution, or a new convention emerged:
 1. Update `.aihaus/decisions.md` with superseded status on old ADRs
 2. Update `.aihaus/knowledge.md` with new conventions
