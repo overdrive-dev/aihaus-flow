@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.21.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.22.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
