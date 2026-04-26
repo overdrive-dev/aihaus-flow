@@ -10,26 +10,45 @@
 #
 # Usage:
 #   bash worktree-reconcile.sh [--main-branch <name>] [--dry-run]
+#   bash worktree-reconcile.sh --reap-locked [--age-days N] [--confirm]
 #
 # Env:
-#   AIHAUS_MAIN_BRANCH  — override main-branch detection (before flag parsing)
+#   AIHAUS_MAIN_BRANCH        — override main-branch detection (before flag parsing)
 #   AIHAUS_RECONCILE_DRY_RUN=1 — emit Category A action as echo, do not prune
+#   AIHAUS_REAP_DRY_RUN=1     — for --reap-locked mode: print would-delete list only
 #
 # Exit codes: 0 ok (including no-worktrees + non-git-dir cases)
 #
-# Called standalone or by /aih-resume (S09).
-# Refs: M014/S08, K-002, ADR-M014-B §F.
+# Functions exported for sourcing:
+#   classify_only <worktree-path>  — returns A/B/C to stdout; exit 0 on recognised path,
+#                                    non-zero on unrecognised path.
+#
+# --reap-locked mode (S02a M017 / S02d-reusable):
+#   Iterates locked worktrees. Checks mtime of .git/worktrees/<name>/locked sentinel.
+#   Prunes entries older than --age-days (default 14) when --confirm is passed.
+#   Respects AIHAUS_REAP_DRY_RUN=1 (print would-delete list, no deletion).
+#   Emits [REAPED] marker on success. Windows path-lock → Category-C fallthrough.
+#
+# Called standalone or by /aih-resume (S09), or sourced by worktree-release.sh.
+# Refs: M014/S08, M017/S02a, K-002, ADR-M014-B §F, ADR-M017-B.
 
 set -euo pipefail
 
 # ---- argument parsing -------------------------------------------------------
 MAIN_BRANCH="${AIHAUS_MAIN_BRANCH:-}"
 DRY_RUN="${AIHAUS_RECONCILE_DRY_RUN:-0}"
+REAP_DRY_RUN="${AIHAUS_REAP_DRY_RUN:-0}"
+REAP_MODE=0
+REAP_AGE_DAYS=14
+REAP_CONFIRM=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --main-branch) MAIN_BRANCH="$2"; shift 2 ;;
-    --dry-run)     DRY_RUN=1; shift ;;
+    --main-branch)  MAIN_BRANCH="$2"; shift 2 ;;
+    --dry-run)      DRY_RUN=1; shift ;;
+    --reap-locked)  REAP_MODE=1; shift ;;
+    --age-days)     REAP_AGE_DAYS="$2"; shift 2 ;;
+    --confirm)      REAP_CONFIRM=1; shift ;;
     *) echo "worktree-reconcile.sh: unknown arg $1" >&2; exit 0 ;;
   esac
 done
@@ -58,6 +77,141 @@ fi
 MAIN_HEAD="$(git rev-parse "${MAIN_BRANCH}" 2>/dev/null || true)"
 if [ -z "$MAIN_HEAD" ]; then
   echo "worktree-reconcile.sh: cannot resolve ${MAIN_BRANCH} HEAD; skipping reconcile" >&2
+  exit 0
+fi
+
+# ---- classify_only function -------------------------------------------------
+# Classifies a single worktree path as A, B, or C.
+# Returns via stdout + exit 0 on recognised path.
+# Returns exit 1 on unrecognised or error (path doesn't exist, not a worktree, etc.).
+# Does NOT prune or act — read-only assessment only.
+classify_only() {
+  local wt_path="$1"
+
+  # Validate the path exists
+  if [ -z "$wt_path" ] || [ ! -d "$wt_path" ]; then
+    echo "worktree-reconcile.sh: classify_only: path not found: ${wt_path}" >&2
+    return 1
+  fi
+
+  # Check it's a known worktree (appears in git worktree list)
+  if ! git worktree list --porcelain 2>/dev/null | grep -q "^worktree ${wt_path}$"; then
+    echo "worktree-reconcile.sh: classify_only: path is not a git worktree: ${wt_path}" >&2
+    return 1
+  fi
+
+  # Get SHA for this worktree
+  local wt_sha
+  wt_sha="$(git worktree list --porcelain 2>/dev/null | awk -v p="${wt_path}" '
+    /^worktree / { if ($0 == "worktree " p) { found=1; next } else { found=0 } }
+    found && /^HEAD / { sub(/^HEAD /, ""); print; exit }
+  ')"
+
+  if [ -z "$wt_sha" ]; then
+    echo "worktree-reconcile.sh: classify_only: cannot resolve HEAD for: ${wt_path}" >&2
+    return 1
+  fi
+
+  # Dirty / clean detection
+  local dirty_files
+  dirty_files="$(git -C "${wt_path}" status --porcelain 2>/dev/null | wc -l | tr -d ' ')" || dirty_files="1"
+
+  if [ "${dirty_files}" -gt 0 ]; then
+    echo "C"
+    return 0
+  fi
+
+  # Clean: check reachability from main
+  local commits_not_on_main
+  commits_not_on_main="$(git rev-list --count "${MAIN_BRANCH}..${wt_sha}" 2>/dev/null || echo "1")"
+
+  if [ "${commits_not_on_main}" -eq 0 ]; then
+    echo "A"
+  else
+    echo "B"
+  fi
+  return 0
+}
+
+# ---- --reap-locked mode -----------------------------------------------------
+# When called with --reap-locked: iterate locked worktrees, check lock sentinel
+# mtime, and prune those older than REAP_AGE_DAYS when --confirm is given.
+if [ "${REAP_MODE}" = "1" ]; then
+  GIT_DIR="$(git rev-parse --git-dir 2>/dev/null || true)"
+  if [ -z "${GIT_DIR}" ]; then
+    echo "worktree-reconcile.sh: --reap-locked: cannot resolve .git dir" >&2
+    exit 0
+  fi
+  WORKTREES_DIR="${GIT_DIR}/worktrees"
+  if [ ! -d "${WORKTREES_DIR}" ]; then
+    # No worktrees registered at all — silent exit
+    exit 0
+  fi
+
+  NOW_EPOCH="$(date +%s)"
+  AGE_CUTOFF_SEC=$(( REAP_AGE_DAYS * 86400 ))
+
+  # Iterate each entry under .git/worktrees/
+  for wt_name_dir in "${WORKTREES_DIR}"/*/; do
+    [ -d "${wt_name_dir}" ] || continue
+    LOCK_FILE="${wt_name_dir}locked"
+    [ -f "${LOCK_FILE}" ] || continue
+
+    # Resolve worktree path from .git/worktrees/<name>/gitdir
+    GITDIR_FILE="${wt_name_dir}gitdir"
+    if [ ! -f "${GITDIR_FILE}" ]; then
+      continue
+    fi
+    # gitdir contains relative path like ../../.claude/worktrees/agent-xxxx/.git
+    WT_GITDIR_REL="$(cat "${GITDIR_FILE}")"
+    # The worktree path is the parent of the .git file
+    WT_PATH_CANDIDATE="$(dirname "$(dirname "${GIT_DIR}/${WT_GITDIR_REL}")")"
+    # Normalize
+    WT_PATH_CANDIDATE="$(cd "${WT_PATH_CANDIDATE}" 2>/dev/null && pwd -P 2>/dev/null || echo "")"
+
+    # Check lock sentinel mtime
+    LOCK_MTIME="$(stat -c %Y "${LOCK_FILE}" 2>/dev/null || stat -f %m "${LOCK_FILE}" 2>/dev/null || echo "${NOW_EPOCH}")"
+    LOCK_AGE=$(( NOW_EPOCH - LOCK_MTIME ))
+
+    if [ "${LOCK_AGE}" -lt "${AGE_CUTOFF_SEC}" ]; then
+      # Live lock, skip
+      continue
+    fi
+
+    if [ "${REAP_DRY_RUN}" = "1" ] || [ "${REAP_CONFIRM}" = "0" ]; then
+      # Dry-run or no --confirm: report only
+      printf '[REAP-CANDIDATE] %s — lock age %d days (sentinel: %s)\n' \
+        "${WT_PATH_CANDIDATE:-${wt_name_dir}}" "$(( LOCK_AGE / 86400 ))" "${LOCK_FILE}"
+      continue
+    fi
+
+    # --confirm is set and lock is old enough — attempt reap
+    if [ -n "${WT_PATH_CANDIDATE}" ] && [ -d "${WT_PATH_CANDIDATE}" ]; then
+      # Attempt unlock + remove
+      if git worktree unlock "${WT_PATH_CANDIDATE}" 2>/dev/null; then
+        if git worktree remove --force "${WT_PATH_CANDIDATE}" 2>/dev/null; then
+          printf '[REAPED] %s — pruned (lock age %d days).\n' \
+            "${WT_PATH_CANDIDATE}" "$(( LOCK_AGE / 86400 ))" >&2
+        else
+          # Windows path-lock Category-C fallthrough (reconcile.sh:146-147 pattern)
+          printf '[CATEGORY C] %s — remove failed after unlock; preserved as safety fallback.\n' \
+            "${WT_PATH_CANDIDATE}"
+          # Re-lock to restore state
+          git worktree lock "${WT_PATH_CANDIDATE}" 2>/dev/null || true
+        fi
+      else
+        printf '[CATEGORY C] %s — unlock failed; preserved (Windows path-lock or active use).\n' \
+          "${WT_PATH_CANDIDATE:-${wt_name_dir}}"
+      fi
+    else
+      # Path doesn't exist on disk — prune stale registration only
+      if git worktree unlock "${WT_PATH_CANDIDATE:-}" 2>/dev/null || true; then
+        git worktree prune 2>/dev/null || true
+        printf '[REAPED] %s — stale registration pruned.\n' "${WT_PATH_CANDIDATE:-${wt_name_dir}}" >&2
+      fi
+    fi
+  done
+
   exit 0
 fi
 

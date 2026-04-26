@@ -305,3 +305,11 @@ The script is **stdout-only** — it does NOT write to `.aihaus/memory/global/ar
 5. Single Edit call rewrites the file.
 
 This pattern preserves single-writer discipline by construction — the script analyzes/aggregates, the orchestrator persists. Per BLOCKER-2 mitigation surfaced at S10 mid-milestone gate (Step E5.5 first invocation).
+
+## §M018 Dogfood Gate (M017 acceptance #5)
+
+M018 (next milestone) MUST complete every `merge-back.sh` invocation with zero manual
+interventions — no `--drop`, no `--abort`, no MANIFEST edit+retry. Any refusal requires
+surface to user per ADR-M017-A recovery paths. If M018 closes clean, M017 success criterion
+#5 (dogfood gate) is discharged and can be removed from future milestone acceptance templates.
+If M018 surfaces refusals, log patterns to KNOWLEDGE-LOG.md for rule tightening.

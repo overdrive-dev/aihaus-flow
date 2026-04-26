@@ -49,6 +49,17 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/git-add-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking git stage safety..."
+          }
+        ]
+      },
+      {
         "matcher": "Write|Edit",
         "hooks": [
           {
@@ -176,6 +187,17 @@
             "statusMessage": "Aggregating warning recurrence..."
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/worktree-release.sh",
+            "timeout": 30,
+            "statusMessage": "Releasing worktree lock (L1)..."
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -186,6 +208,17 @@
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-end.sh",
             "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/worktree-release-all.sh",
+            "timeout": 60,
+            "statusMessage": "Releasing session worktrees (L2)..."
           }
         ]
       }

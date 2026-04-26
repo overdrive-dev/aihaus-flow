@@ -74,6 +74,7 @@ Present a single message containing:
 **STOP HERE. Wait for the user to respond.**
 
 ## Phase 2: Autonomous Execution (zero human input after approval)
+**Pre-dispatch (L4/sentinel):** `bash .aihaus/hooks/worktree-reap.sh` (scan, no-op if none); `mkdir -p .claude/worktrees && printf '' > ".claude/worktrees/.session-$$.owned"` (sentinel for S02b L2 reader).
 
 > **Execution autonomy** (enforced via `autonomy-guard.sh` Stop hook): NEVER emit `Checkpoint honesto`, `Opção sua`, `Qual prefere?`, `(a)/(b)/(c)`, numbered `1. →` menus, `Pausing to...`, `Three realistic forks`, `Realista: Nh+`, `retoma com /aih-...`. Pick safer default per `_shared/autonomy-protocol.md` TRUE blocker test (L15-31), log in RUN-MANIFEST, proceed silently. Hook blocks forbidden patterns.
 

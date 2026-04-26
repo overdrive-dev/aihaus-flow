@@ -122,6 +122,29 @@ After completing a review, if you discovered a recurring blind spot:
 - Be specific: file paths, line numbers, concrete recommendations
 - The plan author may be wrong — that's what you're checking for
 
+## Same-File Cross-Story Rule (M017-S06 / ADR-M017-C)
+
+For multi-story milestone reviews (`/aih-milestone` E3 gate), fan out across
+`stories/**/*.md`, parse each story's `## Owned Files` section, set-intersect pairs.
+Emit BLOCKER on any overlap unless a `cross-story-file:` declaration exists in the
+milestone plan AND D3 is viable (heuristic: `pkg/.aihaus/hooks/worktree-branch-from.sh`
+exists). Currently D3 is non-viable (Path B active post-M017 S01); any overlap is a
+BLOCKER regardless of declaration.
+
+BLOCKER format:
+```
+BLOCKER: Owned-file overlap detected.
+  File: <path>
+  Stories: S<a>, S<b>
+  Resolution: merge S<a>+S<b> into one story, or add 'cross-story-file:' declaration.
+```
+
+See `pkg/.aihaus/skills/aih-milestone/annexes/same-file-rule.md` for grammar, algorithm,
+D3-viability gate, M017 grandfather clause, and re-enablement path.
+
+Do NOT mutate agent frontmatter fields when applying this rule; `owned_paths:` is
+explicitly NOT a frontmatter field (PATTERNS gap #3 — rule reads story `.md` files only).
+
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

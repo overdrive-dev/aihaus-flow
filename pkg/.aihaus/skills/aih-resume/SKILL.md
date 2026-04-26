@@ -53,13 +53,16 @@ substep — i.e., there is unfinished work.
 Invoke:
 ```bash
 bash .aihaus/hooks/worktree-reconcile.sh
+bash .aihaus/hooks/worktree-reap.sh
 ```
 
 Collect stdout:
 - **Category B** entries: cherry-pick recipes — surface to user (do not auto-execute).
 - **Category C** entries: dirty preserved worktrees — surface to user (do not auto-resolve).
+- **REAP-CANDIDATE** lines: stale lock-marker worktrees (>14d) — surface to user; do not auto-prune.
 
-Category A pruning occurs silently inside the hook.
+Category A pruning occurs silently inside the reconcile hook.
+L4 reap scan is non-destructive by default; prune only with explicit `--confirm-reap`.
 
 ### 4. Cross-check checkpoint vs worktree state
 

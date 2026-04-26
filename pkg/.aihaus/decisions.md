@@ -1449,3 +1449,149 @@ Single-shot during M014 Bloco 2 (S06-S10); no phased rollout for the substrate. 
 - Supersedes ADR-005 (M006, 2026-04-14)
 - Reconciles ADR-M014-A (M014/S05 already partially removed Cursor via DSP hard-reject)
 - ADR-M014-B LD-10 note: "REMOVE legacy-mode in M015 if no usage reported" -- this milestone is the removal gate
+
+---
+
+## ADR-M017-A — Merge-back as script, not prose (C3)
+
+**Status:** Accepted
+**Date:** 2026-04-24
+**Milestone:** M017
+**Extends:** ADR-M014-B §F.(c) (worktree reconciliation) — extended with dedicated merge-back writer; ADR-004 single-writer discipline (checkpoint wrapping reused)
+**Pattern:** ADR-M014-B reference-and-extend grammar; K-004 mapfile/awk Owned-Files parsing
+
+### Context
+
+- Pre-M017, merge-back from `isolation: worktree` agents to `main` was **100% operator narrative** — `pkg/.aihaus/skills/aih-milestone/team-template.md:38-64` and `pkg/.aihaus/skills/aih-milestone/annexes/execution.md:337-338` described per-file `cp` + explicit `git add` in prose; no code enforced it.
+- **2026-04-12 incident recurrence:** during a prior milestone, an implementer ran `git add frontend/` from a worktree also holding another story's WIP. The sweep crossed story boundaries. Feedback memory `worktree_merge_back_race.md` recorded the lesson but not a structural fix.
+- K-002 documented the root cause (worktrees branch off `main`) but left cross-story file-set detection to operator eyeballing.
+- ADR-M014-B §F.(c) classified A/B/C at resume time but did not prescribe the merge-back path itself.
+
+### Decision
+
+(a) **`pkg/.aihaus/hooks/merge-back.sh` (S03, `fb7a36a`) is the sole merge-back path.** Invocation: `bash .aihaus/hooks/merge-back.sh --story S<NN> --manifest <path>`. Reads Owned Files via `mapfile -t` + awk; per-file `cp`; explicit `git add <file>` loop; diffs `git diff --cached --name-only` against expected before committing.
+
+(b) **Stable refusal grammar on exit 3:** `MERGE_BACK_REFUSED story=S<NN> reason=<unexpected-files|missing-files|cross-story-spill> expected=<...> actual=<...> worktree=<path>`. Machine-stable. Additional exit codes: 0 ok, 2 bad args, 6 lock-timeout, 12 worktree-dir-missing.
+
+(c) **Checkpoint wrapping extends ADR-004 single-writer.** Every invocation bracketed by `manifest-append.sh --checkpoint-enter/exit merge-back:S<NN>`. `manifest-append.sh` remains sole writer of `## Checkpoints`.
+
+(d) **Companion defense: `git-add-guard.sh` (S04, `657cbe1`)** — registered AFTER `bash-guard.sh`. Blocks `git add -A`, `--all`, `.`, `<dir>/`, `-u`, `-p`, `git commit -am`, `git commit -a` on `milestone/*`/`feature/*` branches. Opt-out `AIHAUS_GIT_ADD_GUARD=0`.
+
+(e) **Recovery paths in `pkg/.aihaus/skills/aih-milestone/annexes/merge-back-recovery.md`:** `--drop <file>`, `--abort`, MANIFEST edit + retry.
+
+### Consequences
+
+**Positive.** 2026-04-12 incident class structurally prevented. Single writer of file-set contract. Checkpoint wrapping gives `/aih-resume` visibility.
+
+**Negative.** 2 new hooks + 1 annex. `git add -p` blocked on milestone/feature branches (per-command opt-out). Shell-alias bypass not solved.
+
+**Neutral.** ADR-004 preserved; ADR-M014-B classification unchanged.
+
+### Rollback
+
+Env bypass `AIHAUS_MERGE_BACK_GUARD=0` + `AIHAUS_GIT_ADD_GUARD=0` restores pre-M017 prose. Full revert: `git revert fb7a36a 657cbe1`.
+
+### Migration
+
+Single-shot within M017. Existing worktrees handled by ADR-M017-B §L4 reap.
+
+### Related
+
+ADR-004 (extended); ADR-M014-B (extended); ADR-M017-B (sibling); ADR-M017-C (sibling); K-002 (updated); K-004; S01 RESEARCH-harness.md.
+
+---
+
+## ADR-M017-B — Lock-leak prevention stack (C1)
+
+**Status:** Accepted
+**Date:** 2026-04-24
+**Milestone:** M017
+**Extends:** ADR-M011-A (`paused` precedent → `aborted`); ADR-M014-B §F.(c) (reconcile classification reused)
+**Pattern:** 4-layer defense-in-depth; per-layer env bypass
+
+### Context
+
+- 11 stranded `locked` worktrees observed 2026-04-24 at M010/M011/M012 HEADs; `worktree-reconcile.sh:117-120` skipped `locked` → orphans accumulated invisibly.
+- User direction 2026-04-24 "não da pra tratar como exceção" — reframes reap-only strategy as the bug.
+- S01 P1 VERIFIED-yes: external `git worktree unlock` works. Harness writes `.git/worktrees/<name>/locked` at spawn and never clears it on non-graceful exit.
+- ADR-M011-A precedent: `paused` first-class state; `aborted` analogous but terminal.
+
+### Decision
+
+(a) **L1 SubagentStop** via `worktree-release.sh` (S02a, `99ae69f`). Parses stdin JSON, `classify_only` from reconcile.sh, acts A/B/C, releases lock LAST. Exit 0 always. Identity-agnostic across 5 worktree-isolated agents.
+
+(b) **L2 SessionEnd** via `worktree-release-all.sh` (S02b, `3eec338`). Reads `.claude/worktrees/.session-<pid>.owned` sentinel, reuses S02a routine. Idempotent.
+
+(c) **L3 explicit `/aih-milestone --abort`** (S02c, `6a3bec2`) via `phase-advance.sh --to aborted --reason`. `aborted` new terminal; `aborted → complete` REJECTED; `aborted → paused` sole resurrection via `/aih-resume`.
+
+(d) **L4 catastrophic-crash fallback** via `worktree-reap.sh` (S02d, `a654e95`). Two-phase UX: Phase A scan-default; Phase B `--confirm-reap` prunes mtime ≥ 14d. Windows path-lock fallthrough inherits reconcile.sh:146-147.
+
+(e) **Session-sentinel write-wiring** in 4 skill entries (S02d).
+
+### Consequences
+
+**Positive.** 11-orphan backlog reap-able. Future steady-state ≈ 0. Defense-in-depth. L1/L2 silent success path.
+
+**Negative.** 4 new hooks + state-machine addition. L4 reap destructive (safeguarded). Sentinels don't self-clean on crashed sessions.
+
+**Neutral.** ADR-M011-A unchanged. ADR-M014-B §F.(c) unchanged (L1/L2 source `classify_only` via K-001/K-003 idiom).
+
+### Rollback
+
+Per-layer env: `AIHAUS_RELEASE_L1=0`, `_L2=0`, `AIHAUS_L3_DISABLED=1`, `AIHAUS_REAP_DISABLED=1`. Full revert: `git revert 99ae69f 3eec338 6a3bec2 a654e95`.
+
+### Migration
+
+First install post-M017: reap scan detects pre-existing orphans; user runs `--confirm-reap` once. Steady-state ≈ 0 thereafter.
+
+### Related
+
+ADR-M011-A (extended); ADR-M014-B (extended); ADR-M017-A (sibling); ADR-M017-C (sibling); K-001/K-003 (source-with-flag-suspension); K-002 (extended); S01 P1.
+
+---
+
+## ADR-M017-C — Stale-base + same-file cross-story rule (C2 + D2 + D3 non-viable)
+
+**Status:** Accepted
+**Date:** 2026-04-24
+**Milestone:** M017
+**Extends:** K-002 promoted to PERMANENT state
+**Pattern:** plan-time BLOCKER; D3-viability heuristic as feature-flag
+
+### Context
+
+- K-002 documents worktrees-off-main race. Pre-M017 "known hazard" — operator eyeballing.
+- S01 three probes: P1 VERIFIED-yes; **P2 VERIFIED-no** (issue #27749 CLOSED / not-planned); **P3 VERIFIED-no** (issue #50850 CLOSED). NON-UNANIMOUS → S05 Path B.
+- M017 PLAN declared two cross-story-file overlaps BEFORE S01 proved D3 non-viable. Grandfather clause required.
+
+### Decision
+
+(a) **D3 Path B (S05):** no `worktree-branch-from.sh`. K-002 PERMANENT until Anthropic ships primitive.
+
+(b) **D2 same-file rule (S06, `5b9442e`)** via plan-checker fan-out at `/aih-milestone` E3. Overlap → BLOCKER unless `cross-story-file:` declaration AND D3 viable. Grammar in `pkg/.aihaus/skills/aih-milestone/annexes/same-file-rule.md` for documentary purposes.
+
+(c) **D3 viability heuristic (file-existence gate):** hatch ACCEPTED iff `pkg/.aihaus/hooks/worktree-branch-from.sh` exists AND K-002 state reads "structurally handled". Under Path B neither holds → **hatch DISABLED**. File-existence gate means future re-enablement needs only shipping hook + flipping K-002; no plan-checker edit.
+
+(d) **Grandfather clause (M017 self-inclusion):** M017's two overlaps (`settings.local.json` S02a→S02b→S04; `aih-milestone/SKILL.md` S02c→S02d) are documented historical artifacts. S08 meta-test asserts BLOCKER as correct-but-not-actionable. Post-M017 milestones MUST merge overlapping stories.
+
+(e) **Re-enablement path (deferred):** if Claude Code issue #27749 OR #50850 is re-opened and resolved, a follow-up milestone ships `worktree-branch-from.sh`, flips K-002 state, and heuristic re-enables hatch globally.
+
+### Consequences
+
+**Positive.** Cross-story conflicts caught at plan time. K-002 gets concrete state + re-enablement path. File-existence heuristic single-check. Grandfather prevents M017 meta-test failure.
+
+**Negative.** Multi-story plans needing cross-story refs must merge stories. K-002 PERMANENT admits aihaus can't fix at hook layer.
+
+**Neutral.** S05 Path B pure documentation. Grammar preserved for future. M017 dogfood grandfathered.
+
+### Rollback
+
+Env bypass `AIHAUS_CROSS_STORY_RULE_DISABLED=1`. Full revert: `git revert 5b9442e` + remove this ADR. Re-enablement is forward path conditional on Anthropic primitive.
+
+### Migration
+
+Existing drafts/plans unaffected. M017 two overlaps grandfathered. Fresh installs: hook absent → hatch disabled.
+
+### Related
+
+K-002 (updated to PERMANENT); ADR-M014-B (extended — unaddressable state marker); ADR-M017-A (sibling); ADR-M017-B (sibling); S01 RESEARCH-harness.md; S05-FALLBACK-NOTE.md; Claude Code issues #27749, #50850.
