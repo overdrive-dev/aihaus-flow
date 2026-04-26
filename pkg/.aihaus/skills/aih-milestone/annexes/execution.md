@@ -196,10 +196,39 @@ Resolve `<abs-path>` from the milestone directory at spawn time (same variable t
 ### Step E5.5 — Mid-milestone adversarial gate (ADR-M016-A governed)
 
 Invoked once per milestone, between Story Group N/2 and Story Group N/2+1
-(in milestones with >= 12 stories; skipped in smaller milestones).
+(when the derived story-count is >= 12; skipped in smaller milestones).
 
 **Governing ADR:** ADR-M016-A (data-plane + file-plane evolution contracts). This step is
 the enforcement point where ADR-M016-A's mid-milestone reconciliation discipline fires.
+
+**CRITICAL — coordinator narrative count is FORBIDDEN.** The story-count used to evaluate the
+>= 12 threshold MUST be derived from the filesystem at runtime. A coordinator that infers or
+recalls story-count from narrative memory (e.g., "this milestone has 10 stories") violates
+ADR-M016-A: the coordinator hallucinated count=10 during M017's dogfood run when the actual
+filesystem count was 12, causing the gate to be silently skipped. Derivation is the only
+legitimate source. Opt-out MUST be explicit via `AIHAUS_SKIP_E55=1` environment variable
+(never via coordinator-inferred skip).
+
+**Story-count derivation (M018/S3):**
+```bash
+# E5.5 story-count derivation (M018/S3 — coordinator narrative is FORBIDDEN)
+STORY_COUNT=$(find "$MILESTONE_DIR/stories" -maxdepth 1 -type f \
+  -regextype posix-extended -regex '.*/S[0-9]+[a-z]*\.md' | wc -l)
+
+if [ "${AIHAUS_SKIP_E55:-0}" = "1" ]; then
+  log "E5.5 SKIPPED: AIHAUS_SKIP_E55=1 explicit override"
+elif [ "$STORY_COUNT" -lt 12 ]; then
+  log "E5.5 SKIPPED: derived story-count=$STORY_COUNT (<12 threshold)"
+else
+  log "E5.5 GATE FIRES: derived story-count=$STORY_COUNT"
+  # ... proceed with sequential agent spawns below ...
+fi
+```
+
+The regex `S[0-9]+[a-z]*\.md` counts both canonical (`S07.md`) and sub-letter (`S02a.md`, `S07b.md`)
+story files. `-maxdepth 1 -type f` excludes hidden files, subdirectories, and backup files.
+`$MILESTONE_DIR` resolves to the absolute path of the running milestone directory
+(e.g., `.aihaus/milestones/M0XX-slug/`).
 
 **Trigger condition:** after the N/2-th story's commit lands and `git status --porcelain` is
 clean, before spawning the N/2+1-th story's teammate. In M016's specific invocation,
@@ -250,12 +279,14 @@ bash .aihaus/hooks/manifest-append.sh --field progress-log \
 `E5.5-verdict.md` file to the user. This is a TRUE blocker per `_shared/autonomy-protocol.md`.
 Resume via `/aih-resume` after findings are resolved.
 
-**Skip semantics:** milestones with < 12 stories may set `AIHAUS_SKIP_E5.5=1`; the skip
-is logged to RUN-MANIFEST progress:
+**Skip semantics:** milestones with derived story-count < 12 are automatically skipped (no
+env var needed). An explicit opt-out regardless of count is available via `AIHAUS_SKIP_E55=1`
+(name uses no dot — a dot in an env var name is invalid POSIX; bash rejects it at runtime
+with `command not found`). The skip is logged to RUN-MANIFEST progress:
 
 ```bash
 bash .aihaus/hooks/manifest-append.sh --field progress-log \
-  --payload "E5.5 mid-milestone gate: SKIPPED (AIHAUS_SKIP_E5.5=1 or story-count < 12)"
+  --payload "E5.5 mid-milestone gate: SKIPPED (AIHAUS_SKIP_E55=1 or story-count < 12)"
 ```
 
 **MANIFEST_PATH env injection:** inject `MANIFEST_PATH` into each agent spawn prompt
@@ -324,7 +355,7 @@ Each hook invocation below MUST land in the annex with the `--field` / `--payloa
 | After Agent returns | `manifest-append.sh` | `--field invoke-pop --payload "<skill>"` |
 | Per-story progress (Step E6) | `manifest-append.sh` | `--field progress-log --payload "<1-line msg>"` |
 | E5.5 gate pass (Step E5.5) | `manifest-append.sh` | `--field progress-log --payload "E5.5 mid-milestone gate: PASS — proceeding to story group N/2+1"` |
-| E5.5 gate skip (Step E5.5) | `manifest-append.sh` | `--field progress-log --payload "E5.5 mid-milestone gate: SKIPPED (AIHAUS_SKIP_E5.5=1 or story-count < 12)"` |
+| E5.5 gate skip (Step E5.5) | `manifest-append.sh` | `--field progress-log --payload "E5.5 mid-milestone gate: SKIPPED (AIHAUS_SKIP_E55=1 or story-count < 12)"` |
 | End of milestone loop (Step F1) | `manifest-append.sh` | `--field status --payload completed` |
 | End of milestone loop (Step F1) | `manifest-append.sh` | `--field phase --payload completed` |
 | End of milestone loop (Step F1) | `phase-advance.sh` | `--to complete --dir <milestone-dir>` |

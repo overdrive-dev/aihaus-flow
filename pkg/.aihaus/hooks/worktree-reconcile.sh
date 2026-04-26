@@ -204,11 +204,22 @@ if [ "${REAP_MODE}" = "1" ]; then
           "${WT_PATH_CANDIDATE:-${wt_name_dir}}"
       fi
     else
-      # Path doesn't exist on disk — prune stale registration only
-      if git worktree unlock "${WT_PATH_CANDIDATE:-}" 2>/dev/null || true; then
-        git worktree prune 2>/dev/null || true
-        printf '[REAPED] %s — stale registration pruned.\n' "${WT_PATH_CANDIDATE:-${wt_name_dir}}" >&2
+      # Path empty or not on disk — guard pattern from classify_only (lines 92-96).
+      # Do NOT use || true masking (SC2015 antipattern — CHECK C1).
+      # git worktree prune does NOT remove locked entries per git-worktree(1);
+      # rm -rf "${wt_name_dir}" is the only path that clears M010-M012 backlog (CHECK H4).
+      printf '[REAP-CANDIDATE] %s — path resolution failed; manual cleanup required\n' \
+        "${wt_name_dir}" >&2
+      # Attempt unlock only if path is non-empty (avoids git error on empty arg).
+      # Capture exit code without || true (set -e safe: assignment captures failure).
+      _u=0
+      if [ -n "${WT_PATH_CANDIDATE}" ]; then
+        git worktree unlock "${WT_PATH_CANDIDATE}" 2>/dev/null || _u=$?
       fi
+      # Wipe the .git/worktrees/<name>/ registration.
+      # git worktree prune does NOT clear locked entries, so rm -rf is required.
+      # NEVER emit [REAPED] for path-empty entries — only [REAP-CANDIDATE] above.
+      rm -rf "${wt_name_dir}"
     fi
   done
 

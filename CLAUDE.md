@@ -188,7 +188,9 @@ reads RUN-MANIFEST on every TUI turn (per-turn ~5ms) and renders
 primitives are ADR-M011-A (state gate) + ADR-M011-B (statusLine). M017
 adds `git-add-guard.sh` PreToolUse — rejects `git add -A` / `<dir>/` /
 `-u` / `-p` + `git commit -am` on `milestone/*` / `feature/*` branches;
-opt-out `AIHAUS_GIT_ADD_GUARD=0`.
+opt-out `AIHAUS_GIT_ADD_GUARD=0`. M018 corrects `AIHAUS_SKIP_E55` (no dot)
+as the canonical E5.5 skip env; prior prose used a dot-in-name variant that
+is bash-invalid (POSIX shell rejects dot in parameter names).
 
 ## Merge-Back (M017 / ADR-M017-A)
 
@@ -220,7 +222,7 @@ bash pkg/scripts/install.sh --target .
 ```
 This creates `.aihaus/` (gitignored) with symlinks back to `pkg/.aihaus/`. Local artifacts accumulate in `.aihaus/` while package improvements go to `pkg/.aihaus/`.
 
-After modifying `pkg/.aihaus/templates/settings.local.json`, re-run `bash pkg/scripts/update.sh --target .` to keep the local install aligned with the template.
+After any post-merge drift in `pkg/.aihaus/{hooks,skills,agents,templates}/` (including `settings.local.json`), re-run `bash pkg/scripts/update.sh --target .` to keep the local install aligned with the latest package contents.
 
 ## Releasing
 
@@ -235,6 +237,10 @@ The generator filters maintainer-only `tools/` paths and omits any Validation se
 ```bash
 gh release create vX.Y.Z --title "vX.Y.Z — <milestone title>" --notes-file tools/.out/release-notes-M0XX.md
 ```
+
+### Tag Hygiene
+
+After `gh release create`, run `git fetch --tags origin` on every aihaus install that follows the release branch. Tags occasionally land on remote without a corresponding local ref (M016/v0.20.0 case observed 2026-04-26 dogfood; recovered via `git fetch --tags`).
 
 <!-- AIHAUS:EVOLVING-START -->
 <!-- Curator writes ONLY inside this block. Content here is machine-maintained. -->

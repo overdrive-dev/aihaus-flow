@@ -75,22 +75,59 @@ check_agents() {
   fi
 }
 
-# ---- Check 3: .aihaus/hooks/ has 28 .sh files (M017/S04 adds git-add-guard.sh) ----
+# ---- Check 3: .aihaus/hooks/ contains exactly the expected hook files (M018/S2 allowlist) ----
+# Replaces literal [[ "$count" -eq 28 ]] with per-name allowlist iteration (mirrors Check 1
+# skill-allowlist shape). Adding/removing a hook requires a NAME edit here — intentional
+# friction that makes reviewer diffs meaningful and kills the silent-drift hazard that forced
+# D-001/D-003/D-005/D-007/D-008 in M017 (CHECK B3 / ADR-M017-C same-file resolution).
 check_hooks() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ has 28 .sh files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/hooks/ contains exactly the expected hook files (M018/S2 allowlist)"
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   if [[ ! -d "$hooks_root" ]]; then
     _fail "$label" "directory not found: $hooks_root"
     return
   fi
-  # maxdepth 1 excludes hooks/lib/ (M011/S01 shared helpers library).
-  local count
-  count=$(find "$hooks_root" -maxdepth 1 -type f -name '*.sh' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 28 ]]; then
+  local -a EXPECTED_HOOKS=(
+    audit-agent.sh
+    audit-log.sh
+    autonomy-guard.sh
+    backup-file.sh
+    bash-guard.sh
+    composite-score.sh
+    context-inject.sh
+    file-guard.sh
+    git-add-guard.sh
+    invoke-guard.sh
+    learning-advisor.sh
+    manifest-append.sh
+    manifest-migrate.sh
+    merge-back.sh
+    phase-advance.sh
+    read-guard.sh
+    scaffold-assert.sh
+    session-end.sh
+    session-start.sh
+    statusline-milestone.sh
+    task-completed.sh
+    task-created.sh
+    teammate-idle.sh
+    warning-recurrence.sh
+    worktree-reap.sh
+    worktree-reconcile.sh
+    worktree-release.sh
+    worktree-release-all.sh
+  )
+  local missing=()
+  for hook in "${EXPECTED_HOOKS[@]}"; do
+    if [[ ! -f "${hooks_root}/${hook}" ]]; then
+      missing+=("$hook")
+    fi
+  done
+  if [[ ${#missing[@]} -eq 0 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 28 .sh files, found $count"
+    _fail "$label" "missing hooks: ${missing[*]}"
   fi
 }
 
@@ -2374,6 +2411,61 @@ check_m017_git_add_guard_cases() {
   fi
 }
 
+# ---- Check 51 (M018/S1+S2): L4 reap 4-axis regression fixture ---------------
+# Wires S1's tools/fixtures/M017/reap-execute/fixture.sh into the smoke-test suite.
+# Fixture exits 0 when all 4 worktree-reap axes pass; exits non-zero on any failure.
+check_m018_reap_fixture() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: L4 reap 4-axis fixture (M018/S1)"
+  local fixture="${SCRIPT_DIR}/fixtures/M017/reap-execute/fixture.sh"
+  if [[ ! -f "$fixture" ]]; then
+    _fail "$label" "fixture missing: tools/fixtures/M017/reap-execute/fixture.sh"
+    return
+  fi
+  if bash "$fixture" >/dev/null 2>&1; then
+    _pass "$label"
+  else
+    local out
+    out="$(bash "$fixture" 2>&1 || true)"
+    _fail "$label" "$out"
+  fi
+}
+
+# ---- Check 52 (M018/S2+S4): release-notes shape 3-scenario fixture ----------
+# Wires S4's tools/fixtures/M017/release-notes-shape/fixture.sh into the smoke-test suite.
+# Fixture exits 0 when all 3 release-notes shape scenarios pass.
+check_m018_release_notes_shape_fixture() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: release-notes-shape 3-scenario fixture (M018/S4)"
+  local fixture="${SCRIPT_DIR}/fixtures/M017/release-notes-shape/fixture.sh"
+  if [[ ! -f "$fixture" ]]; then
+    _fail "$label" "fixture missing: tools/fixtures/M017/release-notes-shape/fixture.sh"
+    return
+  fi
+  if bash "$fixture" >/dev/null 2>&1; then
+    _pass "$label"
+  else
+    local out
+    out="$(bash "$fixture" 2>&1 || true)"
+    _fail "$label" "$out"
+  fi
+}
+
+# ---- Check 53 (M018/S2): env-name dot grep-guard (CHECK L4) -----------------
+# Guards against env variable names with literal dots (POSIX-invalid), which caused
+# CHECK C2 regression in M017. Scans all shipped files in pkg/.aihaus/ for the pattern
+# AIHAUS_[A-Z_]*.[A-Z0-9_]+ (where . is a literal dot in env names, not regex).
+check_m018_env_name_dot_guard() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: env-name dot grep-guard (CHECK C2 regression prevention, M018/S2)"
+  local matches
+  if matches=$(grep -rE 'AIHAUS_[A-Z_]*\.[A-Z0-9_]+' "${PACKAGE_ROOT}/.aihaus/" 2>/dev/null); then
+    _fail "$label" "env names with literal dots (POSIX-invalid) found:" "$matches"
+  else
+    _pass "$label"
+  fi
+}
+
 # ---- Selectable sub-mode dispatcher (--check <name> --skill <slug>) ---------
 # PURPOSE: invoked by completion-protocol Step 4.6 pre-apply gate before each
 # skill evolution is committed. Runs only the named check against the named skill;
@@ -2499,12 +2591,15 @@ check_memory_scores_single_writer_prose
 check_m017_hooks_bash_n
 check_m017_merge_back_refusal
 check_m017_git_add_guard_cases
+check_m018_reap_fixture
+check_m018_release_notes_shape_fixture
+check_m018_env_name_dot_guard
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK]\n"
+  printf "aihaus package smoke test PASSED [OK] (53/53)\n"
   exit 0
 else
-  printf "FAILED - %d checks failed\n" "$FAILURES"
+  printf "FAILED - %d of 53 checks failed\n" "$FAILURES"
   exit 1
 fi

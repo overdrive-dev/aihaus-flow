@@ -15,11 +15,24 @@
 # printed to stderr if any are found, so the maintainer can fix the
 # template before publishing.
 #
+# SUMMARY FILE RESOLUTION (dual-path tolerance):
+#   Canonical path:  <milestone>/execution/MILESTONE-SUMMARY.md
+#   Fallback path:   <milestone>/MILESTONE-SUMMARY.md  (non-canonical — WARN)
+#   non-canonical accepted with WARN; will be removed in M020 — pin canonical
+#   shape via the MILESTONE-SUMMARY.md template under pkg/.aihaus/templates/
+#
+# SECTION NAME TOLERANCE:
+#   Canonical section:  ## Stories Completed
+#   Alternative:        ## Commits shipped  (non-canonical — WARN)
+#   non-canonical accepted with WARN; will be removed in M020 — pin canonical
+#   shape via the MILESTONE-SUMMARY.md template under pkg/.aihaus/templates/
+#
 # USAGE:
-#   bash tools/generate-release-notes.sh M0XX [-o tools/.out/release-notes-M0XX.md]
+#   bash tools/generate-release-notes.sh M0XX [-o tools/.out/release-notes-M0XX.md] [--strict]
 #
 # EXIT CODES:
 #   0 = success
+#   1 = strict mode: one or more WARN conditions triggered
 #   2 = preconditions unmet (missing milestone summary, missing branch
 #       header, no merge-base, etc.)
 
@@ -28,12 +41,14 @@ set -euo pipefail
 # ---- Args ------------------------------------------------------------------
 MILESTONE_ID=""
 OUT_FILE=""
+STRICT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -o) OUT_FILE="${2:-}"; shift 2 ;;
+    --strict) STRICT=1; shift ;;
     -h|--help)
-      sed -n '1,30p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '1,40p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -76,10 +91,28 @@ if [[ -z "$MILESTONE_DIR" || ! -d "$MILESTONE_DIR" ]]; then
   exit 2
 fi
 
+# ---- WARN accumulator (--strict converts WARNs to exit 1) -----------------
+WARN_COUNT=0
+emit_warn() {
+  printf "WARN: %s\n" "$1" >&2
+  WARN_COUNT=$((WARN_COUNT + 1))
+}
+
+# ---- Resolve MILESTONE-SUMMARY.md (dual-path tolerance) --------------------
+# Canonical:  <milestone>/execution/MILESTONE-SUMMARY.md
+# Fallback:   <milestone>/MILESTONE-SUMMARY.md   (non-canonical — WARN)
 SUMMARY="${MILESTONE_DIR}/execution/MILESTONE-SUMMARY.md"
+SUMMARY_PATH_WARN=0
 if [[ ! -f "$SUMMARY" ]]; then
-  printf "MILESTONE-SUMMARY.md not found: %s\n" "$SUMMARY" >&2
-  exit 2
+  FALLBACK_SUMMARY="${MILESTONE_DIR}/MILESTONE-SUMMARY.md"
+  if [[ -f "$FALLBACK_SUMMARY" ]]; then
+    emit_warn "non-canonical path: MILESTONE-SUMMARY.md found at milestone root (not execution/). non-canonical accepted with WARN; will be removed in M020 — pin canonical shape via the MILESTONE-SUMMARY.md template under pkg/.aihaus/templates/"
+    SUMMARY="$FALLBACK_SUMMARY"
+    SUMMARY_PATH_WARN=1
+  else
+    printf "MILESTONE-SUMMARY.md not found: %s (also checked %s)\n" "$SUMMARY" "$FALLBACK_SUMMARY" >&2
+    exit 2
+  fi
 fi
 
 # ---- Extract Branch: header from MILESTONE-SUMMARY.md ----------------------
@@ -148,11 +181,17 @@ while IFS= read -r sha; do
 done <<<"$COMMITS"
 
 # ---- Pull "Stories Completed" rows from MILESTONE-SUMMARY.md ---------------
+# Canonical section header:  ## Stories Completed
+# Alternative section header: ## Commits shipped  (non-canonical — WARN)
 STORIES_BULLETS=""
 in_stories=0
+section_matched=""
 while IFS= read -r line; do
   if [[ "$line" =~ ^##[[:space:]]+Stories[[:space:]]+Completed ]]; then
-    in_stories=1; continue
+    in_stories=1; section_matched="canonical"; continue
+  fi
+  if [[ "$line" =~ ^##[[:space:]]+Commits[[:space:]]+shipped ]]; then
+    in_stories=1; section_matched="non-canonical"; continue
   fi
   if [[ "$in_stories" -eq 1 ]]; then
     if [[ "$line" =~ ^##[[:space:]] ]]; then
@@ -176,6 +215,11 @@ while IFS= read -r line; do
     fi
   fi
 done < "$SUMMARY"
+
+# Emit WARN if non-canonical section was used
+if [[ "$section_matched" == "non-canonical" ]]; then
+  emit_warn "non-canonical section: '## Commits shipped' found (expected '## Stories Completed'). non-canonical accepted with WARN; will be removed in M020 — pin canonical shape via the MILESTONE-SUMMARY.md template under pkg/.aihaus/templates/"
+fi
 
 # ---- Compose the release notes ---------------------------------------------
 NOTES=""
@@ -213,6 +257,12 @@ if [[ -n "$OUT_FILE" ]]; then
   printf "wrote release notes to %s\n" "$OUT_FILE" >&2
 else
   printf '%s' "$NOTES"
+fi
+
+# ---- Strict mode: any WARN → exit 1 ----------------------------------------
+if [[ "$STRICT" -eq 1 && "$WARN_COUNT" -gt 0 ]]; then
+  printf "strict mode: %d WARN(s) treated as errors\n" "$WARN_COUNT" >&2
+  exit 1
 fi
 
 exit 0
