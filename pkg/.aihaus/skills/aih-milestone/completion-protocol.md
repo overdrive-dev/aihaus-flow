@@ -3,6 +3,39 @@
 Run after all stories are implemented and QA-approved.
 `{milestone_dir}` = `.aihaus/milestones/[M0XX]-[slug]`
 
+## §Stash Recovery (M018/S5 — fixes G2 stash auto-pop)
+
+Run immediately after the final story commit, before writing MILESTONE-SUMMARY.
+
+Detects the pre-run stash created by `aih-milestone` at execution start (slug-matched, not
+index-matched). SHA-stable reference is invariant across concurrent stashes — a `cut -d: -f1`
+index is fragile because stash indices shift when any push/pop happens concurrently (M017 had
+a real `stash@{0}: On milestone/M013-...` collision).
+
+```bash
+# §Stash Recovery (M018/S5 — fixes G2 stash auto-pop)
+SLUG=$(awk '/^milestone:/{print $2; exit}' "$MANIFEST" | sed 's/^M[0-9]*-//')
+STASH_REF=$(git stash list --format='%gd %s' \
+  | awk -v slug="$SLUG" '$0 ~ "aih-milestone pre-run stash " slug { print $1; exit }')
+
+if [ -n "$STASH_REF" ]; then
+  STASH_MSG=$(git stash show -s --format=%B "$STASH_REF" 2>/dev/null || echo "")
+  if echo "$STASH_MSG" | grep -qF "aih-milestone pre-run stash $SLUG"; then
+    STASH_SHA=$(git rev-parse "$STASH_REF" 2>/dev/null || echo "")
+    if [ -z "$(git status --porcelain)" ]; then
+      git stash pop --quiet "$STASH_SHA" \
+        && log "STASH RECOVERED: $STASH_SHA popped to clean tree"
+    else
+      log "STASH PENDING: $STASH_SHA — dirty tree; run 'git stash pop $STASH_SHA' manually"
+    fi
+  fi
+fi
+```
+
+Cross-validate: `git stash show -s --format=%B "$STASH_REF"` must contain the slug before pop,
+preventing false-positive pops on stashes from other tools. Only pop on a clean tree
+(`git status --porcelain` empty); on a dirty tree, surface the SHA for manual recovery.
+
 ## Step 1: Write Milestone Summary
 Create `{milestone_dir}/execution/MILESTONE-SUMMARY.md`:
 ```
@@ -253,6 +286,37 @@ Milestone [M0XX] complete.
 - Decisions promoted: [N] new ADRs
 - Knowledge entries: [N] added
 - Branch: milestone/[M0XX]-[slug] -- ready for review/merge
+```
+
+### §Post-Merge Refresh (M018/S5 — fixes P3 install drift)
+
+After the completion report, emit this reminder to stderr (visible-by-default; not auto-run).
+`update.sh` is destructive — it runs `rm -rf` on package dirs before re-copying; the operator
+must choose the right moment. M017's failure mode: `.aihaus/hooks/worktree-reap.sh` was absent
+after merge because the local `.aihaus/` was stale relative to `pkg/.aihaus/hooks/`.
+
+```bash
+# §Post-Merge Refresh (M018/S5 — fixes P3 install drift)
+echo ">>> Run: bash pkg/scripts/update.sh --target . — refresh .aihaus/{hooks,skills,agents,templates}/ post-merge" >&2
+```
+
+This must remain the FINAL stderr line of the completion-protocol output.
+
+### §Surviving-Feature Audit (M018/S5 — addresses CHECK M6 / P2)
+
+Surfaces any features left in `running` or `paused` state that may need manual triage.
+INFO-level only — not a BLOCKER. User decides what to do per stale entry.
+(P2 auto-flip absorption protocol is deferred per PLAN §Out of Scope; this ships only the audit.)
+
+```bash
+# §Surviving-Feature Audit (M018/S5 — addresses CHECK M6 / P2)
+for f in .aihaus/features/*/RUN-MANIFEST.md; do
+  [ -f "$f" ] || continue
+  status=$(grep '^status:' "$f" 2>/dev/null | head -1 | awk '{print $2}')
+  case "$status" in
+    running|paused) log "FEATURE-STALE: $(dirname $f) status=$status — manual triage" ;;
+  esac
+done
 ```
 
 ## Step 6: Update project.md if structural changes were made
