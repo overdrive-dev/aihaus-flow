@@ -162,10 +162,27 @@ if [ "${REAP_MODE}" = "1" ]; then
     if [ ! -f "${GITDIR_FILE}" ]; then
       continue
     fi
-    # gitdir contains relative path like ../../.claude/worktrees/agent-xxxx/.git
-    WT_GITDIR_REL="$(cat "${GITDIR_FILE}")"
-    # The worktree path is the parent of the .git file
-    WT_PATH_CANDIDATE="$(dirname "$(dirname "${GIT_DIR}/${WT_GITDIR_REL}")")"
+    # gitdir contains either a relative path (../../.claude/worktrees/agent-xxxx/.git)
+    # OR an absolute path (C:/Users/.../wt/.git on Windows; /home/user/wt/.git on Unix).
+    # M018-S1 K-001: Windows/Git Bash writes absolute paths here, so unconditional
+    # prepend of GIT_DIR produced invalid concatenations like '.git/C:/...' →
+    # WT_PATH_CANDIDATE always empty on Windows. Detect absolute vs relative.
+    WT_GITDIR_VAL="$(cat "${GITDIR_FILE}")"
+    case "${WT_GITDIR_VAL}" in
+      /*|[A-Za-z]:[/\\]*)
+        # Absolute path (Unix /... or Windows C:/...) — use as-is
+        WT_GITDIR_FULL="${WT_GITDIR_VAL}"
+        ;;
+      *)
+        # Relative path — resolve against GIT_DIR
+        WT_GITDIR_FULL="${GIT_DIR}/${WT_GITDIR_VAL}"
+        ;;
+    esac
+    # gitdir points at the worktree's .git FILE (e.g., /path/to/wt/.git).
+    # The worktree path is its parent (single dirname). M017's original 'dirname dirname'
+    # stripped one segment too many — only "worked" because K-001's path-resolution
+    # bug made WT_PATH_CANDIDATE always empty on Windows, masking this regression.
+    WT_PATH_CANDIDATE="$(dirname "${WT_GITDIR_FULL}")"
     # Normalize
     WT_PATH_CANDIDATE="$(cd "${WT_PATH_CANDIDATE}" 2>/dev/null && pwd -P 2>/dev/null || echo "")"
 
