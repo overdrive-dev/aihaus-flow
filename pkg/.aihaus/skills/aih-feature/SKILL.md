@@ -93,10 +93,9 @@ Create all tasks as `pending` at the start of Phase 2 using TaskCreate:
 Chain dependencies sequentially. Before each step, set its task to `in_progress`. After completion, set to `completed`.
 
 ### Step 6: Create Branch + RUN-MANIFEST
-- Derive `[slug]` from the feature description: lowercase, replace spaces with hyphens, truncate to 40 characters, strip trailing hyphens.
-- If user said "stay on this branch" or "don't create a branch", skip branching.
-- Otherwise: `git checkout -b feature/[slug]`
-- If user approved stashing: `git stash` before branching, note to `git stash pop` after.
+- **Pre-flight (collision check, ADR-260427-C):** see `annexes/pre-flight-collision.md` before any branch op.
+- Derive `[slug]` (lowercase, hyphens, ≤40 chars, strip trailing hyphens). If user said "stay on this branch", skip branching.
+- `git checkout -b feature/[slug]`. If user approved stashing: `git stash` before branching; `git stash pop` after.
 - Create `.aihaus/features/[YYMMDD]-[slug]/RUN-MANIFEST.md` with: Run ID, Command, Started ISO, Phase `implement`, Status `running`, Branch name. Update `Last updated` and append to Progress Log after each subsequent step.
 
 ### Step 7: Implement

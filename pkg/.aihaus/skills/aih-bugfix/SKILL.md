@@ -101,6 +101,7 @@ Chain dependencies sequentially. Before each step, set its task to `in_progress`
 From the bug description, create a slug: lowercase, hyphens for spaces, strip special characters, max 40 characters. Example: "500-error-null-user-id"
 
 ### 8. Branch + RUN-MANIFEST (unless user said "stay on branch")
+**Pre-flight (collision check, ADR-260427-C):** see `pkg/.aihaus/skills/aih-feature/annexes/pre-flight-collision.md` before any branch op.
 ```bash
 git checkout -b fix/[slug]
 ```

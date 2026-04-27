@@ -2466,6 +2466,119 @@ check_m018_env_name_dot_guard() {
   fi
 }
 
+# ---- Check 54 (F260427/S1): session-end.sh has no blind stash pop -----------
+# ADR-260427-A: session-end must NOT auto-pop without label cross-validation.
+# The old behavior `git stash pop 2>/dev/null || true` was a defect — pop is
+# now gated on clean tree + label match. This check fails if a regression
+# restores the blind pop pattern.
+check_f260427_session_end_safe_pop() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: session-end.sh safe-pop pattern (F260427/S1, ADR-260427-A)"
+  local f="${PACKAGE_ROOT}/.aihaus/hooks/session-end.sh"
+  if [[ ! -f "$f" ]]; then
+    _fail "$label" "hook missing: $f"
+    return
+  fi
+  # Must NOT contain blind `git stash pop 2>/dev/null || true` pattern at the
+  # top level (without label/clean-tree gate). A grep on the literal old line:
+  if grep -E '^[[:space:]]*git[[:space:]]+stash[[:space:]]+pop[[:space:]]+2>/dev/null[[:space:]]*\|\|[[:space:]]+true[[:space:]]*$' "$f" >/dev/null 2>&1; then
+    _fail "$label" "blind 'git stash pop 2>/dev/null || true' found — defect regressed"
+    return
+  fi
+  # Must contain the audit-log positive marker (proves the new behavior is wired).
+  if ! grep -q '_record_pending\|session-end-stash-pending' "$f"; then
+    _fail "$label" "audit-log marker missing — _record_pending or session-end-stash-pending"
+    return
+  fi
+  # Must contain SHA-stable ref (M018/S5 alignment).
+  if ! grep -q 'git rev-parse stash@{0}' "$f"; then
+    _fail "$label" "SHA-stable stash ref missing — must use 'git rev-parse stash@{0}'"
+    return
+  fi
+  _pass "$label"
+}
+
+# ---- Check 55 (F260427/S2): bash-guard branch-switch warn fixture -----------
+# Wires the 4-case fixture into the smoke-test suite. Asserts: warn fires on
+# bare ref switch with running manifest, file-mode skipped, -b skipped, opt-out
+# silences. Fixture exits 0 on all-pass.
+check_f260427_branch_switch_warn_fixture() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: bash-guard branch-switch-warn 7-case fixture (F260427/S2)"
+  local fixture="${SCRIPT_DIR}/fixtures/F260427/branch-switch-warn/fixture.sh"
+  if [[ ! -f "$fixture" ]]; then
+    _fail "$label" "fixture missing: tools/fixtures/F260427/branch-switch-warn/fixture.sh"
+    return
+  fi
+  if bash "$fixture" >/dev/null 2>&1; then
+    _pass "$label"
+  else
+    local out
+    out="$(bash "$fixture" 2>&1 || true)"
+    _fail "$label" "$out"
+  fi
+}
+
+# ---- Check 56 (F260427/S3): pre-flight collision annex exists ---------------
+# ADR-260427-C: feature/bugfix skills reference a shared pre-flight annex.
+# Fails if annex missing OR if SKILL.md doesn't reference it.
+check_f260427_pre_flight_annex() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: pre-flight collision annex + SKILL refs (F260427/S3, ADR-260427-C)"
+  local annex="${PACKAGE_ROOT}/.aihaus/skills/aih-feature/annexes/pre-flight-collision.md"
+  local feat_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-feature/SKILL.md"
+  local bug_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-bugfix/SKILL.md"
+  if [[ ! -f "$annex" ]]; then
+    _fail "$label" "annex missing: pkg/.aihaus/skills/aih-feature/annexes/pre-flight-collision.md"
+    return
+  fi
+  if ! grep -q 'pre-flight-collision\.md' "$feat_skill" 2>/dev/null; then
+    _fail "$label" "aih-feature/SKILL.md missing reference to pre-flight-collision.md"
+    return
+  fi
+  if ! grep -q 'pre-flight-collision\.md' "$bug_skill" 2>/dev/null; then
+    _fail "$label" "aih-bugfix/SKILL.md missing reference to pre-flight-collision.md"
+    return
+  fi
+  _pass "$label"
+}
+
+# ---- Check 57 (F260427): aih-feature/SKILL.md ≤ 199 lines (200-line ceiling safety net) ---
+# Belt-and-suspenders: check_skill_length already enforces <200 globally.
+# This check pins aih-feature/aih-bugfix to ≤199 explicitly so future edits
+# touching pre-flight content surface line-count regressions early.
+check_f260427_skill_line_safety() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aih-feature + aih-bugfix SKILL.md ≤199 lines (F260427 safety net)"
+  local feat_lines bug_lines
+  feat_lines=$(wc -l < "${PACKAGE_ROOT}/.aihaus/skills/aih-feature/SKILL.md" | tr -d ' ')
+  bug_lines=$(wc -l < "${PACKAGE_ROOT}/.aihaus/skills/aih-bugfix/SKILL.md" | tr -d ' ')
+  if [[ "$feat_lines" -gt 199 ]]; then
+    _fail "$label" "aih-feature/SKILL.md is $feat_lines lines (max 199 — move new prose to annexes/ per ADR-260427-C)"
+    return
+  fi
+  if [[ "$bug_lines" -gt 199 ]]; then
+    _fail "$label" "aih-bugfix/SKILL.md is $bug_lines lines (max 199 — move new prose to annexes/ per ADR-260427-C)"
+    return
+  fi
+  _pass "$label"
+}
+
+# ---- Check 58 (F260427/S5a): three new ADRs landed in decisions.md ----------
+# Sanity check: ADR-260427-A, ADR-260427-B, ADR-260427-C all present.
+check_f260427_adrs_present() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: ADR-260427-A/B/C present in decisions.md (F260427/S5a)"
+  local f="${PACKAGE_ROOT}/.aihaus/decisions.md"
+  for adr in ADR-260427-A ADR-260427-B ADR-260427-C; do
+    if ! grep -q "$adr" "$f" 2>/dev/null; then
+      _fail "$label" "$adr missing from pkg/.aihaus/decisions.md"
+      return
+    fi
+  done
+  _pass "$label"
+}
+
 # ---- Selectable sub-mode dispatcher (--check <name> --skill <slug>) ---------
 # PURPOSE: invoked by completion-protocol Step 4.6 pre-apply gate before each
 # skill evolution is committed. Runs only the named check against the named skill;
@@ -2594,12 +2707,17 @@ check_m017_git_add_guard_cases
 check_m018_reap_fixture
 check_m018_release_notes_shape_fixture
 check_m018_env_name_dot_guard
+check_f260427_session_end_safe_pop
+check_f260427_branch_switch_warn_fixture
+check_f260427_pre_flight_annex
+check_f260427_skill_line_safety
+check_f260427_adrs_present
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (53/53)\n"
+  printf "aihaus package smoke test PASSED [OK] (58/58)\n"
   exit 0
 else
-  printf "FAILED - %d of 53 checks failed\n" "$FAILURES"
+  printf "FAILED - %d of 58 checks failed\n" "$FAILURES"
   exit 1
 fi

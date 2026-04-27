@@ -1595,3 +1595,130 @@ Existing drafts/plans unaffected. M017 two overlaps grandfathered. Fresh install
 ### Related
 
 K-002 (updated to PERMANENT); ADR-M014-B (extended — unaddressable state marker); ADR-M017-A (sibling); ADR-M017-B (sibling); S01 RESEARCH-harness.md; S05-FALLBACK-NOTE.md; Claude Code issues #27749, #50850.
+
+
+---
+
+## ADR-260427-A: session-end.sh follows M018/S5 safe-auto-pop pattern
+
+**Date:** 2026-04-27
+**Status:** Accepted
+**Milestone/feature:** feature/auto-interference-audit (260427)
+
+### Context
+
+Audit dated 2026-04-27 reported that uncommitted edits silently disappeared between sessions. Root cause: `pkg/.aihaus/hooks/session-end.sh` (M-pre-M018 implementation) ran `git stash push --include-untracked` immediately followed by `git stash pop 2>/dev/null || true` — the trailing `|| true` swallowed pop failures, stranding work in the stash without surfacing it.
+
+M018/S5 already solved the analogous problem at the milestone surface (`pkg/.aihaus/skills/aih-milestone/completion-protocol.md:6-37` §Stash Recovery): stash with a slug-validated label, attempt pop only on a clean tree, surface `STASH PENDING <SHA>` for manual resolve when dirty. SHA-stable reference (not index name) is invariant across concurrent stash mutations.
+
+The session-end surface was the only stash code-site not aligned with this pattern.
+
+### Decision
+
+`session-end.sh` adopts the M018/S5 safe-auto-pop contract:
+
+1. Stash with label `aihaus session-end ${CLAUDE_SESSION_ID:-<ts>}` and `--include-untracked`.
+2. Resolve stash SHA via `git rev-parse stash@{0}` (not the ref name).
+3. Cross-validate the stash message contains the session label before pop.
+4. Auto-pop **only** when `git status --porcelain` is empty AND label-cross-validates.
+5. On dirty tree, label-mismatch, or pop-failure: append a JSON line to `.claude/audit/session-end-stash-pending.jsonl` with `{ts, session_id, branch, stash_sha, reason, label}`. `session-start.sh` surfaces this to the user via the `additionalContext` JSON payload.
+6. Session-start sweep drops `aihaus session-end *` stashes older than 14 days; caps total at 50.
+
+### Consequences
+
+**Positive.** No silent strand. Symmetry with milestone surface. ADR-M009-A sidecars (`.aihaus/.effort`) protected by auto-pop on clean tree; visible on dirty tree.
+
+**Negative.** Stashes can accumulate up to 50 if user never reviews them. Mitigated by the 14-day reaper.
+
+**Neutral.** Behavior identical to milestone surface — operators learn one pattern, applied twice.
+
+### Rollback
+
+`git revert` the S1 commit. No data loss possible — the new behavior is strictly more conservative than the old.
+
+### Related
+
+M018/S5 (`completion-protocol.md` §Stash Recovery — sibling implementation).
+ADR-M009-A (calibration sidecar ownership — protected by this contract).
+
+---
+
+## ADR-260427-B: branch-switch detection is soft-warn, not hard-block
+
+**Date:** 2026-04-27
+**Status:** Accepted
+**Milestone/feature:** feature/auto-interference-audit (260427)
+
+### Context
+
+Same audit reported HEAD silently switching to a parallel branch mid-task. Hypothesized cause: a second `claude --dangerously-skip-permissions` process running on the same working tree, or Claude's own confused recovery git ops. No aihaus mutex defends `git checkout <branch>` while a feature/bugfix/milestone RUN-MANIFEST shows `status: running`.
+
+Considered hard-block via `bash-guard.sh` PreToolUse: rejected. False-positive surface is too large — `git checkout HEAD~N -- file` (file-mode), `git switch --detach`, `git switch -c new-branch <ref>` (where the ref is the source, not the target) all need allow-paths. Hard-block also breaks legitimate user-driven branch hops (verifying main, cherry-picking from elsewhere).
+
+### Decision
+
+`bash-guard.sh` extends with a soft-warn branch-switch detector:
+
+1. Detects `git checkout <ref>` / `git switch <ref>` excluding: `-b`, `--orphan`, `-c <name>`, `--detach`, `-` (previous-branch), `.` (path), and tracked-pathspec args (test via `git ls-files --error-unmatch <arg>`).
+2. Globs `.aihaus/{milestones,features,bugfixes}/*/RUN-MANIFEST.md` and parses lowercase `status:` from each Metadata block.
+3. If any manifest has `status: running`, emit stderr warning: `aihaus: branch switch detected while <manifest-path> is running on <other-branch>; continue only if intentional`. The warn fires on ANY branch-switch while a manifest is running — leaving the manifest's branch mid-work IS the collision; switching elsewhere while a peer manifest runs is also worth surfacing. Narrower "current ≠ manifest" framing was considered and rejected as undercoverage.
+4. Append audit row to `.claude/audit/branch-switch-warn.jsonl` (8 fields: ts, session_id, from_branch, target_ref, manifest_path, manifest_status, decision=warn-allow, command_hash). `command_hash` is the first 12 chars of `sha256sum` of the full command string.
+5. Never block the command. Opt-out: `AIHAUS_BRANCH_SWITCH_GUARD=0`.
+
+### Consequences
+
+**Positive.** Surfaces cross-session collisions without blocking legitimate flows. Mirrors `git-add-guard.sh` segment-and-deny grammar — operators learn one pattern.
+
+**Negative.** Can be dismissed inattentively. Documented in gotchas.md as a class of self-inflicted error.
+
+**Neutral.** Audit log is orthogonal to RUN-MANIFEST single-writer (ADR-004); no contention.
+
+### Rollback
+
+Remove the new block from `bash-guard.sh`. Single hook file.
+
+### Related
+
+ADR-M017-A (`git-add-guard.sh` — sibling segment-and-deny grammar, source of the pattern).
+
+---
+
+## ADR-260427-C: cross-skill pre-flight collision is feature/bugfix-scoped, not extending L1-L4
+
+**Date:** 2026-04-27
+**Status:** Accepted
+**Milestone/feature:** feature/auto-interference-audit (260427)
+
+### Context
+
+ADR-M017-B's L1-L4 lock-leak prevention stack is **milestone-scoped only**: it relies on milestone RUN-MANIFEST schema (lock files, abort semantics, reap discipline) that feature/bugfix manifests do not carry. Extending L1-L4 to features/bugfixes would require schema parity — a milestone-sized effort by itself.
+
+The audit's primary unmitigated surface is two concurrent skills running on the same working tree. A pre-flight check (read-only inspection of running manifests + dirty-tree state) is the proportional first move.
+
+### Decision
+
+`/aih-feature` and `/aih-bugfix` skills add a one-line reference to a new annex (`pkg/.aihaus/skills/aih-feature/annexes/pre-flight-collision.md`) that defines the check:
+
+1. Glob `.aihaus/{milestones,features,bugfixes}/*/RUN-MANIFEST.md`.
+2. For each manifest with `status: running`, capture its `branch:` field.
+3. If current branch differs AND working tree dirty (`git status --porcelain` non-empty), surface ONE concrete sentence to the user: *"Aihaus detected a running manifest at `<path>` on branch `<branch>`. Continuing on `<current>` may collide. Continue?"*
+4. Wait for affirmative ("y/sim/vai/go/Enter") per autonomy-protocol.md. Do not enumerate options.
+
+The dirty-but-not-mine heuristic is intentionally weaker than the milestone's `## Owned Files` parse, because feature/bugfix manifests do not carry `## Owned Files` (that section is a milestone convention per `aih-milestone/annexes/same-file-rule.md` + `merge-back.sh`).
+
+### Consequences
+
+**Positive.** Cross-session collisions surface before branch ops. Feature/bugfix flows get a proportional first defense without a full L1-L4 port.
+
+**Negative.** Heuristic is weaker than milestone's owned-files check. False-positives possible when user has unrelated dirty edits.
+
+**Neutral.** If S3 proves insufficient across two more sessions, file-existence-gated escalation to extending L1-L4 (per ADR-M017-B's heuristic pattern).
+
+### Rollback
+
+Delete the annex file; revert the one-line reference in each SKILL.md.
+
+### Related
+
+ADR-M017-B (L1-L4 lock-leak stack — sibling, milestone-scoped).
+ADR-M017-C (same-file rule — sibling, milestone-scoped, source of the `## Owned Files` convention).
