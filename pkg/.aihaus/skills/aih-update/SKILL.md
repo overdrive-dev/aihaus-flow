@@ -97,12 +97,18 @@ git -C "$PKG_LOCAL" pull origin main
 
 ### 7. Run the package update script
 
+Route by platform — Windows uses junctions (created via PowerShell); Git Bash's `rm -rf` follows them and `ln -s` cannot recreate them. The bash path **must not** run on Windows:
+
 ```bash
-bash "$PKG_LOCAL/pkg/scripts/install.sh" --target "$(pwd)" --update
+case "$OSTYPE" in
+  msys*|cygwin*|win32)
+    powershell.exe -NoProfile -ExecutionPolicy Bypass \
+      -File "$PKG_LOCAL/pkg/scripts/update.ps1" -Target "$(pwd)" ;;
+  *) bash "$PKG_LOCAL/pkg/scripts/install.sh" --target "$(pwd)" --update ;;
+esac || { echo "ERROR: update script failed"; exit 1; }
 ```
 
-Re-links skills/agents/hooks/templates from the updated package. Preserves
-local data (project.md, plans, milestones, memory) + calibration via `.aihaus/.calibration` (auto-mode-safe users see a `!!` re-run warning).
+Re-links skills/agents/hooks/templates. Preserves local data + calibration via `.aihaus/.calibration`.
 
 ### 8. Write version marker
 
@@ -142,23 +148,14 @@ Before reporting, surface any migration-relevant state:
 
 ### 12. Migration Notice (version-gated)
 
-Read the previous version from `.aihaus/.version` (or treat as `0.0.0` if missing). Print the blocks whose boundary `prev_version` crosses (both may fire on a multi-version skip):
+Read previous version from `.aihaus/.version` (treat as `0.0.0` if missing). Fire each block whose boundary `prev_version` crosses (multi-version skips fire multiple):
 
-- **`prev_version < 0.2.0`** — gathering-mode boundary:
-  ```
-  Migration (v0.2.0): /aih-milestone now enters gathering mode. /aih-resume added.
-  Backward-compat: /aih-milestone "desc" --execute preserves old one-shot behavior.
-  ```
-- **`prev_version < 0.11.0`** — command-retirement boundary:
-  ```
-  Migration (v0.11.0) — commands retired:
-    /aih-run                → /aih-milestone + "start" (or --execute), /aih-feature --plan <slug>
-    /aih-plan-to-milestone  → /aih-milestone --plan <slug> (first-class, no longer DEPRECATED)
-  Update muscle memory / CI scripts / keyboard snippets accordingly.
-  ```
-- **`prev_version < 0.18.0`** — M014 BREAKING (ADR-M014-A/B). `/aih-automode` DELETED; launch via `bash .aihaus/auto.sh` (DSP wrapper); `permissions.{allow,deny,defaultMode}` stripped, safety in PreToolUse hooks; `/aih-resume` rewritten (schema v3 sub-story checkpoints; `--legacy-mode` preserves old).
-- **`prev_version < 0.19.0`** — M015 BREAKING (ADR-M015-A supersedes ADR-002+005). Cursor removed: `--platform` flag dropped, `pkg/.aihaus/{.cursor-plugin,rules}/` deleted.
-Append: "Restart Claude Code to pick up reshuffled skills." when any block fires.
+- **< 0.2.0** — `/aih-milestone` now enters gathering mode; `/aih-resume` added; `/aih-milestone "desc" --execute` preserves old one-shot.
+- **< 0.11.0** — retired: `/aih-run` → `/aih-milestone start|--execute` or `/aih-feature --plan <slug>`; `/aih-plan-to-milestone` → `/aih-milestone --plan <slug>`. Update CI scripts and keyboard snippets accordingly.
+- **< 0.18.0** — M014 BREAKING (ADR-M014-A/B): `/aih-automode` DELETED; launch via `bash .aihaus/auto.sh`; `permissions.{allow,deny,defaultMode}` stripped (safety in PreToolUse hooks); `/aih-resume` rewritten (schema v3 sub-story checkpoints; `--legacy-mode` preserves old).
+- **< 0.19.0** — M015 BREAKING (ADR-M015-A, supersedes ADR-002+005): Cursor removed; `--platform` flag dropped; `pkg/.aihaus/{.cursor-plugin,rules}/` deleted.
+
+When any block fires, append: "Restart Claude Code to pick up reshuffled skills."
 
 ### 13. Report
 
@@ -181,9 +178,11 @@ If new skills appeared in the update diff, append: "⚠️  Restart Claude Code 
 
 When running inside the aihaus-flow repo itself (detected by `pkg/` existing):
 
-1. Skip cloning — use `pkg/` directly as the package source.
+1. Skip cloning — use `pkg/` directly (`PKG_LOCAL=.`).
 2. `git pull origin main` to update the repo itself.
-3. Run `bash pkg/scripts/install.sh --target . --update` to re-link.
+3. Re-link via the same OS-aware case from Step 7 (PowerShell on
+   Windows, bash on Unix). **Do not call `bash install.sh --update`
+   unconditionally** — it wipes junctions on Windows.
 4. Report what changed.
 
 ---
