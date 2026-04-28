@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.22.1-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.23.1-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -356,6 +356,14 @@ your-project/
 ---
 
 ## Upgrading
+
+`/aih-update` is platform-aware (since v0.23.1): on Windows it routes
+through `pkg/scripts/update.ps1` so directory junctions at
+`.claude/{skills,agents,hooks}` survive the refresh. Direct shell
+invocation works too — `bash pkg/scripts/update.sh` on Unix,
+`pwsh pkg/scripts/update.ps1` on Windows. The bash scripts now
+include junction-safe primitives (`lib/junction-safe.sh`) for any
+direct invocation under Git Bash.
 
 After `bash pkg/scripts/update.sh` (or `install.sh --update`):
 
