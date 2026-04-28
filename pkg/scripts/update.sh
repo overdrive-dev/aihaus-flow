@@ -149,6 +149,8 @@ if [[ -d "${AIHAUS}/hooks" ]]; then
 fi
 
 # ---- Re-link / re-copy .claude/{skills,agents,hooks} ------------------------
+# shellcheck source=lib/junction-safe.sh
+source "$(dirname "$0")/lib/junction-safe.sh"
 
 link_or_copy() {
   local name="$1"
@@ -160,17 +162,15 @@ link_or_copy() {
     return 0
   fi
 
-  # Remove stale destination
-  if [[ -L "${dst}" || -e "${dst}" ]]; then
-    rm -rf "${dst}"
-  fi
+  # Remove stale destination (junction-safe on Windows — see lib/junction-safe.sh)
+  safe_remove_dir "${dst}"
 
   if [[ "${MODE}" == "link" ]]; then
-    if ln -s "${src}" "${dst}" 2>/dev/null; then
+    if make_dir_link "${src}" "${dst}"; then
       echo "  link: .claude/${name} -> .aihaus/${name}"
       return 0
     fi
-    echo "  warn: symlink failed for ${name}, falling back to copy"
+    echo "  warn: link failed for ${name} (${LINK_ERR}), falling back to copy"
     MODE="copy"
   fi
   cp -R "${src}" "${dst}"
