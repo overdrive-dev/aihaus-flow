@@ -1800,3 +1800,183 @@ ADR-001 (filesystem state primitive — preserved); ADR-004 (extended, not super
 - Plan: `.aihaus/plans/260501-improve-auto-mode-feedback/PLAN.md` (D1, D7)
 - Patterns: `.aihaus/plans/260501-improve-auto-mode-feedback/PATTERNS.md` §2 + §4 + §5
 - Stories: S03 (RUN-STATUS.md projection + projection-contract template + this ADR), S04 (resolve_manifest_path helper + outside-exec-skip audit row), S05 (forensic schema bump + smoke-test + outcome-gate validator)
+
+## ADR-260502-A — Manifest auto-close enforcement protocol (R1)
+
+**Status:** Accepted
+**Date:** 2026-05-02
+**Milestone:** M020
+**Extends:** ADR-001 (filesystem state primitive — preserved); ADR-004 (single-writer per file — preserved verbatim; M020 adds NO new writers); ADR-M011-A (autonomy-guard `paused` TRUE-blocker — preserved; `paused` and `paused-user-input` are never auto-closed); ADR-M014-B (resume substrate / `## Checkpoints` — extended; the crash-resume guard reads checkpoint enter/exit pairs); ADR-M017-A (merge-back-as-script — extended; merge-back gains a release-before-spawn invocation of the new hook); ADR-M019-A (parallel-projection pattern — preserved; `manifest-append.sh` remains sole writer of RUN-STATUS.md, byte-unchanged)
+**Pattern:** Deterministic enforcement hook supersedes model-driven prose at the manifest-close moment. Provable-done = 5-condition conjunction. Single-writer discipline preserved by routing all mutations through `update_metadata_kv` inside `acquire_coarse_lock`.
+
+### Decision
+
+**Ship `manifest-auto-close.sh` as a deterministic enforcement hook fired at three deterministic moments — `merge-back.sh` end-of-success, `session-start.sh` boot, `/aih-resume` Phase 1 step 4b — that flips a feature/bugfix/milestone manifest's `Status` to `completed` IFF five provable-done conditions hold simultaneously.**
+
+The 5-condition provable-done definition (binding):
+
+1. `Status` is in the eligible set: `running | awaiting-approval` (PR 1 baseline) plus `awaiting-merge` (PR 2 / S07 extension).
+2. `Branch:` field exists locally (`git rev-parse --verify`) OR remotely.
+3. `is_branch_merged_into_any <branch> <integration-refs>` returns 0 — i.e., the branch is an ancestor of at least one integration ref (resolved by `lib/integration-refs.sh::detect_integration_refs`).
+4. `SUMMARY.md` exists in the run directory **OR** the last `## Story Records` data row's `verified` column is `true`.
+5. **Crash-resume guard:** `## Checkpoints` contains no `event=enter` row lacking a paired `event=exit` row for the same `(story, agent, substep)` triple. Protects against auto-closing a crash-mid-execution run that happens to have a stale SUMMARY.md from an earlier session.
+
+When all five conditions hold, the hook acquires the per-manifest coarse lock (`lib/manifest-helpers.sh::acquire_coarse_lock`, lines 111-140), routes the mutation through `update_metadata_kv` (lines 30-42) — the M019-anchored single-writer primitive — and emits a single line to `.claude/audit/hook.jsonl`. **No new writers are introduced.** ADR-004 single-writer-per-file rule is preserved verbatim.
+
+**Migration-before-parse pre-condition.** For every manifest examined (full-sweep OR `--manifest`), the hook FIRST invokes `MANIFEST_PATH=<f> bash manifest-migrate.sh` before parsing metadata. v1 markdown-bullet manifests in user repos migrate forward (v1→v2→v3→v4) on first touch; without this pre-condition, the hook silently skips v1 manifests because the markdown-bullet shape does not parse as YAML.
+
+**Audit-log schema (Q-8 resolved).** Field set: `{ts, hook, manifest_path, branch, integration_ref, result, reason}`. `hook=manifest-auto-close` is constant. `result ∈ {closed, skipped, refused}`. `reason` is a short free-form text drawn from a recommended enum: `branch-missing | not-merged | unmatched-enter | already-terminal | paused-explicit | no-integration-ref | awaiting-merge-promotion | running-promotion | awaiting-approval-promotion`. One JSON line per decision in `.claude/audit/hook.jsonl`. Greppable by `hook=manifest-auto-close` and `result=closed|skipped|refused` (NFR-04).
+
+**Wire-up at three sites.** The hook fires at deterministic moments:
+
+- **`merge-back.sh` end-of-success.** Single-target invocation `manifest-auto-close.sh --manifest <milestone-manifest-path>`. The merge-back hook releases its coarse lock BEFORE the spawn — **release-before-spawn discipline** — and the spawned auto-close re-acquires its own lock. Without release-before-spawn, the parent and child deadlock on the same per-manifest mutex (R-1 / NFR-02).
+- **`session-start.sh` boot.** Full-sweep invocation `manifest-auto-close.sh` (no `--manifest`). Glob `.aihaus/{milestones,features,bugfixes}/*/RUN-MANIFEST.md`. Failures are non-blocking; session-start always exits 0 regardless of auto-close exit code.
+- **`/aih-resume` Phase 1 step 4b.** Inserted between current step 4 (`Cross-check checkpoint vs worktree state`) and step 5 (`Candidate selection`). For each manifest with `Status != completed` collected in step 2, invoke `manifest-auto-close.sh --manifest <path>`. Auto-closed manifests are removed from the candidate set; the skill emits `Auto-closed N manifests (drift cleanup).` if N > 0, silent if N = 0.
+
+**Subscriber (advisory only).** `session-end.sh` appends a non-blocking advisory after the existing `jq` event-emit block. Tests `[ -x "$AIHAUS_DIR/hooks/manifest-auto-close.sh" ]` first; if false, silently no-ops (NFR-05 / R-3). Otherwise runs `--dry-run` with stderr swallowed; if count > 0, prints `advisory: $count manifest(s) eligible for auto-close — run /aih-close --bulk` to stderr. Never propagates a non-zero exit.
+
+**L4 — `/aih-close --bulk --yes` requires explicit terminal flag.** The manual override skill (S10) MUST refuse to close in bulk mode without an explicit `--deferred|--completed|--cancelled|--awaiting-merge` flag when `--yes` is passed. Prevents accidental mass-close to `completed` for manifests that should be `deferred` or `cancelled`. Stderr text: `/aih-close: --yes requires explicit terminal flag (--deferred|--completed|--cancelled|--awaiting-merge)`.
+
+### Context
+
+- The model-driven Step 13 (`aih-feature/SKILL.md:190-196`) and Step 16 (`aih-bugfix/SKILL.md:178-184`) are the only places today that flip Status to terminal. They are pure prose, executed by the model at end-of-run. The model commonly skips this prose on session-end, CI-handoff, phased-work, and code-reviewer-iteration paths.
+- Concrete evidence (domus-nora-app, 2026-05-02): 9/9 feature/bugfix runs were merged into `origin/staging` with SUMMARY.md or final commit present, yet all 9 had `Phase: implement|apply-fix|planning` and `Status: running|awaiting-approval` in their manifest headers. `worktree-reconcile.sh` separately emitted 8 Category-B 1000-commit cherry-pick recipes — all false positives.
+- The post-mortem identified seven recommendations (R1–R7). R1 (`manifest-auto-close.sh`) is the leverage point because it is the only one that *removes the model from the loop*. R2 (`/aih-resume` step 4b) and R7 (session-end advisory) are the visibility loop closers that R1 leaves open.
+- The 5-condition conjunction is intentionally narrow. Each condition guards a distinct false-positive class: condition 1 prevents auto-close of paused/cancelled/deferred work; condition 2 prevents auto-close when the branch was force-deleted; condition 3 is the "merged" core; condition 4 prevents auto-close of runs that never produced a SUMMARY (incomplete work); condition 5 prevents auto-close of crash-mid-execution runs. Removing any one condition opens a new false-positive surface; adding more would over-narrow and create false negatives.
+- ADR-004 single-writer discipline is preserved because `manifest-auto-close.sh` is a *caller* of `update_metadata_kv`, not a writer. The byte-mutating helper still has exactly one entry point per manifest path, governed by the same lock.
+- Migration-before-parse is mandatory for backward compat with v1 markdown-bullet manifests (NFR-09 / R-5). Without it, users with in-flight v1 manifests in their repos would never see those manifests auto-close — silent regression.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| A | Keep dual-format parser in `manifest-auto-close.sh` (parse v1 markdown-bullet AND v3 YAML directly) | No SKILL.md changes; no migration path needed | Perpetuates schema bifurcation; future hooks have to choose-one-or-both forever | Adds permanent maintenance debt; v1→v3 migration path already exists and is lock-safe |
+| B | Make auto-close an explicit user action only (`/aih-close --bulk` as the sole path) | Simpler — no enforcement hook; user-driven only | Adds another command users must remember; doesn't solve the forgetting problem (post-mortem root cause) | Defeats the purpose; the bug is precisely that humans + models forget terminal steps |
+| C | (Chosen) Deterministic enforcement hook fired at three sites + manual override skill | Removes the model from the loop architecturally; same class of bug becomes architecturally impossible; manual override exists for edge cases | New file (~250 LOC); requires migration-before-parse pre-condition; release-before-spawn discipline at one wire-up site | Highest leverage; closes 80% of post-mortem cases automatically; remaining 20% addressed by `/aih-close` |
+| D | Require `Status: awaiting-merge` for the branch-merged auto-promotion path (don't promote `running` → `completed` via merge detection) | Stricter semantics | Defeats the purpose: the bug is precisely that humans/models leave manifests at `running` | Auto-close treats `running`, `awaiting-approval`, `awaiting-merge` as equally eligible when merge evidence exists |
+| E | Add `Status: cancelled` auto-detection (e.g., branch deleted from remote + no merge) | Closes another drift class | Too hostile to in-flight work that pushed an exploratory branch then deleted it | Cancellation should remain explicit (`/aih-close --cancelled`) |
+
+### Applicability Examples
+
+**Worked example #1 — FITS the pattern.** A future maintainer wants to ship a "stale-bug auto-close" hook that flips `Status: running` to `Status: archived` after 90 days of inactivity for bugfix manifests. The natural enforcement moment is `session-start.sh` boot. The provable-done conjunction has analogous shape: (1) `Status: running`, (2) `last_updated:` field exists, (3) `last_updated < now - 90d`, (4) no recent activity in `## Progress Log`. The mutation routes through `update_metadata_kv` inside `acquire_coarse_lock`. Audit emits `hook=stale-bug-archive result=archived|skipped|refused`. **Fits.** New ADR-M0XX-Y extends ADR-260502-A; the pattern (deterministic hook, conjunction-based eligibility, single-writer mutation, audit-log greppability) replays cleanly.
+
+**Worked example #2 — DOES NOT FIT (model judgment required).** A future maintainer wants to "auto-close" manifests where the user verbally said "I'm done with this" in a chat transcript. The eligibility condition is non-deterministic — it requires NLP/LLM judgment on free-form text. **Does NOT fit.** ADR-260502-A's pattern explicitly requires deterministic conjunction conditions; the moment a condition becomes "model decides," the architectural guarantee ("removes the model from the loop") is voided. Correct answer: this belongs in `aih-feature/SKILL.md` Step 13 prose (model-driven), not in an enforcement hook.
+
+### Consequences
+
+**Positive.** Same class of stale-manifest bug becomes architecturally impossible regardless of model behavior, session boundary, or how many code-reviewer loops ran. `/aih-resume` candidate selection becomes self-healing on every invocation. `manifest-append.sh --field status` becomes the sole atomic mutation path — easier to audit, easier to test. ADR-001 / ADR-004 / ADR-M019-A all preserved verbatim. Audit-log greppability gives operators forensic recovery.
+
+**Negative.** Net new ~600 LOC in PR 1 (hook + helper + 14 fixtures + harness). Migration-before-parse adds one `manifest-migrate.sh` invocation per scanned manifest — measurable but acceptable cost (NFR-08 budget: full sweep <3s on ≤30 manifests). Release-before-spawn is a discipline burden — not enforced by the type system, only by code review and the deadlock test (NFR-02). Crash-resume guard depends on `## Checkpoints` correctness — if the M014-anchored checkpoint logic ever drifts, the guard's false-negative rate grows.
+
+**Neutral.** Schema v3 → v4 is one byte. `## Story Records` `verified` column already exists (M014 anchored). The hook is ~250 LOC including comments and audit; the helper is ~80 LOC. Total surface is small enough to inspect by reading.
+
+### Threat Model
+
+**Class 1: false-positive close (auto-closing work that is NOT actually merged).** Mitigated by 5-condition conjunction — all five must hold. Each condition guards a distinct false-positive class. The audit log captures every decision; a false-positive close is recoverable by `manifest-append.sh --field status --payload running`.
+
+**Class 2: race-induced corruption (concurrent writers torn manifest).** Mitigated by ADR-004 inheritance + release-before-spawn discipline (I-03 in architecture.md). The lock domain is per-manifest; a single coarse-lock cycle covers the entire mutation. `update_metadata_kv` uses `mktemp` + `mv -f` (atomic on same-filesystem POSIX; mkdir-atomic on Windows).
+
+**Class 3: hostile manifest forgery.** A user who forges `verified=true` in `## Story Records` can trigger a false-positive auto-close. **Acknowledged not mitigated.** The hook trusts the manifest as a source of truth; manifest integrity is a separate problem solved at the M019/M017 single-writer layer. Audit trail provides forensic recovery.
+
+**Class 4: stale external editor buffer.** A user editing a manifest in VS Code while merge-back fires can overwrite the auto-close mutation with their stale buffer. **Acknowledged not mitigated.** External editors are outside the lock domain. Idempotency saves the user on the next session-start sweep — the manifest re-promotes. Documented as a known interaction in the architecture.md threat-model section.
+
+**Class 5: crash-mid-execution + stale SUMMARY.** A crash that leaves an unmatched `event=enter` checkpoint with a stale SUMMARY.md from an earlier session would auto-close in a naive implementation. Mitigated by FR-08 / I-06 — the crash-resume guard refuses auto-close in this exact case. Verified by F-CRASH-RESUME fixture.
+
+### Migration
+
+Single-shot within M020 Phase A. First session-start sweep post-PR-1 organically migrates all in-flight v1 markdown-bullet manifests to v3 YAML (and post-PR-2 to v4). Backups land at `<manifest>.v1.bak`. No retroactive regeneration required. No user-visible action.
+
+### Rollback
+
+Comment out the three wire-up invocations in `merge-back.sh`, `session-start.sh`, and `aih-resume/SKILL.md` step 4b. The hook stays installed but never fires. ADR-260502-A stays accepted with Implementation Status marked "wire-up reverted — see M020 retrospective." `/aih-close --bulk` remains available for manual cleanup. `manifest-auto-close.sh --dry-run` works for diagnosis.
+
+### References
+
+- Scope: `.aihaus/milestones/M020-260502-stale-manifest-auto-close/PRD.md` (FR-05..FR-13, FR-18..FR-22, FR-32..FR-35; NFR-01..NFR-06)
+- Architecture: `.aihaus/milestones/M020-260502-stale-manifest-auto-close/architecture.md` (§2 Component diagram, §4 Q-8 audit-log schema, §6 Data model + API design, §7 Threat model, §10 Migration strategy)
+- Plan: `.aihaus/plans/260502-stale-manifest-auto-close/PLAN.md` (PR 1 §1a–§1f, PR 2 §2d, PR 3 §3b)
+- Stories: S01 (`lib/integration-refs.sh`), S02 (hook + audit + 14 fixtures), S05 (wire-up at three sites + advisory), S07 (`awaiting-merge` auto-promotion)
+- Outcome gates satisfied: C-1, C-2, C-3, C-4, C-6, C-7, C-10
+
+## ADR-260502-B — Integration-branch awareness (R4) + closest-ancestor reconcile
+
+**Status:** Accepted
+**Date:** 2026-05-02
+**Milestone:** M020
+**Extends:** ADR-001 (filesystem state primitive — preserved); ADR-260502-A (companion ADR; both share `lib/integration-refs.sh` as a foundation); ADR-M017-A (merge-back-as-script — preserved; `worktree-reconcile.sh` is a sibling tool, not the merge-back path itself)
+**Pattern:** Single source of truth for "what counts as merged into integration." Closest-ancestor classification supersedes single-`MAIN_BRANCH` reachability. Hard-cap on cherry-pick recipe length with explicit env override.
+
+### Decision
+
+**Ship `lib/integration-refs.sh` as the single source of truth for integration-ref detection in aihaus, consumed by `manifest-auto-close.sh`, `worktree-reconcile.sh`, and `/aih-close`. Detection priority: (1) `.aihaus/project.md` `integration_branches:` MANUAL field, (2) `git symbolic-ref refs/remotes/origin/HEAD` target, (3) defaults `[origin/staging, origin/main, origin/develop, origin/dev]`. Every emitted ref MUST pass `git rev-parse --verify` before emission. Empty-list result is valid (caller treats as `result=skipped reason=no-integration-ref`).**
+
+**`worktree-reconcile.sh` measures against closest integration ancestor, not main only.** Pre-M020 behavior at line 318 (`commits_not_on_main="$(git rev-list --count "${MAIN_BRANCH}..${wt_sha}" 2>/dev/null || echo "1")"`) is replaced with closest-integration-ancestor logic. For each worktree: iterate the cached integration-ref list; the FIRST ref where `git merge-base --is-ancestor <wt_sha> <ref>` succeeds is the **closest integration ancestor**. If any ref contains the worktree HEAD, classify Category A (clean+merged) and prune silently. If no ref contains it, fall through to existing Category B logic against the closest non-containing ref (which becomes the rebase target).
+
+**Hard cap on cherry-pick recipes at `AIHAUS_RECONCILE_CAP` (default 50).** If Category-B recipe would emit `>cap` commits, the hook emits exactly ONE line:
+
+```
+[INTEGRATION-LAG] <worktree-path> appears to be tracking an old base. Suggest: git rebase <closest-integration-ref>
+```
+
+and emits ZERO `[CATEGORY B]` recipe blocks for that worktree (Q-5 resolved: hard cap, env override). `AIHAUS_RECONCILE_CAP=0` is treated as "no cap" (uncapped recipe) — explicit user opt-in. Independent of `AIHAUS_RECONCILE_INTEGRATION_REFS=0` (the broader opt-out preserving pre-M020 single-`MAIN_BRANCH` behavior byte-identically).
+
+**`git rev-parse --verify` filter on every emitted ref.** A symbolic-ref that no longer resolves (e.g., `origin/HEAD` pointing at a deleted branch on a stale clone) is silently dropped. The function exits 0 with an empty list when no refs verify (NFR-06 / R-4). This is the only architectural defense against the "no `origin/HEAD` set on cloned repo" failure mode.
+
+### Context
+
+- Pre-M020 `worktree-reconcile.sh:318` compared every worktree HEAD only to `MAIN_BRANCH` (resolved via the chain at lines 62–81). In a `staging → main` GitFlow, every staging-merged worktree appears as Category B with a 1000-commit cherry-pick recipe — pure noise.
+- The post-mortem evidence: 8 Category-B recipes spanning 893–1177 commits each in domus-nora-app, all of them staging-merged (already on `origin/staging`, not yet on `origin/main`). Operator response is to mute the tool entirely; the genuine "orphaned commits" detection path becomes invisible.
+- The fix is structural: stop comparing to "main" and start comparing to "any integration ref." A list, ordered by priority, is the right shape because GitFlow naming varies: some repos use `staging`, some use `develop`, some use `release/<sprint>`, some have no staging at all.
+- `lib/integration-refs.sh` becomes the single source of truth. Three consumers (`manifest-auto-close.sh`, `worktree-reconcile.sh`, `/aih-close`) all classify "merged" identically — a precondition for cross-tool consistency. Without a shared helper, each tool would drift its own detection logic.
+- The hard-cap-with-env-override pattern is borrowed from M017's `AIHAUS_RECONCILE_LIMIT` (worktree-reap policy). Same shape, same opt-out grammar.
+- Q-2 placement decision (architect-resolved): `integration_branches:` lives in the MANUAL section of project.md (`<!-- AIHAUS:MANUAL-START -->` … `<!-- AIHAUS:MANUAL-END -->`). This is per-repo policy — by definition human-controlled. The starter template `pkg/.aihaus/templates/project.md` ships a commented-out example.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| A | Keep single `MAIN_BRANCH` and add a list-mode flag | Minimal refactor; one branch of code path | Doesn't solve cross-tool consistency (auto-close + reconcile + aih-close need shared logic); flag explosion | Per-tool drift inevitable; cross-tool consistency degrades |
+| B | (Chosen) Single shared helper + closest-ancestor classification + hard cap | Cross-tool consistency; one source of truth; hard cap forces actionable signal; env override for paranoid users | New file (~80 LOC); migration of `worktree-reconcile.sh` line 318 + surrounding 30 LOC | Best long-term shape; extensible to future hooks |
+| C | "Any integration ref" vs "specific named ref" (post-mortem R4 said singular) | Simpler — one ref to compare against | GitFlow naming varies (`staging`, `develop`, `release/2026`); naming a specific ref forces user config | Extended to a list because user repo naming is variable |
+| D | Soft cap on cherry-pick recipes (emit recipe + escalation line both) | More information per worktree | Doubles output volume; doesn't resolve user's "what do I do?" question | Hard cap is the binary decision the user wants |
+| E | Hard cap with no env override | Strictly enforced; no escape hatch | Rare cases (post-mortem reconstruction, forensic) need full recipe | `AIHAUS_RECONCILE_CAP=0` is the explicit opt-in for those rare cases |
+
+### Applicability Examples
+
+**Worked example #1 — FITS the pattern.** A future maintainer wants to add a `lib/feature-flags.sh` shared helper that resolves enabled feature flags from priority sources: (1) `.aihaus/project.md` MANUAL field, (2) env vars, (3) compiled defaults. Three consumers (skill A, hook B, agent prompt C) need consistent feature-flag state. **Fits the ADR-260502-B pattern.** Single source of truth, priority-ordered detection, every emitted flag verified before emission, empty-result handling. Pattern replays cleanly.
+
+**Worked example #2 — DOES NOT FIT (mutable state, not detection).** A future maintainer wants to add a `lib/recent-activity.sh` shared helper that returns "the most recent commit SHAs touching aihaus files." This is *mutable state* — the answer changes on every git commit. ADR-260502-B's pattern is for *detection of static configuration* (integration refs are stable across a session). For mutable state, a per-call git query is the right pattern, not a cached helper. **Does NOT fit.** Correct answer: inline `git log` calls at each consumer; no shared helper because there's no shared state to deduplicate.
+
+### Consequences
+
+**Positive.** Cross-tool consistency on "merged" classification — auto-close, reconcile, and aih-close all agree. 8 Category-B 1000-commit alerts in domus-nora-app drop to 0 (all 8 worktrees become Category A — clean+merged-to-staging — and prune silently). Truly orphaned worktrees still flag with ≤50-commit useful recipes. Hard cap forces actionable signal. `AIHAUS_RECONCILE_INTEGRATION_REFS=0` preserves pre-M020 behavior byte-identically for paranoid users.
+
+**Negative.** Silent prunes extend to staging-merged worktrees (Category A growth). A user who wanted to inspect a staging-merged worktree might find it pruned; recoverable via `git worktree add` against the same SHA, but a friction point. Mitigation: the env opt-out (`AIHAUS_RECONCILE_INTEGRATION_REFS=0`) is documented in ADR-260502-B and in `worktree-reconcile.sh` header comments. Helper file is POSIX-`sh` only — no bash-isms. Implementer must avoid `[[ ... ]]`, arrays, and other bashisms in `lib/integration-refs.sh`.
+
+**Neutral.** New file ~80 LOC. `worktree-reconcile.sh` MOD ~120 LOC (line 318 replacement + surrounding). Two new fixtures (F-RECONCILE-CAP-49 / F-RECONCILE-CAP-50). The cap default 50 is a round number from the post-mortem; nothing forensic about it.
+
+### Threat Model
+
+**Class 1: false-positive prune (silent pruning of a worktree the user wanted to keep).** Mitigated by `AIHAUS_RECONCILE_INTEGRATION_REFS=0` env opt-out. Recoverable via `git worktree add` against the same SHA — Git preserves the commits regardless of worktree presence.
+
+**Class 2: false-negative classification (wrong integration ref picked).** Mitigated by explicit `integration_branches:` field in project.md (priority 1). Defaults are conservative: if no symbolic-ref and no project.md field, the four-default fallback covers the common GitFlow shapes. Empty-result exit-0 prevents catastrophic misclassification on weird-clone repos (NFR-06).
+
+**Class 3: stale `origin/HEAD` symbolic-ref.** A symbolic-ref pointing at a deleted branch is a real failure mode. Mitigated by `git rev-parse --verify` filter — every emitted ref must verify before emission. Stale refs are silently dropped.
+
+**Class 4: cap evasion via large `AIHAUS_RECONCILE_CAP`.** A user setting `AIHAUS_RECONCILE_CAP=10000` explicitly opts in to large recipes. Acknowledged not mitigated; this is user-controlled escape-hatch by design.
+
+### Migration
+
+Single-shot within M020 Phase C. First post-PR-3 invocation of `worktree-reconcile.sh` uses the new logic. The `MAIN_BRANCH` resolution chain (lines 62–81) is preserved as the fallback path inside the same hook. No retroactive regeneration. No user action required.
+
+### Rollback
+
+Set `AIHAUS_RECONCILE_INTEGRATION_REFS=0` globally to revert to pre-M020 single-`MAIN_BRANCH` behavior byte-identically. ADR-260502-B stays accepted with Implementation Status marked "user opted out — see M020 retrospective." `lib/integration-refs.sh` continues to serve `manifest-auto-close.sh` (which has its own opt-out path).
+
+### References
+
+- Scope: `.aihaus/milestones/M020-260502-stale-manifest-auto-close/PRD.md` (FR-01..FR-04, FR-29..FR-31; NFR-06, NFR-07)
+- Architecture: `.aihaus/milestones/M020-260502-stale-manifest-auto-close/architecture.md` (§4 Q-2 + Q-5 resolution, §6.3 lib/integration-refs.sh API, §7 Threat model)
+- Plan: `.aihaus/plans/260502-stale-manifest-auto-close/PLAN.md` (PR 3 §3a)
+- Stories: S01 (`lib/integration-refs.sh` shared helper), S09 (`worktree-reconcile.sh` integration-ref switch + cap + escalation), S08 (this ADR)
+- Outcome gates satisfied: C-8, C-11
