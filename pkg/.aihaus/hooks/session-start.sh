@@ -92,6 +92,12 @@ if [ -f "$PENDING_LOG" ]; then
 fi
 # --------------------------------------------------------------------------
 
+# --- M020/S05 — auto-close full sweep on session start ---
+AUTOCLOSE_HOOK="$CLAUDE_PROJECT_DIR/.aihaus/hooks/manifest-auto-close.sh"
+if [ -x "$AUTOCLOSE_HOOK" ]; then
+  bash "$AUTOCLOSE_HOOK" 2>/dev/null || true
+fi
+
 jq -n --arg status "${PLANNING_STATUS:-no artifacts yet}" --arg notice "$STASH_NOTICE" '{
   hookSpecificOutput: {
     hookEventName: "SessionStart",

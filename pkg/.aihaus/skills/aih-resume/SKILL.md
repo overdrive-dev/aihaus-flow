@@ -71,6 +71,17 @@ If mismatch is detected (e.g., manifest records `sha: a1b2c3d` but that worktree
 exists or has a different HEAD), flag it as an **informational warning** in your output.
 Never auto-resolve mismatches — user decides.
 
+### 4b. Cross-check branch vs integration ref (auto-close drift)
+
+For each manifest with `Status != completed` from step 2, invoke:
+```bash
+bash pkg/.aihaus/hooks/manifest-auto-close.sh --manifest <path>
+```
+Auto-closed manifests are removed from the candidate set. If N > 0, emit:
+> Auto-closed N manifests (drift cleanup).
+
+If N = 0, silent. After auto-close, re-read the candidate set with the now-current `Status` values.
+
 ### 5. Candidate selection
 
 **When slug is given:** look up directly; error if not found or already completed.
