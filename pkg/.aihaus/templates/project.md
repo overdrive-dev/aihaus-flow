@@ -86,4 +86,10 @@ Short pointers to the most important knowledge entries can live here.
 
 <!-- AIHAUS:EVOLVING-END -->
 
+<!-- integration_branches: optional list of integration refs in priority order
+     (overrides default origin/HEAD + fallback chain). Example:
+     integration_branches: [origin/staging, origin/main, origin/release/2026]
+     Each ref must exist in the repo (filtered via `git rev-parse --verify`).
+-->
+
 <!-- AIHAUS:MANUAL-END -->
