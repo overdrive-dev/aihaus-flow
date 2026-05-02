@@ -147,3 +147,71 @@ release_coarse_lock() {
   fi
   # POSIX: fd 200 released on process exit; nothing to do here.
 }
+
+# --- Resolve the active milestone's RUN-MANIFEST.md path (S04.2 / FR-016) ---
+# Walks up from ${BASH_SOURCE[0]} (THIS script's location) to find the project
+# root — defined as the nearest ancestor containing a .aihaus/ directory. Then
+# picks the most-recently-updated non-terminal milestone manifest under
+# .aihaus/milestones/. Returns absolute path on stdout; empty string on miss.
+#
+# Algorithm:
+#   1. Anchor on script location (NOT cwd, NOT env vars). Sidesteps Stop-hook
+#      cwd semantics (Anthropic's contract is undocumented; we don't depend on it).
+#   2. Walk up with hard 20-iteration cap (FR-016 / Ambiguity F). Cap chosen
+#      because deepest observed path (Windows OneDrive) has ~9 components;
+#      doubled for safety + junction-cycle protection (K-001).
+#   3. Termination: (a) .aihaus dir found, (b) reached POSIX or Windows root
+#      (/c, /), (c) dirname pathology (empty or . from cmd-spawned bash), (d) cap.
+#   4. Among eligible non-terminal manifests (status: running|paused — FR-017
+#      widening), pick the one with the latest mtime (stat -c%Y / stat -f%m).
+#
+# Arguments: none.
+# Reads: ${BASH_SOURCE[0]}, filesystem.
+# Writes: nothing.
+# Exit: 0 always (fail-safe). Caller's null-guard handles empty stdout.
+resolve_manifest_path() {
+  # Anchor on THIS file's location, not cwd.
+  local cwd
+  cwd="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" \
+    || cwd="$(dirname "${BASH_SOURCE[0]}")"
+
+  # Walk up to the .aihaus/ ancestor.
+  local i=0
+  while [ ! -d "$cwd/.aihaus" ]; do
+    [ "$i" -ge 20 ] && { printf ''; return 0; }
+    case "$cwd" in
+      ''|'.'|'/'|'/c'|/[A-Za-z]) printf ''; return 0 ;;
+    esac
+    cwd="$(dirname "$cwd")"
+    i=$((i+1))
+  done
+
+  # Scan non-terminal manifests; pick the one with the latest mtime.
+  local best="" best_mtime=0 m s mt
+  for m in "$cwd"/.aihaus/milestones/M*/RUN-MANIFEST.md; do
+    [ -f "$m" ] || continue
+    # Extract status from ## Metadata block.
+    s="$(awk '
+      /^## Metadata$/ { on=1; next }
+      /^## /          { on=0 }
+      on && /^status:/ {
+        sub(/^status:[[:space:]]*/,"")
+        gsub(/[[:space:]]/,"")
+        print; exit
+      }
+    ' "$m" 2>/dev/null)"
+    # FR-017: allow running OR paused; skip complete/aborted/unknown.
+    case "$s" in
+      running|paused) ;;
+      *) continue ;;
+    esac
+    # mtime: GNU stat -c%Y; BSD/macOS stat -f%m; fallback 0.
+    mt="$(stat -c%Y "$m" 2>/dev/null || stat -f%m "$m" 2>/dev/null || echo 0)"
+    if [ "$mt" -gt "$best_mtime" ] 2>/dev/null; then
+      best="$m"
+      best_mtime="$mt"
+    fi
+  done
+
+  printf '%s' "$best"
+}

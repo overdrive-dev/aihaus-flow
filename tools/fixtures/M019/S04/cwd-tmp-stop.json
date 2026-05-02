@@ -1,0 +1,8 @@
+{
+  "hook_event_name": "Stop",
+  "session_id": "test-session-cwd-tmp-001",
+  "message": {
+    "role": "assistant",
+    "content": "This is a safe message used to test cwd-independent manifest resolution."
+  }
+}
