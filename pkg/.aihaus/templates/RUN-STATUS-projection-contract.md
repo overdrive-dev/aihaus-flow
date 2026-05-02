@@ -14,7 +14,7 @@
 
 ### Phase vs progress separation (D1 spirit-justification)
 
-`STATUS.md` owns phase only; `RUN-STATUS.md` owns progress only — non-overlapping projections of disjoint state.
+STATUS owns phase only; RUN-STATUS owns progress only — non-overlapping projections of disjoint state. (`STATUS.md` and `RUN-STATUS.md` respectively.)
 
 A reader asking "what phase is the milestone in?" reads `STATUS.md`. A reader asking "which stories are done / in-flight / pending?" reads `RUN-STATUS.md`. **Never both at once.** The two projection files are non-overlapping derivatives of the same source-of-truth (`RUN-MANIFEST.md`), governed by ADR-M019-A.
 
