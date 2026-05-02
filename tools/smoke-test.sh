@@ -115,6 +115,7 @@ check_hooks() {
     warning-recurrence.sh
     worktree-reap.sh
     worktree-reconcile.sh
+    manifest-auto-close.sh
     worktree-release.sh
     worktree-release-all.sh
   )
@@ -2657,6 +2658,35 @@ check_run_status_contract() {
   fi
 }
 
+# ---- Check 60 (M020/S02): manifest-auto-close.sh present + parseable --------
+# Asserts:
+#   - pkg/.aihaus/hooks/manifest-auto-close.sh exists
+#   - bash -n syntax check passes
+#   - sources lib/integration-refs.sh (string match for source line)
+#   - declares the constant hook=manifest-auto-close for audit-log greppability (NFR-04)
+check_manifest_auto_close_present() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: manifest-auto-close.sh present + parseable + audit-id constant (M020/S02)"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/manifest-auto-close.sh"
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "manifest-auto-close.sh missing at pkg/.aihaus/hooks/"
+    return
+  fi
+  if ! bash -n "$hook" 2>/dev/null; then
+    _fail "$label" "manifest-auto-close.sh failed bash -n syntax check"
+    return
+  fi
+  if ! grep -q 'lib/integration-refs.sh' "$hook"; then
+    _fail "$label" "manifest-auto-close.sh missing 'lib/integration-refs.sh' source line"
+    return
+  fi
+  if ! grep -q 'hook=manifest-auto-close\|"hook":"manifest-auto-close"\|"hook": *"manifest-auto-close"' "$hook"; then
+    _fail "$label" "manifest-auto-close.sh missing constant audit-log identifier 'hook=manifest-auto-close' (NFR-04)"
+    return
+  fi
+  _pass "$label"
+}
+
 # ---- Check 58 (F260427/S5a): three new ADRs landed in decisions.md ----------
 # Sanity check: ADR-260427-A, ADR-260427-B, ADR-260427-C all present.
 check_f260427_adrs_present() {
@@ -2806,12 +2836,13 @@ check_f260427_pre_flight_annex
 check_f260427_skill_line_safety
 check_f260427_adrs_present
 check_run_status_contract
+check_manifest_auto_close_present
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (59/59)\n"
+  printf "aihaus package smoke test PASSED [OK] (60/60)\n"
   exit 0
 else
-  printf "FAILED - %d of 59 checks failed\n" "$FAILURES"
+  printf "FAILED - %d of 60 checks failed\n" "$FAILURES"
   exit 1
 fi
