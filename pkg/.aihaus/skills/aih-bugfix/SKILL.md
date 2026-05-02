@@ -107,7 +107,7 @@ git checkout -b fix/[slug]
 ```
 If branching fails (e.g., branch exists), append a short suffix: `fix/[slug]-2`.
 
-Create `.aihaus/bugfixes/[YYMMDD]-[slug]/RUN-MANIFEST.md` with: Run ID, Command, Started ISO, Phase `apply-fix`, Status `running`, Branch name. Update `Last updated` and append to Progress Log after each subsequent step.
+Create `.aihaus/bugfixes/[YYMMDD]-[slug]/RUN-MANIFEST.md` from the v3 YAML template in `annexes/run-manifest-template.md` (schema: v3, status: running, phase: apply-fix). Mutations go via `manifest-append.sh` (single-writer — never inline edits). Update `last_updated` and append to Progress Log after each subsequent step.
 
 ### 9. Apply Fix
 - Edit the identified files to resolve the root cause
@@ -176,7 +176,9 @@ Runs AFTER the commit. If `.aihaus/project.md` does not exist, print
 5. If `DECISIONS.md` / `.aihaus/decisions.md` / `.aihaus/knowledge.md` was touched, spawn `project-analyst` with `--refresh-recent-decisions` and merge the scratch files between the `RECENT-DECISIONS-START/END` and `RECENT-KNOWLEDGE-START/END` markers in `.aihaus/project.md`.
 
 ### 16. Report Completion
-Update RUN-MANIFEST.md: set Status `completed`, Phase `completed`, append final timestamp. Summarize what was done:
+Pick a terminal `Status` and update via `bash .aihaus/hooks/manifest-append.sh --field status --payload <value>` (lock-safe — NOT direct file edit): `completed` (work done, branch ready or already merged), `awaiting-merge` (PR open, not yet merged — auto-promotes to `completed` on merge per ADR-260502-A FR-28), `deferred` (partial work, remainder tracked in another milestone or follow-up), or `cancelled` (work abandoned, explicit user decision).
+Do not leave `Status: running` after the final commit lands. If you cannot decide between the four terminal values, ask the user — that is the only acceptable non-terminal exit at this step.
+Then summarize:
 - Branch name (or "stayed on [branch]")
 - Files changed
 - Tests added/updated
