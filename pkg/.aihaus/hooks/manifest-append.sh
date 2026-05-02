@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # manifest-append.sh — single writer for RUN-MANIFEST.md Story Records + Invoke stack
-#                       + Checkpoints (schema v3, M014/ADR-M014-B).
+#                       + Checkpoints (schema v3, M014/ADR-M014-B)
+#                       + RUN-STATUS.md projection (M019/ADR-M019-A).
 # ADR-004 amendment to ADR-001. Append-only; mkdir-mutex with 30s stale reclaim;
 # trap release; worktree-refusal guard; OneDrive/cloud-sync advisory.
 #
@@ -251,7 +252,235 @@ _append_checkpoint_row() {
   mv -f "$tmp" "$MANIFEST_PATH"
 }
 
-# Rate-limit guard: return 0 (allow) or 1 (drop) for duplicate enter events.
+# --- S03 / ADR-M019-A — RUN-STATUS.md projection (NEW) ---
+#
+# Regenerate RUN-STATUS.md from current MANIFEST_PATH state. Called inside the
+# existing coarse+inner lock after every mutating case, BEFORE log_audit "ok".
+# Sequence: (1) RUN-MANIFEST.md atomic-rename complete → (2) sentinel-check
+# MANIFEST_PATH.tmp gone → (3) regen content → (4) write RUN-STATUS.md.tmp →
+# (5) atomic-rename RUN-STATUS.md → (6) caller continues to log_audit "ok".
+# Fail-safe: any error returns 0; RUN-MANIFEST.md remains source-of-truth (NFR-005).
+_regen_run_status() {
+  local status_path
+  status_path="$(dirname "$MANIFEST_PATH")/RUN-STATUS.md"
+
+  # Sentinel — asserts RUN-MANIFEST.md.tmp is gone before starting RUN-STATUS write.
+  # This is the load-bearing mitigation for ASSUMPTIONS A1.4 (OneDrive concurrent .tmp).
+  # FR-011: never two .tmp files in flight simultaneously inside one critical section.
+  [ ! -e "$MANIFEST_PATH.tmp" ] || { log_audit "regen-skip" "sentinel-tmp-still-present"; return 0; }
+
+  # Single-pass field extraction (awk pass 1): metadata fields.
+  # Lock-hold budget: ≤2 awk invocations total so worst-case checkpoint storm
+  # (M014 saw 720 rows) does NOT push individual calls past 2s flock timeout (NFR-002).
+  local ms_id phase status_val last_updated
+  ms_id="$(basename "$(dirname "$MANIFEST_PATH")")"
+  # Extract phase, status, last_updated from ## Metadata in one awk pass
+  local meta_fields
+  meta_fields="$(awk '
+    /^## Metadata$/ { in_meta=1; next }
+    /^## / && in_meta { exit }
+    in_meta && /^phase:/ { gsub(/^phase:[[:space:]]*/,""); phase=$0 }
+    in_meta && /^status:/ { gsub(/^status:[[:space:]]*/,""); status=$0 }
+    in_meta && /^last_updated:/ { gsub(/^last_updated:[[:space:]]*/,""); lu=$0 }
+    END { printf "%s|%s|%s", phase, status, lu }
+  ' "$MANIFEST_PATH" 2>/dev/null)" || return 0
+  phase="${meta_fields%%|*}"; meta_fields="${meta_fields#*|}"
+  status_val="${meta_fields%%|*}"; last_updated="${meta_fields#*|}"
+  [ -n "$phase" ] || phase="-"
+  [ -n "$status_val" ] || status_val="-"
+  [ -n "$last_updated" ] || last_updated="$(ts_iso)"
+
+  # Single-pass field extraction (awk pass 2): story records + invoke stack + recent activity.
+  # Extracts: distinct story IDs (done/in-flight), current story arrow, invoke stack depth,
+  # slice tree rows, recent progress rows.
+  local story_data
+  story_data="$(awk '
+    BEGIN { in_records=0; in_stack=0; in_progress=0; in_checkpoints=0
+            done_count=0; inflight_count=0; total_count=0; stack_depth=0
+            current_story=""; slice_tree=""; recent=""; recent_count=0 }
+    /^## Story Records$/ { in_records=1; in_stack=0; in_progress=0; in_checkpoints=0; next }
+    /^## Invoke stack$/ { in_stack=1; in_records=0; in_progress=0; in_checkpoints=0; next }
+    /^## Progress Log$/ { in_progress=1; in_records=0; in_stack=0; in_checkpoints=0; next }
+    /^## Checkpoints$/ { in_checkpoints=1; in_records=0; in_stack=0; in_progress=0; next }
+    /^## / { in_records=0; in_stack=0; in_progress=0; in_checkpoints=0; next }
+
+    # Story Records: header line or data rows (pipe-delimited)
+    in_records && /^\|/ { next }  # skip table header row
+    in_records && /^[Ss][0-9]/ {
+      split($0, f, "|")
+      sid=f[1]; gsub(/[[:space:]]/, "", sid)
+      st=f[2];  gsub(/[[:space:]]/, "", st)
+      sha=f[4]; gsub(/[[:space:]]/, "", sha)
+      ts=f[3];  gsub(/[[:space:]]/, "", ts)
+      notes=f[6]; gsub(/^[[:space:]]+|[[:space:]]+$/, "", notes)
+      if (sid == "") next
+      # Track unique story IDs: last record wins per story_id
+      if (!(sid in seen)) {
+        seen[sid] = 1
+        total_count++
+        order[total_count] = sid
+      }
+      story_status[sid] = st
+      story_sha[sid] = sha
+      story_ts[sid] = ts
+      story_notes[sid] = notes
+      current_story = sid
+      next
+    }
+
+    # Invoke stack: count non-empty lines
+    in_stack && /[^[:space:]]/ { stack_depth++ }
+
+    # Progress Log + Checkpoints: collect last N=15 lines for recent activity
+    # Skip section headers (^#), table header/separator rows (^| ts | or |---|)
+    (in_progress || in_checkpoints) && /[^[:space:]]/ && !/^#/ && !/^\| ts / && !/^\|---/ {
+      recent_count++
+      recent_lines[recent_count] = $0
+    }
+
+    END {
+      # Count states
+      for (i=1; i<=total_count; i++) {
+        sid = order[i]
+        st = story_status[sid]
+        if (st == "complete") done_count++
+        else if (st == "in-progress" || st == "in-flight") inflight_count++
+      }
+      pending_count = total_count - done_count - inflight_count
+
+      # Build slice tree (one line per unique story)
+      for (i=1; i<=total_count; i++) {
+        sid = order[i]
+        st = story_status[sid]
+        sha = story_sha[sid]
+        ts = story_ts[sid]
+        note = story_notes[sid]
+        if (st == "complete") {
+          marker = "[v]"
+          detail = "done " ts (sha != "" ? "  sha:" substr(sha,1,7) : "")
+        } else if (st == "in-progress" || st == "in-flight") {
+          marker = "[>]"
+          detail = "in-flight (since " ts ")"
+        } else {
+          marker = "[ ]"
+          detail = "pending"
+        }
+        slug_hint = (note != "" ? substr(note, 1, 40) : "")
+        if (slug_hint != "")
+          slice_tree = slice_tree "- " sid " " marker "  " slug_hint "  " detail "\n"
+        else
+          slice_tree = slice_tree "- " sid " " marker "  " detail "\n"
+      }
+
+      # Build slice grid (5 per row, [v]=done [>]=in-flight [ ]=pending)
+      grid = ""
+      for (i=1; i<=total_count; i++) {
+        sid = order[i]
+        st = story_status[sid]
+        if (st == "complete") cell = "[v]"
+        else if (st == "in-progress" || st == "in-flight") cell = "[>]"
+        else cell = "[ ]"
+        grid = grid sid " " cell
+        if (i % 5 == 0 && i < total_count) grid = grid "\n"
+        else if (i < total_count) grid = grid "  "
+      }
+
+      # Recent activity: last 10 lines (reversed for newest-first)
+      start = (recent_count > 10) ? recent_count - 9 : 1
+      recent_out = ""
+      for (i=recent_count; i>=start; i--) {
+        recent_out = recent_out "- " recent_lines[i] "\n"
+      }
+
+      printf "%d|%d|%d|%d|%d|%s|%s|%s|%s",
+        total_count, done_count, inflight_count, pending_count, stack_depth,
+        current_story, slice_tree, grid, recent_out
+    }
+  ' "$MANIFEST_PATH" 2>/dev/null)" || return 0
+
+  # Parse extracted data
+  local total done_c inflight_c pending_c stack_d curr_story slice_tree grid_txt recent_txt
+  total="${story_data%%|*}"; story_data="${story_data#*|}"
+  done_c="${story_data%%|*}"; story_data="${story_data#*|}"
+  inflight_c="${story_data%%|*}"; story_data="${story_data#*|}"
+  pending_c="${story_data%%|*}"; story_data="${story_data#*|}"
+  stack_d="${story_data%%|*}"; story_data="${story_data#*|}"
+  curr_story="${story_data%%|*}"; story_data="${story_data#*|}"
+  slice_tree="${story_data%%|*}"; story_data="${story_data#*|}"
+  grid_txt="${story_data%%|*}"; recent_txt="${story_data#*|}"
+
+  # Resolve total from file-count (primary) — story_data total is distinct-id count
+  local stories_dir file_total
+  stories_dir="$(dirname "$MANIFEST_PATH")/stories"
+  if [ -d "$stories_dir" ]; then
+    file_total="$(find "$stories_dir" -maxdepth 1 -name 'S*.md' 2>/dev/null | wc -l | tr -d ' ')"
+    [ "${file_total:-0}" -gt 0 ] && total="$file_total"
+  fi
+
+  # Get current git SHA (fail-safe)
+  local sha="none"
+  sha="$(git rev-parse --short HEAD 2>/dev/null)" || sha="none"
+
+  # Arrow display: suppress when phase is complete or aborted
+  local arrow_field=""
+  case "$phase" in
+    complete|aborted) arrow_field="" ;;
+    *) [ -n "$curr_story" ] && arrow_field="**Current:** ${curr_story} ->" ;;
+  esac
+
+  # Build output
+  local tmp="$status_path.tmp"
+  {
+    printf '<!-- DERIVED FROM RUN-MANIFEST.md — DO-NOT-EDIT-MANUALLY (manifest-append.sh is the sole writer per ADR-M019-A) -->\n'
+    printf '<!-- last_updated: %s -->\n\n' "$(ts_iso)"
+    printf '# RUN-STATUS — %s\n\n' "$ms_id"
+    printf '**Phase:** %s          _(informational only; canonical phase lives in STATUS.md)_\n' "$phase"
+    printf '**Stories:** %s done / %s in-flight / %s pending (%s total)\n' \
+      "${done_c:-0}" "${inflight_c:-0}" "${pending_c:-0}" "${total:-?}"
+    [ -n "$arrow_field" ] && printf '%s\n' "$arrow_field"
+    printf '**Agents in flight:** %s\n' "${stack_d:-0}"
+    printf '**SHA:** %s\n' "$sha"
+    printf '\n## Slice grid\n\n'
+    if [ -n "$grid_txt" ]; then
+      printf '%s\n' "$grid_txt"
+    else
+      printf '_(no stories recorded yet)_\n'
+    fi
+    printf '\n## Slice tree\n\n'
+    if [ -n "$slice_tree" ]; then
+      printf '%s' "$slice_tree"
+    else
+      printf '_(no stories recorded yet)_\n'
+    fi
+    printf '\n## Recent activity\n\n'
+    if [ -n "$recent_txt" ]; then
+      printf '%s' "$recent_txt"
+    else
+      printf '_(no activity recorded yet)_\n'
+    fi
+    printf '\n---\n'
+    printf '_Sole writer: `manifest-append.sh` per ADR-M019-A. Do not edit manually._\n'
+  } > "$tmp" 2>/dev/null || return 0
+
+  # OneDrive-aware atomic rename — verbatim from phase-advance.sh:170-185
+  # ONLY adaptation: failure mode is `return 0` (fail-safe) instead of `exit 11`.
+  local onedrive_path=0
+  case "$status_path" in
+    *OneDrive*|*"One Drive"*|*Dropbox*|*iCloud*) onedrive_path=1 ;;
+  esac
+  if [ "$onedrive_path" -eq 1 ] && command -v python3 >/dev/null 2>&1; then
+    # Python os.replace is atomic across OneDrive/NTFS
+    if python3 -c "import os,sys; os.replace(sys.argv[1], sys.argv[2])" "$tmp" "$status_path" 2>/dev/null; then
+      : # success
+    else
+      mv -f "$tmp" "$status_path" 2>/dev/null || return 0
+    fi
+  else
+    mv -f "$tmp" "$status_path" 2>/dev/null || return 0
+  fi
+}
+
+# --- Rate-limit guard: return 0 (allow) or 1 (drop) for duplicate enter events.
 # Drops if an identical (story, agent, substep) enter row exists with a ts
 # within the last 1 second.
 _checkpoint_rate_limit() {
@@ -294,6 +523,7 @@ if [ -n "$CHECKPOINT_MODE" ]; then
       fi
       _append_checkpoint_row "$(ts_iso)" "$CP_STORY" "$CP_AGENT" "$CP_SUBSTEP" "enter" "" ""
       update_metadata_kv "last_updated" "$(ts_iso)"
+      _regen_run_status || true  # ADR-M019-A: regen before log_audit; fail-safe (NFR-005)
       log_audit "ok"
       exit 0
       ;;
@@ -307,6 +537,7 @@ if [ -n "$CHECKPOINT_MODE" ]; then
       _ensure_checkpoints_section
       _append_checkpoint_row "$(ts_iso)" "$CP_STORY" "$CP_AGENT" "$CP_SUBSTEP" "exit" "$CP_RESULT" "$CP_SHA"
       update_metadata_kv "last_updated" "$(ts_iso)"
+      _regen_run_status || true  # ADR-M019-A: regen before log_audit; fail-safe (NFR-005)
       log_audit "ok"
       exit 0
       ;;
@@ -319,6 +550,7 @@ case "$FIELD" in
     # payload is a pre-formed pipe-delimited row
     append_to_section "## Story Records" "$PAYLOAD" append
     update_metadata_kv "last_updated" "$(ts_iso)"
+    _regen_run_status || true  # ADR-M019-A: regen before log_audit; fail-safe (NFR-005)
     ;;
   invoke-push)
     [ -n "$PAYLOAD" ] || { log_audit "fail" "payload-empty"; exit 8; }
@@ -329,6 +561,7 @@ case "$FIELD" in
     fi
     append_to_section "## Invoke stack" "$PAYLOAD" append
     update_metadata_kv "last_updated" "$(ts_iso)"
+    _regen_run_status || true  # ADR-M019-A: regen before log_audit; fail-safe (NFR-005)
     ;;
   invoke-pop)
     depth=$(stack_depth)
@@ -338,21 +571,25 @@ case "$FIELD" in
     fi
     pop_invoke_stack
     update_metadata_kv "last_updated" "$(ts_iso)"
+    _regen_run_status || true  # ADR-M019-A: regen before log_audit; fail-safe (NFR-005)
     ;;
   progress-log)
     [ -n "$PAYLOAD" ] || { log_audit "fail" "payload-empty"; exit 8; }
     append_progress_log "$PAYLOAD"
     update_metadata_kv "last_updated" "$(ts_iso)"
+    _regen_run_status || true  # ADR-M019-A: regen before log_audit; fail-safe (NFR-005)
     ;;
   phase)
     [ -n "$PAYLOAD" ] || { log_audit "fail" "payload-empty"; exit 8; }
     update_metadata_kv "phase" "$PAYLOAD"
     update_metadata_kv "last_updated" "$(ts_iso)"
+    _regen_run_status || true  # ADR-M019-A: regen before log_audit; fail-safe (NFR-005)
     ;;
   status)
     [ -n "$PAYLOAD" ] || { log_audit "fail" "payload-empty"; exit 8; }
     update_metadata_kv "status" "$PAYLOAD"
     update_metadata_kv "last_updated" "$(ts_iso)"
+    _regen_run_status || true  # ADR-M019-A: regen before log_audit; fail-safe (NFR-005)
     ;;
 esac
 
