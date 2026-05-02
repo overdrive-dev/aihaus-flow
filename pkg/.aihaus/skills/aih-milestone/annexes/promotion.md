@@ -35,6 +35,8 @@ On **defer** choice: create `.aihaus/milestones/drafts/<next-M>-<deferred-theme>
 
 Override: `--no-split` bypasses the prompt (flag documented; do not use silently).
 
+> **WARN: --no-split bypasses the 12-story cap. Cap was set deliberately. Add a 1-paragraph rationale to the milestone PRD's 'Alternatives Considered' section.**
+
 ## Step P2 — Load Plan
 
 Parse PLAN.md sections:
