@@ -96,7 +96,7 @@ Chain dependencies sequentially. Before each step, set its task to `in_progress`
 - **Pre-flight (collision check, ADR-260427-C):** see `annexes/pre-flight-collision.md` before any branch op.
 - Derive `[slug]` (lowercase, hyphens, ≤40 chars, strip trailing hyphens). If user said "stay on this branch", skip branching.
 - `git checkout -b feature/[slug]`. If user approved stashing: `git stash` before branching; `git stash pop` after.
-- Create `.aihaus/features/[YYMMDD]-[slug]/RUN-MANIFEST.md` with: Run ID, Command, Started ISO, Phase `implement`, Status `running`, Branch name. Update `Last updated` and append to Progress Log after each subsequent step.
+- Create `.aihaus/features/[YYMMDD]-[slug]/RUN-MANIFEST.md` from the v3 YAML template in `annexes/run-manifest-template.md` (schema: v3, status: running, phase: implement). Mutations go via `manifest-append.sh` (single-writer — never inline edits). Update `last_updated` and append to Progress Log after each subsequent step.
 
 ### Step 7: Implement
 - Make all changes identified in the plan.
@@ -188,7 +188,8 @@ Runs AFTER the commit. If `.aihaus/project.md` does not exist, print
 5. If `DECISIONS.md` (repo root) or `.aihaus/decisions.md` / `.aihaus/knowledge.md` was touched in this commit, spawn `project-analyst` with `--refresh-recent-decisions` and merge the scratch files between the `RECENT-DECISIONS-START/END` and `RECENT-KNOWLEDGE-START/END` markers in `.aihaus/project.md`.
 
 ### Step 13: Report Completion
-Update RUN-MANIFEST.md: set Status `completed`, Phase `completed`, append final timestamp. Tell the user:
+Pick a terminal `Status` and update via `bash .aihaus/hooks/manifest-append.sh --field status --payload <value>` (lock-safe — NOT direct file edit): `completed` (work done, branch ready or already merged), `awaiting-merge` (PR open, not yet merged — auto-promotes to `completed` on merge per ADR-260502-A FR-28), `deferred` (partial work, remainder tracked in another milestone or follow-up), or `cancelled` (work abandoned, explicit user decision).
+Do not leave `Status: running` after the final commit lands. If you cannot decide between the four terminal values, ask the user — that is the only acceptable non-terminal exit at this step.
 - What was implemented
 - Branch name and commit hash
 - Test/verification results
