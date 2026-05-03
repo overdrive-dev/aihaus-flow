@@ -38,11 +38,11 @@ _start_check() {
   CHECK_NUMBER=$((CHECK_NUMBER + 1))
 }
 
-# ---- Check 1: 12 expected SKILL.md files in expected subdirectories ---------
+# ---- Check 1: 13 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 12 expected SKILL.md files"
-  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-resume aih-brainstorm aih-effort)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 13 expected SKILL.md files"
+  local expected=(aih-brainstorm aih-bugfix aih-close aih-effort aih-feature aih-help aih-init aih-milestone aih-plan aih-quick aih-resume aih-sync-notion aih-update)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -740,23 +740,23 @@ check_purity() {
 }
 
 # ---- Check 27: skill directory count = 12 (M014/S03 deletes aih-automode) ---
-# Verifies that exactly 12 aih-* skill directories exist under .aihaus/skills/.
-# Note: Check 1 verifies the NAMED SKILL.md files (12 expected names including
-# aih-effort; aih-automode deleted in M014/S03). Check 27 independently verifies
-# the directory count so that unexpected directories (stale renames, extra skill
-# dirs) also cause CI failure. If the count exceeds 12, a stale directory likely
-# remains from a prior rename.
+# Verifies that exactly 13 aih-* skill directories exist under .aihaus/skills/.
+# Note: Check 1 verifies the NAMED SKILL.md files (13 expected names including
+# aih-close (M020/S10) and aih-effort; aih-automode deleted in M014/S03). Check 27
+# independently verifies the directory count so that unexpected directories (stale
+# renames, extra skill dirs) also cause CI failure. If the count exceeds 13, a stale
+# directory likely remains from a prior rename.
 check_skill_count_and_staleness() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: exactly 12 aih-* skill dirs exist (M014/S03)"
+  local label="Check ${CHECK_NUMBER}: exactly 13 aih-* skill dirs exist (M020/S10)"
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   local problems=()
 
   # Count aih-* directories (exclude _shared and any non-aih prefixed dirs).
   local actual_count
   actual_count=$(find "$skills_root" -maxdepth 1 -type d -name 'aih-*' | wc -l | tr -d ' ')
-  if [[ "$actual_count" -ne 12 ]]; then
-    problems+=("expected 12 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
+  if [[ "$actual_count" -ne 13 ]]; then
+    problems+=("expected 13 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -2716,6 +2716,19 @@ check_f260427_adrs_present() {
   _pass "$label"
 }
 
+# ---- Check 61 (M020/S10): aih-close skill frontmatter conformance -----------
+check_aih_close_skill() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aih-close skill frontmatter conformance (M020/S10)"
+  local f="${PACKAGE_ROOT}/.aihaus/skills/aih-close/SKILL.md"
+  [ -f "$f" ] || { _fail "$label" "missing $f"; return; }
+  grep -q '^name: aih-close$' "$f" || { _fail "$label" "name field missing or malformed"; return; }
+  local lines
+  lines=$(wc -l < "$f" | tr -d ' ')
+  [ "$lines" -le 200 ] || { _fail "$label" "$lines > 200 lines"; return; }
+  _pass "$label"
+}
+
 # ---- Selectable sub-mode dispatcher (--check <name> --skill <slug>) ---------
 # PURPOSE: invoked by completion-protocol Step 4.6 pre-apply gate before each
 # skill evolution is committed. Runs only the named check against the named skill;
@@ -2851,12 +2864,13 @@ check_f260427_skill_line_safety
 check_f260427_adrs_present
 check_run_status_contract
 check_manifest_auto_close_present
+check_aih_close_skill
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (60/60)\n"
+  printf "aihaus package smoke test PASSED [OK] (61/61)\n"
   exit 0
 else
-  printf "FAILED - %d of 60 checks failed\n" "$FAILURES"
+  printf "FAILED - %d of 61 checks failed\n" "$FAILURES"
   exit 1
 fi
