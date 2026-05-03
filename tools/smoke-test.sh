@@ -118,6 +118,7 @@ check_hooks() {
     manifest-auto-close.sh
     worktree-release.sh
     worktree-release-all.sh
+    worktree-drift-check.sh
   )
   local missing=()
   for hook in "${EXPECTED_HOOKS[@]}"; do

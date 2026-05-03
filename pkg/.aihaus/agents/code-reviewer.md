@@ -56,6 +56,22 @@ If this is a `/aih-feature` or `/aih-bugfix` review (`MANIFEST_PATH` set, file i
   WITH a `MED` finding documenting that the deviation flag was used (so reviewers downstream can
   see the pattern frequency).
 
+**ADR enum-literal drift (when the diff touches an ADR or enum-mapping code):**
+Grep the ADR text for backtick-fenced enum-like literals (e.g., `` `CONFIRMED/PENDING/CANCELLED` ``
+or any ALL_CAPS slash-separated sequence). For each matched literal, search the project's
+enum source-of-truth (e.g., `backend/app/models/enums.py`, `frontend/src/types/enums.ts`, or
+stack equivalent — read `project.md` Inventory) and confirm every literal exists in the matching
+enum class. Any literal absent from the real enum → flag as **CRITICAL** (ADR validity: an ADR
+that misrepresents the schema cannot be used to validate downstream code against the real schema).
+
+**Dispatcher boundary audit (when a PR narrows a TS/Python type that mirrors a backend role-gated schema):**
+Identify the dispatcher function (e.g., a role-gating helper or service boundary — read
+`project.md` to locate the stack equivalent). Grep for ALL callers of that dispatcher; for each
+caller, verify that the corresponding API helper or frontend consumer is consistently narrowed to
+match the role-gated response shape. Helpers still typed wide (i.e., the narrowing PR fixed only
+the named entry point, not every crossing of the same boundary) → flag as **HIGH** (parallel type
+lie that survived the narrowing PR). Source: downstream consumer audit, 2026-05-03.
+
 ## Output Format
 Write `REVIEW.md` in the milestone/feature directory:
 

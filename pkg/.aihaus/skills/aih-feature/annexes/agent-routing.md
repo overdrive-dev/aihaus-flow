@@ -42,6 +42,32 @@ Every agent prompt MUST include all of:
 - Verification commands the agent should run before reporting (e.g., smoke-test, lint, typecheck)
 - Brief report contract — what the agent must include in its return summary (worktree path, files touched, verification outputs)
 
+## Post-return discipline (orchestrator-side)
+
+After every `implementer`, `frontend-dev`, or `code-fixer` agent return, the orchestrator MUST do
+the following BEFORE crediting the agent's work or moving to the next story step:
+
+1. **Run `git status` and `git diff --stat HEAD`** in the main worktree. If the working tree is
+   unchanged after the agent reports success → silent merge-back failure. The agent's reported
+   work did not flow back. Do NOT proceed.
+
+2. **Cross-check reported paths.** Compare the agent's reported file paths against
+   `git diff --name-only` output. If the agent reported `frontend/foo/bar.tsx` but git shows
+   `frontend/foz/baz.tsx` (or nothing) → the agent worked on stale paths. The most common cause
+   is worktree-base drift: the agent's isolated worktree was created from a snapshot that predates
+   a rename or restructure, so its "edits" landed on files that no longer exist in main.
+
+3. **Recovery when drift is detected.** Discard the agent's worktree output; do NOT credit partial
+   work. Redo inline (if within inline-edit budget) OR re-spawn the agent with an explicit
+   briefing that lists the CURRENT canonical paths from `git ls-tree -r HEAD --name-only`.
+
+4. **Optional helper:** `bash pkg/.aihaus/hooks/worktree-drift-check.sh <reported-path...>` —
+   exits 0 if all reported paths exist in the main worktree, exits 1 with a per-path diagnostic
+   to stderr on any miss. Run it immediately after merge-back, before crediting the agent.
+
+Source: downstream consumer audit, 2026-05-03 (two consecutive frontend-dev sessions produced
+reports referencing non-existent paths; each caused a full redo costing ~1 hour).
+
 ## Why this exists
 
 Raw-model orchestrator inline edits lose three things specialty agents bring:
