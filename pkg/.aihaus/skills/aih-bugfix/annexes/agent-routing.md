@@ -43,6 +43,30 @@ When inline is NOT appropriate:
 - Migration files
 - Anything requiring new tests
 
+## Post-return discipline (orchestrator-side)
+
+After every `implementer`, `frontend-dev`, or `code-fixer` agent return, the orchestrator MUST do
+the following BEFORE crediting the agent's work or moving to the next bugfix step:
+
+1. **Run `git status` and `git diff --stat HEAD`** in the main worktree. If the working tree is
+   unchanged after the agent reports success → silent merge-back failure. The agent's reported
+   work did not flow back. Do NOT proceed.
+
+2. **Cross-check reported paths.** Compare the agent's reported file paths against
+   `git diff --name-only` output. Path mismatch (agent says `frontend/foo/bar.tsx`, git shows
+   nothing or a different path) → worktree-base drift. The agent worked on a stale snapshot
+   that predates a rename; nothing applied to main.
+
+3. **Recovery when drift is detected.** Discard the agent output; do NOT credit partial work.
+   Redo inline (if within the 5-edit bugfix budget) OR re-spawn with the CURRENT canonical paths
+   from `git ls-tree -r HEAD --name-only`.
+
+4. **Optional helper:** `bash pkg/.aihaus/hooks/worktree-drift-check.sh <reported-path...>` —
+   exits 0 if all paths exist in the main worktree, exits 1 with a per-path diagnostic to stderr.
+
+Source: downstream consumer audit, 2026-05-03 (recurring worktree drift on isolation agents
+caused two full redo-from-scratch sessions in 24 hours).
+
 ## Same class as feature Step 7
 
 This contract is the bugfix mirror of `aih-feature/annexes/agent-routing.md`. Both close the same antipattern: model-driven SKILL steps with no structural enforcement. Source: downstream consumer audit post-mortem `260503-aih-feature-step7-agent-delegation`.
