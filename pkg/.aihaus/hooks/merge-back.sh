@@ -279,4 +279,9 @@ bash "$(dirname "$0")/manifest-append.sh" \
   --checkpoint-exit "$STORY" merge-back "merge-back:$STORY" OK "$CURRENT_SHA" 2>/dev/null || true
 
 echo "merge-back.sh: ok — story=$STORY files-copied=$FILES_COPIED worktree=$WORKTREE" >&2
+
+# --- M020/S05 — auto-close wire-up (F2: release-before-spawn) ---
+release_coarse_lock "$MANIFEST" 2>/dev/null || true
+trap - EXIT INT TERM
+bash "$(dirname "$0")/manifest-auto-close.sh" --manifest "$MANIFEST" 2>/dev/null || true
 exit 0

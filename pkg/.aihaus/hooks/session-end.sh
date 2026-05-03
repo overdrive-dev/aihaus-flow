@@ -76,4 +76,13 @@ fi
 jq -n --arg ts "$(ts_iso)" \
   '{ts: $ts, event: "session_end"}' >> "$LOG_FILE" 2>/dev/null || true
 
+# --- stale-manifest advisory (non-blocking, NFR-05 / R-3) ---
+AUTOCLOSE_HOOK="$CLAUDE_PROJECT_DIR/.aihaus/hooks/manifest-auto-close.sh"
+if [ -x "$AUTOCLOSE_HOOK" ]; then
+  count=$(bash "$AUTOCLOSE_HOOK" --dry-run 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+  if [ "${count:-0}" -gt 0 ] 2>/dev/null; then
+    printf 'advisory: %s manifest(s) eligible for auto-close — run /aih-close --bulk\n' "$count" >&2
+  fi
+fi
+
 exit 0

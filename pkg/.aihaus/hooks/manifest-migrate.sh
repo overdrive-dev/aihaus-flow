@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # manifest-migrate.sh — detect v1 RUN-MANIFEST.md and convert to v2 in place;
-# detect v2 and add the optional ## Checkpoints section for v3 (M014/ADR-M014-B).
+# detect v2 and add the optional ## Checkpoints section for v3 (M014/ADR-M014-B);
+# detect v3 and bump schema to v4 to unlock extended Status vocabulary (M020/S06).
 # ADR-004 migration hook. Idempotent; backs up to .v1.bak before v1→v2 mutation.
 # Coordinates with manifest-append.sh via the same $MANIFEST_PATH.lock mutex.
 #
 # Usage: MANIFEST_PATH=<path> manifest-migrate.sh
 #
-# Exit codes: 0 ok (migrated or already-v2/v3), 2 invalid args, 3 worktree-refuse,
+# Exit codes: 0 ok (migrated or already-v2/v3/v4), 2 invalid args, 3 worktree-refuse,
 #             4 backup-failed, 5 write-failed, 6 lock-timeout, 7 manifest-missing.
 set -euo pipefail
 
@@ -50,6 +51,44 @@ case "$MANIFEST_PATH" in
     fi
     ;;
 esac
+
+# --- detect v4 (already fully migrated — no-op) ---
+if grep -qE '^schema:\s*v4\s*$' "$MANIFEST_PATH"; then
+  echo "manifest-migrate.sh: already-v4 (no-op)"
+  log_audit "already-v4"
+  exit 0
+fi
+
+# --- detect v3 → apply v3→v4 migration (additive: schema bump only) ---
+if grep -qE '^schema:\s*v3\s*$' "$MANIFEST_PATH"; then
+  LOCK="$MANIFEST_PATH.lock"
+  tries=0
+  while ! mkdir "$LOCK" 2>/dev/null; do
+    if [ -d "$LOCK" ]; then
+      age=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || stat -f %m "$LOCK" 2>/dev/null || echo 0) ))
+      if [ "$age" -gt "$STALE_LOCK_SEC" ]; then
+        rmdir "$LOCK" 2>/dev/null || true
+        continue
+      fi
+    fi
+    tries=$((tries + 1))
+    [ "$tries" -lt 100 ] || { echo "manifest-migrate.sh: lock timeout (v3→v4)" >&2; log_audit "fail" "lock-timeout-v3v4"; exit 6; }
+    sleep 0.1 2>/dev/null || sleep 1
+  done
+  trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+
+  TMP_V4="$(mktemp)"
+  trap 'rmdir "$LOCK" 2>/dev/null || true; rm -f "$TMP_V4"' EXIT INT TERM
+  sed 's/^schema: v3$/schema: v4/' "$MANIFEST_PATH" > "$TMP_V4"
+  if ! mv -f "$TMP_V4" "$MANIFEST_PATH"; then
+    echo "manifest-migrate.sh: write failed (v3→v4)" >&2
+    log_audit "fail" "write-failed-v3v4"
+    exit 5
+  fi
+  echo "manifest-migrate.sh: v3→v4 OK (schema bump only — vocabulary unlocked)"
+  log_audit "migrated-v3v4"
+  exit 0
+fi
 
 # --- detect v3 (already fully migrated — no-op) ---
 if grep -qE '^schema:\s*v3\s*$' "$MANIFEST_PATH"; then

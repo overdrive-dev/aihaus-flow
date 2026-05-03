@@ -38,11 +38,11 @@ _start_check() {
   CHECK_NUMBER=$((CHECK_NUMBER + 1))
 }
 
-# ---- Check 1: 12 expected SKILL.md files in expected subdirectories ---------
+# ---- Check 1: 13 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 12 expected SKILL.md files"
-  local expected=(aih-init aih-plan aih-bugfix aih-feature aih-milestone aih-help aih-quick aih-sync-notion aih-update aih-resume aih-brainstorm aih-effort)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 13 expected SKILL.md files"
+  local expected=(aih-brainstorm aih-bugfix aih-close aih-effort aih-feature aih-help aih-init aih-milestone aih-plan aih-quick aih-resume aih-sync-notion aih-update)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -115,6 +115,7 @@ check_hooks() {
     warning-recurrence.sh
     worktree-reap.sh
     worktree-reconcile.sh
+    manifest-auto-close.sh
     worktree-release.sh
     worktree-release-all.sh
   )
@@ -739,23 +740,23 @@ check_purity() {
 }
 
 # ---- Check 27: skill directory count = 12 (M014/S03 deletes aih-automode) ---
-# Verifies that exactly 12 aih-* skill directories exist under .aihaus/skills/.
-# Note: Check 1 verifies the NAMED SKILL.md files (12 expected names including
-# aih-effort; aih-automode deleted in M014/S03). Check 27 independently verifies
-# the directory count so that unexpected directories (stale renames, extra skill
-# dirs) also cause CI failure. If the count exceeds 12, a stale directory likely
-# remains from a prior rename.
+# Verifies that exactly 13 aih-* skill directories exist under .aihaus/skills/.
+# Note: Check 1 verifies the NAMED SKILL.md files (13 expected names including
+# aih-close (M020/S10) and aih-effort; aih-automode deleted in M014/S03). Check 27
+# independently verifies the directory count so that unexpected directories (stale
+# renames, extra skill dirs) also cause CI failure. If the count exceeds 13, a stale
+# directory likely remains from a prior rename.
 check_skill_count_and_staleness() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: exactly 12 aih-* skill dirs exist (M014/S03)"
+  local label="Check ${CHECK_NUMBER}: exactly 13 aih-* skill dirs exist (M020/S10)"
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   local problems=()
 
   # Count aih-* directories (exclude _shared and any non-aih prefixed dirs).
   local actual_count
   actual_count=$(find "$skills_root" -maxdepth 1 -type d -name 'aih-*' | wc -l | tr -d ' ')
-  if [[ "$actual_count" -ne 12 ]]; then
-    problems+=("expected 12 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
+  if [[ "$actual_count" -ne 13 ]]; then
+    problems+=("expected 13 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -1650,12 +1651,13 @@ check_verifier_knowledge_consulted() {
   fi
 }
 
-# ---- Check (M014/S06): schema v2→v3 migration fixture (idempotent + additive) -
-# Exercises manifest-migrate.sh v2→v3 path:
+# ---- Check (M014/S06 + M020/S06): schema v2→v3→v4 migration fixture (idempotent + additive) -
+# Exercises manifest-migrate.sh full chain:
 #   R1 takes a v2 fixture manifest (schema: v2, no ## Checkpoints)
-#   R2 runs manifest-migrate.sh → asserts ## Checkpoints heading present
+#   R2 runs manifest-migrate.sh → asserts schema: v3 + ## Checkpoints heading present
 #   R3 asserts column header present (LD-1 7-column shape)
-#   R4 runs manifest-migrate.sh again → asserts no diff (idempotent)
+#   R4 runs manifest-migrate.sh again → asserts schema bumped to v4 (v3→v4 step, M020/S06)
+#   R5 runs manifest-migrate.sh a third time → asserts no diff (already-v4 no-op, idempotent)
 # Uses mktemp -d for the fixture; never pollutes the repo.
 check_schema_v3_migration() {
   _start_check
@@ -1690,7 +1692,7 @@ story_id|status|started_at|commit_sha|verified|notes
 S01|complete|2026-04-22T00:01:00Z|abc1234|true|
 MANIFEST_EOF
 
-  # R2: run migration first time
+  # R2: run migration first time (v2 → v3)
   local migrate_out migrate_rc
   migrate_out=$(MANIFEST_PATH="$fixture" bash "$migrate_hook" 2>&1)
   migrate_rc=$?
@@ -1709,23 +1711,36 @@ MANIFEST_EOF
     problems+=("R3: LD-1 column header not present; expected: '${expected_header}'")
   fi
 
-  # R4: capture snapshot before second run
-  local snap_before
-  snap_before="$(cat "$fixture")"
-
-  # R4: run migration a second time
+  # R4: run migration a second time (v3 → v4, M020/S06)
   local migrate_out2 migrate_rc2
   migrate_out2=$(MANIFEST_PATH="$fixture" bash "$migrate_hook" 2>&1)
   migrate_rc2=$?
   if [[ "$migrate_rc2" -ne 0 ]]; then
-    problems+=("R4: manifest-migrate.sh exited ${migrate_rc2} on second run; output: ${migrate_out2:0:200}")
+    problems+=("R4: manifest-migrate.sh exited ${migrate_rc2} on v3→v4 run; output: ${migrate_out2:0:200}")
   fi
 
-  # R4: assert idempotent (file unchanged)
+  # R4: assert schema bumped to v4
+  if ! grep -q '^schema: v4$' "$fixture"; then
+    problems+=("R4: schema not bumped to v4 after second migration run")
+  fi
+
+  # R5: capture snapshot before third run
+  local snap_before
+  snap_before="$(cat "$fixture")"
+
+  # R5: run migration a third time (should be already-v4 no-op)
+  local migrate_out3 migrate_rc3
+  migrate_out3=$(MANIFEST_PATH="$fixture" bash "$migrate_hook" 2>&1)
+  migrate_rc3=$?
+  if [[ "$migrate_rc3" -ne 0 ]]; then
+    problems+=("R5: manifest-migrate.sh exited ${migrate_rc3} on already-v4 run; output: ${migrate_out3:0:200}")
+  fi
+
+  # R5: assert idempotent at v4 (file unchanged)
   local snap_after
   snap_after="$(cat "$fixture")"
   if [[ "$snap_before" != "$snap_after" ]]; then
-    problems+=("R4: idempotence violated — manifest changed on second migration run")
+    problems+=("R5: idempotence violated — manifest changed on already-v4 run")
   fi
 
   rm -rf "$tmpdir" 2>/dev/null || true
@@ -2657,6 +2672,35 @@ check_run_status_contract() {
   fi
 }
 
+# ---- Check 60 (M020/S02): manifest-auto-close.sh present + parseable --------
+# Asserts:
+#   - pkg/.aihaus/hooks/manifest-auto-close.sh exists
+#   - bash -n syntax check passes
+#   - sources lib/integration-refs.sh (string match for source line)
+#   - declares the constant hook=manifest-auto-close for audit-log greppability (NFR-04)
+check_manifest_auto_close_present() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: manifest-auto-close.sh present + parseable + audit-id constant (M020/S02)"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/manifest-auto-close.sh"
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "manifest-auto-close.sh missing at pkg/.aihaus/hooks/"
+    return
+  fi
+  if ! bash -n "$hook" 2>/dev/null; then
+    _fail "$label" "manifest-auto-close.sh failed bash -n syntax check"
+    return
+  fi
+  if ! grep -q 'lib/integration-refs.sh' "$hook"; then
+    _fail "$label" "manifest-auto-close.sh missing 'lib/integration-refs.sh' source line"
+    return
+  fi
+  if ! grep -q 'hook=manifest-auto-close\|"hook":"manifest-auto-close"\|"hook": *"manifest-auto-close"' "$hook"; then
+    _fail "$label" "manifest-auto-close.sh missing constant audit-log identifier 'hook=manifest-auto-close' (NFR-04)"
+    return
+  fi
+  _pass "$label"
+}
+
 # ---- Check 58 (F260427/S5a): three new ADRs landed in decisions.md ----------
 # Sanity check: ADR-260427-A, ADR-260427-B, ADR-260427-C all present.
 check_f260427_adrs_present() {
@@ -2669,6 +2713,19 @@ check_f260427_adrs_present() {
       return
     fi
   done
+  _pass "$label"
+}
+
+# ---- Check 61 (M020/S10): aih-close skill frontmatter conformance -----------
+check_aih_close_skill() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aih-close skill frontmatter conformance (M020/S10)"
+  local f="${PACKAGE_ROOT}/.aihaus/skills/aih-close/SKILL.md"
+  [ -f "$f" ] || { _fail "$label" "missing $f"; return; }
+  grep -q '^name: aih-close$' "$f" || { _fail "$label" "name field missing or malformed"; return; }
+  local lines
+  lines=$(wc -l < "$f" | tr -d ' ')
+  [ "$lines" -le 200 ] || { _fail "$label" "$lines > 200 lines"; return; }
   _pass "$label"
 }
 
@@ -2806,12 +2863,14 @@ check_f260427_pre_flight_annex
 check_f260427_skill_line_safety
 check_f260427_adrs_present
 check_run_status_contract
+check_manifest_auto_close_present
+check_aih_close_skill
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (59/59)\n"
+  printf "aihaus package smoke test PASSED [OK] (61/61)\n"
   exit 0
 else
-  printf "FAILED - %d of 59 checks failed\n" "$FAILURES"
+  printf "FAILED - %d of 61 checks failed\n" "$FAILURES"
   exit 1
 fi

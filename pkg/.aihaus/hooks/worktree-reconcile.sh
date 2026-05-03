@@ -2,11 +2,12 @@
 # worktree-reconcile.sh — classify and act on each git worktree.
 #
 # For each non-main worktree:
-#   Category A (clean + HEAD reachable from main): prune silently via
+#   Category A (clean + HEAD reachable from any integration ref): prune silently via
 #               git worktree remove --force; log to stderr.
-#   Category B (clean + commits not on main): emit cherry-pick recipe
-#               to stdout; NEVER auto-execute.
+#   Category B (clean + commits not on any integration ref): emit cherry-pick recipe
+#               to stdout; NEVER auto-execute. Capped at AIHAUS_RECONCILE_CAP commits.
 #   Category C (dirty): preserve untouched; emit 1-line summary to stdout.
+#   [INTEGRATION-LAG]: Category B with >cap commits — emit rebase suggestion instead.
 #
 # Usage:
 #   bash worktree-reconcile.sh [--main-branch <name>] [--dry-run]
@@ -16,6 +17,10 @@
 #   AIHAUS_MAIN_BRANCH        — override main-branch detection (before flag parsing)
 #   AIHAUS_RECONCILE_DRY_RUN=1 — emit Category A action as echo, do not prune
 #   AIHAUS_REAP_DRY_RUN=1     — for --reap-locked mode: print would-delete list only
+#   AIHAUS_RECONCILE_INTEGRATION_REFS=0 — disable integration-ref logic; revert to
+#                                         pre-M020 single-MAIN_BRANCH behavior byte-identically
+#   AIHAUS_RECONCILE_CAP=N    — hard cap on cherry-pick recipe commit count (default 50).
+#                               Set to 0 to disable cap (uncapped recipe). (M020/S09)
 #
 # Exit codes: 0 ok (including no-worktrees + non-git-dir cases)
 #
@@ -30,7 +35,7 @@
 #   Emits [REAPED] marker on success. Windows path-lock → Category-C fallthrough.
 #
 # Called standalone or by /aih-resume (S09), or sourced by worktree-release.sh.
-# Refs: M014/S08, M017/S02a, K-002, ADR-M014-B §F, ADR-M017-B.
+# Refs: M014/S08, M017/S02a, M020/S09, K-002, ADR-M014-B §F, ADR-M017-B, ADR-260502-B.
 
 set -euo pipefail
 
@@ -52,6 +57,10 @@ while [ $# -gt 0 ]; do
     *) echo "worktree-reconcile.sh: unknown arg $1" >&2; exit 0 ;;
   esac
 done
+
+# ---- M020/S09: env defaults for integration-ref switch + cap ----------------
+INTEGRATION_REFS_ENABLED="${AIHAUS_RECONCILE_INTEGRATION_REFS:-1}"
+RECONCILE_CAP="${AIHAUS_RECONCILE_CAP:-50}"
 
 # ---- non-git-dir guard ------------------------------------------------------
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
@@ -78,6 +87,21 @@ MAIN_HEAD="$(git rev-parse "${MAIN_BRANCH}" 2>/dev/null || true)"
 if [ -z "$MAIN_HEAD" ]; then
   echo "worktree-reconcile.sh: cannot resolve ${MAIN_BRANCH} HEAD; skipping reconcile" >&2
   exit 0
+fi
+
+# --- M020/S09: source integration-ref helper (ADR-260502-B) ------------------
+# Sourced after MAIN_BRANCH detection so the pre-M020 fallback is already set.
+if [ "$INTEGRATION_REFS_ENABLED" = "1" ]; then
+  HELPER_DIR="$(dirname "${BASH_SOURCE[0]}")/lib"
+  if [ -f "$HELPER_DIR/integration-refs.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$HELPER_DIR/integration-refs.sh"
+    INTEGRATION_REFS_LIST="$(detect_integration_refs)"
+  else
+    INTEGRATION_REFS_LIST=""
+  fi
+else
+  INTEGRATION_REFS_LIST=""
 fi
 
 # ---- classify_only function -------------------------------------------------
@@ -313,41 +337,89 @@ while IFS=$'\t' read -r wt_path wt_sha wt_branch wt_locked; do
     continue
   fi
 
-  # ---- clean: check reachability from main --------------------------------
-  # Count commits in worktree HEAD not reachable from main.
-  commits_not_on_main="$(git rev-list --count "${MAIN_BRANCH}..${wt_sha}" 2>/dev/null || echo "1")"
+  # ---- clean: check reachability from integration refs (M020/S09) ---------
+  if [ -n "$INTEGRATION_REFS_LIST" ]; then
+    # New path: iterate refs, find closest containing ancestor
+    closest_containing=""
+    for ref in $INTEGRATION_REFS_LIST; do
+      if git merge-base --is-ancestor "$wt_sha" "$ref" 2>/dev/null; then
+        closest_containing="$ref"
+        break
+      fi
+    done
 
-  if [ "$commits_not_on_main" -eq 0 ]; then
-    # ---- Category A: clean + merged → prune ---------------------------------
-    if [ "$DRY_RUN" = "1" ]; then
-      echo "[CATEGORY A] ${wt_path} — clean, merged (DRY-RUN: would prune)." >&2
-    else
-      if git worktree remove --force "${wt_path}" 2>/dev/null; then
-        echo "[CATEGORY A] ${wt_path} — pruned (clean, merged)." >&2
+    if [ -n "$closest_containing" ]; then
+      # Category A: contained by some integration ref
+      if [ "$DRY_RUN" = "1" ]; then
+        echo "[CATEGORY A] ${wt_path} — clean, merged into ${closest_containing} (DRY-RUN)." >&2
       else
-        # Fallback: if remove fails (e.g. Windows path locks), report as C
-        printf '[CATEGORY C] %s — remove failed; preserved as safety fallback.\n' "${wt_path}"
+        if git worktree remove --force "${wt_path}" 2>/dev/null; then
+          echo "[CATEGORY A] ${wt_path} — pruned (clean, merged into ${closest_containing})." >&2
+        else
+          printf '[CATEGORY C] %s — remove failed; preserved.\n' "${wt_path}"
+        fi
+      fi
+    else
+      # Category B: not on any integration ref. Pick first ref as rebase target.
+      closest_target="$(printf '%s' "$INTEGRATION_REFS_LIST" | head -n1)"
+      commits_count="$(git rev-list --count "${closest_target}..${wt_sha}" 2>/dev/null || echo "999999")"
+      if [ "$RECONCILE_CAP" -gt 0 ] && [ "$commits_count" -gt "$RECONCILE_CAP" ]; then
+        printf '[INTEGRATION-LAG] %s appears to be tracking an old base. Suggest: git rebase %s\n' \
+          "${wt_path}" "${closest_target}"
+      else
+        # Existing Category B recipe path, anchored on closest_target
+        commit_range="$(git rev-list --reverse "${closest_target}..${wt_sha}" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
+        branch_label="${wt_branch:-${wt_sha:0:8}}"
+        branch_label="${branch_label#refs/heads/}"
+        printf '[CATEGORY B] %s — clean but %s commit(s) not on %s.\n' \
+          "${wt_path}" "${commits_count}" "${closest_target}"
+        printf 'Cherry-pick recipe:\n'
+        printf '```bash\n'
+        printf '# Cherry-pick %s commits from %s onto %s:\n' "${commits_count}" "${branch_label}" "${closest_target}"
+        printf 'git cherry-pick %s\n' "${commit_range}"
+        printf '# Then prune the worktree:\n'
+        printf 'git worktree remove --force %s\n' "${wt_path}"
+        printf '```\n'
+        printf '\n'
       fi
     fi
   else
-    # ---- Category B: clean + unmerged commits → emit recipe ----------------
-    # Collect commit shas oldest-first (rev-list outputs newest-first by default)
-    commit_range="$(git rev-list --reverse "${MAIN_BRANCH}..${wt_sha}" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
-    branch_label="${wt_branch:-${wt_sha:0:8}}"
-    # Strip refs/heads/ prefix for readability
-    branch_label="${branch_label#refs/heads/}"
+    # Pre-M020 fallback path (AIHAUS_RECONCILE_INTEGRATION_REFS=0 OR helper missing)
+    # Count commits in worktree HEAD not reachable from main.
+    commits_not_on_main="$(git rev-list --count "${MAIN_BRANCH}..${wt_sha}" 2>/dev/null || echo "1")"
 
-    printf '[CATEGORY B] %s — clean but %s commit(s) not on %s.\n' \
-      "${wt_path}" "${commits_not_on_main}" "${MAIN_BRANCH}"
-    printf 'Cherry-pick recipe:\n'
-    printf '```bash\n'
-    printf '# Cherry-pick %s commits from %s onto %s:\n' \
-      "${commits_not_on_main}" "${branch_label}" "${MAIN_BRANCH}"
-    printf 'git cherry-pick %s\n' "${commit_range}"
-    printf '# Then prune the worktree:\n'
-    printf 'git worktree remove --force %s\n' "${wt_path}"
-    printf '```\n'
-    printf '\n'
+    if [ "$commits_not_on_main" -eq 0 ]; then
+      # ---- Category A: clean + merged → prune ---------------------------------
+      if [ "$DRY_RUN" = "1" ]; then
+        echo "[CATEGORY A] ${wt_path} — clean, merged (DRY-RUN: would prune)." >&2
+      else
+        if git worktree remove --force "${wt_path}" 2>/dev/null; then
+          echo "[CATEGORY A] ${wt_path} — pruned (clean, merged)." >&2
+        else
+          # Fallback: if remove fails (e.g. Windows path locks), report as C
+          printf '[CATEGORY C] %s — remove failed; preserved as safety fallback.\n' "${wt_path}"
+        fi
+      fi
+    else
+      # ---- Category B: clean + unmerged commits → emit recipe ----------------
+      # Collect commit shas oldest-first (rev-list outputs newest-first by default)
+      commit_range="$(git rev-list --reverse "${MAIN_BRANCH}..${wt_sha}" 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
+      branch_label="${wt_branch:-${wt_sha:0:8}}"
+      # Strip refs/heads/ prefix for readability
+      branch_label="${branch_label#refs/heads/}"
+
+      printf '[CATEGORY B] %s — clean but %s commit(s) not on %s.\n' \
+        "${wt_path}" "${commits_not_on_main}" "${MAIN_BRANCH}"
+      printf 'Cherry-pick recipe:\n'
+      printf '```bash\n'
+      printf '# Cherry-pick %s commits from %s onto %s:\n' \
+        "${commits_not_on_main}" "${branch_label}" "${MAIN_BRANCH}"
+      printf 'git cherry-pick %s\n' "${commit_range}"
+      printf '# Then prune the worktree:\n'
+      printf 'git worktree remove --force %s\n' "${wt_path}"
+      printf '```\n'
+      printf '\n'
+    fi
   fi
 
 done <<EOF

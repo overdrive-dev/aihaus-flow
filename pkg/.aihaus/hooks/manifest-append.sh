@@ -587,6 +587,12 @@ case "$FIELD" in
     ;;
   status)
     [ -n "$PAYLOAD" ] || { log_audit "fail" "payload-empty"; exit 8; }
+    # M020/S06: gate via validate_status before mutation (ADR-260502-A, FR-23..FR-27)
+    if ! validate_status "$PAYLOAD"; then
+      printf 'manifest-append.sh: invalid status value: %s\n' "$PAYLOAD" >&2
+      log_audit "fail" "invalid-status"
+      exit 8
+    fi
     update_metadata_kv "status" "$PAYLOAD"
     update_metadata_kv "last_updated" "$(ts_iso)"
     _regen_run_status || true  # ADR-M019-A: regen before log_audit; fail-safe (NFR-005)
