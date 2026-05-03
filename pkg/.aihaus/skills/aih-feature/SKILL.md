@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-feature
 description: Implement a scoped feature — plan, branch, build, test, commit. Use for changes that fit in one session.
 allowed-tools: Read Write Edit Grep Glob Bash TaskCreate TaskUpdate Skill
@@ -196,3 +196,4 @@ Do not leave `Status: running` after the final commit lands. If you cannot decid
 - Any decisions or discoveries worth noting
 
 **Autonomy:** See `_shared/autonomy-protocol.md` — binding rules; overrides contradictory prose above.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->

@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-quick
 description: Fast-track for small, well-understood changes. Skips full planning — analyze, implement, and review in one shot.
 allowed-tools: Read Write Edit Grep Glob Bash Skill
@@ -50,3 +50,4 @@ If the user pastes an image/file, copy **immediately on first mention** to a tem
 
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->

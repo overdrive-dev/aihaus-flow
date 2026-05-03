@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-plan
 description: Research a problem and produce a plan without writing code. Use when you want to think before building.
 allowed-tools: Read Grep Glob Bash WebFetch Skill
@@ -42,3 +42,4 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, follow `annexes/from-brains
 
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->

@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-update
 description: Update aihaus to the latest version from the remote repository. Fetches, compares, applies, and re-links.
 disable-model-invocation: true
@@ -196,3 +196,4 @@ When running inside the aihaus-flow repo itself (detected by `pkg/` existing):
 - Write `.aihaus/.version` and `.aihaus/.install-source` for future updates.
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules; overrides contradictory prose above.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->
