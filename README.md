@@ -154,7 +154,7 @@ Milestone execution routes multi-story work through the `annexes/execution.md` p
 For milestones, the orchestrator:
 
 1. **Plans** — analyst → product-manager → architect → plan-checker (adversarial gate, max 2 iterations).
-2. **Executes** — stories serialized; each story implemented in an isolated worktree by `implementer` or `frontend-dev`, reviewed by `reviewer`/`code-reviewer`, fixed by `code-fixer`, committed atomically. No `git add -A` — explicit owned-file lists.
+2. **Executes** — stories serialized; each story implemented in an isolated worktree by `implementer` or `frontend-dev` (delegation is mandatory at Step 7 / Step 9 per the agent-routing contract — orchestrator inline edits are budgeted), reviewed by `reviewer`/`code-reviewer`, fixed by `code-fixer`, committed atomically. No `git add -A` — explicit owned-file lists.
 3. **Verifies** — `verifier` (goal-backward), `integration-checker` (E2E wiring), `security-auditor` (when sensitive areas touched) — all in parallel.
 4. **Completes** — promotes decisions to `decisions.md`, knowledge to `knowledge.md`, writes `MILESTONE-SUMMARY.md`, applies agent-evolution proposals.
 
@@ -267,7 +267,7 @@ Nothing is fine-tuned and no weights move. What changes is the markdown that gui
 
 ## Commands
 
-aihaus ships 12 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**. Since v0.9.0 the autonomy contract is codified in a shared annex (`pkg/.aihaus/skills/_shared/autonomy-protocol.md`) that every skill references — no mid-execution option menus, no honest checkpoints, no delegated typing.
+aihaus ships 13 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**. Since v0.9.0 the autonomy contract is codified in a shared annex (`pkg/.aihaus/skills/_shared/autonomy-protocol.md`) that every skill references — no mid-execution option menus, no honest checkpoints, no delegated typing.
 
 ### Core workflow
 
@@ -280,6 +280,7 @@ aihaus ships 12 intent-based skills. Every command follows the same pattern: **a
 | `/aih-bugfix` | Triage → branch → fix → test → commit |
 | `/aih-milestone` | Conversational gathering for milestone-sized work — drafts to `STATUS.md` |
 | `/aih-quick` | Fast-track for trivial changes — skips planning |
+| `/aih-close` | Close a stale RUN-MANIFEST (slug or `--bulk`) — flips Status to terminal value via `manifest-append.sh` (v0.24.0+) |
 
 ### Execution & resume
 
@@ -334,11 +335,11 @@ aihaus ships 12 intent-based skills. Every command follows the same pattern: **a
 ```
 your-project/
 ├── .aihaus/                          # aihaus workspace (gitignored by default — your call)
-│   ├── skills/                       # 12 intent-based commands
+│   ├── skills/                       # 13 intent-based commands
 │   │   └── _shared/
 │   │       └── autonomy-protocol.md  # Binding execution-autonomy rules (M005)
 │   ├── agents/                       # 46 specialized agent definitions
-│   ├── hooks/                        # 23 lifecycle + protocol-enforcement hooks
+│   ├── hooks/                        # 29 lifecycle + protocol-enforcement hooks (incl. manifest-auto-close)
 │   ├── templates/                    # project.md + settings templates
 │   ├── memory/                       # Persistent agent memory (grows over time)
 │   ├── project.md                    # Your codebase context (created by /aih-init)
