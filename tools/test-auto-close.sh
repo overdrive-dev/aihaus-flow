@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test-auto-close.sh — regression harness for manifest-auto-close.sh
-# Drives 14 fixtures under tests/fixtures/stale-manifests-260502/
+# Drives 18 fixtures under tests/fixtures/stale-manifests-260502/
 #
 # Each fixture dir contains:
 #   RUN-MANIFEST.md — the manifest under test
@@ -12,7 +12,7 @@
 # invoked from INSIDE the sandbox directory so that git commands resolve against
 # the sandbox's refs, not the aihaus-flow repo.
 #
-# Exit 0 if all 14 pass; non-zero otherwise.
+# Exit 0 if all 18 pass; non-zero otherwise.
 set -euo pipefail
 
 # ---- resolve paths -----------------------------------------------------------
@@ -230,7 +230,7 @@ run_fixture() {
   trap - EXIT
 }
 
-# ---- run all 14 fixtures -----------------------------------------------------
+# ---- run all 18 fixtures -----------------------------------------------------
 printf "Running manifest-auto-close.sh fixture suite\n"
 printf "Fixture root: %s\n\n" "$FIXTURES_ROOT"
 
@@ -249,6 +249,10 @@ FIXTURES=(
   F-NO-INTEGRATION-REF
   F-MISSING-BRANCH
   F-PROJECT-MD-LIST
+  F-DEFERRED-ALREADY
+  F-AWAITING-MERGE
+  F-CANCELLED
+  F-PAUSED-USER-INPUT
 )
 
 for fixture in "${FIXTURES[@]}"; do
