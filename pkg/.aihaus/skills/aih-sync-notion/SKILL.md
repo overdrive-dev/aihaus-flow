@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-sync-notion
 description: Sync the Notion Kanban board with current execution state. Updates card statuses, creates missing cards, and verifies role coverage.
 disable-model-invocation: true
@@ -78,3 +78,4 @@ During card triage and intake sync, if the user describes an implementable chang
 
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->

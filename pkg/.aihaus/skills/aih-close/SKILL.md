@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-close
 description: Close a stale RUN-MANIFEST atomically. Default-to-completed if branch is merged; explicit --deferred / --cancelled / --completed / --awaiting-merge for partial work; --bulk for sweep over auto-closeable manifests.
 disable-model-invocation: true
@@ -101,3 +101,4 @@ See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/exec
 no option menus; no honest checkpoints; no delegated typing. Overrides contradictory prose
 above. The single user-prompt in Default-flag behavior (unmerged branch path) is explicitly
 permitted as a TRUE-blocker scoping question per autonomy-protocol §TRUE blocker definition.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->

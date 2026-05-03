@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-help
 description: Show all available aihaus workflow commands and their usage. Use when someone asks for help or types /aih-help.
 disable-model-invocation: true
@@ -184,3 +184,4 @@ All artifacts live under `.aihaus/`:
 
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->

@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-resume
 description: "Resume an interrupted autonomous run. Reads ## Checkpoints (schema v3) as authoritative truth; dispatches stateful agents with --resume-from. Pass --legacy-mode to fall back to heuristic detection."
 disable-model-invocation: true
@@ -170,3 +170,4 @@ When done, report the resume point and the final outcome.
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases,
 no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->

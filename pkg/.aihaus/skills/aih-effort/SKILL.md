@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-effort
 description: Retune agent effort tiers and model assignments after install. Interactive by default; accepts --preset, --cohort, --agent, --status, --inspect flags. All edits atomic + git-committed + reversible.
 ---
@@ -149,3 +149,4 @@ preset without searching git history.
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules. Overrides any
 contradictory prose above.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->

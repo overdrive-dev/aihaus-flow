@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-brainstorm
 description: Exploratory multi-specialist ideation with adversarial review and optional web research. Produces BRIEF.md that feeds into /aih-plan or /aih-milestone.
 disable-model-invocation: true
@@ -83,7 +83,6 @@ Enter a ping-pong loop with the user. The **orchestrating assistant** (not a spa
 - **abandon** ("not pursuing" / "nevermind") → leave artifacts, do NOT write `BRIEF.md`, print `Brainstorm ended without BRIEF.md — CONVERSATION.md preserved at <path>.`
 
 Agents are spawned only after the conversation earns them. This matches the brainstorm's purpose as a pre-project exploration step that might lead to nothing.
-
 ## Phase 2 — Panel Selection
 Default panel size: 3 agents. Pick by topic-pattern match against this table:
 
@@ -197,3 +196,4 @@ If during intake or panelist turns the user raises an implementable aside ("whil
 
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->

@@ -125,6 +125,24 @@ the refresh loop (which only touches `skills/`, `agents/`, `hooks/`,
 `(model, effort)` to refreshed agents from `.effort`. Full schema + migration
 guide: `pkg/.aihaus/skills/aih-effort/annexes/state-file.md`.
 
+## SKILL Enforcement Audit
+
+Since v0.25.0 / M021, every step in every aih-* SKILL is classified by enforcement
+layer (A model-driven / B agent-delegated / C hook-enforced) with a 13-column row
+schema (SKILL / Location / Step / Label / Primary / Actor / Gate / Escape /
+Leverage / Reversibility / Drift Risk / Eligibility / Notes). 289 rows cover
+the 13 SKILLs + binding annexes + _shared protocols.
+
+- Canonical audit: `pkg/.aihaus/skills/_shared/enforcement-audit.md`
+- Promotion backlog (M022+): `pkg/.aihaus/skills/_shared/enforcement-audit-backlog.md`
+- Framework + move rule: ADR-260503-A in `pkg/.aihaus/decisions.md`
+- Move rule: promote A → B/C iff `leverage=high AND (reversibility=irrev OR
+  drift-risk=hard) AND eligibility=deterministic` (per ADR-260502-A determinism gate).
+
+Refresh triggers: (a) new SKILL added → audit must add fragment, (b) step count
+of any SKILL changes by ≥2 → re-classify, (c) annex referenced by a SKILL is
+renamed/moved → re-anchor. Smoke Check 62 detects (a) and (b).
+
 ## Resume Substrate
 
 Since v0.18.0 / M014, `/aih-resume` uses an authoritative checkpoint substrate rather

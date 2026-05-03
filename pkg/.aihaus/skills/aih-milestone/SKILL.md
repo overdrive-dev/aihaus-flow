@@ -1,4 +1,4 @@
----
+﻿---
 name: aih-milestone
 description: "Start, resume, or execute a milestone. Conversational gathering mode by default; --execute or start-intent triggers the milestone-execution pipeline (annexes/execution.md)."
 allowed-tools: Read Write Edit Grep Glob Bash Agent TaskCreate TaskUpdate Skill
@@ -187,7 +187,6 @@ The only exception is an explicit out-of-band execution signal ("fix this now", 
 1. State clearly: "Switching out of gathering to execute — draft remains at `gathering`."
 2. Hand off to `/aih-quick` or `/aih-bugfix` (proper execution skill).
 3. Return to gathering context when done.
-
 ## Guardrails
 - Gathering mode NEVER auto-executes without start-intent or `--execute`. Default posture is capture, not run.
 - NEVER delete CONTEXT.md — only append/update sections.
@@ -197,3 +196,4 @@ The only exception is an explicit out-of-band execution signal ("fix this now", 
 
 ## Autonomy
 See `_shared/autonomy-protocol.md` — binding rules for planning/threshold/execution phases, no option menus, no honest checkpoints, no delegated typing. Overrides contradictory prose above.
+<!-- See pkg/.aihaus/skills/_shared/enforcement-audit.md for this SKILL's enforcement audit. -->
