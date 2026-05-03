@@ -215,3 +215,38 @@ resolve_manifest_path() {
 
   printf '%s' "$best"
 }
+
+# --- Validate Status value against v4 vocabulary (M020/S06) ---
+# Returns 0 if value is in the canonical 8-value enum, 1 otherwise.
+# Caller chooses exit-code mapping (manifest-append.sh exits 8 = payload-malformed).
+validate_status() {
+  local value="$1"
+  case "$value" in
+    running|awaiting-approval|awaiting-merge|paused|paused-user-input|deferred|completed|cancelled)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# --- Read a key/value from the ## Metadata block (M020/S06) ---
+# Args: <manifest-path> <key>. Prints value to stdout on success; exits 0/1.
+# Companion to update_metadata_kv (lines 30-42, M019-anchored).
+read_metadata_kv() {
+  local path="$1" key="$2"
+  [ -f "$path" ] || return 1
+  local value
+  value="$(awk -v k="$key" '
+    BEGIN { in_meta=0; found=0 }
+    /^## Metadata$/ { in_meta=1; next }
+    /^## / && in_meta==1 { exit }
+    in_meta==1 && $1 == k":" { sub(/^[^:]+:[[:space:]]*/, ""); print; found=1; exit }
+  ' "$path")"
+  if [ -z "$value" ]; then
+    return 1
+  fi
+  printf '%s\n' "$value"
+  return 0
+}

@@ -1651,12 +1651,13 @@ check_verifier_knowledge_consulted() {
   fi
 }
 
-# ---- Check (M014/S06): schema v2→v3 migration fixture (idempotent + additive) -
-# Exercises manifest-migrate.sh v2→v3 path:
+# ---- Check (M014/S06 + M020/S06): schema v2→v3→v4 migration fixture (idempotent + additive) -
+# Exercises manifest-migrate.sh full chain:
 #   R1 takes a v2 fixture manifest (schema: v2, no ## Checkpoints)
-#   R2 runs manifest-migrate.sh → asserts ## Checkpoints heading present
+#   R2 runs manifest-migrate.sh → asserts schema: v3 + ## Checkpoints heading present
 #   R3 asserts column header present (LD-1 7-column shape)
-#   R4 runs manifest-migrate.sh again → asserts no diff (idempotent)
+#   R4 runs manifest-migrate.sh again → asserts schema bumped to v4 (v3→v4 step, M020/S06)
+#   R5 runs manifest-migrate.sh a third time → asserts no diff (already-v4 no-op, idempotent)
 # Uses mktemp -d for the fixture; never pollutes the repo.
 check_schema_v3_migration() {
   _start_check
@@ -1691,7 +1692,7 @@ story_id|status|started_at|commit_sha|verified|notes
 S01|complete|2026-04-22T00:01:00Z|abc1234|true|
 MANIFEST_EOF
 
-  # R2: run migration first time
+  # R2: run migration first time (v2 → v3)
   local migrate_out migrate_rc
   migrate_out=$(MANIFEST_PATH="$fixture" bash "$migrate_hook" 2>&1)
   migrate_rc=$?
@@ -1710,23 +1711,36 @@ MANIFEST_EOF
     problems+=("R3: LD-1 column header not present; expected: '${expected_header}'")
   fi
 
-  # R4: capture snapshot before second run
-  local snap_before
-  snap_before="$(cat "$fixture")"
-
-  # R4: run migration a second time
+  # R4: run migration a second time (v3 → v4, M020/S06)
   local migrate_out2 migrate_rc2
   migrate_out2=$(MANIFEST_PATH="$fixture" bash "$migrate_hook" 2>&1)
   migrate_rc2=$?
   if [[ "$migrate_rc2" -ne 0 ]]; then
-    problems+=("R4: manifest-migrate.sh exited ${migrate_rc2} on second run; output: ${migrate_out2:0:200}")
+    problems+=("R4: manifest-migrate.sh exited ${migrate_rc2} on v3→v4 run; output: ${migrate_out2:0:200}")
   fi
 
-  # R4: assert idempotent (file unchanged)
+  # R4: assert schema bumped to v4
+  if ! grep -q '^schema: v4$' "$fixture"; then
+    problems+=("R4: schema not bumped to v4 after second migration run")
+  fi
+
+  # R5: capture snapshot before third run
+  local snap_before
+  snap_before="$(cat "$fixture")"
+
+  # R5: run migration a third time (should be already-v4 no-op)
+  local migrate_out3 migrate_rc3
+  migrate_out3=$(MANIFEST_PATH="$fixture" bash "$migrate_hook" 2>&1)
+  migrate_rc3=$?
+  if [[ "$migrate_rc3" -ne 0 ]]; then
+    problems+=("R5: manifest-migrate.sh exited ${migrate_rc3} on already-v4 run; output: ${migrate_out3:0:200}")
+  fi
+
+  # R5: assert idempotent at v4 (file unchanged)
   local snap_after
   snap_after="$(cat "$fixture")"
   if [[ "$snap_before" != "$snap_after" ]]; then
-    problems+=("R4: idempotence violated — manifest changed on second migration run")
+    problems+=("R5: idempotence violated — manifest changed on already-v4 run")
   fi
 
   rm -rf "$tmpdir" 2>/dev/null || true
