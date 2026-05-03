@@ -1980,3 +1980,160 @@ Set `AIHAUS_RECONCILE_INTEGRATION_REFS=0` globally to revert to pre-M020 single-
 - Plan: `.aihaus/plans/260502-stale-manifest-auto-close/PLAN.md` (PR 3 §3a)
 - Stories: S01 (`lib/integration-refs.sh` shared helper), S09 (`worktree-reconcile.sh` integration-ref switch + cap + escalation), S08 (this ADR)
 - Outcome gates satisfied: C-8, C-11
+
+---
+
+## ADR-260503-A — SKILL enforcement-layer audit framework + move rule
+
+**Status:** Accepted
+**Date:** 2026-05-03
+**Milestone:** M021
+**Extends:** ADR-001 (filesystem state primitive — preserved; the audit is markdown-only); ADR-260502-A (deterministic enforcement gate — eligibility constraint inherited verbatim; see Worked example #2 quoted below); ADR-004 (single-writer per file — preserved; canonical `enforcement-audit.md` has S08 as sole writer)
+**Pattern:** Per-step classification of every binding contract step in every aih-* SKILL into A model-driven / B agent-delegated / C hook-enforced primary layer + actor/gate/escape tag-set + leverage/reversibility/drift-detectability score axes + eligibility column. The move rule promotes A → B/C iff `leverage=high AND (reversibility=irrev OR drift-detectability=hard) AND eligibility=deterministic`. Per-skill fragments + S08 sole-writer canonical concat preserves ADR-004.
+
+### Decision
+
+**Ship a package-shipped, audit-only living document at `pkg/.aihaus/skills/_shared/enforcement-audit.md` classifying every step in every `pkg/.aihaus/skills/aih-*/SKILL.md` (13 SKILLs) and every binding annex (~20-25 files) into a 13-column row schema; lock the framework, scoring axes, move rule, step-counting rubric, and refresh triggers in this ADR; gate promotion eligibility through the ADR-260502-A determinism inheritance.**
+
+The 13-column row schema (binding):
+
+```
+| SKILL | Location | Step | Label | Primary | Actor | Gate | Escape | Leverage | Reversibility | Drift Risk | Eligibility | Notes |
+```
+
+**Three-layer primary classification (binding enum).** Every step has exactly one Primary value drawn from `{A, B, C, A+C, B+C, A+B+C}`. Composite values are permitted for steps where actors are layered (e.g., agent invokes hook; model writes prose backed by hook detection):
+
+- `A` model-driven — prose-only, model is the actor + gate.
+- `B` agent-delegated — explicit `subagent_type` spawn, agent is the actor, agent's checklist is the gate.
+- `C` hook-enforced — script (PreToolUse / PostToolUse / Stop / SessionStart) is the actor and gate.
+
+**Tag-set columns (composite reality).** Three orthogonal columns capture composite cases:
+
+- `actor ∈ {model, agent, hook, multi}` — when Primary is composite (`B+C` etc.), actor is `multi`.
+- `gate ∈ {none, advisory, blocking, advisory+blocking}` — `advisory+blocking` for hooks emitting advisory at one site + blocking at another.
+- `escape ∈ {none, opt-out-env, manual-override}` — `opt-out-env` = `AIHAUS_*=0` envs; `manual-override` = explicit user command.
+
+**Score axes (binding enum).** Three orthogonal columns capture risk:
+
+- `leverage ∈ {low, med, high}` — magnitude of correctness-cost when the step's enforcement drifts (blast-radius), independent of step size or input volume.
+- `reversibility ∈ {rev, irrev}` — `irrev` = once committed/landed, requires forensic recovery (revert + audit).
+- `drift-detectability ∈ {easy, med, hard}` — `easy` = caught by smoke / hook / reviewer; `hard` = silent / surfaces only via incident.
+
+**Eligibility column (ADR-260502-A inheritance).** `eligibility ∈ {deterministic, model-judgment, partial}` — gates promotion eligibility per ADR-260502-A "Worked example #2 — DOES NOT FIT" (decisions.md:1863, quoted verbatim):
+
+> **Worked example #2 — DOES NOT FIT (model judgment required).** A future maintainer wants to "auto-close" manifests where the user verbally said "I'm done with this" in a chat transcript. The eligibility condition is non-deterministic — it requires NLP/LLM judgment on free-form text. **Does NOT fit.** ADR-260502-A's pattern explicitly requires deterministic conjunction conditions; the moment a condition becomes "model decides," the architectural guarantee ("removes the model from the loop") is voided. Correct answer: this belongs in `aih-feature/SKILL.md` Step 13 prose (model-driven), not in an enforcement hook.
+
+**Move rule (binding).** Promote A → B/C iff `leverage=high AND (reversibility=irrev OR drift-detectability=hard) AND eligibility=deterministic`. The third axis is the ADR-260502-A "deterministic-only" gate inherited verbatim — A-classified high-leverage steps requiring model judgment must STAY A (no enforcement available, by ADR).
+
+**Leverage definition (binding prose, FR-06).** `leverage = magnitude of correctness-cost when the step's enforcement drifts (blast-radius), independent of step size or input volume`. Two implementer worktrees scoring the same step against this prose must agree.
+
+**Step-counting rubric (locked in `tools/audit-skill-enforcement.sh`).** Per-format regex set covering all 4 SKILL formats:
+
+- `### Step N(\.\d+)?[ —:]` — H3 colon/dash format (aih-feature, aih-milestone/annexes/execution.md).
+- `## Step N(\.\d+)?[ —:]` — H2 step format (aih-milestone/SKILL.md, aih-milestone/annexes/promotion.md).
+- `### N(\.\d+)?\.[ ]` — numbered H3 (aih-bugfix, aih-init, aih-resume, aih-update).
+- D2 fallback for SKILLs with zero numbered-H3 (aih-quick, aih-close, aih-plan): count H2 mode/phase headers EXCLUDING named-section list (`## Task`, `## Modes`, `## Autonomy`, `## Guardrails`, `## Annexes`, `## Inputs`, `## Required output`, `## Constraints`, `## Acceptance criteria`, `## Hard rules`).
+
+`## Phase N` headers are EXCLUDED — they are groupings, not steps. Phases become parent groupings within audit fragments (visual structure only); they do NOT contribute rows.
+
+**Per-skill fragment + S08 sole-writer architecture (preserves ADR-004).** Each story owns ONE fragment file under `pkg/.aihaus/skills/_shared/enforcement-audit/<skill>.md`; S08 is the SOLE writer of the canonical concat `pkg/.aihaus/skills/_shared/enforcement-audit.md`. K-002 same-file rule respected — zero same-file overlap across S02-S07.
+
+**Smoke Check 62 (structural-from-day-one + monotone ratchet).** Asserts (a) canonical `enforcement-audit.md` exists with ≥4 H2 headers, (b) per-skill fragment dir exists, (c) row coverage cannot regress across commits. Substantive coverage assertion engages at S08 close (every rubric-matched step appears as ≥1 row). Lightweight Check 17 shape per PATTERNS Pattern 5; never copy Check 6's awk-parse rigor.
+
+### Context
+
+Three consecutive 2026-05-02/03 post-mortems surfaced one structural root cause:
+
+> "Anywhere the SKILL says 'the model will catch this,' there's drift. Anywhere there's an explicit agent step with a checklist, there isn't drift."
+> — *260503 getShift-completion §"Cross-cutting"*
+
+Each remediation cost ~5h; ~15h total bleed in 48h. Specific incidents:
+
+- **v0.24.0** — closure-step drift: `aih-feature` Step 13 / `aih-bugfix` Step 16 model-driven terminal-vocabulary prose. Remediated via M020 ADR-260502-A: deterministic enforcement hook supersedes model-driven prose at the manifest-close moment.
+- **v0.24.1 + v0.24.2** — Step 7 / Step 9 routing drift: model inline-edited instead of delegating to specialty agents. Remediated via 260503-step7-agent-delegation: SKILL prose rewrite + new annex `agent-routing.md` (binding contract) + Phase B autonomy-guard advisory.
+- **v0.24.3** — worktree drift: cross-story file ownership violations and reviewer-prompt drift. Remediated via M017 four-layer lock-leak prevention stack + worktree-drift-check hook.
+
+The pattern is structural, not local. There are likely 5-10 more drift-prone steps in other SKILLs that have not yet fired post-mortems. M021 surfaces them via inventory + classification + scoring + a prioritized remediation backlog. Audit-only: remediation execution moves to M022+ via `enforcement-audit-backlog.md`.
+
+The framework draws on three precedents:
+- `pkg/.aihaus/skills/aih-effort/annexes/cohorts.md` — per-entity classification table (PATTERNS Pattern 1; the structural shape model).
+- `pkg/.aihaus/skills/_shared/autonomy-protocol.md` — binding governance annex (PATTERNS Pattern 3; the publication location model).
+- ADR-260502-A — deterministic enforcement gate (the eligibility column's authority).
+
+Cost recovery: if backlog promotions prevent 3 future post-mortems of similar shape, ~15h paid back. Break-even at the third prevented incident.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| A | Per-step frontmatter on each SKILL.md | Inline; no new doc | Pushes multiple SKILLs past 199-line ceiling (Check 5 / 57); requires schema change to SKILL frontmatter; PATTERNS Pattern 5 explicit "What NOT to copy" call | High cost, low payoff; structural conflict with line ceiling |
+| B | Run audit-only without producing a backlog | Simpler; one milestone | Post-mortem author explicitly cited a "backlog of moves" — leaves next post-mortems unstaged | Defeats the purpose; the inventory without the prioritization is half the work |
+| C | Bundle audit + remediations in one milestone | Single deliverable | Remediation cost varies wildly per migration class (A→B ~120 LOC, A→C ~150 LOC + hook + ADR); discovering bundled with audit table is risk-stacking | Decoupling makes remediation-milestone shape data-driven |
+| D | Maintainer-only doc at `tools/skill-audit.md` (not shipped) | Keeps package surface clean | Users running `/aih-init` in their own repos won't discover the framework when authoring custom SKILLs | Defeats discoverability; the framework should ship with the package |
+| E | A/B/C single-enum classification (per orchestrator brainstorm) | Simpler | Too coarse for composite steps (`aih-feature` Step 7 is `B+C` — agent + hook); ASSUMPTIONS finding #1 surfaced this early | Refined to A/B/C primary + actor/gate/escape tag-set |
+| F | Auto-generate via static analysis | Fully reproducible | Score axes (leverage / reversibility / drift-detectability) require human judgment grep cannot infer; classification accuracy degrades sharply on composite cases | Kept grep as a row-coverage assertion only (`audit-skill-enforcement.sh --coverage`) |
+| G | (Chosen) Per-skill fragments + S08 sole-writer canonical + 13-column schema + move rule with eligibility gate | Preserves ADR-004 single-writer; preserves K-002 same-file rule; composite-friendly schema; eligibility column inherits ADR-260502-A; framework is informational (no auto-promotion) | New 13-column schema + new tooling (~150 LOC) + 14 fragment files; rubric-correctness depends on per-format regex + golden-rows fixture | Highest leverage; closes the structural drift loop without forcing remediation cost into the audit milestone |
+
+### Applicability Examples
+
+**Worked example #1 — FITS the pattern.** A future maintainer wants to audit and remediate enforcement-layer drift for the auto-close staleness logic — there are several heuristics around `manifest-auto-close.sh` 5-condition conjunction that may have drifted across `merge-back.sh`, `session-start.sh`, and `/aih-resume` step 4b wire-up sites since M020. The auto-close logic lives in 3 known wire-up sites + 1 hook + 1 helper + 5 conditions — bounded inventory ≈10-15 step-rows. A new directory `pkg/.aihaus/skills/_shared/enforcement-audit-autoclose/` holds per-site fragments; a sole reconciler story emits canonical `enforcement-audit-autoclose.md`. The 13-column schema replays cleanly; `Eligibility` inherits ADR-260502-A determinism gate (the auto-close is the canonical example). A new structural+monotone Check 63 mirrors Check 62. **Fits.** The pattern (per-fragment + sole-writer + ratchet smoke check + bounded SKILL inventory) replays.
+
+**Worked example #2 — DOES NOT FIT.** A naive scenario: "Audit user code style (variable names, function lengths, comment density) across all consumer projects that have aihaus installed." The pattern requires a **bounded, owned set of inputs** — here aihaus has no canonical SKILL inventory in consumer repos (consumer projects are open-ended). The scoring axes also require per-format deterministic rubrics (SC-10 byte-identical reproducibility); naming-style scoring fails this gate. Cross-repo single-writer is impossible (ADR-004 is per-file in one repo). And the eligibility gate (ADR-260502-A) explicitly disallows promotion to a deterministic enforcement layer for naming-style — it requires NLP/LLM judgment on free-form text (the canonical "DOES NOT FIT" example, quoted in §Decision above). **Does NOT fit.** Correct answer: style audits belong to a different pattern entirely — per-project linter configs, code-review checklists, or model-driven SKILL.md prose at the consumer-repo scope.
+
+### Consequences
+
+**Positive.** The structural drift root cause becomes visible: every "model will catch this" step is named, classified, scored, and queued for remediation. M022+ planning consumes a deterministically-ranked backlog of A→B/C candidates, each annotated with cost-estimate from PATTERNS.md and eligibility rationale. Future SKILL authors discover the framework via CLAUDE.md §"SKILL Enforcement Audit" + per-SKILL pointer comments; new SKILL adds must add a fragment file before merge (Refresh Trigger). The ADR-260502-A determinism gate is inherited verbatim — non-promotable A steps stay A by architecture, not by oversight. ADR-001 and ADR-004 preserved verbatim; the audit is markdown-only, single-writer, audit-only.
+
+**Negative.** Net new ~1700-2200 LOC of audit content + ~150 LOC tooling + ~30 LOC smoke-check across one milestone. Borderline upper milestone-sized but justifiable by 3-incident cost-recovery argument. Score-axis subjectivity is a real risk — mitigated by the golden-rows fixture (D3) + S08 score-consistency check (L7), but two implementers may legitimately disagree on borderline steps. Audit decays as SKILLs evolve — Refresh Triggers mitigate, but trigger (c) (annex renamed) requires manual cue.
+
+**Neutral.** No new hook scripts ship in M021 (`EXPECTED_HOOKS` array unchanged; SC-11). No installer logic touched (`pkg/scripts/{install,update}.sh` already propagate `_shared/`). 13 SKILL.md files gain one pointer line each (5 of them with trailing-blank strip for net-zero LOC delta — D5 / I-08).
+
+### Threat Model
+
+**Class 1: rubric drift across implementers.** Mitigated by golden-rows fixture (D3 / L3) — every S02-S07 implementer briefing references it before drafting any row. S08 cross-fragment score-consistency check (L7) flags ≥1-axis-level divergences across known-similar regex groups (advisory, not blocking). S08 reconciliation rework loop ≤2 spawns; refusal-grammar halt on 3rd. Recoverable.
+
+**Class 2: score subjectivity.** Mitigated by locked leverage definition (FR-06): two implementers scoring against the prose must agree. Borderline disagreements on similar-shape steps surface via Class-1 mitigation.
+
+**Class 3: audit becomes stale.** Mitigated by ADR-260503-A Refresh Triggers clause and Smoke Check 62 monotone ratchet. Trigger (a) and (b) are auto-detected; (c) requires manual cue. **Acknowledged residual risk** — audit may go stale on annex rename without smoke detection.
+
+**Class 4: model-judgment over-flagging.** Naive backlog generation would surface intentional A steps (e.g., `aih-init` Step 3 codebase scan) as A→C promotion candidates. Mitigated by L8 model-judgment sanity gate (S09 grep step body for "model" / "judgment" / "decide" / "ask" → flag as `eligibility=model-judgment-suspected` requiring Notes rationale OR drop) + eligibility=deterministic in move rule.
+
+**Class 5: self-applying meta-issue.** M021's own production milestone steps are themselves enforcement-layer steps. **Acknowledged not auto-remediated;** S09 backlog explicitly excludes M021-meta rows via Notes-column disambiguation. Future audits may consume M021's own production rows; this is by design.
+
+### Migration
+
+Single-shot within M021. Strictly additive — no retroactive change to existing SKILLs. New: 14 fragment files + canonical concat + backlog + tooling + 7 fixture dirs. Modified-additively: smoke-test (Check 62 add), decisions.md (this ADR append), CLAUDE.md (§ add), 13 SKILL.md (1 pointer line each + 5 trailing-blank strips). No data migration. No schema change. No installer logic touched.
+
+User repos that ran `bash pkg/scripts/install.sh --target .` before M021 see new files appear after the next `bash pkg/scripts/update.sh --target .`. No breaking change.
+
+### Rollback
+
+Comment out the §"SKILL Enforcement Audit" subsection in CLAUDE.md (S10 ownership). Revert S10's 13 SKILL.md pointer-comment additions. Revert this ADR via `git revert <S01-commit-hash>` (NOT amend, NOT reset). The canonical `enforcement-audit.md` and per-skill fragments stay in tree (informational only) — they're harmless without the CLAUDE.md cross-link. ADR-260503-A stays accepted in commit history with Implementation Status marked "rolled back — see M021 retrospective." `tools/audit-skill-enforcement.sh` continues to work for diagnosis.
+
+### Refresh Triggers
+
+The audit is a living document. Re-run conditions:
+
+(a) **New SKILL added** (e.g., a future `pkg/.aihaus/skills/aih-foo/`) → audit MUST add fragment file `pkg/.aihaus/skills/_shared/enforcement-audit/aih-foo.md` before merge. Smoke Check 62 detects this automatically (rubric sweeps all SKILL dirs; expected-row count grows; canonical row count must keep up).
+
+(b) **Step count of any SKILL changes by ≥2** → re-classify affected fragment. Detected automatically: `compute_expected_rows` output shifts; canonical row count must shift in step.
+
+(c) **Annex referenced by a SKILL is renamed/moved** → re-anchor the fragment row paths. NOT detected automatically; requires manual cue from the SKILL editor (one-time annotation in the manifest progress log).
+
+### Implementation Status
+
+**Audit landed in M021. Remediations queued in `enforcement-audit-backlog.md` are reviewed in M022+. THIS ADR DOES NOT AUTO-PROMOTE ANY STEP.**
+
+The framework codifies the classification, scoring, move rule, step-counting rubric, eligibility gate (inherited from ADR-260502-A), and refresh triggers. It does NOT itself force any A→B/C migration. M022+ planners consume `enforcement-audit-backlog.md`'s prioritized candidates one by one, each shipped as its own remediation milestone with cost-estimate from PATTERNS.md and explicit ADR for any new hook.
+
+### References
+
+- Scope: `.aihaus/milestones/M021-260503-skill-enforcement-audit/PRD.md` (40 FRs, 8 NFRs, 12 SCs)
+- Architecture: `.aihaus/milestones/M021-260503-skill-enforcement-audit/architecture.md` (§3 component diagram, §4 invariants I-01..I-15, §6 cross-story dependency map, §7 data model, §8 threat model + worked examples, §9 Check 62 spec, §10 backout plan, §11 migration, §12 testing)
+- Plan: `.aihaus/plans/260503-skill-enforcement-audit/PLAN.md` (10 stories, 6 phases; post inline-fix)
+- Plan supporting docs: `.aihaus/plans/260503-skill-enforcement-audit/{ASSUMPTIONS,PATTERNS,CHECK}.md`
+- Stories: S01 (framework + scaffold + this ADR + skeleton script + golden-rows + Check 62 structural + 7 fixtures + test runner), S02-S07 (per-skill fragments), S08 (canonical concat + reconciliation rework + score-consistency check), S09 (backlog with eligibility filter + L8 sanity gate), S10 (CLAUDE.md + per-SKILL pointers + 199-line ceiling fix)
+- Inherited ADR: ADR-260502-A "Manifest auto-close enforcement protocol (R1)" — `pkg/.aihaus/decisions.md:1804-1899` (Worked example #2 quoted verbatim above)
+- Sibling ADR: ADR-260502-B "Integration-branch awareness (R4) + closest-ancestor reconcile" — `pkg/.aihaus/decisions.md:1901-1981` (style template)
+- Outcome gates satisfied: SC-1 through SC-12
+- Post-mortem evidence: `.aihaus/brainstorm/260503-skill-enforcement-audit/CONVERSATION.md` + 260502-stale-manifest + 260503-step7 + 260503-getShift-completion

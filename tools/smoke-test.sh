@@ -2730,6 +2730,52 @@ check_aih_close_skill() {
   _pass "$label"
 }
 
+# ---- Check 62: enforcement-audit scaffold + ADR + structural gate (M021/S01) -
+check_enforcement_audit_scaffold() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: enforcement-audit scaffold + ADR-260503-A structural gate (M021/S01)"
+  local canonical="pkg/.aihaus/skills/_shared/enforcement-audit.md"
+  local audit_dir="${PACKAGE_ROOT}/.aihaus/skills/_shared/enforcement-audit"
+  local golden_rows="tools/.fixtures/enforcement-audit/golden-rows/golden-rows.md"
+  local decisions_md="${PACKAGE_ROOT}/.aihaus/decisions.md"
+
+  # Phase A (pre-S08): canonical doesn't exist; verify scaffold prerequisites only
+  if [ ! -f "${SCRIPT_DIR}/../${canonical}" ]; then
+    if [ ! -d "$audit_dir" ]; then
+      _fail "$label" "audit dir missing: $audit_dir"
+      return
+    fi
+    if [ ! -f "${SCRIPT_DIR}/../${golden_rows}" ]; then
+      _fail "$label" "golden-rows missing: $golden_rows"
+      return
+    fi
+    if ! grep -q "ADR-260503-A" "$decisions_md" 2>/dev/null; then
+      _fail "$label" "ADR-260503-A absent from decisions.md"
+      return
+    fi
+    _pass "$label (Phase A — canonical not yet created by S08)"
+    return
+  fi
+
+  # Phase B (post-S08): canonical exists; verify >=4 H2 + row count match
+  local canonical_path="${SCRIPT_DIR}/../${canonical}"
+  local h2_count
+  h2_count=$(grep -c '^## ' "$canonical_path" 2>/dev/null || echo 0)
+  if [ "$h2_count" -lt 4 ]; then
+    _fail "$label" "canonical has $h2_count H2 headers (need >=4)"
+    return
+  fi
+  local actual
+  actual=$(grep -c '^| aih-' "$canonical_path" 2>/dev/null || echo 0)
+  local expected
+  expected=$(bash "${SCRIPT_DIR}/audit-skill-enforcement.sh" --compute-expected 2>/dev/null || echo 0)
+  if [ "$actual" -ne "$expected" ]; then
+    _fail "$label" "row count $actual != expected $expected"
+    return
+  fi
+  _pass "$label (Phase B — canonical: $actual rows match expected)"
+}
+
 # ---- Selectable sub-mode dispatcher (--check <name> --skill <slug>) ---------
 # PURPOSE: invoked by completion-protocol Step 4.6 pre-apply gate before each
 # skill evolution is committed. Runs only the named check against the named skill;
@@ -2866,12 +2912,13 @@ check_f260427_adrs_present
 check_run_status_contract
 check_manifest_auto_close_present
 check_aih_close_skill
+check_enforcement_audit_scaffold
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (61/61)\n"
+  printf "aihaus package smoke test PASSED [OK] (62/62)\n"
   exit 0
 else
-  printf "FAILED - %d of 61 checks failed\n" "$FAILURES"
+  printf "FAILED - %d of 62 checks failed\n" "$FAILURES"
   exit 1
 fi
