@@ -125,6 +125,30 @@ for name in skills agents hooks templates; do
   update_aihaus_dir "${name}"
 done
 
+# ---- Refresh auto.sh from launch-aihaus.sh on hash change (M019/S02 F-C3 fix) --
+# Previously update.sh only refreshed skills/agents/hooks/templates; this block
+# closes the gap so CLI-005 env defaults (and any future launch-aihaus.sh edits)
+# reach existing installs automatically. SHA comparison avoids needless writes.
+_LAUNCH_SRC="${SCRIPT_DIR}/launch-aihaus.sh"
+_AUTO_DST="${AIHAUS}/auto.sh"
+if [[ -f "${_LAUNCH_SRC}" ]]; then
+  if [[ -f "${_AUTO_DST}" ]]; then
+    _src_sha="$(sha256sum "${_LAUNCH_SRC}" 2>/dev/null | awk '{print $1}' || shasum -a 256 "${_LAUNCH_SRC}" 2>/dev/null | awk '{print $1}')"
+    _dst_sha="$(sha256sum "${_AUTO_DST}"   2>/dev/null | awk '{print $1}' || shasum -a 256 "${_AUTO_DST}"   2>/dev/null | awk '{print $1}')"
+    if [[ "${_src_sha}" != "${_dst_sha}" ]]; then
+      cp -f "${_LAUNCH_SRC}" "${_AUTO_DST}"
+      chmod +x "${_AUTO_DST}" 2>/dev/null || true
+      echo "  auto.sh refreshed from launch-aihaus.sh"
+    fi
+  else
+    cp -f "${_LAUNCH_SRC}" "${_AUTO_DST}"
+    chmod +x "${_AUTO_DST}" 2>/dev/null || true
+    echo "  auto.sh created from launch-aihaus.sh"
+  fi
+else
+  echo "  warn: launch-aihaus.sh not found at ${_LAUNCH_SRC}, skipping auto.sh refresh"
+fi
+
 # ---- Restore per-agent effort from sidecar -----------------------------------
 # Dispatch order (binding per architecture.md):
 #   1. restore_effort   -- migrates v2 .calibration -> v3 .effort (if needed)

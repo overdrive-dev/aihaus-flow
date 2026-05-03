@@ -18,8 +18,8 @@ $ErrorActionPreference = 'Stop'
 
 # Minimum Claude Code version supporting --dangerously-skip-permissions (DSP).
 # TODO: Update this floor if the Claude Code changelog confirms a stricter minimum.
-# Conservative default: 2.0.0 (DSP flag was present well before this release).
-$DspMinVersion = '2.0.0'
+# 2.1.126: fixed idle-timeout edge cases (CLI-005 defense-in-depth; M019/S02).
+$DspMinVersion = '2.1.126'
 
 function Show-Usage {
     @'

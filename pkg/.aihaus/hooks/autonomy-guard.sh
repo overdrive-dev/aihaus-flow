@@ -51,6 +51,12 @@ if command -v jq >/dev/null 2>&1; then
 fi
 [ -z "$MSG" ] && MSG="$INPUT"
 
+# M019/S04.4 — extract session_id from Stop payload for forensic correlation.
+GATE_SESSION_ID=""
+if command -v jq >/dev/null 2>&1; then
+  GATE_SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)"
+fi
+
 # Forbidden patterns. Each line below is: REGEX<TAB>SECTION
 # Patterns use ERE syntax (grep -E). Quotes are plain single-quoted strings
 # to avoid shell-escape hell.
@@ -89,11 +95,15 @@ log_violation() {
 #   matched_whitelist, haiku_latency_ms, exec_phase, manifest_status,
 #   cli_available, cache_hit, rate_limited, timeout (14 total incl. timeout;
 #   13 semantic per architecture § 6 — `timeout` is the operational add-on).
+# M019/S04 schema bump adds 4 fields: session_id, story_id, message_head,
+#   active_invoke_top (forensic correlation; backward-compatible JSONL).
 #
-# Decision enum (11 first-class values per F-10 unification):
+# Decision enum (13 values — 11 original M011 + 2 added M019/S04):
 #   paused-allow | regex-match | haiku-continue | haiku-block |
 #   timeout-fallback-allow | parse-fail-allow | no-cli-skip |
-#   haiku-opt-out | cache-hit-continue | cache-hit-block | rate-limit-skip-allow
+#   haiku-opt-out | cache-hit-continue | cache-hit-block | rate-limit-skip-allow |
+#   outside-exec-skip (12th, M019/S04.1) |
+#   unknown-no-substrate-visibility (13th, M019/S04.4 — predicate filled by S05)
 #
 # Rotation (CONTEXT.md Q-2): at write time, if file size ≥ 10 MB OR line
 # count ≥ 10 000, atomic `mv $AUDIT_GATE_LOG $AUDIT_GATE_LOG.old` (overwrites
@@ -137,10 +147,50 @@ log_gate_decision() {
       printf '"%s"' "$(printf '%s' "$v" | sed 's/\\/\\\\/g; s/"/\\"/g')"
     fi
   }
-  printf '{"ts":"%s","decision":"%s","message_hash":%s,"matched_pattern":%s,"section":%s,"haiku_reason":%s,"matched_whitelist":%s,"haiku_latency_ms":%s,"exec_phase":"%s","manifest_status":%s,"cli_available":"%s","cache_hit":"%s","rate_limited":"%s","timeout":"%s"}\n' \
+  # M019/S04.4 — 4 new forensic fields (backward-compatible; prior rows lack them).
+  # session_id: from CC stdin payload (extracted earlier into GATE_SESSION_ID).
+  local sess="${GATE_SESSION_ID:-}"
+  [ -z "$sess" ] && sess="null"
+  # story_id: last Story Records row col-1 from resolved manifest.
+  local story_id="null"
+  local _rmp
+  _rmp="${GATE_RESOLVED_MANIFEST_PATH:-}"
+  if [ -z "$_rmp" ] && declare -f resolve_manifest_path >/dev/null 2>&1; then
+    _rmp="$(resolve_manifest_path 2>/dev/null || true)"
+  fi
+  if [ -n "$_rmp" ] && [ -f "$_rmp" ]; then
+    local _sid
+    _sid="$(awk '
+      /^## Story Records$/ { on=1; next }
+      /^## / { on=0 }
+      on && /\|/ && $0 !~ /^\|[[:space:]]*-+/ && $0 !~ /^\|[[:space:]]*story/ {
+        split($0, f, "|"); gsub(/[[:space:]]/, "", f[2]); last=f[2]
+      }
+      END { if (last != "") print last }
+    ' "$_rmp" 2>/dev/null || true)"
+    [ -n "$_sid" ] && story_id="$_sid"
+  fi
+  # message_head: first 80 chars of MSG (privacy: no full body).
+  local mhead
+  mhead="$(printf '%s' "${MSG:-}" | head -c 80 2>/dev/null || true)"
+  [ -z "$mhead" ] && mhead="null"
+  # active_invoke_top: last agent slug pushed onto ## Invoke stack.
+  local invoke_top="null"
+  if [ -n "$_rmp" ] && [ -f "$_rmp" ]; then
+    local _itop
+    _itop="$(awk '
+      /^## Invoke stack$/ { on=1; next }
+      /^## / { on=0 }
+      on && /[^[:space:]]/ { last=$0 }
+      END { if (last != "") print last }
+    ' "$_rmp" 2>/dev/null | awk -F'|' '{gsub(/[[:space:]]/, "", $2); if ($2 != "") print $2}' 2>/dev/null || true)"
+    [ -n "$_itop" ] && invoke_top="$_itop"
+  fi
+  printf '{"ts":"%s","decision":"%s","message_hash":%s,"matched_pattern":%s,"section":%s,"haiku_reason":%s,"matched_whitelist":%s,"haiku_latency_ms":%s,"exec_phase":"%s","manifest_status":%s,"cli_available":"%s","cache_hit":"%s","rate_limited":"%s","timeout":"%s","session_id":%s,"story_id":%s,"message_head":%s,"active_invoke_top":%s}\n' \
     "$ts" "$decision" \
     "$(_qq "$hash")" "$(_qq "$pat")" "$(_qq "$sec")" "$(_qq "$hreason")" "$(_qq "$hwhite")" "$hlat" \
     "$in_execution" "$(_qq "$mstatus")" "$cliok" "$chit" "$rlim" "$tmo" \
+    "$(_qq "$sess")" "$(_qq "$story_id")" "$(_qq "$mhead")" "$(_qq "$invoke_top")" \
     >> "$AUDIT_GATE_LOG" 2>/dev/null || true
 }
 
@@ -195,21 +245,34 @@ elif [ -n "${MANIFEST_PATH:-}" ] && [ -f "${MANIFEST_PATH}" ]; then
 fi
 
 # M011/S05 — resolve manifest status for paused short-circuit + audit hint.
+# M019/S04.3 — uses resolve_manifest_path() from lib/manifest-helpers.sh;
+#   widens status filter from `running` to `running|paused` (FR-017);
+#   sort-by-mtime tie-break for multiple non-terminal manifests.
+# Source lib/manifest-helpers.sh relative to this script's own location so
+# the path is cwd-independent (A5.1 fix).
+_GUARD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" \
+  || _GUARD_DIR="$(dirname "${BASH_SOURCE[0]}")"
+# shellcheck source=lib/manifest-helpers.sh
+[ -f "$_GUARD_DIR/lib/manifest-helpers.sh" ] \
+  && . "$_GUARD_DIR/lib/manifest-helpers.sh" 2>/dev/null || true
+
 resolve_manifest_status() {
   local m=""
   if [ -n "${MANIFEST_PATH:-}" ] && [ -f "${MANIFEST_PATH}" ]; then
     m="$MANIFEST_PATH"
   else
-    for cand in .aihaus/milestones/M0*/RUN-MANIFEST.md; do
-      [ -f "$cand" ] || continue
-      if awk '/^## Metadata$/ {on=1; next} /^## / {on=0} on && /^status:[[:space:]]*running[[:space:]]*$/ {found=1; exit} END {exit !found}' "$cand" 2>/dev/null; then
-        m="$cand"; break
-      fi
-    done
+    # Use shared walk-up helper (S04.2) — cwd-independent.
+    if declare -f resolve_manifest_path >/dev/null 2>&1; then
+      m="$(resolve_manifest_path 2>/dev/null || true)"
+    fi
   fi
   [ -n "$m" ] || { printf 'null'; return; }
   [ -f "$m" ] || { printf 'null'; return; }
-  awk '/^## Metadata$/ {on=1; next} /^## / {on=0} on && /^status:/ {sub(/^status:[[:space:]]*/, ""); gsub(/[[:space:]]/, ""); print; exit}' "$m" 2>/dev/null || printf 'null'
+  # Cache for log_gate_decision (avoids second walk-up for story_id / invoke_top).
+  GATE_RESOLVED_MANIFEST_PATH="$m"
+  local val
+  val="$(awk '/^## Metadata$/ {on=1; next} /^## / {on=0} on && /^status:/ {sub(/^status:[[:space:]]*/,""); gsub(/[[:space:]]/,""); print; exit}' "$m" 2>/dev/null)"
+  printf '%s' "${val:-null}"
 }
 
 GATE_MANIFEST_STATUS="$(resolve_manifest_status)"
@@ -224,6 +287,15 @@ if [ "$GATE_MANIFEST_STATUS" = "paused" ]; then
   log_gate_decision "paused-allow"
   exit 0
 fi
+
+# M019/S04.4 — S05 fills in the unknown-no-substrate-visibility predicate here.
+# Emission site reserved: AFTER paused-allow short-circuit above,
+# BEFORE regex scan below (architecture.md §"autonomy-guard audit-row enum extension").
+# S05 will insert:
+#   if [ "${GATE_OUTPUT_TOKENS:-0}" = "0" ] && [ "${GATE_MANIFEST_MTIME_STALE:-0}" = "1" ]; then
+#     log_gate_decision "unknown-no-substrate-visibility"
+#     exit 0
+#   fi
 
 # --- M011/S05 Step 2: regex fast-path (M005 byte-identical) ------------------
 # Scan message against each pattern. First match in exec phase blocks.
@@ -253,7 +325,9 @@ done <<< "$PATTERNS"
 #   - timeout / parse fail    → allow
 
 if [ "$in_execution" != "1" ]; then
-  # No audit row when not in execution — reduces log noise for planning mode.
+  # M019/S04.1 — emit audit row before exit so forensic gap closes (FR-015).
+  # Previously silent; now logs "outside-exec-skip" as the 12th decision-enum value.
+  log_gate_decision "outside-exec-skip"
   exit 0
 fi
 

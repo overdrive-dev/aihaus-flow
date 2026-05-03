@@ -2564,6 +2564,99 @@ check_f260427_skill_line_safety() {
   _pass "$label"
 }
 
+# ---- Check 59 (M019/S05): RUN-STATUS projection contract + ADR-M019-A + cwd helper + regex-baseline --
+# Consolidated 9-sub-assert check (CHECK F3 lock: single _start_check at function head).
+# Sub-asserts:
+#   1. RUN-STATUS-projection-contract.md exists
+#   2. Template references ADR-M019-A
+#   3. Template references manifest-append.sh as sole writer
+#   4. Template contains canonical disjoint-projections sentence
+#   5. decisions.md has ## ADR-M019-A header
+#   6. decisions.md contains canonical sentence
+#   7. decisions.md contains "applicability examples" (case-insensitive, CHECK F8)
+#   8. lib/manifest-helpers.sh has resolve_manifest_path function
+#   9. regex-baseline diff yields zero lines (byte-identical R4 mitigation)
+check_run_status_contract() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: RUN-STATUS projection contract + ADR-M019-A + S04 cwd helper + regex-baseline preserved (M019/S05)"
+  local repo_root="${PACKAGE_ROOT}/.."
+
+  # Sub-assert 1: template exists
+  local tmpl="${PACKAGE_ROOT}/.aihaus/templates/RUN-STATUS-projection-contract.md"
+  if [[ ! -f "$tmpl" ]]; then
+    _fail "$label" "RUN-STATUS-projection-contract.md missing at pkg/.aihaus/templates/"
+    return
+  fi
+
+  # Sub-assert 2: template references ADR-M019-A
+  if ! grep -q "ADR-M019-A" "$tmpl"; then
+    _fail "$label" "template missing ADR-M019-A reference"
+    return
+  fi
+
+  # Sub-assert 3: template references manifest-append.sh as sole writer
+  if ! grep -q "manifest-append.sh" "$tmpl"; then
+    _fail "$label" "template missing manifest-append.sh sole-writer reference"
+    return
+  fi
+
+  # Sub-assert 4: template carries canonical disjoint-projections sentence
+  if ! grep -q "STATUS owns phase only; RUN-STATUS owns progress only" "$tmpl"; then
+    _fail "$label" "template missing canonical sentence 'STATUS owns phase only; RUN-STATUS owns progress only'"
+    return
+  fi
+
+  # Sub-assert 5: decisions.md has ADR-M019-A header
+  local decisions="${PACKAGE_ROOT}/.aihaus/decisions.md"
+  if ! grep -q "^## ADR-M019-A" "$decisions" 2>/dev/null; then
+    _fail "$label" "decisions.md missing ## ADR-M019-A header"
+    return
+  fi
+
+  # Sub-assert 6: decisions.md has the canonical sentence
+  if ! grep -q "STATUS owns phase only; RUN-STATUS owns progress only" "$decisions" 2>/dev/null; then
+    _fail "$label" "decisions.md missing canonical sentence 'STATUS owns phase only; RUN-STATUS owns progress only'"
+    return
+  fi
+
+  # Sub-assert 7: applicability examples header (case-insensitive per CHECK F8)
+  if ! grep -qi "applicability examples" "$decisions" 2>/dev/null; then
+    _fail "$label" "decisions.md missing 'applicability examples' header (case-insensitive)"
+    return
+  fi
+
+  # Sub-assert 8: resolve_manifest_path function exists in lib
+  local helpers="${PACKAGE_ROOT}/.aihaus/hooks/lib/manifest-helpers.sh"
+  if ! grep -q "^resolve_manifest_path" "$helpers" 2>/dev/null; then
+    _fail "$label" "lib/manifest-helpers.sh missing resolve_manifest_path function"
+    return
+  fi
+
+  # Sub-assert 9: regex-baseline byte-identical (R4 mitigation, CHECK F4)
+  # Extraction command (documented in regex-baseline.txt header):
+  #   awk '/^PATTERNS=\$\(cat <<.PATTERNS_EOF./{on=1; next} /^PATTERNS_EOF$/{on=0} on {print}' \
+  #     pkg/.aihaus/hooks/autonomy-guard.sh
+  local baseline="${repo_root}/.aihaus/milestones/M019-260501-improve-auto-mode-feedback/execution/regex-baseline.txt"
+  if [[ ! -f "$baseline" ]]; then
+    # Baseline absent (e.g., worktree without dogfood .aihaus) — skip gracefully
+    _pass "$label [sub-assert 9 skipped — regex-baseline.txt not present in this environment]"
+    return
+  fi
+  local guard="${PACKAGE_ROOT}/.aihaus/hooks/autonomy-guard.sh"
+  if [[ ! -f "$guard" ]]; then
+    _fail "$label" "autonomy-guard.sh missing — cannot verify regex-baseline"
+    return
+  fi
+  local extracted_patterns baseline_patterns
+  extracted_patterns=$(awk '/^PATTERNS=\$\(cat <<.PATTERNS_EOF./{on=1; next} /^PATTERNS_EOF$/{on=0} on {print}' "$guard" 2>/dev/null)
+  baseline_patterns=$(grep -v '^#' "$baseline" | grep -v '^$')
+  if [[ "$extracted_patterns" == "$baseline_patterns" ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "regex-baseline mismatch — autonomy-guard.sh 11-regex array has drifted from snapshot (run: diff <(grep -v '^#' execution/regex-baseline.txt | grep -v '^$') <(awk '/^PATTERNS=..cat <<.PATTERNS_EOF./{on=1; next} /^PATTERNS_EOF\$/{on=0} on {print}' pkg/.aihaus/hooks/autonomy-guard.sh))"
+  fi
+}
+
 # ---- Check 58 (F260427/S5a): three new ADRs landed in decisions.md ----------
 # Sanity check: ADR-260427-A, ADR-260427-B, ADR-260427-C all present.
 check_f260427_adrs_present() {
@@ -2712,12 +2805,13 @@ check_f260427_branch_switch_warn_fixture
 check_f260427_pre_flight_annex
 check_f260427_skill_line_safety
 check_f260427_adrs_present
+check_run_status_contract
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (58/58)\n"
+  printf "aihaus package smoke test PASSED [OK] (59/59)\n"
   exit 0
 else
-  printf "FAILED - %d of 58 checks failed\n" "$FAILURES"
+  printf "FAILED - %d of 59 checks failed\n" "$FAILURES"
   exit 1
 fi

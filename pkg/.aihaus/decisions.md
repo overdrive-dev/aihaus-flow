@@ -1722,3 +1722,81 @@ Delete the annex file; revert the one-line reference in each SKILL.md.
 
 ADR-M017-B (L1-L4 lock-leak stack — sibling, milestone-scoped).
 ADR-M017-C (same-file rule — sibling, milestone-scoped, source of the `## Owned Files` convention).
+
+---
+
+## ADR-M019-A — Parallel projection of milestone progress (RUN-STATUS.md)
+
+**Status:** Accepted
+**Date:** 2026-05-01
+**Milestone:** M019
+**Extends:** ADR-001 (filesystem state primitive — preserved); ADR-004 (single-writer per file — extended, not superseded; per-file rule unchanged); ADR-M014-B (manifest-append.sh sole-writer precedent for section-extension)
+**Pattern:** ADR-M017-A reference-and-extend grammar; sibling-projection structure mirrored on `STATUS-projection-contract.md`
+
+### Decision
+
+**STATUS owns phase only; RUN-STATUS owns progress only — non-overlapping projections of disjoint state.**
+
+`phase-advance.sh` remains sole writer of `STATUS.md`; `STATUS.md` carries `Metadata.phase` (one of `gathering | planning | ready | running | complete | paused | aborted`) and nothing else. `manifest-append.sh` becomes the sole writer of a new sibling projection `RUN-STATUS.md`; `RUN-STATUS.md` carries story-level progress (slice tree, slice grid `[✓][→][ ]`, recent-activity log) and nothing else. The two projection files are non-overlapping derivatives of the same source-of-truth (`RUN-MANIFEST.md`), with disjoint trigger surfaces (`phase-advance.sh` fires on phase transitions; `manifest-append.sh` fires on every story-record / invoke-push / invoke-pop / progress-log / phase / status / checkpoint mutation).
+
+### Context
+
+- ADR-004 is letter-valid: each of `STATUS.md` and `RUN-STATUS.md` has exactly one writer. The per-file rule is preserved verbatim.
+- ADR-004 spirit-collision risk surfaced by contrarian #1 ("two projection files of the same source-of-truth confuses readers"): mitigated by the canonical disjoint-projections sentence above + the applicability examples below.
+- Trigger naturalness wins: `phase-advance.sh` fires ~5-7 times per milestone (phase transitions only); `manifest-append.sh` fires on every story-record / invoke / checkpoint event (typically 50-700+ times per milestone). Extending `STATUS.md` to carry progress would require awkward `--refresh-projection` no-op invocations from `manifest-append.sh` into `phase-advance.sh`'s lock domain.
+- ADR-M014-B established `manifest-append.sh` as the sole-writer precedent for section-extension (M014 `## Checkpoints`). RUN-STATUS.md regen is a sibling section-write inside the same critical section, governed by the same single-writer discipline.
+- M019 dogfood pain (Victor's M041 45-slice run on an external host repo): `M041 · S22/?` statusLine + no scrollback-stable surface. RUN-STATUS.md is the scrollback-stable surface (`tail -F`-able, VS Code on second monitor).
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| A | Extend STATUS.md (one writer for all projection content) | One writer per concept; preserves the "1 file, 1 writer" mental model | `phase-advance.sh` fires only ~5-7×/milestone; story-level progress would lag arbitrarily long; awkward `--refresh-projection` no-op invocations needed | Trigger naturalness wrong; M014 precedent ignored |
+| B | (Chosen) Parallel RUN-STATUS.md under `manifest-append.sh` sole-writer | Natural triggers (every story-record event); M014 precedent reused; tail-F ergonomic; spirit-justification closes the contradiction | Two projection files of same source-of-truth (contrarian #1) | Letter-valid under ADR-004; spirit risk mitigated by canonical sentence + applicability examples + threat-model Non-goal |
+| C | Daemon dashboard (Vue+SQLite+WebSocket per disler precedent) | Real-time UI, multi-window | Violates aihaus's markdown+bash distribution constraint | Hard rejection; out of scope |
+
+### Applicability Examples
+
+The canonical applicability test for any future "should this be a new projection file?" question is whether the new file:
+1. Has exactly ONE existing sole-writer hook whose natural trigger surface aligns with the projection's update cadence.
+2. Carries a NON-OVERLAPPING slice of source-of-truth state (not a copy of, or alternate representation of, an existing projection's slice).
+
+If both hold, the parallel-projection pattern fits. If either fails, the projection is multi-source aggregate and the pattern does NOT fit.
+
+**Worked example #1 — FITS the rule.** A future maintainer wants to surface "currently-paused stories" as a fast-read projection (`BLOCKED.md`) so external dashboards can poll for stuck work without parsing the full manifest. The natural trigger is `manifest-append.sh --field status` — which already fires on every story status change. The projected slice (paused-stories list) is non-overlapping with `STATUS.md` (phase only) and `RUN-STATUS.md` (progress grid; doesn't enumerate paused subset). **Fits.** New ADR-M0XX-Y extends ADR-M019-A; `manifest-append.sh` gets a third sibling section-write helper `_regen_blocked` inside the existing critical section, behind the same lock; new template `BLOCKED-projection-contract.md` mirrors RUN-STATUS-projection-contract.md.
+
+**Worked example #2 — HITS the multi-source carve-out.** A future maintainer wants to surface "agent activity summary across milestones, decisions, and per-agent memory" as a single projection file (`AGENTS.md`) for at-a-glance answer to "which agents have done what lately?" The desired content aggregates `RUN-MANIFEST.md` (story records), `decisions.md` (ADR authorship metadata), and `.aihaus/memory/agents/<name>.md` (per-agent memory). **Does NOT fit.** No single existing sole-writer hook covers all three sources; the natural triggers are disjoint (manifest mutations, ADR appends, agent-memory writes by curator). Tying the projection to one writer's critical section would either (a) force the chosen writer to read files outside its lock domain (race-prone), or (b) require synthetic re-trigger calls into the chosen writer, which is exactly the pattern Option A above was rejected for. Correct answer for AGENTS.md: a separate periodic-rebuild tool (e.g., `tools/rebuild-agents-summary.sh` invoked on demand or from a SessionEnd hook), NOT a parallel projection under the ADR-M019-A pattern.
+
+The carve-out test in one sentence: **if your projection's content cannot be tied to a single existing sole-writer hook's critical section, it is a multi-source aggregate and ADR-M019-A does NOT apply.**
+
+### Consequences
+
+**Positive.** `tail -F RUN-STATUS.md` answers "where am I and what's left?" without parsing the manifest. M014/M017 precedents extend additively. Spirit-justification closes contrarian #1. ADR-001 preserved. ADR-004 per-file rule preserved. Projection-file pattern is now established and reusable (BLOCKED.md hypothetical).
+
+**Negative.** Two projection files of the same source-of-truth — readers must internalize "STATUS authoritative on phase, RUN-STATUS authoritative on progress." A future maintainer who skims this ADR may apply the pattern to a multi-source case (worked example #2) and create a coupling bug. Mitigation: the carve-out test above is the binding rubric; smoke-test asserts ADR-M019-A presence + canonical sentence + applicability-examples header so the test cannot be silently dropped.
+
+**Neutral.** Lock-hold time on `manifest-append.sh` doubles per call (RUN-MANIFEST tmp+mv + RUN-STATUS tmp+mv). Worst-case checkpoint storm (M014 saw 720 rows) measured under M019 dogfood load via D5 outcome gate (zero `manifest-append.sh` exit-6 across 2 consecutive runs). If D5 fails, Backout Plan applies: comment out `_regen_run_status` (~1 LOC); ADR stays accepted with implementation deferred.
+
+### Migration
+
+Single-shot within M019. First mutating `manifest-append.sh` call on any active milestone post-M019 organically generates `RUN-STATUS.md`; pre-existing milestones without `RUN-STATUS.md` are acceptable (it generates on next activity). No retroactive regeneration. No schema-version bump on `RUN-MANIFEST.md`.
+
+### Rollback
+
+Comment out the `_regen_run_status` call inside `manifest-append.sh`'s critical section (~1 LOC). RUN-MANIFEST.md continues sole source-of-truth; STATUS.md continues unchanged. ADR-M019-A stays accepted with Implementation Status marked "deferred — see M019 retrospective." S01/S02/S04/S05 individually valuable.
+
+### Threat-model Non-goal (D7 — see RUN-STATUS-projection-contract.md for full text)
+
+No secrets in story slugs / commit messages. RUN-STATUS.md exposes story slugs, commit SHAs, agent activity timestamps. The file is intentionally human-readable and lives at a path that may be auto-synced by OneDrive / Dropbox / iCloud. Treat its contents as externally readable. This is **discipline, not enforcement**: M019 ships no redaction layer.
+
+### Related
+
+ADR-001 (filesystem state primitive — preserved); ADR-004 (extended, not superseded); ADR-M014-B (manifest-append.sh sole-writer precedent — extended); ADR-M017-A (merge-back substrate — preserved); ADR-M017-C (cross-story file-set isolation — zone-level exception documented for S04 ↔ S05 on `autonomy-guard.sh`); STATUS-projection-contract.md (sibling); RUN-STATUS-projection-contract.md (new — `pkg/.aihaus/templates/RUN-STATUS-projection-contract.md`).
+
+### References
+
+- Scope: `.aihaus/milestones/M019-260501-improve-auto-mode-feedback/PRD.md` (FR-010..FR-014)
+- Architecture: `.aihaus/milestones/M019-260501-improve-auto-mode-feedback/architecture.md` (§"manifest-append.sh extension", §"RUN-STATUS.md schema")
+- Plan: `.aihaus/plans/260501-improve-auto-mode-feedback/PLAN.md` (D1, D7)
+- Patterns: `.aihaus/plans/260501-improve-auto-mode-feedback/PATTERNS.md` §2 + §4 + §5
+- Stories: S03 (RUN-STATUS.md projection + projection-contract template + this ADR), S04 (resolve_manifest_path helper + outside-exec-skip audit row), S05 (forensic schema bump + smoke-test + outcome-gate validator)

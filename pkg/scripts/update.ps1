@@ -97,6 +97,27 @@ foreach ($name in @('skills', 'agents', 'hooks', 'templates')) {
     Update-AihausDir -Name $name
 }
 
+# ---- Refresh auto.ps1 from launch-aihaus.ps1 on hash change (M019/S02 F-C3 fix) --
+# Closes the same gap as update.sh: existing installs receive CLI-005 env defaults
+# and any future launch-aihaus.ps1 edits via update.ps1 automatically.
+$LaunchSrc = Join-Path $ScriptDir 'launch-aihaus.ps1'
+$AutoDst   = Join-Path $Aihaus 'auto.ps1'
+if (Test-Path $LaunchSrc) {
+    if (Test-Path $AutoDst) {
+        $srcHash = (Get-FileHash -LiteralPath $LaunchSrc -Algorithm SHA256).Hash
+        $dstHash = (Get-FileHash -LiteralPath $AutoDst   -Algorithm SHA256).Hash
+        if ($srcHash -ne $dstHash) {
+            Copy-Item -Path $LaunchSrc -Destination $AutoDst -Force
+            Write-Host "  auto.ps1 refreshed from launch-aihaus.ps1"
+        }
+    } else {
+        Copy-Item -Path $LaunchSrc -Destination $AutoDst -Force
+        Write-Host "  auto.ps1 created from launch-aihaus.ps1"
+    }
+} else {
+    Write-Host "  warn: launch-aihaus.ps1 not found at $LaunchSrc, skipping auto.ps1 refresh"
+}
+
 # ---- Restore per-agent effort from sidecar -----------------------------------
 # Dispatch order (binding per architecture.md):
 #   1. Restore-Effort   -- migrates v2 .calibration -> v3 .effort (if needed)

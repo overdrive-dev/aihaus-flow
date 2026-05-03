@@ -114,3 +114,27 @@ At each arrow, the skill calls the next one via Skill tool inside its own final 
 ## Authority
 
 This annex overrides contradictory prose in individual SKILL.md files. When a skill's own prose says "ask the user to confirm X" and this annex says "do not ask during execution", the annex wins.
+
+## CLI-005 idle-stall defense (M019)
+
+Long-running milestone executions on Opus 4.7 at `xhigh` effort may appear to
+stall for 10-22 minutes with no progress output. Two stall classes exist:
+
+1. **Model self-stop** -- outside the autonomy-guard substrate. `RUN-STATUS.md`
+   (M019) provides a filesystem-visible heartbeat: if `manifest-append.sh` has
+   not regenerated `RUN-STATUS.md` for >20 minutes during an active story, the
+   stall is likely model self-stop, not an aihaus pause.
+2. **CLI-005 stream-idle regression** -- a known Claude Code stream-idle
+   regression. Mitigated at install time: `CLAUDE_STREAM_IDLE_TIMEOUT_MS`
+   defaults to `300000` (5 min) in `auto.sh` / `auto.ps1`. Opt-out via
+   `AIHAUS_DSP_TIMEOUT=0` in environment (set before launching auto.sh).
+
+Skills must NOT paper over stalls with option menus or "honest checkpoints."
+Per the TRUE blocker test (above), a stream stall is not a TRUE blocker.
+Apply the safer default: `/aih-resume` after confirming `RUN-STATUS.md`
+shows no new progress for >20 minutes.
+
+**Propagation:** existing installs receive the env defaults via `pkg/scripts/update.sh`
+and `pkg/scripts/update.ps1`, which now refresh `auto.sh` / `auto.ps1` from
+`launch-aihaus.sh` / `launch-aihaus.ps1` on hash-change (M019/S02 F-C3 fix;
+previously update.sh only touched skills/agents/hooks/templates).
