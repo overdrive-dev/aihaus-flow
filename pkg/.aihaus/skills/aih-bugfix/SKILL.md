@@ -109,10 +109,9 @@ If branching fails (e.g., branch exists), append a short suffix: `fix/[slug]-2`.
 
 Create `.aihaus/bugfixes/[YYMMDD]-[slug]/RUN-MANIFEST.md` from the v3 YAML template in `annexes/run-manifest-template.md` (schema: v3, status: running, phase: apply-fix). Mutations go via `manifest-append.sh` (single-writer — never inline edits). Update `last_updated` and append to Progress Log after each subsequent step.
 
-### 9. Apply Fix
-- Edit the identified files to resolve the root cause
-- Follow existing code patterns in neighboring files
-- Keep changes minimal and focused on the defect
+### 9. Apply Fix (delegate; never inline for non-trivial work)
+
+Spawn specialty agents per the bugfix routing rules — orchestrator does NOT edit source files directly for non-trivial fixes. Bugfixes are typically narrower than features, so the inline-edit budget is more permissive (5 small edits without justification). Routing table + briefing checklist: see `annexes/agent-routing.md`.
 
 ### 10. Add or Update Tests (delegate to test-writer)
 Spawn `test-writer` with `subagent_type: "test-writer"` and the instruction:

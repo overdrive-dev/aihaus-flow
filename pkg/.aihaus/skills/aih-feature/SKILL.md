@@ -98,10 +98,9 @@ Chain dependencies sequentially. Before each step, set its task to `in_progress`
 - `git checkout -b feature/[slug]`. If user approved stashing: `git stash` before branching; `git stash pop` after.
 - Create `.aihaus/features/[YYMMDD]-[slug]/RUN-MANIFEST.md` from the v3 YAML template in `annexes/run-manifest-template.md` (schema: v3, status: running, phase: implement). Mutations go via `manifest-append.sh` (single-writer — never inline edits). Update `last_updated` and append to Progress Log after each subsequent step.
 
-### Step 7: Implement
-- Make all changes identified in the plan.
-- Follow existing patterns in neighboring files.
-- Do NOT modify files outside the approved plan without noting why.
+### Step 7: Implement (delegate; never inline for non-trivial work)
+
+Classify the planned changes by file area, then **spawn specialty agents** in parallel where independent. The orchestrator does NOT make implementation edits directly — agents carry project memory, conventions, and lessons-learned that raw model lacks. Routing table + briefing checklist + inline-edit budget: see `annexes/agent-routing.md` (binding contract).
 
 ### Step 8: Verify
 Run the verification commands appropriate to the areas touched (build, typecheck, unit tests, smoke tests). Use whatever the project already defines in its README or CONTRIBUTING docs. Run all relevant checks for every subsystem you changed. If tests fail, fix them. Do not skip.
