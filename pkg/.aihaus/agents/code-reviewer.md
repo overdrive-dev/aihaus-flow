@@ -42,6 +42,20 @@ blocking operations in async contexts, excessive allocations.
 **Quality:** Duplicated logic, overly complex functions, missing error handling,
 inconsistent patterns, dead imports, unused variables.
 
+**Step 7 / Step 9 compliance (process — only when reviewing a feature/bugfix diff):**
+If this is a `/aih-feature` or `/aih-bugfix` review (`MANIFEST_PATH` set, file is
+`.aihaus/features/.../RUN-MANIFEST.md` or `.aihaus/bugfixes/.../RUN-MANIFEST.md`):
+- Check Story Records / Progress Log for `implementer`, `frontend-dev`, or `code-fixer` agent rows.
+- If the diff shows substantive source changes (>20 LOC across multiple files OR new files)
+  AND no agent rows are recorded AND no `deviation: inline-only-because:` flag exists in the
+  progress log → flag as **CRITICAL** (process violation, not code defect):
+  `Inline-edit budget exceeded without delegation flag — see pkg/.aihaus/skills/aih-feature/annexes/agent-routing.md`.
+- If diff is small (≤3 edits, ≤5 lines each, ≤1 file each) — within the inline budget — accept
+  silently.
+- If `deviation: inline-only-because: <reason>` flag is present in the progress log → accept
+  WITH a `MED` finding documenting that the deviation flag was used (so reviewers downstream can
+  see the pattern frequency).
+
 ## Output Format
 Write `REVIEW.md` in the milestone/feature directory:
 
