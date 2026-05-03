@@ -315,6 +315,44 @@ while IFS=$'\t' read -r pattern section; do
   fi
 done <<< "$PATTERNS"
 
+# --- M020/Phase-B: Step 7 / Step 9 inline-edit drift advisory (non-blocking) ---
+# Fires when MANIFEST_PATH is set and the manifest's Story Records show
+# substantive file changes but no implementer/frontend-dev/code-fixer agent
+# rows. Soft warning to stderr only — never blocks. Opt-out:
+# AIHAUS_STEP7_ADVISORY=0.
+if [ -n "${MANIFEST_PATH:-}" ] && [ -f "${MANIFEST_PATH}" ] \
+   && [ "${AIHAUS_STEP7_ADVISORY:-1}" != "0" ]; then
+  # Count agent: rows in Story Records where agent ∈ {implementer, frontend-dev, code-fixer}
+  _s7_agent_rows=$(awk '
+    /^## Story Records$/ { in_sec=1; next }
+    /^## / && in_sec==1 { exit }
+    in_sec==1 && /(implementer|frontend-dev|code-fixer)/ { count++ }
+    END { print count+0 }
+  ' "${MANIFEST_PATH}" 2>/dev/null || echo 0)
+
+  # Count Progress Log rows (proxy for total work)
+  _s7_log_rows=$(awk '
+    /^## Progress Log$/ { in_sec=1; next }
+    /^## / && in_sec==1 { exit }
+    in_sec==1 && /^- / { count++ }
+    END { print count+0 }
+  ' "${MANIFEST_PATH}" 2>/dev/null || echo 0)
+
+  # Heuristic: if Progress Log has >5 entries (substantive run) but agent_rows == 0,
+  # surface a soft advisory pointing at the agent-routing annex.
+  if [ "${_s7_log_rows:-0}" -gt 5 ] && [ "${_s7_agent_rows:-0}" -eq 0 ]; then
+    printf 'advisory: Step 7/9 — manifest shows substantive work (%s progress entries) but 0 implementer/frontend-dev/code-fixer agent rows. See pkg/.aihaus/skills/aih-feature/annexes/agent-routing.md for delegation contract.\n' \
+      "${_s7_log_rows}" >&2
+    # Also log to audit (non-fatal)
+    _S7_AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+    mkdir -p "$(dirname "$_S7_AUDIT_LOG")" 2>/dev/null || true
+    printf '{"ts":"%s","hook":"autonomy-guard","advisory":"step7-inline-drift","manifest_path":"%s","log_rows":%s,"agent_rows":0}\n' \
+      "$(date -u +%FT%TZ)" "${MANIFEST_PATH}" "${_s7_log_rows}" \
+      >> "$_S7_AUDIT_LOG" 2>/dev/null || true
+  fi
+fi
+# --- end Phase-B advisory ---
+
 # --- M011/S05 Step 3: haiku backstop (regex-miss + exec phase only) ---------
 # Early-exit gates (each logs one decision row; all fail-safe allow):
 #   - outside execution phase → no block possible; no haiku
