@@ -19,18 +19,21 @@ DSP_MIN_CLAUDE_VERSION="2.1.126"
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--target <path>] [--copy] [--update] [--package <path>] [--force]
+Usage: install.sh [--target <path>] [--copy] [--update] [--package <path>] [--force] [--force-project-skills]
 
 Installs aihaus into a target git repository (Claude Code only).
 
 Options:
-  --target <path>      Target directory (default: current working directory)
-  --copy               Copy files instead of symlinking (fallback for
-                       locked-down environments)
-  --update             Re-sync package dirs only; preserve local data
-  --package <path>     Override AIHAUS_HOME discovery; use this path as package root
-  --force              Overwrite existing .aihaus/ without prompting
-  -h, --help           Show this message
+  --target <path>         Target directory (default: current working directory)
+  --copy                  Copy files instead of symlinking (fallback for
+                          locked-down environments)
+  --update                Re-sync package dirs only; preserve local data
+  --package <path>        Override AIHAUS_HOME discovery; use this path as package root
+  --force                 Overwrite existing .aihaus/ without prompting
+  --force-project-skills  Always create .claude/skills junction even when
+                          user-global skills (~/.claude/skills/aih-init) exist
+                          (env: FORCE_PROJECT_SKILLS=1)
+  -h, --help              Show this message
 EOF
 }
 
@@ -45,6 +48,7 @@ MODE="link"
 UPDATE="0"
 FORCE="0"
 PACKAGE_FLAG=""  # V5: --package <path> override (tier 1 of discovery chain)
+FORCE_PROJECT_SKILLS="${FORCE_PROJECT_SKILLS:-0}"  # M024/S02: env-var opt-out for skill-junction conditional
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -71,6 +75,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --force)
       FORCE="1"
+      shift
+      ;;
+    --force-project-skills)
+      FORCE_PROJECT_SKILLS="1"
       shift
       ;;
     -h|--help)
@@ -411,8 +419,29 @@ link_or_copy() {
 }
 
 mkdir -p "${TARGET}/.claude"
+
+# ---------------------------------------------------------------------------
+# M024/S02: Skill-junction conditional (Concern C) — ADR-260507-A #5
+# Skip per-repo .claude/skills junction when user-global skills already exist
+# (detected by sentinel directory ~/.claude/skills/aih-init, present in every
+# aihaus install). Opt-out: --force-project-skills flag OR FORCE_PROJECT_SKILLS=1.
+# Note: dogfood mode returns before reaching this block (I-04 / install.sh:274),
+# so the conditional here only applies to non-dogfood --target invocations.
+# ---------------------------------------------------------------------------
+_has_user_global_skills() {
+  [[ -d "$HOME/.claude/skills/aih-init" ]]   # aih-init is sentinel — exists in every aihaus install
+}
+
 for name in skills agents hooks; do
-  link_or_copy "${name}"
+  if [[ "${name}" == "skills" ]]; then
+    if ! _has_user_global_skills || [[ "${FORCE_PROJECT_SKILLS:-0}" == "1" ]]; then
+      link_or_copy "skills"
+    else
+      echo "  skip: .claude/skills -- user-global skills present (pass --force-project-skills to override)"
+    fi
+  else
+    link_or_copy "${name}"
+  fi
 done
 
 # Step 6.5: create auto.sh wrapper symlink / copy (M014/S05)
@@ -469,16 +498,19 @@ fi
 # Step 10: V5 user-global skill install — ADR-260504-A FR-01/FR-06
 # Install each aih-* skill into ~/.claude/skills/ (user-global Claude Code resolution layer).
 # This runs on every non-dogfood non-update invocation (idempotent per I-02).
+# M024/S02 (Concern B fix): pass AIHAUS_RESOLVED (repo root containing pkg/) not PKG_ROOT
+# (which is repo-root/pkg — would resolve to repo-root/pkg/pkg/.aihaus/skills, never exists).
 echo ""
 echo "  installing user-global skills..."
-install_user_global_skills "${PKG_ROOT}"
+install_user_global_skills "${AIHAUS_RESOLVED}"
 
 # Step 11: write ~/.aihaus/.install-source registry (FR-04, I-01)
 # Written here (after per-repo overlay + user-global skills succeed) so a partial
-# failure never pins a broken path. Using PKG_ROOT as the canonical AIHAUS_HOME.
+# failure never pins a broken path. Using AIHAUS_RESOLVED as the canonical AIHAUS_HOME.
+# M024/S02 (Concern B fix): use AIHAUS_RESOLVED (repo root) not PKG_ROOT (repo-root/pkg).
 mkdir -p "$HOME/.aihaus"
-printf '%s\n' "${PKG_ROOT}" > "$HOME/.aihaus/.install-source"
-echo "  registry: ~/.aihaus/.install-source -> ${PKG_ROOT}"
+printf '%s\n' "${AIHAUS_RESOLVED}" > "$HOME/.aihaus/.install-source"
+echo "  registry: ~/.aihaus/.install-source -> ${AIHAUS_RESOLVED}"
 
 # Step 12: idempotent .gitignore injection (soft-fail per LD-3)
 # Manual fallback: pkg/.aihaus/templates/gitignore-fragment

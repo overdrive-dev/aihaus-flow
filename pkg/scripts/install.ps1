@@ -17,6 +17,7 @@ param(
     [switch]$Copy,
     [switch]$Update,
     [switch]$Force,
+    [switch]$ForceProjectSkills,
     [switch]$Help
 )
 
@@ -29,17 +30,19 @@ $DspMinVersion = '2.1.126'
 
 function Show-Usage {
     @'
-Usage: install.ps1 [-Target <path>] [-Package <path>] [-Copy] [-Update] [-Force]
+Usage: install.ps1 [-Target <path>] [-Package <path>] [-Copy] [-Update] [-Force] [-ForceProjectSkills]
 
 Installs aihaus into a target git repository (Claude Code only).
 
 Options:
-  -Target <path>    Target directory (default: current working directory)
-  -Package <path>   Override AIHAUS_HOME discovery; use this path as package root
-  -Copy             Copy files instead of creating junctions
-  -Update           Re-sync package dirs only; preserve local data
-  -Force            Overwrite existing .aihaus/ without prompting
-  -Help             Show this message
+  -Target <path>        Target directory (default: current working directory)
+  -Package <path>       Override AIHAUS_HOME discovery; use this path as package root
+  -Copy                 Copy files instead of creating junctions
+  -Update               Re-sync package dirs only; preserve local data
+  -Force                Overwrite existing .aihaus/ without prompting
+  -ForceProjectSkills   Always create .claude\skills junction even when
+                        user-global skills (~/.claude/skills/aih-init) exist
+  -Help                 Show this message
 '@ | Write-Host
 }
 
@@ -861,8 +864,26 @@ function Link-Or-Copy {
     Write-Host "  copy: .claude\$Name"
 }
 
+# M024/S02: Skill-junction conditional (Concern C) -- ADR-260507-A #5
+# Skip per-repo .claude\skills junction when user-global skills already exist
+# (detected by sentinel directory $HOME\.claude\skills\aih-init, present in
+# every aihaus install). Opt-out: -ForceProjectSkills switch.
+# Note: dogfood mode exits before reaching this block, so the conditional only
+# applies to non-dogfood -Target invocations.
+function Test-HasUserGlobalSkills {
+    return (Test-Path (Join-Path $env:USERPROFILE ".claude\skills\aih-init"))
+}
+
 foreach ($name in @('skills','agents','hooks')) {
-    Link-Or-Copy -Name $name
+    if ($name -eq 'skills') {
+        if (-not (Test-HasUserGlobalSkills) -or $ForceProjectSkills) {
+            Link-Or-Copy -Name 'skills'
+        } else {
+            Write-Host "  skip: .claude\skills -- user-global skills present (pass -ForceProjectSkills to override)"
+        }
+    } else {
+        Link-Or-Copy -Name $name
+    }
 }
 
 # Step 6.5: create auto.ps1 wrapper symlink / junction / copy (M014/S05)
@@ -1004,21 +1025,24 @@ if ($claudeCmd) {
 # Step 10: V5 user-global skill install -- ADR-260504-A FR-01/FR-06
 # Install each aih-* skill into $env:USERPROFILE\.claude\skills\ (user-global Claude Code resolution layer).
 # This runs on every non-dogfood non-update invocation (idempotent per I-02).
+# M024/S02 (Concern B fix): pass $AihausResolved (repo root containing pkg\) not $PkgRoot
+# (which is repo-root\pkg -- would resolve to repo-root\pkg\pkg\.aihaus\skills, never exists).
 if (-not $Update) {
     Write-Host ""
     Write-Host "  installing user-global skills..."
-    Install-UserGlobalSkills -AihausHome $PkgRoot
+    Install-UserGlobalSkills -AihausHome $AihausResolved
 
     # Step 11: write $env:USERPROFILE\.aihaus\.install-source registry (FR-04, I-01)
     # Written here (after per-repo overlay + user-global skills succeed) so a partial
-    # failure never pins a broken path. Using PkgRoot as the canonical AIHAUS_HOME.
+    # failure never pins a broken path. Using $AihausResolved as the canonical AIHAUS_HOME.
+    # M024/S02 (Concern B fix): use $AihausResolved (repo root) not $PkgRoot (repo-root\pkg).
     $registryDir = Join-Path $env:USERPROFILE ".aihaus"
     if (-not (Test-Path $registryDir)) {
         New-Item -ItemType Directory -Path $registryDir -Force | Out-Null
     }
     $registryFile = Join-Path $registryDir ".install-source"
-    Set-Content -LiteralPath $registryFile -Value $PkgRoot -Encoding UTF8 -NoNewline
-    Write-Host "  registry: $env:USERPROFILE\.aihaus\.install-source -> $PkgRoot"
+    Set-Content -LiteralPath $registryFile -Value $AihausResolved -Encoding UTF8 -NoNewline
+    Write-Host "  registry: $env:USERPROFILE\.aihaus\.install-source -> $AihausResolved"
 }
 
 # Step 12: idempotent .gitignore injection (soft-fail per LD-3)

@@ -223,6 +223,25 @@ Opt-out env vars: `AIHAUS_PAUSE_CLASS=0` (S01 hook bypass), `AIHAUS_GSP_DS_REGEX
 fast-path bypass — skips 13 new patterns; existing 11 still fire), `AIHAUS_AUTONOMY_HAIKU=0`
 (existing M011 backstop bypass).
 
+Since v0.28.0 / M024 (ADR-260507-A), `aih-milestone/annexes/execution.md` excises Wave/Group
+structural nouns from skill prose at 5 substitution sites; `autonomy-guard.sh:73` runtime
+regex preserved byte-identical (M023 + M024 compose). `/aih-milestone --plan <slug>`
+short-circuits the analyst/PM/architect/plan-checker pipeline at Step E3 when a 3-way gate
+passes ((a) OQ-resolved + (b) architecture-coverage + (d) story-table, all H-level permissive)
+AND the on-disk CHECK.md SHA proves plan-checker ran (consumer reads `git log -1
+--format=%H -- .aihaus/plans/<slug>/CHECK.md`). Skipped planning creates 3 stub files
+(`analysis-brief.md`, `PRD.md`, `architecture.md`) with skip-markers preserving 6
+production-path consumer contracts. `install.sh` and `install.ps1` ship a path-doubling
+hotfix (`AIHAUS_RESOLVED` replaces `PKG_ROOT` at user-global install + registry write at
+lines 474/480 + 1010/1020) plus skill-junction conditional (per-repo install skips
+`.claude/skills/aih-*` when user-global already provides them; `--force-project-skills` /
+`-ForceProjectSkills` / `FORCE_PROJECT_SKILLS=1` overrides). Smoke Check 72 detects
+post-hoc that `phase-advance.sh --to complete` was called without a corresponding
+`.claude/audit/curator-apply.jsonl` row — **offline observability, NOT runtime gating**;
+grace-window for currently-running milestone (`git branch --show-current`) prevents
+self-completion sequence trap. M024 introduces NO new opt-out env vars. See
+`pkg/.aihaus/skills/_shared/autonomy-protocol.md` §M024 invariants for runtime composition rule.
+
 ## Merge-Back (M017 / ADR-M017-A)
 
 Merge-back from `isolation: worktree` agents to the milestone branch is driven by

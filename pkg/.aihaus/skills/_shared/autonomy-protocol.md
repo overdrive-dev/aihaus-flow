@@ -147,3 +147,15 @@ previously update.sh only touched skills/agents/hooks/templates).
 > - **Decomposition seams are NEVER TRUE blockers.** Backend/Frontend, Wave N/M, Batch A/B, Phase X/Y boundaries are stylistic decompositions, not blockers.
 > - **`pause_class` enum is REQUIRED on every `phase-advance --to paused` write.** 4 values: `{credential-missing, destructive-git-state, external-dep-down, user-invoked}`. See ADR-260506-A §Decision item 2 for operational definitions.
 > - **GSP-DS prose triggers Stop block.** `autonomy-guard.sh` PATTERNS heredoc covers 13 PT-BR regexes (M023 pack) — see ADR-260506-A.
+
+## §M024 invariants (post-2026-05-06; ADR-260507-A)
+
+> **M024 amendments to the composition rule + auto-improve substrate framing:**
+>
+> - **Composition rule (M023 + M024).** M023 + M024 compose at runtime. Skill prose excises Wave/Group structural nouns from `pkg/.aihaus/skills/aih-milestone/annexes/execution.md` (S01 — 5 substitution sites at L50, L61, L70, L198, L271, L295); `pkg/.aihaus/hooks/autonomy-guard.sh:73` regex (`[Ww]ave [0-9]+ complet[ao].*([Ss]top|[Pp]ause|[Aa]linha)`) still blocks them at Stop hook. The runtime detector and the skill prose are **independent enforcement layers** — never assume regex deletion follows skill-prose excision.
+>
+> - **`--plan <slug>` short-circuit (consumer-self-validating).** When `/aih-milestone --plan <slug>` is invoked at Step E3 and the 3-way gate passes ((a) OQ-resolved + (b) architecture-coverage + (d) story-table, all H-level permissive) AND the on-disk CHECK.md SHA proves plan-checker ran (consumer reads `git log -1 --format=%H -- .aihaus/plans/<slug>/CHECK.md`), milestone execution skips analyst/PM/architect/plan-checker spawns. Three stub files (`analysis-brief.md`, `PRD.md`, `architecture.md`) with skip-markers preserve the 6 production-path consumer contracts. Fail-closed default: CHECK.md absent or untracked → gate refused, fall back to full E3.
+>
+> - **Auto-improve post-hoc detection (per CHECK F5 — NOT runtime gating).** Smoke Check 72 detects post-hoc that `phase-advance.sh --to complete` was called for a milestone without a corresponding `.claude/audit/curator-apply.jsonl` row. Detection is **offline**; enforcement requires CI/dogfood smoke runs to fail. M024 acknowledges this as **primary=A model-driven gate** per ADR-260502-A enforcement-audit classification — `phase-advance.sh` has zero hook into `tools/smoke-test.sh`; the smoke check is offline observability, NOT a runtime block. Grace-window for currently-running milestone (`git branch --show-current` match `milestone/M0XX-*`) prevents self-completion sequence trap.
+>
+> - **F3 task-fraction laundering — prose-only mitigation.** `pkg/.aihaus/skills/aih-milestone/annexes/execution.md` Step E6 advises orchestrator to TaskCreate only the next 1-3 active rows ahead. This is **prose-only**; `autonomy-guard.sh` does NOT include a regex for `[0-9]+/[0-9]+ (stories|tasks) (complete|done)` task-fraction laundering. M025+ may add the regex if dogfood detects. Honest about the prose vs runtime composition gap.
