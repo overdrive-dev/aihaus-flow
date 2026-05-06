@@ -2,26 +2,34 @@
 # aihaus uninstall script (Unix)
 # Removes package-installed files while preserving user data.
 # Flags:
-#   --target <path>   Uninstall from <path> instead of $PWD
-#   --purge           Remove EVERYTHING under .aihaus/ (including project.md)
-#   -h, --help        Show usage
+#   --target <path>        Uninstall from <path> instead of $PWD
+#   --purge                Remove EVERYTHING under .aihaus/ (including project.md)
+#   --purge-user-global    Remove user-global aih-* skills from ~/.claude/skills/
+#                          Only removes entries carrying the .aihaus-managed marker AND
+#                          whose symlink target resolves under registered AIHAUS_HOME
+#                          (R4 readlink validation — ADR-260504-A FR-06 + FR-21).
+#   -h, --help             Show usage
 set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: uninstall.sh [--target <path>] [--purge]
+Usage: uninstall.sh [--target <path>] [--purge] [--purge-user-global]
 
 Removes aihaus files from a target repository while preserving user data.
 
 Options:
   --target <path>      Target directory (default: current working directory)
   --purge              Delete ALL .aihaus/ data including project.md (prompts)
+  --purge-user-global  Remove user-global aih-* skills from ~/.claude/skills/
+                       Only removes entries marked aihaus-owned AND whose symlink
+                       target resolves under registered AIHAUS_HOME (R4 guard).
   -h, --help           Show this message
 EOF
 }
 
 TARGET="${PWD}"
 PURGE="0"
+PURGE_USER_GLOBAL="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,6 +37,7 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { echo "ERROR: --target requires a path" >&2; exit 2; }
       TARGET="$2"; shift 2 ;;
     --purge) PURGE="1"; shift ;;
+    --purge-user-global) PURGE_USER_GLOBAL="1"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -85,6 +94,119 @@ else
   if [[ -f "${AIHAUS}/.install-mode" ]]; then
     rm -f "${AIHAUS}/.install-mode"; touched="1"
   fi
+fi
+
+# ---------------------------------------------------------------------------
+# --purge-user-global: remove user-global aih-* skill dirs from ~/.claude/skills/
+# Security boundary (ADR-260504-A FR-06 + FR-21 R4):
+#   - Only removes dirs carrying a .aihaus-managed marker (aihaus-owned signal).
+#   - readlink resolves symlink target; refuses if outside registered AIHAUS_HOME.
+#   - Removes ~/.aihaus/.install-source registry after successful purge.
+#   - Removes ~/.claude/hooks/session-start.sh if aihaus-managed marker present.
+# ---------------------------------------------------------------------------
+purge_user_global() {
+  local user_skills_dir="$HOME/.claude/skills"
+  local registry="$HOME/.aihaus/.install-source"
+  local purge_touched="0"
+
+  # Resolve registered AIHAUS_HOME from the install-source registry.
+  if [[ ! -f "${registry}" ]]; then
+    echo "  warn: ~/.aihaus/.install-source not found; no registered AIHAUS_HOME to validate against" >&2
+    echo "  warn: user-global purge aborted (cannot perform R4 readlink validation without registry)" >&2
+    return 1
+  fi
+  local aihaus_home
+  aihaus_home="$(cat "${registry}" | tr -d '[:space:]')"
+  if [[ -z "${aihaus_home}" ]]; then
+    echo "  warn: ~/.aihaus/.install-source is empty; cannot resolve AIHAUS_HOME" >&2
+    return 1
+  fi
+  # Resolve to canonical absolute path (guard against relative paths in registry).
+  aihaus_home="$(cd "${aihaus_home}" 2>/dev/null && pwd)" || {
+    echo "  warn: AIHAUS_HOME '${aihaus_home}' from registry does not exist on disk; R4 validation skipped" >&2
+    return 1
+  }
+
+  echo "  user-global purge: AIHAUS_HOME=${aihaus_home}"
+
+  # Iterate over every aih-* entry in the user-global skills dir.
+  if [[ -d "${user_skills_dir}" ]]; then
+    for entry in "${user_skills_dir}"/aih-*; do
+      # glob may expand to literal string if no matches
+      [[ -e "${entry}" || -L "${entry}" ]] || continue
+      local entry_name
+      entry_name="$(basename "${entry}")"
+
+      # --- Marker check (FR-06) ---
+      if [[ ! -f "${entry}/.aihaus-managed" ]]; then
+        echo "skipping ~/.claude/skills/${entry_name}: no .aihaus-managed marker (not aihaus-owned)" >&2
+        continue
+      fi
+
+      # --- R4 readlink validation (FR-21) ---
+      # Resolve the symlink target. If it's not a symlink, use the dir itself.
+      local resolved_target
+      if [[ -L "${entry}" ]]; then
+        resolved_target="$(readlink -f "${entry}" 2>/dev/null || true)"
+      else
+        # Copied dir: check .aihaus-managed source= line for origin path.
+        # The marker file contains "source=<orig_path>" (ADR-260504-A §6.3).
+        local src_line
+        src_line="$(grep '^source=' "${entry}/.aihaus-managed" 2>/dev/null | head -1 | sed 's/^source=//' || true)"
+        resolved_target="${src_line}"
+      fi
+
+      if [[ -z "${resolved_target}" ]]; then
+        echo "skipping ~/.claude/skills/${entry_name}: symlink target outside registered AIHAUS_HOME (R4 guard)" >&2
+        continue
+      fi
+
+      # Normalize: strip any trailing slash from aihaus_home for prefix comparison.
+      local home_prefix="${aihaus_home%/}"
+      case "${resolved_target}" in
+        "${home_prefix}"/*|"${home_prefix}")
+          : ;;  # target is under AIHAUS_HOME — safe to remove
+        *)
+          echo "skipping ~/.claude/skills/${entry_name}: symlink target outside registered AIHAUS_HOME (R4 guard)" >&2
+          continue
+          ;;
+      esac
+
+      # Both checks passed — remove the entry.
+      rm -rf "${entry}"
+      echo "  removed user-global: ~/.claude/skills/${entry_name}"
+      purge_touched="1"
+    done
+  fi
+
+  # --- Hook fragment cleanup (Z7 outcome — gate on marker existence) ---
+  # If install.sh dropped a user-global hook fragment at ~/.claude/hooks/session-start.sh
+  # and that file carries an .aihaus-managed marker line, remove it.
+  local user_hook="$HOME/.claude/hooks/session-start.sh"
+  if [[ -f "${user_hook}" ]] && grep -q "managed_by=aihaus" "${user_hook}" 2>/dev/null; then
+    rm -f "${user_hook}"
+    echo "  removed user-global: ~/.claude/hooks/session-start.sh"
+    purge_touched="1"
+    # Also remove now-empty hooks dir if empty.
+    rmdir "$HOME/.claude/hooks" 2>/dev/null || true
+  fi
+
+  # --- Remove install-source registry after successful purge ---
+  if [[ -f "${registry}" ]]; then
+    rm -f "${registry}"
+    echo "  removed: ~/.aihaus/.install-source"
+    purge_touched="1"
+  fi
+
+  if [[ "${purge_touched}" == "0" ]]; then
+    echo "  user-global: nothing to remove"
+  fi
+}
+
+# Invoke user-global purge if flag was set.
+if [[ "${PURGE_USER_GLOBAL}" == "1" ]]; then
+  purge_user_global || true
+  touched="1"
 fi
 
 # Settings cleanup: only remove keys listed in _aihaus_managed marker
