@@ -130,8 +130,9 @@ guide: `pkg/.aihaus/skills/aih-effort/annexes/state-file.md`.
 Since v0.25.0 / M021, every step in every aih-* SKILL is classified by enforcement
 layer (A model-driven / B agent-delegated / C hook-enforced) with a 13-column row
 schema (SKILL / Location / Step / Label / Primary / Actor / Gate / Escape /
-Leverage / Reversibility / Drift Risk / Eligibility / Notes). 289 rows cover
-the 13 SKILLs + binding annexes + _shared protocols.
+Leverage / Reversibility / Drift Risk / Eligibility / Notes). 293 rows cover
+the 14 SKILLs (M022 added `aih-install`) + binding annexes + _shared protocols.
+Since v0.27.0 / M023 the rubric extends with the GSP-DS pattern catalog.
 
 - Canonical audit: `pkg/.aihaus/skills/_shared/enforcement-audit.md`
 - Promotion backlog (M022+): `pkg/.aihaus/skills/_shared/enforcement-audit-backlog.md`
