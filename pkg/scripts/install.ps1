@@ -1,16 +1,22 @@
 # aihaus install script (Windows PowerShell)
 # Copies .aihaus/ into target repo and links .claude/{skills,agents,hooks}.
+# V5 (M022/Z4): user-global skill bootstrap + 8-tier discovery priority chain
+#               + dogfood-mode branch + zero-prompt happy path.
 # Flags:
 #   -Target <path>    Install into <path> instead of $PWD
+#   -Package <path>   Override package source location (tier 1 of discovery chain)
 #   -Copy             Copy files instead of creating junctions
 #   -Update           Re-sync package dirs only; preserve local data
+#   -Force            Overwrite existing .aihaus/ without prompting
 #   -Help             Show usage
 
 [CmdletBinding()]
 param(
     [string]$Target = (Get-Location).Path,
+    [string]$Package = "",
     [switch]$Copy,
     [switch]$Update,
+    [switch]$Force,
     [switch]$Help
 )
 
@@ -23,14 +29,16 @@ $DspMinVersion = '2.1.126'
 
 function Show-Usage {
     @'
-Usage: install.ps1 [-Target <path>] [-Copy] [-Update]
+Usage: install.ps1 [-Target <path>] [-Package <path>] [-Copy] [-Update] [-Force]
 
 Installs aihaus into a target git repository (Claude Code only).
 
 Options:
   -Target <path>    Target directory (default: current working directory)
+  -Package <path>   Override AIHAUS_HOME discovery; use this path as package root
   -Copy             Copy files instead of creating junctions
   -Update           Re-sync package dirs only; preserve local data
+  -Force            Overwrite existing .aihaus/ without prompting
   -Help             Show this message
 '@ | Write-Host
 }
@@ -43,11 +51,17 @@ $PkgRoot = (Resolve-Path (Join-Path $ScriptDir '..')).Path
 $PkgAihaus = Join-Path $PkgRoot '.aihaus'
 $PkgTemplates = Join-Path $PkgRoot 'templates'
 
-if (-not (Test-Path $Target)) {
-    Write-Error "target directory does not exist: $Target"
-    exit 1
+# Resolve -Package flag immediately (tier 1 of discovery chain)
+$PackageFlag = ""
+if (-not [string]::IsNullOrWhiteSpace($Package)) {
+    if (Test-Path $Package) {
+        $PackageFlag = (Resolve-Path $Package).Path
+    } else {
+        Write-Error "-Package path does not exist: $Package"
+        exit 2
+    }
 }
-$Target = (Resolve-Path $Target).Path
+
 $Mode = if ($Copy) { 'copy' } else { 'link' }
 
 # ============================================================================
@@ -440,6 +454,273 @@ function Restore-EffortV3 {
     }
 }
 
+# ============================================================================
+# Resolve-AihausHome -- V5 (M022/Z4): 8-tier discovery priority chain
+# ADR-260504-A §6.1 (Windows PowerShell mirror of resolve_aihaus_home() in Z3).
+# Returns resolved AIHAUS_HOME path string, or $null if not found.
+#
+# Tier 1: -Package <path> CLI flag (already resolved into $PackageFlag)
+# Tier 2: $env:AIHAUS_HOME env var
+# Tier 3: $env:USERPROFILE\.aihaus\.install-source registry
+# Tier 4: $env:LOCALAPPDATA\aihaus (Windows XDG-equivalent default)
+# Tier 5: $env:USERPROFILE\tools\aihaus (legacy README path)
+# Tier 6: $env:USERPROFILE\Documents\GitHub\aihaus-flow (legacy auto-clone path)
+# Tier 7: $env:USERPROFILE\Documents\GitHub\aihaus (legacy variant)
+# Tier 8: $env:USERPROFILE\code\aihaus (legacy variant)
+# Multiple tiers populated -> pick newest by git log -1 --format=%ct HEAD.
+# Winning path written to $env:USERPROFILE\.aihaus\.install-source for subsequent runs.
+# ============================================================================
+function Resolve-AihausHome {
+    # Tier 1: explicit -Package flag wins immediately
+    if (-not [string]::IsNullOrWhiteSpace($script:PackageFlag)) {
+        $pkgSkills = Join-Path $script:PackageFlag "pkg\.aihaus\skills"
+        if (Test-Path $pkgSkills) {
+            return $script:PackageFlag
+        } else {
+            Write-Error "-Package path does not contain pkg\.aihaus\skills: $($script:PackageFlag)"
+            exit 2
+        }
+    }
+
+    # Tier 2: env override
+    if (-not [string]::IsNullOrWhiteSpace($env:AIHAUS_HOME)) {
+        $envSkills = Join-Path $env:AIHAUS_HOME "pkg\.aihaus\skills"
+        if (Test-Path $envSkills) {
+            return $env:AIHAUS_HOME
+        }
+    }
+
+    # Tier 3: registry written on first install
+    $registry = Join-Path $env:USERPROFILE ".aihaus\.install-source"
+    if (Test-Path $registry) {
+        $recorded = (Get-Content -LiteralPath $registry -Raw).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($recorded)) {
+            $recordedSkills = Join-Path $recorded "pkg\.aihaus\skills"
+            if (Test-Path $recordedSkills) {
+                return $recorded
+            }
+        }
+    }
+
+    # Tiers 4-8: scan candidates, arbitrate by newest HEAD commit timestamp
+    $localAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $env:USERPROFILE "AppData\Local" }
+    $candidates = @(
+        (Join-Path $localAppData "aihaus"),
+        (Join-Path $env:USERPROFILE "tools\aihaus"),
+        (Join-Path $env:USERPROFILE "Documents\GitHub\aihaus-flow"),
+        (Join-Path $env:USERPROFILE "Documents\GitHub\aihaus"),
+        (Join-Path $env:USERPROFILE "code\aihaus")
+    )
+
+    $best = $null
+    $bestTs = 0
+    foreach ($c in $candidates) {
+        $skillsPath = Join-Path $c "pkg\.aihaus\skills"
+        $gitPath    = Join-Path $c ".git"
+        if ((Test-Path $skillsPath) -and (Test-Path $gitPath)) {
+            try {
+                $tsRaw = & git -C $c log -1 --format=%ct 2>$null
+                $ts = if ($tsRaw -match '^\d+$') { [long]$tsRaw } else { 0 }
+                if ($ts -gt $bestTs) {
+                    $best   = $c
+                    $bestTs = $ts
+                }
+            } catch {
+                # git unavailable or not a real repo -- skip
+            }
+        }
+    }
+
+    if ($null -ne $best) {
+        # Record pick to registry for next time (tier 3 on subsequent runs)
+        $registryDir = Join-Path $env:USERPROFILE ".aihaus"
+        if (-not (Test-Path $registryDir)) {
+            New-Item -ItemType Directory -Path $registryDir -Force | Out-Null
+        }
+        Set-Content -LiteralPath $registry -Value $best -Encoding UTF8 -NoNewline
+        return $best
+    }
+
+    # Nothing found
+    return $null
+}
+
+# ============================================================================
+# Test-DogfoodCwd -- V5 (M022/Z4): Dogfood detection — I-04
+# Returns $true when cwd IS the central aihaus clone.
+# Predicate: pkg\scripts\install.sh + pkg\.aihaus\skills\ both exist under cwd.
+# ============================================================================
+function Test-DogfoodCwd {
+    $installSh   = Join-Path $PWD "pkg\scripts\install.sh"
+    $skillsDir   = Join-Path $PWD "pkg\.aihaus\skills"
+    return ((Test-Path $installSh) -and (Test-Path $skillsDir))
+}
+
+# ============================================================================
+# Install-UserGlobalSkills -- V5 (M022/Z4): User-global skill install loop
+# ADR-260504-A FR-01/FR-06 (Windows mirror of install_user_global_skills() in Z3).
+#
+# Installs junctions for every pkg\.aihaus\skills\aih-* directory into
+# $env:USERPROFILE\.claude\skills\aih-* (user-global Claude Code skill layer).
+# Each created dir carries a .aihaus-managed marker (R1 collision defense).
+#
+# Junction strategy (R7 cross-volume fallback):
+#   1. New-Item -ItemType Junction (requires same volume; no elevation needed)
+#   2. cmd /c mklink /J (same semantics; fallback if New-Item fails)
+#   3. cmd /c mklink /D (directory symlink; requires Developer Mode or admin)
+#   4. Copy-Item -Recurse (final fallback; no link; works everywhere)
+# Each fallback emits a stderr-level warning line naming the chosen strategy.
+# ============================================================================
+function Install-UserGlobalSkills {
+    param([string]$AihausHome)
+
+    $userGlobalSkills = Join-Path $env:USERPROFILE ".claude\skills"
+    if (-not (Test-Path $userGlobalSkills)) {
+        New-Item -ItemType Directory -Path $userGlobalSkills -Force | Out-Null
+    }
+
+    $skillsSource = Join-Path $AihausHome "pkg\.aihaus\skills"
+    $skillDirs    = Get-ChildItem -Path $skillsSource -Directory |
+                    Where-Object { $_.Name -like 'aih-*' }
+
+    $installedCount = 0
+    $skippedCount   = 0
+
+    foreach ($skillDir in $skillDirs) {
+        $skillName = $skillDir.Name
+        $src       = $skillDir.FullName
+        $dst       = Join-Path $userGlobalSkills $skillName
+
+        # R1 collision defense: refuse to overwrite a dir not managed by aihaus.
+        if ((Test-Path $dst) -and (-not (Test-Path (Join-Path $dst ".aihaus-managed")))) {
+            Write-Warning "  warn: $dst exists but is not aihaus-managed; skipping (manual cleanup required)"
+            $skippedCount++
+            continue
+        }
+
+        # Remove stale or prior-version junction/copy.
+        if (Test-Path $dst) {
+            Remove-Item -Recurse -Force -LiteralPath $dst
+        }
+
+        # Attempt junction strategies in priority order.
+        $linkCreated  = $false
+        $linkStrategy = ""
+
+        if (-not $linkCreated) {
+            try {
+                # Strategy 1: New-Item -ItemType Junction (same-volume; no elevation)
+                New-Item -ItemType Junction -Path $dst -Target $src -Force -ErrorAction Stop | Out-Null
+                $linkCreated  = $true
+                $linkStrategy = "junction (New-Item)"
+            } catch {
+                # Volume check for R7: if cross-volume, go to mklink /D next
+                $srcDrive = (Split-Path $src -Qualifier).TrimEnd(':')
+                $dstDrive = (Split-Path $dst -Qualifier).TrimEnd(':')
+                $crossVol = ($srcDrive -ne $dstDrive)
+
+                if (-not $linkCreated) {
+                    try {
+                        # Strategy 2: cmd /c mklink /J (same-volume junction via cmd.exe)
+                        $result = cmd /c "mklink /J `"$dst`" `"$src`"" 2>&1
+                        if ($LASTEXITCODE -eq 0) {
+                            $linkCreated  = $true
+                            $linkStrategy = "junction (mklink /J)"
+                        }
+                    } catch { }
+                }
+
+                if (-not $linkCreated -and $crossVol) {
+                    try {
+                        # Strategy 3: mklink /D (directory symlink; requires Developer Mode or admin)
+                        Write-Host "  warn: cross-volume detected (${srcDrive}: -> ${dstDrive}:); falling back to mklink /D for $skillName" -ForegroundColor Yellow
+                        $result = cmd /c "mklink /D `"$dst`" `"$src`"" 2>&1
+                        if ($LASTEXITCODE -eq 0) {
+                            $linkCreated  = $true
+                            $linkStrategy = "symlink (mklink /D cross-volume fallback)"
+                        } else {
+                            Write-Host "  warn: mklink /D failed for $skillName ($result); falling back to copy" -ForegroundColor Yellow
+                        }
+                    } catch {
+                        Write-Host "  warn: mklink /D threw for $skillName; falling back to copy" -ForegroundColor Yellow
+                    }
+                } elseif (-not $linkCreated) {
+                    Write-Host "  warn: junction failed for $skillName; falling back to copy" -ForegroundColor Yellow
+                }
+            }
+        }
+
+        if (-not $linkCreated) {
+            # Strategy 4: copy (final fallback -- works everywhere, no link)
+            Copy-Item -Recurse -Force -Path $src -Destination $dst
+            $linkStrategy = "copy (fallback -- no junction)"
+            Write-Host "  warn: using copy strategy for $skillName ($linkStrategy)" -ForegroundColor Yellow
+        }
+
+        # Drop .aihaus-managed marker inside the skill dir (R1 defense, I-02).
+        # Content: two lines — managed_by + source path (ADR-260504-A §6.3).
+        $markerPath = Join-Path $dst ".aihaus-managed"
+        $markerContent = "managed_by=aihaus`nsource=$src`n"
+        [System.IO.File]::WriteAllText($markerPath, $markerContent, [System.Text.Encoding]::UTF8)
+
+        Write-Host "  user-global: $dst [$linkStrategy]"
+        $installedCount++
+    }
+
+    Write-Host "  user-global skills: $installedCount installed, $skippedCount skipped (collision)"
+}
+
+# ============================================================================
+# V5 (M022/Z4): Dogfood mode check -- I-04, L9
+# Must run BEFORE per-repo install logic. If we are inside the aihaus package
+# directory, emit a one-liner and return. Never git-pull. Never self-junction.
+# Per-repo overlay skipped in dogfood mode; user-global skills still installed.
+# ============================================================================
+if (Test-DogfoodCwd) {
+    Write-Host "info: you are inside the aihaus package; run 'aihaus self-update' to refresh from origin"
+    # Still install user-global skills (cwd IS the pkg clone).
+    $resolvedHome = $PkgRoot
+    Write-Host ""
+    Write-Host "  installing user-global skills..."
+    Install-UserGlobalSkills -AihausHome $resolvedHome
+    # Write registry so future invocations use this clone directly (tier 3).
+    $registryDir = Join-Path $env:USERPROFILE ".aihaus"
+    if (-not (Test-Path $registryDir)) {
+        New-Item -ItemType Directory -Path $registryDir -Force | Out-Null
+    }
+    $registryFile = Join-Path $registryDir ".install-source"
+    Set-Content -LiteralPath $registryFile -Value $resolvedHome -Encoding UTF8 -NoNewline
+    Write-Host "  registry: $env:USERPROFILE\.aihaus\.install-source -> $resolvedHome"
+    Write-Host ""
+    Write-Host "aihaus user-global skills installed (dogfood mode; per-repo overlay skipped)."
+    exit 0
+}
+
+# ============================================================================
+# Resolve AIHAUS_HOME for non-dogfood installs.
+# If running from within a clone of the aihaus repo targeting another directory,
+# use the resolved PkgRoot as the canonical AIHAUS_HOME.
+# ============================================================================
+$AihausResolved = $null
+$pkgSkillsCheck = Join-Path $PkgRoot "pkg\.aihaus\skills"
+if (Test-Path $pkgSkillsCheck) {
+    # Running from within a clone of the aihaus repo targeting another directory.
+    $AihausResolved = $PkgRoot
+} else {
+    $AihausResolved = Resolve-AihausHome
+    if ($null -eq $AihausResolved) {
+        Write-Error "error: could not locate aihaus package. Set AIHAUS_HOME or pass -Package <path>."
+        exit 1
+    }
+}
+
+if (-not (Test-Path $Target)) {
+    Write-Error "target directory does not exist: $Target"
+    exit 1
+}
+$Target = (Resolve-Path $Target).Path
+$Mode = if ($Copy) { 'copy' } else { 'link' }
+
 # Dedupe flag for auto-mode-safe warning across both blocks.
 $script:AutoModeSafeWarningEmitted = $false
 
@@ -508,14 +789,33 @@ if ($Update) {
     # Cohort membership (v3): <aihaus_root>\skills\aih-effort\annexes\cohorts.md
     Restore-Effort -AihausRoot $TargetAihaus
 } else {
-    # Step 3: existing .aihaus prompt
+    # Step 3: existing .aihaus/ handling (V5: zero-prompt happy path -- I-13, L8)
+    # Dead junction/dir with no content -> silent remove and continue.
+    # Live .aihaus/ -> require -Force opt-in; default -> abort with stderr error.
     if (Test-Path $TargetAihaus) {
-        $reply = Read-Host "Existing .aihaus/ found. Overwrite? [y/N]"
-        if ($reply -notmatch '^(y|Y|yes|YES)$') {
-            Write-Host "Aborted."
-            exit 0
+        # Check if it's a dead junction (junction target doesn't exist)
+        $item = Get-Item -LiteralPath $TargetAihaus -Force -ErrorAction SilentlyContinue
+        $isDeadJunction = $false
+        if ($null -ne $item -and $item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            # It's a junction/symlink -- check if target resolves
+            try {
+                $resolved = (Resolve-Path -LiteralPath $TargetAihaus -ErrorAction Stop).Path
+                $isDeadJunction = $false
+            } catch {
+                $isDeadJunction = $true
+            }
         }
-        Remove-Item -Recurse -Force $TargetAihaus
+
+        if ($isDeadJunction) {
+            # Dead junction -- silently remove and continue.
+            Remove-Item -Force -LiteralPath $TargetAihaus
+        } elseif ($Force) {
+            # -Force opt-in: destructive overwrite.
+            Remove-Item -Recurse -Force -LiteralPath $TargetAihaus
+        } else {
+            Write-Host "error: .aihaus\ already exists; pass -Force to overwrite" -ForegroundColor Red
+            exit 1
+        }
     }
 
     # Step 4: copy package .aihaus into target
@@ -701,7 +1001,27 @@ if ($claudeCmd) {
     }
 }
 
-# Step 11: idempotent .gitignore injection (soft-fail per LD-3)
+# Step 10: V5 user-global skill install -- ADR-260504-A FR-01/FR-06
+# Install each aih-* skill into $env:USERPROFILE\.claude\skills\ (user-global Claude Code resolution layer).
+# This runs on every non-dogfood non-update invocation (idempotent per I-02).
+if (-not $Update) {
+    Write-Host ""
+    Write-Host "  installing user-global skills..."
+    Install-UserGlobalSkills -AihausHome $PkgRoot
+
+    # Step 11: write $env:USERPROFILE\.aihaus\.install-source registry (FR-04, I-01)
+    # Written here (after per-repo overlay + user-global skills succeed) so a partial
+    # failure never pins a broken path. Using PkgRoot as the canonical AIHAUS_HOME.
+    $registryDir = Join-Path $env:USERPROFILE ".aihaus"
+    if (-not (Test-Path $registryDir)) {
+        New-Item -ItemType Directory -Path $registryDir -Force | Out-Null
+    }
+    $registryFile = Join-Path $registryDir ".install-source"
+    Set-Content -LiteralPath $registryFile -Value $PkgRoot -Encoding UTF8 -NoNewline
+    Write-Host "  registry: $env:USERPROFILE\.aihaus\.install-source -> $PkgRoot"
+}
+
+# Step 12: idempotent .gitignore injection (soft-fail per LD-3)
 # Manual fallback: pkg\.aihaus\templates\gitignore-fragment
 function Invoke-InjectGitignore {
     param([string]$TargetDir)
@@ -752,7 +1072,7 @@ function Invoke-InjectGitignore {
 }
 Invoke-InjectGitignore -TargetDir $Target
 
-# Step 10: success message
+# Step 13: success message
 Write-Host ""
 if ($Update) {
     Write-Host "aihaus updated ($Mode mode)."
