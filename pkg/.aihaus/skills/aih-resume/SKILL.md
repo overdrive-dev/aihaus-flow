@@ -82,6 +82,29 @@ Auto-closed manifests are removed from the candidate set. If N > 0, emit:
 
 If N = 0, silent. After auto-close, re-read the candidate set with the now-current `Status` values.
 
+### 4c. Stranded-pause detection (M023)
+
+For each candidate manifest with unfinished work AND `Metadata.status` ∈ {`running`, `completed`} (NOT `paused`):
+- Read `.claude/audit/hook.jsonl` backward for `phase-advance` rows targeting this manifest.
+- Read `.claude/audit/autonomy-gate.jsonl` for `regex-match` decision rows near `last_updated`.
+- Compute the **4-condition heuristic** (C1 AND C2 AND C3 AND C4 → stranded):
+  - **C1** No `to_phase: paused` audit row in the last 7 days.
+  - **C2** ≥2 unfinished stories in `## Story Records`.
+  - **C3** Last `## Progress Log` entry within the last 24 hours.
+  - **C4** ≥1 `regex-match` decision row in `.claude/audit/autonomy-gate.jsonl` within 60s of
+    the manifest's `last_updated` (GSP-DS prose was ACTUALLY emitted, not a context-window resume).
+- When stranded, surface the user choice as an explicit classification (NOT an A/B/C menu — single
+  classification question per `_shared/autonomy-protocol.md` §TRUE-blocker scoping):
+
+  > Milestone `<slug>` appears to have stopped mid-execution at a logical boundary (no
+  > `phase-advance --to paused` was invoked, ≥2 stories pending, last activity within 24h,
+  > GSP-DS regex matched within 60s of last update). This matches the GSP-DS pattern.
+  > Recommend: **continue here** with the remaining stories OR **re-promote** the unfinished
+  > stories as a feature scoped to one window via `/aih-feature --plan <new-slug>`. Which?
+
+> **This is the ONLY M023-introduced user-facing question in this skill.** C4 gates against
+> false positives from routine context-window resumes (per CHECK F6 / ADR-260506-A I-08).
+
 ### 5. Candidate selection
 
 **When slug is given:** look up directly; error if not found or already completed.
@@ -105,6 +128,9 @@ From the last checkpoint row:
 - If `event == exit OK` → look ahead to the next substep declared by the agent's story plan
   or the next `enter` without a matching `exit`.
 - If `event == resumed` → same as `enter` without exit; still in-progress.
+- **If user selected "re-promote" in §4c** → emit handoff: `/aih-feature --plan <slug>-resume-N`
+  where `<slug>` is the milestone slug and `N` is an incrementing suffix. The unfinished story
+  IDs (rows without `verified=true` in `## Story Records`) become the feature's scope. Stop here.
 
 ### 7. Look up agent resumable field
 

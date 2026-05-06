@@ -138,3 +138,12 @@ shows no new progress for >20 minutes.
 and `pkg/scripts/update.ps1`, which now refresh `auto.sh` / `auto.ps1` from
 `launch-aihaus.sh` / `launch-aihaus.ps1` on hash-change (M019/S02 F-C3 fix;
 previously update.sh only touched skills/agents/hooks/templates).
+
+## §M023 invariants (post-2026-05-06; ADR-260506-A)
+
+> **M023 amendments to the TRUE-blocker definition:**
+>
+> - **Conversation length is NEVER a TRUE blocker.** Long context, "conversa muito longa," "preservar qualidade" framings are GSP-DS anti-patterns.
+> - **Decomposition seams are NEVER TRUE blockers.** Backend/Frontend, Wave N/M, Batch A/B, Phase X/Y boundaries are stylistic decompositions, not blockers.
+> - **`pause_class` enum is REQUIRED on every `phase-advance --to paused` write.** 4 values: `{credential-missing, destructive-git-state, external-dep-down, user-invoked}`. See ADR-260506-A §Decision item 2 for operational definitions.
+> - **GSP-DS prose triggers Stop block.** `autonomy-guard.sh` PATTERNS heredoc covers 13 PT-BR regexes (M023 pack) — see ADR-260506-A.

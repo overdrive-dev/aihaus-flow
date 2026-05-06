@@ -2914,6 +2914,583 @@ check_readme_install_section() {
   _pass "$label"
 }
 
+
+# ---- Check 65: phase-advance.sh --class enum validation (M023/S01) ----------
+# Asserts:
+#   (a) hook exists and passes bash -n
+#   (b) --to paused without --class exits 2 (AIHAUS_PAUSE_CLASS default=1)
+#   (c) each of 4 valid enum values exits 0 and writes pause_class to manifest
+#   (d) --class internal-contradiction exits 2 with literal "internal-contradiction reserved for M024+"
+#   (e) --class bogus exits 2 with 4-enum list in stderr
+check_pause_class_enum() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: phase-advance.sh --class enum validation (M023/S01)"
+  local issues=()
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/phase-advance.sh"
+  local out_root="${SCRIPT_DIR}/.out"
+  mkdir -p "$out_root" 2>/dev/null || true
+
+  # Sub-assert (a): hook exists and is parseable
+  if [[ ! -f "$hook" ]]; then
+    issues+=("phase-advance.sh missing: $hook")
+    _fail "$label" "${issues[@]}"
+    return
+  fi
+  if ! bash -n "$hook" 2>/dev/null; then
+    issues+=("phase-advance.sh has bash syntax error")
+  fi
+
+  # Helper: create a fresh running manifest in a tmp dir
+  _make_manifest_dir() {
+    local d="$1"
+    mkdir -p "$d"
+    printf '%s\n' \
+      '## Metadata' \
+      'milestone: test-fixture' \
+      'branch: test' \
+      'started: 2026-01-01T00:00:00Z' \
+      'schema: v4' \
+      'phase: running' \
+      'status: running' \
+      'last_updated: 2026-01-01T00:00:00Z' \
+      '' \
+      '## Invoke stack' \
+      '' \
+      '## Story Records' \
+      'story_id|status|started_at|commit_sha|verified|notes' \
+      '' \
+      '## Progress Log' \
+      '' > "$d/RUN-MANIFEST.md"
+  }
+
+  # Sub-assert (b): --to paused without --class exits 2
+  local tmp_b="${out_root}/pause-class-b-$$"
+  _make_manifest_dir "$tmp_b"
+  local rc_b
+  AIHAUS_AUDIT_LOG="${tmp_b}/audit.jsonl" bash "$hook" \
+    --to paused --dir "$tmp_b" --reason "test-no-class" \
+    >"${tmp_b}/stdout.txt" 2>"${tmp_b}/stderr.txt"
+  rc_b=$?
+  if [[ "$rc_b" -ne 2 ]]; then
+    issues+=("sub-assert(b): expected exit 2 for --to paused without --class; got exit $rc_b")
+  fi
+  rm -rf "$tmp_b" 2>/dev/null || true
+
+  # Sub-assert (c): each of 4 valid enum values exits 0 + writes pause_class
+  for cls in credential-missing destructive-git-state external-dep-down user-invoked; do
+    local tmp_c="${out_root}/pause-class-c-${cls}-$$"
+    _make_manifest_dir "$tmp_c"
+    local rc_c
+    AIHAUS_AUDIT_LOG="${tmp_c}/audit.jsonl" bash "$hook" \
+      --to paused --dir "$tmp_c" --reason "test-class-$cls" --class "$cls" \
+      >"${tmp_c}/stdout.txt" 2>"${tmp_c}/stderr.txt"
+    rc_c=$?
+    if [[ "$rc_c" -ne 0 ]]; then
+      issues+=("sub-assert(c): --class $cls expected exit 0; got exit $rc_c")
+    elif ! grep -qE "^pause_class: $cls" "$tmp_c/RUN-MANIFEST.md" 2>/dev/null; then
+      issues+=("sub-assert(c): --class $cls did not write pause_class to manifest")
+    fi
+    rm -rf "$tmp_c" 2>/dev/null || true
+  done
+
+  # Sub-assert (d): --class internal-contradiction exits 2 with reserved message
+  local tmp_d="${out_root}/pause-class-d-$$"
+  _make_manifest_dir "$tmp_d"
+  local rc_d
+  AIHAUS_AUDIT_LOG="${tmp_d}/audit.jsonl" bash "$hook" \
+    --to paused --dir "$tmp_d" --reason "test-reserved" --class internal-contradiction \
+    >"${tmp_d}/stdout.txt" 2>"${tmp_d}/stderr.txt"
+  rc_d=$?
+  if [[ "$rc_d" -ne 2 ]]; then
+    issues+=("sub-assert(d): --class internal-contradiction expected exit 2; got exit $rc_d")
+  fi
+  local err_d
+  err_d="$(cat "${tmp_d}/stderr.txt" 2>/dev/null || true)"
+  if ! printf '%s' "$err_d" | grep -q "internal-contradiction reserved for M024+"; then
+    issues+=("sub-assert(d): missing 'internal-contradiction reserved for M024+' in stderr; got: ${err_d:0:120}")
+  fi
+  rm -rf "$tmp_d" 2>/dev/null || true
+
+  # Sub-assert (e): --class bogus exits 2 with 4-enum list
+  local tmp_e="${out_root}/pause-class-e-$$"
+  _make_manifest_dir "$tmp_e"
+  local rc_e
+  AIHAUS_AUDIT_LOG="${tmp_e}/audit.jsonl" bash "$hook" \
+    --to paused --dir "$tmp_e" --reason "test-bogus" --class bogus-value \
+    >"${tmp_e}/stdout.txt" 2>"${tmp_e}/stderr.txt"
+  rc_e=$?
+  if [[ "$rc_e" -ne 2 ]]; then
+    issues+=("sub-assert(e): --class bogus-value expected exit 2; got exit $rc_e")
+  fi
+  local err_e
+  err_e="$(cat "${tmp_e}/stderr.txt" 2>/dev/null || true)"
+  if ! printf '%s' "$err_e" | grep -qE "credential-missing.destructive-git-state.external-dep-down.user-invoked"; then
+    issues+=("sub-assert(e): missing 4-enum list in stderr for invalid class; got: ${err_e:0:120}")
+  fi
+  rm -rf "$tmp_e" 2>/dev/null || true
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 66: autonomy-guard PT-BR GSP-DS regex coverage (M023/S02) --------
+# Asserts:
+#   (a) all 13 named GSP-DS labels present in autonomy-guard.sh
+#   (b) literal CONVERSATION.md:26 transcript line blocks at exit 2
+#   (c) each of 5 GAP phrases blocks
+#   (d) AIHAUS_GSP_DS_REGEX=0 opt-out skips 13 new PT-BR patterns; existing 12 still fire
+#   (e) header comment mentions "24 patterns"
+check_gsp_ds_regex_coverage() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: autonomy-guard PT-BR GSP-DS regex coverage (M023/S02)"
+  local issues=()
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/autonomy-guard.sh"
+  local out_root="${SCRIPT_DIR}/.out"
+  mkdir -p "$out_root" 2>/dev/null || true
+
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "autonomy-guard.sh missing: $hook"
+    return
+  fi
+
+  # Sub-assert (a): all 13 named GSP-DS labels present
+  local -a gsp_labels=(
+    GSP-DS-honest-scope
+    GSP-DS-long-conversation
+    GSP-DS-explicit-stop
+    GSP-DS-quality-preserve
+    GSP-DS-time-estimate
+    GSP-DS-next-session
+    GSP-DS-resume-recipe
+    GSP-DS-batch-frame
+    GSP-DS-batch-completion-frame
+    GSP-DS-future-tense-continuation
+    GSP-DS-feature-separation
+    GSP-DS-reviewable-pr-frame
+    GSP-DS-domain-split-frame
+  )
+  for lbl in "${gsp_labels[@]}"; do
+    if ! grep -qF "$lbl" "$hook"; then
+      issues+=("sub-assert(a): label '$lbl' missing from autonomy-guard.sh")
+    fi
+  done
+
+  # Sub-assert (e): header comment mentions 24 patterns
+  if ! grep -qE "24 patterns" "$hook"; then
+    issues+=("sub-assert(e): header comment does not mention '24 patterns' (M023 update)")
+  fi
+
+  local tmp_dir="${out_root}/gsp-ds-test-$$"
+  rm -rf "$tmp_dir"; mkdir -p "$tmp_dir"
+
+  # Sub-assert (b): literal CONVERSATION.md:26 transcript blocks
+  # Exact text from user-pasted transcript (CONVERSATION.md line 26)
+  # Using ASCII-safe version to avoid locale issues
+  local transcript
+  transcript='Conversa muito longa, e Batch B a parte maior desse milestone. Realisticamente sao mais 2-3 horas de trabalho cuidadoso. Pra preservar qualidade, paro aqui com PR backend revisavel.'
+  local out_b
+  out_b="$(AIHAUS_EXEC_PHASE=1 \
+    AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-b.jsonl" \
+    AIHAUS_AUDIT_LOG="${tmp_dir}/viol-b.jsonl" \
+    bash "$hook" <<< "$transcript" 2>/dev/null || true)"
+  if ! printf '%s' "$out_b" | grep -q '"decision":"block"'; then
+    issues+=("sub-assert(b): autonomy-guard did not block CONVERSATION.md:26 transcript excerpt")
+  fi
+
+  # Sub-assert (c): each of 5 GAP phrases blocks
+  local -a gap_phrases=(
+    'Quando voce quiser continuar'
+    'feature separada'
+    'PR backend revisavel'
+    'Realisticamente sao mais 2-3 horas'
+    'Conversa muito longa'
+  )
+  local idx=0
+  for phrase in "${gap_phrases[@]}"; do
+    idx=$((idx+1))
+    local out_c
+    out_c="$(AIHAUS_EXEC_PHASE=1 \
+      AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-c${idx}.jsonl" \
+      AIHAUS_AUDIT_LOG="${tmp_dir}/viol-c${idx}.jsonl" \
+      bash "$hook" <<< "$phrase" 2>/dev/null || true)"
+    if ! printf '%s' "$out_c" | grep -q '"decision":"block"'; then
+      issues+=("sub-assert(c): GAP phrase not blocked: $phrase")
+    fi
+  done
+
+  # Sub-assert (d): AIHAUS_GSP_DS_REGEX=0 skips 13 new PT-BR patterns
+  # PT-BR-only phrase (no match in existing 11 English + 1 modified patterns) should NOT block
+  local ptbr_only='Honesto sobre escopo paro aqui.'
+  local out_d_ptbr
+  out_d_ptbr="$(AIHAUS_GSP_DS_REGEX=0 AIHAUS_EXEC_PHASE=1 \
+    AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-d1.jsonl" \
+    AIHAUS_AUDIT_LOG="${tmp_dir}/viol-d1.jsonl" \
+    bash "$hook" <<< "$ptbr_only" 2>/dev/null || true)"
+  if printf '%s' "$out_d_ptbr" | grep -q '"decision":"block"'; then
+    issues+=("sub-assert(d): AIHAUS_GSP_DS_REGEX=0 still blocked PT-BR-only phrase (should skip)")
+  fi
+  # Existing English pattern must STILL block with opt-out
+  local eng_phrase='Checkpoint honesto: stopping here.'
+  local out_d_eng
+  out_d_eng="$(AIHAUS_GSP_DS_REGEX=0 AIHAUS_EXEC_PHASE=1 \
+    AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-d2.jsonl" \
+    AIHAUS_AUDIT_LOG="${tmp_dir}/viol-d2.jsonl" \
+    bash "$hook" <<< "$eng_phrase" 2>/dev/null || true)"
+  if ! printf '%s' "$out_d_eng" | grep -q '"decision":"block"'; then
+    issues+=("sub-assert(d): AIHAUS_GSP_DS_REGEX=0 suppressed existing English pattern; 'Checkpoint honesto' must still block")
+  fi
+
+  rm -rf "$tmp_dir" 2>/dev/null || true
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 67: /aih-resume stranded-pause prose (M023/S03) ------------------
+# Asserts:
+#   (a) ^### 4c\. Stranded-pause detection present in aih-resume/SKILL.md
+#   (b) wc -l <= 199
+#   (c) both option phrasings: "continue here" AND "re-promote"
+#   (d) no A/B/C / 1./2./3. option-menu language in the §4c section
+check_aih_resume_stranded_prose() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: /aih-resume stranded-pause prose (M023/S03)"
+  local issues=()
+  local skill="${PACKAGE_ROOT}/.aihaus/skills/aih-resume/SKILL.md"
+
+  if [[ ! -f "$skill" ]]; then
+    _fail "$label" "aih-resume/SKILL.md missing: $skill"
+    return
+  fi
+
+  # Sub-assert (a): ### 4c. Stranded-pause detection heading present
+  if ! grep -qE '^### 4c\. Stranded-pause detection' "$skill"; then
+    issues+=("sub-assert(a): '### 4c. Stranded-pause detection' heading missing")
+  fi
+
+  # Sub-assert (b): line count <= 199
+  local line_count
+  line_count=$(wc -l < "$skill" | tr -d ' ')
+  if [[ "$line_count" -gt 199 ]]; then
+    issues+=("sub-assert(b): aih-resume/SKILL.md has $line_count lines (limit 199)")
+  fi
+
+  # Sub-assert (c): both option phrasings present
+  if ! grep -q "continue here" "$skill"; then
+    issues+=("sub-assert(c): 'continue here' option phrasing missing")
+  fi
+  if ! grep -q "re-promote" "$skill"; then
+    issues+=("sub-assert(c): 're-promote' option phrasing missing")
+  fi
+
+  # Sub-assert (d): no A/B/C or 1./2./3. option-menu language in §4c section
+  local section_text
+  section_text=$(awk '/^### 4c\./{on=1; next} on && /^###/{on=0} on {print}' "$skill" 2>/dev/null)
+  if printf '%s' "$section_text" | grep -qE '^\(a\)|^\(b\)|^\(c\)|^a\)|^b\)|^c\)'; then
+    issues+=("sub-assert(d): A/B/C option-menu language found in §4c section")
+  fi
+  if printf '%s' "$section_text" | grep -qE '^[[:space:]]*[123]\.[[:space:]]'; then
+    issues+=("sub-assert(d): 1./2./3. numbered option-menu language found in §4c section")
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 68: ADR-260506-A canonical present (M023/S04) --------------------
+# Asserts:
+#   (a) ^## ADR-260506-A present exactly once in decisions.md
+#   (b) required subsections: Context, Decision, Consequences, Migration, Rollback,
+#       Implementation Status, References
+#   (c) §Decision item 2 contains both negative-example phrases
+#   (d) §References cites 10 ADRs + autonomy-protocol.md
+#   (e) _shared/autonomy-protocol.md contains "M023 invariants" or "M023 amendments"
+#   (f) §Migration contains "field-presence" (case-insensitive; no hardcoded date gate per I-04/L3)
+#   (g) §Rollback enumerates 3 env vars
+#   (h) CLAUDE.md has >= 4 grep hits for M023|GSP-DS|pause_class|ADR-260506-A (cross S06)
+check_adr_260506a_present() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: ADR-260506-A canonical present (M023/S04)"
+  local issues=()
+  local decisions="${PACKAGE_ROOT}/.aihaus/decisions.md"
+  local protocol="${PACKAGE_ROOT}/.aihaus/skills/_shared/autonomy-protocol.md"
+  local claude_md="${PACKAGE_ROOT}/../CLAUDE.md"
+
+  if [[ ! -f "$decisions" ]]; then
+    _fail "$label" "decisions.md missing: $decisions"
+    return
+  fi
+
+  # Sub-assert (a): heading present exactly once
+  local adr_count
+  adr_count=$(grep -cE '^## ADR-260506-A' "$decisions" 2>/dev/null || echo 0)
+  if [[ "$adr_count" -ne 1 ]]; then
+    issues+=("sub-assert(a): expected 1 '## ADR-260506-A' heading; found $adr_count")
+  fi
+
+  # Extract the ADR block for scoped checks
+  local adr_block
+  adr_block=$(awk '/^## ADR-260506-A/{on=1} on && /^## ADR-[0-9]/ && !/^## ADR-260506-A/{on=0} on {print}' "$decisions" 2>/dev/null)
+
+  # Sub-assert (b): required subsections
+  for subsec in "### Context" "### Decision" "### Consequences" "### Migration" "### Rollback" "### Implementation Status" "### References"; do
+    if ! printf '%s' "$adr_block" | grep -qF "$subsec"; then
+      issues+=("sub-assert(b): '$subsec' subsection missing from ADR-260506-A")
+    fi
+  done
+
+  # Sub-assert (c): §Decision negative-example phrases
+  if ! printf '%s' "$adr_block" | grep -q "backend/frontend decomposition is NEVER an external dep"; then
+    issues+=("sub-assert(c): negative-example phrase 1 missing")
+  fi
+  if ! printf '%s' "$adr_block" | grep -q "internal sequencing is NEVER an external dep"; then
+    issues+=("sub-assert(c): negative-example phrase 2 missing")
+  fi
+
+  # Sub-assert (d): §References cites 10 ADRs + autonomy-protocol.md
+  local -a required_refs=(
+    "ADR-001"
+    "ADR-004"
+    "ADR-M005-A"
+    "ADR-M011-A"
+    "ADR-M011-B"
+    "ADR-M014-B"
+    "ADR-M017-A"
+    "ADR-260502-A"
+    "ADR-260504-A"
+    "_shared/autonomy-protocol.md"
+  )
+  for ref in "${required_refs[@]}"; do
+    if ! printf '%s' "$adr_block" | grep -qF "$ref"; then
+      issues+=("sub-assert(d): §References missing '$ref'")
+    fi
+  done
+
+  # Sub-assert (e): autonomy-protocol.md contains M023 invariants/amendments
+  if [[ -f "$protocol" ]]; then
+    if ! grep -qE "M023 invariants|M023 amendments" "$protocol"; then
+      issues+=("sub-assert(e): _shared/autonomy-protocol.md missing 'M023 invariants' or 'M023 amendments'")
+    fi
+  else
+    issues+=("sub-assert(e): _shared/autonomy-protocol.md not found: $protocol")
+  fi
+
+  # Sub-assert (f): §Migration contains "field-presence" (case-insensitive; no hardcoded date gate)
+  local migration_block
+  migration_block=$(printf '%s' "$adr_block" | awk '/^### Migration/{on=1; next} on && /^### /{on=0} on {print}')
+  if ! printf '%s' "$migration_block" | grep -qiE "field.presence"; then
+    issues+=("sub-assert(f): §Migration missing 'field-presence' prose (I-04/L3 fork-portable gate)")
+  fi
+
+  # Sub-assert (g): §Rollback enumerates 3 opt-out env vars
+  local rollback_block
+  rollback_block=$(printf '%s' "$adr_block" | awk '/^### Rollback/{on=1; next} on && /^### /{on=0} on {print}')
+  for envvar in "AIHAUS_PAUSE_CLASS" "AIHAUS_AUTONOMY_HAIKU" "AIHAUS_GSP_DS_REGEX"; do
+    if ! printf '%s' "$rollback_block" | grep -q "$envvar"; then
+      issues+=("sub-assert(g): §Rollback missing env var '$envvar'")
+    fi
+  done
+
+  # Sub-assert (h): CLAUDE.md >= 4 grep hits (cross-S06)
+  if [[ -f "$claude_md" ]]; then
+    local claude_hits
+    claude_hits=$(grep -cE "M023|GSP-DS|pause_class|ADR-260506-A" "$claude_md" 2>/dev/null || echo 0)
+    if [[ "$claude_hits" -lt 4 ]]; then
+      issues+=("sub-assert(h): CLAUDE.md has $claude_hits grep hits for M023|GSP-DS|pause_class|ADR-260506-A (need >= 4; check S06)")
+    fi
+  else
+    issues+=("sub-assert(h): CLAUDE.md not found: $claude_md")
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 69: pause_class field permissive on legacy manifests (M023/S01) --
+# Asserts:
+#   (a) synthetic v4 manifest with status: paused and no pause_class field is permissive
+#   (b) validate_status still accepts paused-user-input (NFR-04)
+check_pause_class_permissive_legacy() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: pause_class field permissive on legacy manifests (M023/S01)"
+  local issues=()
+  local helpers="${PACKAGE_ROOT}/.aihaus/hooks/lib/manifest-helpers.sh"
+
+  # Sub-assert (a): a synthetic legacy manifest (status: paused, no pause_class)
+  # should NOT have a pause_class: line (which would trigger Check 70 audit-pair)
+  local legacy_text
+  legacy_text="$(printf '%s\n' \
+    '## Metadata' \
+    'milestone: legacy-test-fixture' \
+    'branch: legacy-branch' \
+    'started: 2020-01-01T00:00:00Z' \
+    'schema: v4' \
+    'phase: paused' \
+    'status: paused' \
+    'pause_reason: test legacy fixture no pause_class field' \
+    'last_updated: 2020-01-01T00:00:00Z' \
+    '' \
+    '## Invoke stack' \
+    '' \
+    '## Story Records' \
+    'story_id|status|started_at|commit_sha|verified|notes' \
+    '' \
+    '## Progress Log' \
+    '')"
+  if printf '%s' "$legacy_text" | grep -qE '^pause_class:'; then
+    issues+=("sub-assert(a): synthetic legacy fixture unexpectedly contains 'pause_class:' line")
+  elif [[ -f "$helpers" ]]; then
+    if ! bash -c ". '$helpers'; validate_status 'paused'" 2>/dev/null; then
+      issues+=("sub-assert(a): validate_status rejects 'paused' -- legacy manifests would fail")
+    fi
+  fi
+
+  # Sub-assert (b): validate_status accepts paused-user-input (NFR-04 legacy shape)
+  if [[ -f "$helpers" ]]; then
+    if ! bash -c ". '$helpers'; validate_status 'paused-user-input'" 2>/dev/null; then
+      issues+=("sub-assert(b): validate_status rejects 'paused-user-input' -- NFR-04 regression")
+    fi
+  else
+    issues+=("sub-assert(b): lib/manifest-helpers.sh not found: $helpers")
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 70: audit-pair invariant (M023/S05) -- FIELD-PRESENCE GATE -------
+# For each manifest with pause_class: field present in ## Metadata (post-M023),
+# assert a phase-advance --to paused row exists in hook.jsonl within 60s of
+# last_updated. Pre-M023 manifests (no pause_class: field) are SKIPPED.
+# NO HARDCODED DATE STRINGS -- field-presence gate only (per I-04 / L3).
+check_audit_pair_invariant() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: audit-pair invariant (M023/S05)"
+  local issues=()
+  local repo_root="${PACKAGE_ROOT}/.."
+  local audit_file="${repo_root}/.claude/audit/hook.jsonl"
+
+  while IFS= read -r manifest; do
+    # Field-presence gate: skip manifests without pause_class: (pre-M023 legacy permissive)
+    if ! grep -qE '^pause_class:' "$manifest" 2>/dev/null; then
+      continue
+    fi
+
+    # Post-M023 manifest: require an audit-pair row in hook.jsonl
+    local last_updated
+    last_updated=$(grep -E '^last_updated:' "$manifest" 2>/dev/null | head -1 | awk '{print $2}')
+    if [[ -z "$last_updated" ]]; then
+      issues+=("$manifest: pause_class present but last_updated missing")
+      continue
+    fi
+
+    # Convert ISO-8601 to epoch (try date -d, fallback to py)
+    local lu_epoch=0
+    if date -d "$last_updated" +%s >/dev/null 2>&1; then
+      lu_epoch=$(date -d "$last_updated" +%s 2>/dev/null || echo 0)
+    elif command -v py >/dev/null 2>&1; then
+      lu_epoch=$(py -c "
+import sys
+from datetime import datetime
+try:
+    s=sys.argv[1].replace('Z','+00:00')
+    print(int(datetime.fromisoformat(s).timestamp()))
+except:
+    print(0)
+" "$last_updated" 2>/dev/null || echo 0)
+    fi
+
+    if [[ "$lu_epoch" -eq 0 ]]; then
+      issues+=("$manifest: could not parse last_updated='$last_updated' as epoch")
+      continue
+    fi
+
+    if [[ ! -f "$audit_file" ]]; then
+      issues+=("$manifest: pause_class present but audit log absent: $audit_file")
+      continue
+    fi
+
+    local found_pair=0
+    while IFS= read -r row; do
+      printf '%s' "$row" | grep -q '"to_phase":"paused"' || continue
+      local row_ts
+      row_ts=$(printf '%s' "$row" | sed 's/.*"ts":"\([^"]*\)".*/\1/')
+      local row_epoch=0
+      if date -d "$row_ts" +%s >/dev/null 2>&1; then
+        row_epoch=$(date -d "$row_ts" +%s 2>/dev/null || echo 0)
+      elif command -v py >/dev/null 2>&1; then
+        row_epoch=$(py -c "
+import sys
+from datetime import datetime
+try:
+    s=sys.argv[1].replace('Z','+00:00')
+    print(int(datetime.fromisoformat(s).timestamp()))
+except:
+    print(0)
+" "$row_ts" 2>/dev/null || echo 0)
+      fi
+      local delta=$(( row_epoch - lu_epoch ))
+      if [[ "$delta" -ge -60 && "$delta" -le 60 ]]; then
+        found_pair=1
+        break
+      fi
+    done < "$audit_file"
+
+    if [[ "$found_pair" -eq 0 ]]; then
+      issues+=("$manifest: pause_class present but no audit row within 60s of last_updated=$last_updated")
+    fi
+  done < <(find "${repo_root}/.aihaus" -type f -name 'RUN-MANIFEST.md' 2>/dev/null)
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 70b: external-dep-down laundering detection (M023/S05) -----------
+# For each manifest with pause_class: external-dep-down, grep pause_reason for
+# laundering tokens (backend|frontend|wave|batch|phase [0-9]).
+# Fails if matched -- these are internal decomposition seams, not external deps.
+check_external_dep_down_laundering() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: external-dep-down laundering detection (M023/S05)"
+  local issues=()
+  local launder_re='(backend|frontend|wave|batch|phase [0-9])'
+  local repo_root="${PACKAGE_ROOT}/.."
+
+  while IFS= read -r manifest; do
+    if grep -qE '^pause_class: external-dep-down' "$manifest" 2>/dev/null; then
+      local reason
+      reason=$(grep -E '^pause_reason:' "$manifest" 2>/dev/null | head -1)
+      if printf '%s' "$reason" | grep -qiE "$launder_re"; then
+        issues+=("$manifest: pause_class=external-dep-down but pause_reason matches laundering regex: $reason")
+      fi
+    fi
+  done < <(find "${repo_root}/.aihaus" -type f -name 'RUN-MANIFEST.md' 2>/dev/null)
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 # Parse --check / --skill flags before the full-suite run
 _CHECK_NAME=""
 _CHECK_SKILL=""
@@ -3004,12 +3581,22 @@ check_aih_close_skill
 check_enforcement_audit_scaffold
 check_cli_shim_parseable
 check_readme_install_section
+check_pause_class_enum
+check_gsp_ds_regex_coverage
+check_aih_resume_stranded_prose
+check_adr_260506a_present
+check_pause_class_permissive_legacy
+check_audit_pair_invariant
+check_external_dep_down_laundering
 
-printf "\n"
+printf "
+"
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (64/64)\n"
+  printf "aihaus package smoke test PASSED [OK] (71/71)
+"
   exit 0
 else
-  printf "FAILED - %d of 64 checks failed\n" "$FAILURES"
+  printf "FAILED - %d of 71 checks failed
+" "$FAILURES"
   exit 1
 fi

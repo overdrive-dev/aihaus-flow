@@ -2367,4 +2367,111 @@ The named-owner / renewal-cadence / transfer-protocol fields are NOT populated i
 - Companion ADR: ADR-260504-A (V5 global-skill-bootstrap protocol) — appended sequentially in Z1; defines the `git clone`-as-canonical install path that this ADR locks as permanent fallback.
 - Inherited ADRs: ADR-001 (filesystem state primitive — preserved); ADR-M017-A (merge-back-as-script — context for `bypassPermissions` agent enumeration).
 - Outcome gates satisfied: SC-8 (ADRs ratified); NFR-06 (security delta vs rustup documented).
+
+---
+
+## ADR-260506-A — Pause-Class Schema + GSP-DS Anti-Pattern Detection
+
+**Status:** Accepted
+**Date:** 2026-05-06
+**Milestone:** M023
+**Extends:** ADR-001 (single-writer manifest), ADR-M005-A (autonomy-protocol bound to all skills — **THIS ADR amends**), ADR-M011-A (paused as TRUE-blocker escape, F-02 worktree bypass), ADR-M014-B (resume substrate v4 gateway)
+**Pattern:** Schema enum + fast-path regex extension + stranded-pause recovery UX as a tightly-coupled bundle closing the GSP-DS user-perceived assertiveness gap.
+
+### Context
+
+`/aih-milestone` runs feel less assertive than `/aih-feature` runs. The model self-pauses mid-execution at decomposition seams (Backend/Frontend, Wave 1/Wave 2, Batch A/Batch B), framed as virtue ("honesto sobre escopo," "preservar qualidade," "conversa muito longa"), then offers a recovery menu pointing at `/aih-resume`. None of these match the four TRUE-blocker classes in `_shared/autonomy-protocol.md`. We name this anti-pattern **GSP-DS (Graceful Self-Pause at Decomposition Seam)**.
+
+**Critical empirical finding (A4 / contrarian F1, verified):** M022's RUN-MANIFEST is `phase: running / status: completed` end-to-end. `.claude/audit/hook.jsonl` contains zero `phase-advance --to paused` rows for M022. **The failing model never invokes `phase-advance.sh` at all** — it just emits prose and stops emitting tokens. The 94-min Z3→Z4 gap was bridged via `/aih-resume → Z4 dispatch` against a `running`-status manifest. This means the load-bearing fix for user-perceived behavior is the autonomy-guard regex pack (S02), not the schema enum (S01) — though both ship together to close the auditability gap and provide the M024+ enum slot.
+
+### Decision
+
+1. **`phase-advance.sh --class <enum>` is REQUIRED when `--to paused`.** 4-value enum: `{credential-missing, destructive-git-state, external-dep-down, user-invoked}`. `internal-contradiction` is RESERVED for M024+ adversarial gate (plan-checker writer). Validation is deterministic (case-membership) per ADR-260502-A.
+
+2. **Operational definitions per class (closes the `external-dep-down` laundering surface, per CHECK F4):**
+   - **`credential-missing`** — fits when a specific credential / env var / token is absent AND attempting to use it returns an unambiguous error. Negative example: model thinks credentials *might* be missing without testing.
+   - **`destructive-git-state`** — fits when `git status` shows uncommitted work that would be destroyed by branch switch / reset / pull. Negative example: a clean tree with pending stories.
+   - **`external-dep-down`** — fits when a NAMED EXTERNAL SERVICE (api.github.com, npm registry, etc.) returns an error AT INVOCATION TIME. **Negative examples (BLOCKED):** "Backend done; frontend dep on backend's contract" — backend/frontend decomposition is NEVER an external dep. "Migration depends on schema not yet built" — internal sequencing is NEVER an external dep.
+   - **`user-invoked`** — fits when the user typed an explicit pause request in the current turn. Negative example: model inferred "user would want a pause here."
+
+3. **`autonomy-guard.sh` MUST cover GSP-DS regex set** (13 PT-BR patterns + 1 modified threshold per S02; 24 total patterns post-M023). Haiku whitelist MUST include the GSP-DS counter-pattern (conversation-length, decomposition-seam disclaimers).
+
+4. **`/aih-resume` MUST detect stranded-pause heuristic** (4 conditions: no paused audit row in 7 days + ≥2 unfinished stories + last progress within 24h + regex-match in `autonomy-gate.jsonl` within 60s of `last_updated`) and emit the recovery question (S03) — explicit classification, NOT A/B/C menu.
+
+5. **Conversation length is NEVER a TRUE blocker.** Long context, "conversa muito longa," "preservar qualidade" framings are GSP-DS anti-patterns.
+
+6. **Decomposition seams are NEVER TRUE blockers.** Backend/Frontend, Wave N/M, Batch A/B, Phase X/Y boundaries are stylistic decompositions, not blockers.
+
+7. **`status: paused-user-input` (legacy M011 status enum value) is DEPRECATED post-M023** — prefer `status: paused + pause_class: user-invoked`. Pre-M023 manifests retain legacy shape; smoke is permissive (per CHECK F13). RUN-MANIFEST schema stays at v4 (additive).
+
+### Consequences
+
+**Enables:**
+- Auditable pause classes — `pause_class` field allows post-hoc validation of every paused milestone.
+- Mechanical GSP-DS detection — 13 PT-BR regex patterns at autonomy-guard fast-path.
+- Cross-skill autonomy regex coverage — S02 lands in skill-agnostic `autonomy-guard.sh`, incidentally protecting `/aih-feature`, `/aih-quick`, `/aih-bugfix` (per CHECK F8).
+- M024+ slot for `internal-contradiction` once an adversarial plan-checker writer-gate exists.
+
+**Costs:**
+- Extra hook flag complexity — `phase-advance.sh` gains `--class` argparse + enum validator.
+- ~73% hot-path regex iteration growth (12→25 patterns) per CHECK F9. Latency adds ~5-10ms per Stop on Windows. Acceptable at current Stop frequency (~1/min).
+- Regex maintenance burden — as decomposition vocabulary expands (e.g., "Etapa 1/Etapa 2", "Bloco A/B" not in M023 set), maintenance grows. Mitigation deferred to M024+ regex governance.
+- Skill body growth — `aih-resume/SKILL.md` near 199-line ceiling.
+- Haiku prompt grows ~80 tokens per CHECK F11 (~$0.0001/invocation; negligible).
+
+### Migration
+
+**Field-presence gate (NOT date-gate) per CHECK F5.** Existing v4 manifests with `status: paused` and no `pause_class` are PERMISSIVE: smoke Check 70 (audit-pair invariant) fires only on manifests where `pause_class:` field is **present** in `## Metadata` (post-M023 by construction). Pre-M023 manifests with `status: paused` and no `pause_class:` are skipped (legacy permissive).
+
+This is **fork-portable across all install dates and time-stable.** M013/M014/M017 historical paused-events stay valid permanently. No `manifest-migrate.sh` changes; schema stays at v4.
+
+### Rollback
+
+Three opt-out env vars (emergency only):
+
+- `AIHAUS_PAUSE_CLASS=0` — S01 hook bypass (accepts `--to paused` without `--class`; `pause_class` field omitted).
+- `AIHAUS_AUTONOMY_HAIKU=0` — existing M011 toggle (skip haiku backstop).
+- `AIHAUS_GSP_DS_REGEX=0` — S02 fast-path bypass (skips the 13 new PT-BR patterns; existing 12 — 11 original + 1 modified — still fire).
+
+### Implementation Status
+
+Lands in M023 (S01–S06). M024+ hosts:
+
+- `internal-contradiction` enum addition once plan-checker adversarial-write gate exists.
+- Active scope expansion of GSP-DS regex pack to `/aih-feature` and `/aih-quick` (F2 deferred).
+- Regex governance / annex (F3 noise-budget governance deferred).
+
+**Forward-link:** the M024 plan-checker writer-gate spec is a stub at `.aihaus/plans/260506-milestone-assertiveness/M024-FORWARD.md` — to be authored as M024 brainstorm.
+
+### References
+
+- ADR-001 (single-writer manifest)
+- ADR-004 (Status projection from Metadata.phase)
+- ADR-M005-A (autonomy protocol bound to all skills — **THIS ADR amends**)
+- ADR-M011-A (paused as TRUE-blocker escape, F-02 worktree bypass)
+- ADR-M011-B (statusLine — relevance per CHECK F10)
+- ADR-M014-B (resume substrate, schema v3→v4 gateway)
+- ADR-M017-A (merge-back hook)
+- ADR-M019-A (autonomy-guard 14-field schema)
+- ADR-260502-A (determinism gate)
+- ADR-260504-A (V5 protocol)
+- `_shared/autonomy-protocol.md` (the document THIS ADR amends in §"M023 invariants")
+
+### Worked Example #1 — FITS
+
+Model emits "credentials missing for `gh release create`, blocked. `GH_TOKEN` env var not set." → `phase-advance --to paused --reason "missing GH_TOKEN" --class credential-missing` → fits enum + operational definition (specific credential, unambiguous error attempt). Manifest gains `pause_class: credential-missing`; audit row at `.claude/audit/hook.jsonl` includes `"pause_class": "credential-missing"`; smoke Check 70 finds the audit pair within 60s of `last_updated` and PASSES. The `## Story Records` rows preserve their existing state for `/aih-resume` to pick up later when the user provides the credential.
+
+### Worked Example #2 — DOES NOT FIT (caught at S02 regex layer)
+
+Model emits "Honesto sobre escopo, paro aqui. /aih-resume continua de Z4." → autonomy-guard regex `GSP-DS-honest-scope` (`[Hh]onest[oa] sobre (escopo|qualidade)`) fires at fast-path → Stop blocked at exit 2. **NO `phase-advance` write occurs.** The block is detected at the autonomy-guard layer (S02), NOT the writer hook layer (S01). This is the canonical example of why S02 carries load-bearing user-perceived weight (per L1 binding): the failing model never reaches `phase-advance.sh`, so the schema enum at S01 alone would not have prevented user-felt pause. The audit trail lives in `.claude/audit/autonomy-gate.jsonl` as a `regex-match` decision row, NOT in `hook.jsonl`.
+
+### Worked Example #3 — DOES NOT FIT (laundering attempt — caught at S05 Check 70b)
+
+Model emits `phase-advance --to paused --reason "Backend dep on Frontend, frontend not built yet" --class external-dep-down`. The `external-dep-down` class does not fit per §Decision item 2 negative examples (backend/frontend is NEVER an external dep; internal sequencing is NEVER an external dep). Detection paths (defense in depth):
+
+1. **S02 regex layer** — `GSP-DS-domain-split-frame` (`tratar o (frontend|backend) como`) fires on the reason text if it appears in adjacent prose (block at exit 2 BEFORE the write happens).
+2. **S04 ADR documentation** — §Decision item 2 negative examples make the laundering shape explicit; ADR text is binding for human + plan-checker review.
+3. **S05 Check 70b** — post-write smoke check greps `pause_reason` text for `(backend|frontend|wave|batch|phase [0-9])` and FAILS if matched. Provides a backstop when S02 regex misses adjacent prose and the model successfully writes the laundered class.
+
+This three-layer defense (S02 regex + S04 docs + S05 smoke) closes the F4 laundering surface without requiring an adversarial writer-gate (the M024+ deferral).
 - bypassPermissions agent inventory (5 agents): `implementer`, `frontend-dev`, `code-fixer`, `executor`, `nyquist-auditor` — per CLAUDE.md "Editing Skills and Agents" section + ADR-M017 context.

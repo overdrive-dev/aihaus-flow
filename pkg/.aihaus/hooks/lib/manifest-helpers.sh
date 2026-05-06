@@ -231,6 +231,22 @@ validate_status() {
   esac
 }
 
+# --- Validate pause_class value against M023 4-enum (M023/ADR-260506-A) ---
+# Returns 0 if value is in the 4-value enum, 1 otherwise.
+# `internal-contradiction` is NOT valid here — it is rejected upstream in
+# phase-advance.sh with a different error message (M024+-reserved).
+validate_pause_class() {
+  local value="$1"
+  case "$value" in
+    credential-missing|destructive-git-state|external-dep-down|user-invoked)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 # --- Read a key/value from the ## Metadata block (M020/S06) ---
 # Args: <manifest-path> <key>. Prints value to stdout on success; exits 0/1.
 # Companion to update_metadata_kv (lines 30-42, M019-anchored).
