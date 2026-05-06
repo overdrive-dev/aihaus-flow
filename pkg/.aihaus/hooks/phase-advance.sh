@@ -14,7 +14,13 @@
 # `paused` and `aborted`. Legal resurrection: `aborted → paused` only
 # (exit PHASE_ADVANCE_REJECTED from=aborted to=<x> reason=terminal otherwise).
 #
+# M023/S01: adds `--class <4-enum>` flag. Required when `--to paused` unless
+# AIHAUS_PAUSE_CLASS=0 bypass is set. Values: credential-missing |
+# destructive-git-state | external-dep-down | user-invoked.
+# `internal-contradiction` is RESERVED for M024+ adversarial gate (exit 2).
+#
 # Env: AIHAUS_AUDIT_LOG (optional; default .claude/audit/hook.jsonl)
+#      AIHAUS_PAUSE_CLASS (set to 0 to bypass --class requirement; ADR-260506-A §Rollback)
 #
 # Exit codes: 0 ok, 2 invalid args, 3 worktree-refuse, 6 lock-timeout,
 #             10 invoke-stack-non-empty, 11 atomic-replace-failed,
@@ -38,11 +44,13 @@ detect_fractional_sleep
 TO=""
 DIR=""
 REASON=""
+CLASS=""                                        # M023 / ADR-260506-A
 while [ $# -gt 0 ]; do
   case "$1" in
     --to) TO="$2"; shift 2 ;;
     --dir) DIR="$2"; shift 2 ;;
     --reason) REASON="$2"; shift 2 ;;
+    --class) CLASS="$2"; shift 2 ;;            # M023 / ADR-260506-A
     *) echo "phase-advance.sh: unknown arg $1" >&2; exit 2 ;;
   esac
 done
@@ -59,6 +67,25 @@ esac
 # --- --reason required when --to paused or --to aborted (M011/S04 + M017/S02c) ---
 if { [ "$TO" = "paused" ] || [ "$TO" = "aborted" ]; } && [ -z "$REASON" ]; then
   echo "phase-advance.sh: --reason required when --to $TO" >&2
+  exit 2
+fi
+
+# --- M023 / ADR-260506-A: --class enum validation ---
+if [ -n "${CLASS:-}" ]; then
+  case "$CLASS" in
+    credential-missing|destructive-git-state|external-dep-down|user-invoked) ;;
+    internal-contradiction)
+      echo "phase-advance.sh: --class internal-contradiction reserved for M024+ adversarial gate (plan-checker writer)" >&2
+      exit 2 ;;
+    *)
+      echo "phase-advance.sh: invalid --class $CLASS (expected: credential-missing|destructive-git-state|external-dep-down|user-invoked)" >&2
+      exit 2 ;;
+  esac
+fi
+
+# --- M023 / ADR-260506-A: --class required when --to paused ---
+if [ "$TO" = "paused" ] && [ -z "${CLASS:-}" ] && [ "${AIHAUS_PAUSE_CLASS:-1}" != "0" ]; then
+  echo "phase-advance.sh: --class required when --to paused (expected: credential-missing|destructive-git-state|external-dep-down|user-invoked)" >&2
   exit 2
 fi
 
@@ -96,8 +123,14 @@ ts_iso() { date -u +%FT%TZ; }
 log_audit() {
   local result="$1" from_phase="${2:-unknown}" fallback="${3:-false}" backup="${4:-false}"
   mkdir -p "$(dirname "$AUDIT_LOG")" 2>/dev/null || true
-  printf '{"ts":"%s","hook":"phase-advance","from_phase":"%s","to_phase":"%s","target_dir":"%s","result":"%s","fallback_used":%s,"backup_created":%s}\n' \
-    "$(ts_iso)" "$from_phase" "$TO" "$DIR" "$result" "$fallback" "$backup" \
+
+  local pause_class_field=""
+  if [ "$TO" = "paused" ] && [ -n "${CLASS:-}" ]; then          # M023 / ADR-260506-A (I-14)
+    pause_class_field=",\"pause_class\":\"$CLASS\""             # M023 / ADR-260506-A (I-14)
+  fi
+
+  printf '{"ts":"%s","hook":"phase-advance","from_phase":"%s","to_phase":"%s","target_dir":"%s","result":"%s","fallback_used":%s,"backup_created":%s%s}\n' \
+    "$(ts_iso)" "$from_phase" "$TO" "$DIR" "$result" "$fallback" "$backup" "$pause_class_field" \
     >> "$AUDIT_LOG" 2>/dev/null || true
 }
 
@@ -204,6 +237,9 @@ if [ "$TO" = "paused" ] && [ -f "$MANIFEST" ]; then
   export MANIFEST_PATH
   update_metadata_kv "status" "paused"
   update_metadata_kv "pause_reason" "$REASON"
+  if [ -n "${CLASS:-}" ]; then                              # M023 / ADR-260506-A (I-14 corollary)
+    update_metadata_kv "pause_class" "$CLASS"              # M023 / ADR-260506-A (I-03)
+  fi
   update_metadata_kv "last_updated" "$(ts_iso)"
   append_progress_log "paused: $REASON (active-stack-rows=$STACK_ROWS)"
 fi
