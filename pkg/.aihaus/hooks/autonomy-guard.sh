@@ -60,13 +60,13 @@ fi
 # Forbidden patterns. Each line below is: REGEX<TAB>SECTION
 # Patterns use ERE syntax (grep -E). Quotes are plain single-quoted strings
 # to avoid shell-escape hell.
-# (M005 fast-path — byte-identical under M011/S05. 11 patterns, F-05 count.)
+# (M005 fast-path — byte-identical under M011/S05. 24 patterns, F-05 count. (1 modified, 13 added; M023))
 PATTERNS=$(cat <<'PATTERNS_EOF'
 [Cc]heckpoint honesto	L52-63:no-honest-checkpoints
 [Hh]onest checkpoint	L52-63:no-honest-checkpoints
 [Oo]pção sua	L32-50:no-option-menus
 Qual (prefere|escolhe)\??	L32-50:no-option-menus
-[Rr]ealista:.*([4-9]|1[0-9])h\+?	L52-63:no-reality-renegotiation
+[Rr]ealista:.*([2-9]|1[0-9])h\+?	L52-63:no-reality-renegotiation
 [Pp]ausing (to|here|for)	L52-63:no-honest-checkpoints
 [Ss]hould I (continue|proceed|pause)	L32-50:no-option-menus
 [Tt]hree realistic forks	L52-63:no-honest-checkpoints
@@ -75,6 +75,28 @@ retoma depois com /aih-	L65-72:no-delegated-typing
 [Tt]ype the command.*/aih-	L65-72:no-delegated-typing
 PATTERNS_EOF
 )
+# --- M023 / ADR-260506-A: GSP-DS PT-BR pattern pack (env-gated) ---
+# AIHAUS_GSP_DS_REGEX=0 bypasses the 13 new PT-BR patterns; existing 12
+# (11 original + 1 modified line-69) still fire unconditionally above.
+if [ "${AIHAUS_GSP_DS_REGEX:-1}" != "0" ]; then
+  PATTERNS="$PATTERNS
+$(cat <<'GSP_DS_EOF'
+[Hh]onest[oa] sobre (escopo|qualidade)	GSP-DS-honest-scope
+[Cc]onversa (muito )?longa	GSP-DS-long-conversation
+[Pp]ar(o|amos) aqui (com|para)	GSP-DS-explicit-stop
+[Pp]reserv(ar|ando) qualidade	GSP-DS-quality-preserve
+[Rr]ealisticamente.*[0-9]+(-[0-9]+)?[ ]?(h|hora)	GSP-DS-time-estimate
+[Pp]r[óo]xim[ao] sess[ãa]o	GSP-DS-next-session
+/aih-resume (l[êe]|reads?) RUN-MANIFEST	GSP-DS-resume-recipe
+[Bb]atch [AB] (mergeado|complet[oa])	GSP-DS-batch-frame
+[Cc]onclu[íi]do.*[Bb]atch [AB]	GSP-DS-batch-completion-frame
+[Qq]uando voc[êe] quiser continuar	GSP-DS-future-tense-continuation
+feature separada	GSP-DS-feature-separation
+PR.*revis[áa]vel	GSP-DS-reviewable-pr-frame
+tratar o (frontend|backend) como	GSP-DS-domain-split-frame
+GSP_DS_EOF
+)"
+fi
 
 ts_iso() { date -u +%FT%TZ; }
 
@@ -459,6 +481,10 @@ $manifest_tail
 - Unresolvable git merge conflict
 - User-requested abort
 - Migration blocking continuation (schema version mismatch, etc.)
+
+## GSP-DS counter-patterns (M023 / ADR-260506-A) — NOT TRUE blockers
+Self-elected pauses framed as virtue (honesto sobre escopo / preservar qualidade / conversa longa) are NOT TRUE blockers. Block these as anti-patterns.
+Decomposition seams (Backend/Frontend, Wave 1/Wave 2, Batch A/Batch B, Phase N/M, Etapa/Bloco) are NOT TRUE blockers.
 
 Return JSON ONLY, no prose:
 {"decision": "continue" | "block", "reason": "<1 sentence>", "matched_whitelist"?: "<item>"}
