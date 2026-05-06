@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 # aihaus update — re-syncs local .aihaus/ from pkg/ package source.
-# Usage: bash pkg/scripts/update.sh [--target <path>]
+# Usage: bash pkg/scripts/update.sh [--target <path>] [--self]
 #
 # Re-links (or re-copies) skills, agents, hooks, templates from pkg/.aihaus/
 # Preserves ALL local data: project.md, plans/, milestones/, memory/, etc.
+#
+# V5 (M022/Z9): user-global skill refresh + R3 dogfood guard + --self + R9 copy-mode
+# FR-23: user-global refresh on every update
+# FR-24: R4 marker invariant — never touch unmarked entries
+# FR-25: R3 dogfood guard — skip git pull on dogfood cwd
+# FR-26: R9 copy-mode user-global refresh
+# ADR-260504-A §6.4
 set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: update.sh [--target <path>] [--migrate-memory] [--no-gitignore]
+Usage: update.sh [--target <path>] [--migrate-memory] [--no-gitignore] [--self]
 
 Re-syncs package-managed files in .aihaus/ from the aihaus package source.
 Local data (project.md, plans/, milestones/, memory/, etc.) is preserved.
@@ -21,8 +28,19 @@ Options:
   --no-gitignore    Skip the .gitignore backfill prompt entirely (non-interactive
                     CI runs, or users who have already declined and don't want
                     to be asked again).
+  --self            Pull from origin before refreshing. Used by 'aihaus self-update'.
+                    Aborts with exit 3 if cwd is dogfood and has uncommitted changes.
   -h, --help        Show this message
 EOF
+}
+
+# ---------------------------------------------------------------------------
+# V5 (M022/Z9): Dogfood detection — matches Z3's is_dogfood_cwd exactly.
+# Returns 0 (true) when the current working directory IS the central aihaus clone.
+# Predicate: pkg/scripts/install.sh + pkg/.aihaus/skills/ both exist in PWD.
+# ---------------------------------------------------------------------------
+is_dogfood_cwd() {
+  [[ -f "${PWD}/pkg/scripts/install.sh" ]] && [[ -d "${PWD}/pkg/.aihaus/skills" ]]
 }
 
 # Resolve package root (the directory containing this script's parent)
@@ -34,6 +52,7 @@ PKG_TEMPLATES="${PKG_ROOT}/templates"
 TARGET="${PWD}"
 MIGRATE_MEMORY=0
 NO_GITIGNORE=0
+SELF_MODE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -48,6 +67,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-gitignore)
       NO_GITIGNORE=1
+      shift
+      ;;
+    --self)
+      SELF_MODE=1
       shift
       ;;
     -h|--help)
@@ -69,6 +92,28 @@ TARGET="$(cd "${TARGET}" 2>/dev/null && pwd)" || {
 
 AIHAUS="${TARGET}/.aihaus"
 CLAUDE="${TARGET}/.claude"
+
+# ---------------------------------------------------------------------------
+# V5 (M022/Z9): R3 dogfood guard + --self / R8 dirty-dogfood abort
+# Must run BEFORE preflight checks that require .aihaus/ to exist.
+# ---------------------------------------------------------------------------
+if is_dogfood_cwd; then
+  if [[ "${SELF_MODE}" -eq 1 ]]; then
+    # R8: --self on dogfood — abort if dirty
+    if [[ -n "$(git -C "${PWD}" status --porcelain 2>/dev/null)" ]]; then
+      echo "aihaus self-update: uncommitted changes — aborting (commit or stash manually first)" >&2
+      exit 3
+    fi
+    echo "  dogfood mode + --self: pulling from origin..."
+    git -C "${PWD}" pull
+    # After git pull, PKG_ROOT may have shifted; recalculate derived paths.
+    PKG_AIHAUS="${PKG_ROOT}/.aihaus"
+    PKG_TEMPLATES="${PKG_ROOT}/templates"
+  else
+    # R3: dogfood cwd without --self — skip git pull, continue with skill refresh
+    echo "  dogfood mode — git pull skipped; commit local changes before self-update"
+  fi
+fi
 
 # ---- Preflight checks -------------------------------------------------------
 
@@ -216,6 +261,154 @@ merge_settings "${SETTINGS_DST}" "${SETTINGS_SRC}"
 
 # ---- Update install mode marker ----------------------------------------------
 echo "${MODE}" > "${AIHAUS}/.install-mode"
+
+# ---------------------------------------------------------------------------
+# V5 (M022/Z9): User-global skill refresh — FR-23/FR-24/FR-26; ADR-260504-A §6.3
+# Refreshes ~/.claude/skills/aih-* entries that carry the .aihaus-managed marker.
+# R4 invariant: never touch entries without the marker.
+# R9 copy-mode: if user-global entries are copies (no symlink), re-copy SKILL.md.
+# Orphan removal: remove entries for skills no longer in pkg/.aihaus/skills/ (marker required).
+# ---------------------------------------------------------------------------
+_refresh_user_global_skills() {
+  local pkg_skills_dir="${PKG_ROOT}/.aihaus/skills"
+  local user_global_skills="${HOME}/.claude/skills"
+
+  # No user-global skills dir at all — nothing to refresh.
+  if [[ ! -d "${user_global_skills}" ]]; then
+    return 0
+  fi
+
+  # Detect whether to use Windows native junctions (Git Bash on Windows, not WSL2).
+  local use_junction=0
+  if [[ "${OS:-}" == "Windows_NT" ]] && [[ -z "${WSL_DISTRO_NAME:-}" ]]; then
+    use_junction=1
+  fi
+
+  local refreshed_count=0
+  local skipped_count=0
+  local orphan_count=0
+
+  # ---- Pass 1: refresh existing user-global entries that carry the marker ----
+  for target_dir in "${user_global_skills}"/aih-*; do
+    [[ -d "${target_dir}" ]] || [[ -L "${target_dir}" ]] || continue
+
+    local skill_name
+    skill_name="$(basename "${target_dir}")"
+
+    # R4: only touch marker-owned entries.
+    if [[ ! -f "${target_dir}/.aihaus-managed" ]]; then
+      skipped_count=$((skipped_count + 1))
+      continue
+    fi
+
+    local pkg_skill_dir="${pkg_skills_dir}/${skill_name}"
+
+    # Orphan removal: skill no longer in package AND carries marker.
+    if [[ ! -d "${pkg_skill_dir}" ]]; then
+      rm -rf "${target_dir}" 2>/dev/null || true
+      echo "  user-global orphan removed: ${skill_name}"
+      orphan_count=$((orphan_count + 1))
+      continue
+    fi
+
+    # Detect copy-mode for this entry:
+    # copy-mode = entry is a real directory (not a symlink/junction) OR
+    #             .aihaus-copy-mode marker exists at user-global level.
+    local entry_is_copy=0
+    if [[ -f "${HOME}/.claude/.aihaus-copy-mode" ]]; then
+      entry_is_copy=1
+    elif [[ -L "${target_dir}" ]]; then
+      entry_is_copy=0  # symlink — link mode
+    elif [[ "${use_junction}" == "1" ]]; then
+      # On Windows: junctions show as directories without -L; check reparse point
+      # by testing if readlink has output (Git Bash exposes junction as symlink).
+      if readlink "${target_dir}" >/dev/null 2>&1; then
+        entry_is_copy=0  # junction treated as link
+      else
+        entry_is_copy=1  # real copy
+      fi
+    else
+      entry_is_copy=1  # real directory on Unix — was a copy
+    fi
+
+    if [[ "${entry_is_copy}" == "1" ]]; then
+      # R9 copy-mode: re-copy SKILL.md (and the whole skill dir) from package.
+      rm -rf "${target_dir}" 2>/dev/null || true
+      cp -R "${pkg_skill_dir}" "${target_dir}"
+      # Restore the .aihaus-managed marker (cp preserved it, but be explicit).
+      {
+        printf 'managed_by=aihaus\n'
+        printf 'source=%s\n' "${pkg_skill_dir}"
+      } > "${target_dir}/.aihaus-managed"
+      echo "  user-global refreshed (copy): ${skill_name}"
+    else
+      # Link mode: update the symlink/junction to the latest pkg path.
+      rm -rf "${target_dir}" 2>/dev/null || true
+      if [[ "${use_junction}" == "1" ]]; then
+        local win_target win_skill
+        win_target="$(cygpath -w "${target_dir}" 2>/dev/null || echo "${target_dir}")"
+        win_skill="$(cygpath -w "${pkg_skill_dir}" 2>/dev/null || echo "${pkg_skill_dir}")"
+        if ! cmd.exe /c "mklink /J \"${win_target}\" \"${win_skill}\"" >/dev/null 2>&1; then
+          echo "  warn: junction refresh failed for ${skill_name}; falling back to copy" >&2
+          cp -R "${pkg_skill_dir}" "${target_dir}"
+        fi
+      else
+        if ! ln -s "${pkg_skill_dir}" "${target_dir}" 2>/dev/null; then
+          echo "  warn: symlink refresh failed for ${skill_name}; falling back to copy" >&2
+          cp -R "${pkg_skill_dir}" "${target_dir}"
+        fi
+      fi
+      # Re-drop .aihaus-managed marker (symlink target may have moved; always write).
+      {
+        printf 'managed_by=aihaus\n'
+        printf 'source=%s\n' "${pkg_skill_dir}"
+      } > "${target_dir}/.aihaus-managed"
+      echo "  user-global refreshed (link): ${skill_name}"
+    fi
+    refreshed_count=$((refreshed_count + 1))
+  done
+
+  # ---- Pass 2: install user-global entries for new skills not yet present ----
+  for pkg_skill_dir in "${pkg_skills_dir}"/aih-*; do
+    [[ -d "${pkg_skill_dir}" ]] || continue
+    local skill_name
+    skill_name="$(basename "${pkg_skill_dir}")"
+    local target_dir="${user_global_skills}/${skill_name}"
+
+    # Already handled in Pass 1 (exists and has marker) or collision-protected.
+    if [[ -e "${target_dir}" ]] || [[ -L "${target_dir}" ]]; then
+      continue
+    fi
+
+    # Install new skill entry.
+    if [[ -f "${HOME}/.claude/.aihaus-copy-mode" ]]; then
+      cp -R "${pkg_skill_dir}" "${target_dir}"
+    elif [[ "${use_junction}" == "1" ]]; then
+      local win_target win_skill
+      win_target="$(cygpath -w "${target_dir}" 2>/dev/null || echo "${target_dir}")"
+      win_skill="$(cygpath -w "${pkg_skill_dir}" 2>/dev/null || echo "${pkg_skill_dir}")"
+      if ! cmd.exe /c "mklink /J \"${win_target}\" \"${win_skill}\"" >/dev/null 2>&1; then
+        cp -R "${pkg_skill_dir}" "${target_dir}"
+      fi
+    else
+      if ! ln -s "${pkg_skill_dir}" "${target_dir}" 2>/dev/null; then
+        cp -R "${pkg_skill_dir}" "${target_dir}"
+      fi
+    fi
+
+    {
+      printf 'managed_by=aihaus\n'
+      printf 'source=%s\n' "${pkg_skill_dir}"
+    } > "${target_dir}/.aihaus-managed"
+
+    echo "  user-global new: ${skill_name}"
+    refreshed_count=$((refreshed_count + 1))
+  done
+
+  echo "  user-global skills: ${refreshed_count} refreshed, ${skipped_count} skipped (unmanaged), ${orphan_count} orphans removed"
+}
+
+_refresh_user_global_skills
 
 # ---- Migrate memory README seeds (opt-in, ADR-M009-A safe) ------------------
 # Only runs when --migrate-memory is passed. NEVER part of the default loop.

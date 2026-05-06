@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # aihaus install script (Unix)
 # Copies .aihaus/ into target repo and links .claude/{skills,agents,hooks}.
+# V5 (M022/Z3): user-global skill bootstrap + 8-tier discovery priority chain
+#               + dogfood-mode branch + zero-prompt happy path.
 # Flags:
 #   --target <path>   Install into <path> instead of $PWD
 #   --copy            Copy files instead of creating symlinks
 #   --update          Re-sync package dirs only; preserve local data
+#   --package <path>  Override package source location (tier 1 of discovery chain)
+#   --force           Overwrite existing .aihaus/ without prompting
 #   -h, --help        Show usage
 set -euo pipefail
 
@@ -15,7 +19,7 @@ DSP_MIN_CLAUDE_VERSION="2.1.126"
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--target <path>] [--copy] [--update]
+Usage: install.sh [--target <path>] [--copy] [--update] [--package <path>] [--force]
 
 Installs aihaus into a target git repository (Claude Code only).
 
@@ -24,6 +28,8 @@ Options:
   --copy               Copy files instead of symlinking (fallback for
                        locked-down environments)
   --update             Re-sync package dirs only; preserve local data
+  --package <path>     Override AIHAUS_HOME discovery; use this path as package root
+  --force              Overwrite existing .aihaus/ without prompting
   -h, --help           Show this message
 EOF
 }
@@ -37,6 +43,8 @@ PKG_TEMPLATES="${PKG_ROOT}/templates"
 TARGET="${PWD}"
 MODE="link"
 UPDATE="0"
+FORCE="0"
+PACKAGE_FLAG=""  # V5: --package <path> override (tier 1 of discovery chain)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -53,6 +61,18 @@ while [[ $# -gt 0 ]]; do
       UPDATE="1"
       shift
       ;;
+    --package)
+      [[ $# -ge 2 ]] || { echo "ERROR: --package requires a path" >&2; exit 2; }
+      PACKAGE_FLAG="$(cd "$2" 2>/dev/null && pwd)" || {
+        echo "ERROR: --package path does not exist: $2" >&2
+        exit 2
+      }
+      shift 2
+      ;;
+    --force)
+      FORCE="1"
+      shift
+      ;;
     -h|--help)
       usage; exit 0
       ;;
@@ -63,6 +83,225 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# ---------------------------------------------------------------------------
+# V5 (M022/Z3): 8-tier discovery priority chain — ADR-260504-A §6.1
+# Returns the canonical AIHAUS_HOME path (parent directory containing
+# pkg/.aihaus/skills/) via stdout, or exits non-zero if not found.
+# Tier 1: --package <path> CLI flag (already resolved above into PACKAGE_FLAG)
+# Tier 2: $AIHAUS_HOME env var
+# Tier 3: ~/.aihaus/.install-source registry (written on first successful run)
+# Tier 4: $XDG_DATA_HOME/aihaus (Unix default: $HOME/.local/share/aihaus)
+# Tier 5: $HOME/tools/aihaus (legacy README path)
+# Tier 6: $HOME/Documents/GitHub/aihaus-flow (friend's auto-clone path)
+# Tier 7: $HOME/Documents/GitHub/aihaus (variant)
+# Tier 8: $HOME/code/aihaus (variant)
+# Multiple tiers populated -> pick newest by git log -1 --format=%ct HEAD.
+# Winning path written to ~/.aihaus/.install-source for subsequent runs.
+# ---------------------------------------------------------------------------
+resolve_aihaus_home() {
+  # tier 1: explicit --package flag wins immediately
+  if [[ -n "${PACKAGE_FLAG:-}" ]]; then
+    if [[ -d "${PACKAGE_FLAG}/pkg/.aihaus/skills" ]]; then
+      printf '%s' "${PACKAGE_FLAG}"
+      return 0
+    else
+      echo "ERROR: --package path does not contain pkg/.aihaus/skills: ${PACKAGE_FLAG}" >&2
+      return 1
+    fi
+  fi
+
+  # tier 2: env override
+  if [[ -n "${AIHAUS_HOME:-}" ]] && [[ -d "${AIHAUS_HOME}/pkg/.aihaus/skills" ]]; then
+    printf '%s' "${AIHAUS_HOME}"
+    return 0
+  fi
+
+  # tier 3: registry written on first install
+  local registry="$HOME/.aihaus/.install-source"
+  if [[ -f "${registry}" ]]; then
+    local recorded
+    recorded="$(head -n1 "${registry}" | tr -d '[:space:]')"
+    if [[ -n "${recorded}" ]] && [[ -d "${recorded}/pkg/.aihaus/skills" ]]; then
+      printf '%s' "${recorded}"
+      return 0
+    fi
+  fi
+
+  # tiers 4-8: scan candidates, arbitrate by newest HEAD commit timestamp
+  local xdg_data="${XDG_DATA_HOME:-$HOME/.local/share}"
+  local candidates=(
+    "${xdg_data}/aihaus"
+    "$HOME/tools/aihaus"
+    "$HOME/Documents/GitHub/aihaus-flow"
+    "$HOME/Documents/GitHub/aihaus"
+    "$HOME/code/aihaus"
+  )
+
+  local best="" best_ts=0
+  for c in "${candidates[@]}"; do
+    if [[ -d "${c}/pkg/.aihaus/skills" ]] && [[ -d "${c}/.git" ]]; then
+      local ts
+      ts="$(git -C "${c}" log -1 --format=%ct 2>/dev/null || echo 0)"
+      if [[ "${ts}" -gt "${best_ts}" ]]; then
+        best="${c}"
+        best_ts="${ts}"
+      fi
+    fi
+  done
+
+  if [[ -n "${best}" ]]; then
+    # record pick to registry for next time (tier 3 read on subsequent runs)
+    mkdir -p "$HOME/.aihaus"
+    printf '%s\n' "${best}" > "${registry}"
+    printf '%s' "${best}"
+    return 0
+  fi
+
+  # nothing found — caller must handle
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# V5 (M022/Z3): Dogfood detection — I-04
+# Returns 0 (true) when cwd IS the central aihaus clone.
+# Predicate: pkg/scripts/install.sh + pkg/.aihaus/skills/ both exist in cwd.
+# ---------------------------------------------------------------------------
+is_dogfood_cwd() {
+  [[ -f "${PWD}/pkg/scripts/install.sh" ]] && [[ -d "${PWD}/pkg/.aihaus/skills" ]]
+}
+
+# ---------------------------------------------------------------------------
+# V5 (M022/Z3): User-global skill install loop — ADR-260504-A FR-01/FR-06
+# Installs symlinks for every pkg/.aihaus/skills/aih-* directory
+# into ~/.claude/skills/aih-* (user-global Claude Code skill resolution layer).
+# Each created dir carries a .aihaus-managed marker (R1 collision defense).
+# WSL2 detection via WSL_DISTRO_NAME env var (D-Z0-A from Z0 verification):
+#   - In WSL2 sessions, ~/resolves to Linux home (/home/<user>/) — correct.
+#   - In Git Bash on Windows, ~/resolves to USERPROFILE — correct.
+#   Both paths write to the appropriate ~/.claude/skills/ for the running environment.
+#   If WSL_DISTRO_NAME is set, we emit an informational hint: skills installed
+#   here are for the Linux-side claude binary. Users who invoke claude.exe from
+#   Windows must also run install.sh from a Windows shell to populate the Windows
+#   USERPROFILE skills directory. We do NOT block — just inform.
+# ---------------------------------------------------------------------------
+install_user_global_skills() {
+  local aihaus_home="$1"
+
+  # Determine user-global skills directory. In WSL2, $HOME is the Linux home.
+  # In Git Bash on Windows, $HOME is /c/Users/<user> (maps to USERPROFILE).
+  # In both cases $HOME/.claude/skills/ is the correct target for the active shell.
+  local user_global_skills="$HOME/.claude/skills"
+
+  # WSL2 detection (D-Z0-A): inform only — do not block.
+  if [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
+    echo "  info: WSL2 detected (distro=${WSL_DISTRO_NAME}); installing skills to Linux-side ${user_global_skills}" >&2
+    echo "  note: skills installed here are for the Linux-side claude binary." >&2
+    echo "        If you also use claude.exe from Windows, run install.sh from a" >&2
+    echo "        Windows Git Bash or PowerShell session to populate the Windows" >&2
+    echo "        %USERPROFILE%\\.claude\\skills\\ directory." >&2
+  fi
+
+  mkdir -p "${user_global_skills}"
+
+  # Detect Windows native (not WSL2): use cmd.exe /c mklink /J for junctions.
+  # On WSL2 or Unix, use ln -s (symlinks).
+  local use_junction=0
+  if [[ "${OS:-}" == "Windows_NT" ]] && [[ -z "${WSL_DISTRO_NAME:-}" ]]; then
+    use_junction=1
+  fi
+
+  local installed_count=0
+  local skipped_count=0
+
+  for skill_dir in "${aihaus_home}/pkg/.aihaus/skills"/aih-*; do
+    [[ -d "${skill_dir}" ]] || continue
+    local skill_name
+    skill_name="$(basename "${skill_dir}")"
+    local target="${user_global_skills}/${skill_name}"
+
+    # R1 collision defense: refuse to overwrite a dir not managed by aihaus.
+    # A .aihaus-managed marker (created by us) is the ownership signal.
+    if [[ -e "${target}" ]] && [[ ! -f "${target}/.aihaus-managed" ]]; then
+      echo "  warn: ${target} exists but is not aihaus-managed; skipping (manual cleanup required)" >&2
+      skipped_count=$((skipped_count + 1))
+      continue
+    fi
+
+    # Remove stale or prior-version symlink/junction.
+    if [[ -e "${target}" ]] || [[ -L "${target}" ]]; then
+      rm -rf "${target}" 2>/dev/null || true
+    fi
+
+    # Create symlink or junction.
+    if [[ "${use_junction}" == "1" ]]; then
+      # Windows native junction via cmd.exe (no UAC required for junctions to dirs)
+      local win_target win_skill
+      win_target="$(cygpath -w "${target}" 2>/dev/null || echo "${target}")"
+      win_skill="$(cygpath -w "${skill_dir}" 2>/dev/null || echo "${skill_dir}")"
+      if ! cmd.exe /c "mklink /J \"${win_target}\" \"${win_skill}\"" >/dev/null 2>&1; then
+        # Junction failed (e.g. cross-volume) — fall back to copy.
+        echo "  warn: junction failed for ${skill_name}; falling back to copy" >&2
+        cp -R "${skill_dir}" "${target}"
+      fi
+    else
+      if ! ln -s "${skill_dir}" "${target}" 2>/dev/null; then
+        # Symlink failed (locked-down filesystem) — fall back to copy.
+        echo "  warn: symlink failed for ${skill_name}; falling back to copy" >&2
+        cp -R "${skill_dir}" "${target}"
+      fi
+    fi
+
+    # Drop .aihaus-managed marker inside the skill directory (R1 defense, I-02).
+    # Content: two lines — managed_by + source path (ADR-260504-A §6.3).
+    {
+      printf 'managed_by=aihaus\n'
+      printf 'source=%s\n' "${skill_dir}"
+    } > "${target}/.aihaus-managed"
+
+    echo "  user-global: ${target}"
+    installed_count=$((installed_count + 1))
+  done
+
+  echo "  user-global skills: ${installed_count} installed, ${skipped_count} skipped (collision)"
+}
+
+# ---------------------------------------------------------------------------
+# V5 (M022/Z3): Dogfood mode check — I-04, L9
+# Must run BEFORE per-repo install logic. If we are inside the aihaus package
+# directory, emit a one-liner and exit 0. Never git-pull. Never self-symlink.
+# ---------------------------------------------------------------------------
+if is_dogfood_cwd; then
+  echo "info: you are inside the aihaus package; run 'aihaus self-update' to refresh from origin"
+  # Still attempt user-global skill install if aihaus_home resolves (cwd IS the pkg).
+  # The per-repo overlay is skipped; only user-global symlinks are created.
+  RESOLVED_HOME="${PKG_ROOT}"
+  install_user_global_skills "${RESOLVED_HOME}"
+  # Write registry so future invocations use this clone directly (tier 3).
+  mkdir -p "$HOME/.aihaus"
+  printf '%s\n' "${RESOLVED_HOME}" > "$HOME/.aihaus/.install-source"
+  echo "  registry: ~/.aihaus/.install-source -> ${RESOLVED_HOME}"
+  echo ""
+  echo "aihaus user-global skills installed (dogfood mode; per-repo overlay skipped)."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Resolve AIHAUS_HOME for non-dogfood installs.
+# If the script is being run from the package directory directly (e.g.
+# bash pkg/scripts/install.sh --target /some/other/repo), use the resolved
+# PKG_ROOT as the canonical AIHAUS_HOME.
+# ---------------------------------------------------------------------------
+if [[ -d "${PKG_ROOT}/pkg/.aihaus/skills" ]]; then
+  # Running from within a clone of the aihaus repo targeting another directory.
+  AIHAUS_RESOLVED="${PKG_ROOT}"
+elif AIHAUS_RESOLVED="$(resolve_aihaus_home 2>&1)"; then
+  : # resolved via priority chain
+else
+  # Could not locate package — inform user.
+  echo "ERROR: could not locate aihaus package. Set AIHAUS_HOME or pass --package <path>." >&2
+  exit 1
+fi
 
 # Absolute path for target
 TARGET="$(cd "${TARGET}" 2>/dev/null && pwd)" || {
@@ -121,15 +360,20 @@ if [[ "${UPDATE}" == "1" ]]; then
   source "$(dirname "$0")/lib/restore-effort.sh"
   restore_effort "${TARGET}/.aihaus"
 else
-  # Step 3: existing .aihaus/ prompt
-  if [[ -e "${TARGET}/.aihaus" ]]; then
-    printf "Existing .aihaus/ found. Overwrite? [y/N] "
-    read -r reply
-    case "${reply}" in
-      y|Y|yes|YES) ;;
-      *) echo "Aborted."; exit 0 ;;
-    esac
-    rm -rf "${TARGET}/.aihaus"
+  # Step 3: existing .aihaus/ handling (V5: zero-prompt happy path — I-13, L8)
+  # Replace interactive prompt: dead symlink -> silent overwrite;
+  # live .aihaus/ -> require --force opt-in; default -> abort with stderr.
+  if [[ -e "${TARGET}/.aihaus" ]] || [[ -L "${TARGET}/.aihaus" ]]; then
+    if [[ -L "${TARGET}/.aihaus" ]] && [[ ! -e "${TARGET}/.aihaus" ]]; then
+      # Dead symlink — silently remove and continue.
+      rm -f "${TARGET}/.aihaus"
+    elif [[ "${FORCE}" == "1" ]]; then
+      # --force opt-in: destructive overwrite.
+      rm -rf "${TARGET}/.aihaus"
+    else
+      echo "error: .aihaus/ already exists; pass --force to overwrite" >&2
+      exit 1
+    fi
   fi
 
   # Step 4: copy package .aihaus/ into target
@@ -222,7 +466,21 @@ if command -v claude >/dev/null 2>&1; then
   fi
 fi
 
-# Step 11: idempotent .gitignore injection (soft-fail per LD-3)
+# Step 10: V5 user-global skill install — ADR-260504-A FR-01/FR-06
+# Install each aih-* skill into ~/.claude/skills/ (user-global Claude Code resolution layer).
+# This runs on every non-dogfood non-update invocation (idempotent per I-02).
+echo ""
+echo "  installing user-global skills..."
+install_user_global_skills "${PKG_ROOT}"
+
+# Step 11: write ~/.aihaus/.install-source registry (FR-04, I-01)
+# Written here (after per-repo overlay + user-global skills succeed) so a partial
+# failure never pins a broken path. Using PKG_ROOT as the canonical AIHAUS_HOME.
+mkdir -p "$HOME/.aihaus"
+printf '%s\n' "${PKG_ROOT}" > "$HOME/.aihaus/.install-source"
+echo "  registry: ~/.aihaus/.install-source -> ${PKG_ROOT}"
+
+# Step 12: idempotent .gitignore injection (soft-fail per LD-3)
 # Manual fallback: pkg/.aihaus/templates/gitignore-fragment
 _inject_gitignore() {
   local target="$1"
@@ -262,7 +520,7 @@ _inject_gitignore() {
 }
 _inject_gitignore "${TARGET}"
 
-# Step 10: success message
+# Step 13: success message
 echo ""
 if [[ "${UPDATE}" == "1" ]]; then
   echo "aihaus updated (${MODE} mode)."

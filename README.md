@@ -23,15 +23,16 @@
 <br>
 
 ```bash
-# Install aihaus into your repo
-git clone https://github.com/overdrive-dev/aihaus-flow ~/tools/aihaus
-bash ~/tools/aihaus/pkg/scripts/install.sh --target .
+# Install aihaus (machine-once)
+git clone https://github.com/overdrive-dev/aihaus-flow "$XDG_DATA_HOME/aihaus"
+bash "$XDG_DATA_HOME/aihaus/pkg/scripts/install.sh"
+
+# Bind it to a project (per-repo, opt-in)
+cd ~/myproject && claude
+> /aih-install
 
 # Launch with full autonomy (DSP mode)
 bash .aihaus/auto.sh
-
-# Or on Windows PowerShell
-.aihaus/auto.ps1
 ```
 
 Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and shell scripts.
@@ -62,50 +63,30 @@ After a single approval, a coordinated team of 46 specialist agents handles rese
 
 ## Install
 
-Both flows start with one clone of the package:
+aihaus is a Claude Code workflow toolkit. Install it once; use it in any repo.
 
 ```bash
-git clone https://github.com/overdrive-dev/aihaus-flow ~/tools/aihaus
-cd your-project
+# macOS / Linux — machine-once
+git clone https://github.com/overdrive-dev/aihaus-flow "$XDG_DATA_HOME/aihaus"
+bash "$XDG_DATA_HOME/aihaus/pkg/scripts/install.sh"
+# Windows PowerShell: replace $XDG_DATA_HOME with $env:LOCALAPPDATA
 ```
 
-### Install
+Then in any project:
 
 ```bash
-bash ~/tools/aihaus/pkg/scripts/install.sh --target .
-/aih-init
-/aih-feature Add rate limiting to the public API
+cd ~/myproject
+claude
+> /aih-install
 ```
 
-Creates `.claude/{skills,agents,hooks}` as symlinks (or directory junctions on Windows) pointing at `.aihaus/{skills,agents,hooks}`. Your existing `.claude/settings.local.json` is deep-merged, never clobbered.
+`aihaus install` (machine-once CLI) bootstraps the global skill set and links it to the current repo. `/aih-init` is a separate slash command — run inside Claude Code — that bootstraps `project.md`. They are different steps.
 
-### Verify
+To stay current: `/aih-update` (pull latest + re-link) or `/aih-update --check` (dry run).
 
-```bash
-/aih-help
-```
+### Migrating from `~/tools/aihaus/`
 
-### Keep it current
-
-aihaus ships often. Re-run the installer or use the skill:
-
-```bash
-/aih-update          # Pull latest from remote, re-link, re-run validation
-/aih-update --check  # Just check whether an update is available
-```
-
-<details>
-<summary><strong>Filesystems without symlinks: <code>--copy</code> mode</strong></summary>
-
-Some CI containers and network drives don't do symlinks. Fall back with:
-
-```bash
-bash ~/tools/aihaus/pkg/scripts/install.sh --target . --copy
-```
-
-`--copy` duplicates the package into the target locations. Live updates are gone — re-run the installer after every `/aih-update`.
-
-</details>
+aihaus's discovery chain finds legacy install paths automatically — no relocation required. Run `aihaus update` once and the registry updates to the new path. Your existing per-repo `.aihaus/` directories are untouched.
 
 ---
 

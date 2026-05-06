@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# aihaus — global CLI verb shim  M022/Z5  FR-09/FR-11/FR-12; ADR-260504-A §6.1
+# AIHAUS_HOME: 8-tier priority chain inlined (D-Z5-A; sourcing install.sh unsafe).
+# self-update → update.sh --self  (Z9 implements --self flag; runtime fail until Z9 ships)
+# update --all → $HOME/.aihaus/.targets registry (Z9 writes on install; degrades if absent)
+set -euo pipefail
+
+_resolve() {
+  # tier 2: AIHAUS_HOME env var
+  [[ -n "${AIHAUS_HOME:-}" ]] && [[ -d "${AIHAUS_HOME}/pkg/.aihaus/skills" ]] && \
+    printf '%s' "${AIHAUS_HOME}" && return
+  # tier 3: ~/.aihaus/.install-source registry
+  local reg="$HOME/.aihaus/.install-source" r
+  if [[ -f "${reg}" ]]; then
+    r="$(head -n1 "${reg}" | tr -d '[:space:]')"
+    [[ -n "${r}" ]] && [[ -d "${r}/pkg/.aihaus/skills" ]] && printf '%s' "${r}" && return
+  fi
+  # tiers 4-8: scan candidates; pick newest HEAD commit timestamp
+  local xdg="${XDG_DATA_HOME:-$HOME/.local/share}" best="" best_ts=0 c ts
+  for c in "${xdg}/aihaus" "$HOME/tools/aihaus" \
+            "$HOME/Documents/GitHub/aihaus-flow" \
+            "$HOME/Documents/GitHub/aihaus" "$HOME/code/aihaus"; do
+    [[ -d "${c}/pkg/.aihaus/skills" ]] && [[ -d "${c}/.git" ]] || continue
+    ts="$(git -C "${c}" log -1 --format=%ct 2>/dev/null || echo 0)"
+    [[ "${ts}" -gt "${best_ts}" ]] && best="${c}" && best_ts="${ts}"
+  done
+  [[ -n "${best}" ]] && mkdir -p "$HOME/.aihaus" && \
+    printf '%s\n' "${best}" > "${reg}" && printf '%s' "${best}" && return
+  return 1
+}
+
+_dogfood_dirty() {  # FR-12/R8: abort (no stash) on dirty dogfood cwd
+  [[ -f "${PWD}/pkg/scripts/install.sh" ]] && [[ -d "${PWD}/pkg/.aihaus/skills" ]] || return 0
+  [[ -n "$(git -C "${PWD}" status --porcelain 2>/dev/null)" ]] || return 0
+  echo "aihaus self-update: dogfood cwd has uncommitted changes — aborting (commit or stash manually first)" >&2
+  exit 3
+}
+
+_help() { cat <<'EOF'
+Usage: aihaus <verb> [options]
+Verbs:
+  install       Install aihaus into the current directory
+  update        Update aihaus in the current directory
+  update --all  Update all registered installs (requires Z9 registry)
+  self-update   Update the central aihaus clone from origin (requires Z9)
+  --help, -h    Show this message
+EOF
+}
+
+VERB="${1:-}"; shift || true
+case "${VERB}" in --help|-h|"") _help; exit 0 ;; esac
+
+AIHAUS_HOME="$(_resolve)" || { echo "aihaus: package not found. Set AIHAUS_HOME or reinstall." >&2; exit 1; }
+export AIHAUS_HOME
+
+case "${VERB}" in
+  install)
+    exec bash "${AIHAUS_HOME}/pkg/scripts/install.sh" --target "${PWD}" "$@" ;;
+  update)
+    if [[ "${1:-}" == "--all" ]]; then shift
+      reg="$HOME/.aihaus/.targets"
+      if [[ ! -f "${reg}" ]]; then
+        echo "aihaus update --all: registry not yet populated (~/.aihaus/.targets; written by Z9 on next install)." >&2
+        exit 1; fi
+      rc=0
+      while IFS= read -r t || [[ -n "${t}" ]]; do
+        [[ -z "${t}" ]] && continue
+        echo "aihaus update: ${t}"
+        bash "${AIHAUS_HOME}/pkg/scripts/update.sh" --target "${t}" "$@" || rc=$?
+      done < "${reg}"; exit "${rc}"
+    fi
+    exec bash "${AIHAUS_HOME}/pkg/scripts/update.sh" --target "${PWD}" "$@" ;;
+  self-update)
+    _dogfood_dirty
+    exec bash "${AIHAUS_HOME}/pkg/scripts/update.sh" --self "$@" ;;
+  *)
+    echo "aihaus: unknown verb '${VERB}'" >&2; echo "Run 'aihaus --help' for usage." >&2; exit 2 ;;
+esac
