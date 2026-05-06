@@ -232,6 +232,8 @@ The install scripts create symlinks (Unix) or directory junctions (Windows) from
 
 Since v0.19.0 / M015 (ADR-M015-A), aihaus is Claude Code-only. The `--platform` flag has been removed from install.sh and uninstall.sh. Launch via `bash .aihaus/auto.sh` (M014 DSP wrapper).
 
+Since v0.26.0 / M022 (ADR-260504-A), `install.sh` ships V5 — global-skill bootstrap. A one-time `bash install.sh` symlinks every `pkg/.aihaus/skills/aih-*` into `~/.claude/skills/aih-*`, making every `/aih-*` skill resolve from any cwd in any future Claude Code session. Per-repo `.aihaus/` becomes opt-in enhancement (hooks + `project.md`), no longer a prerequisite for skill resolution. Default package location is `$XDG_DATA_HOME/aihaus` on Unix (`%LOCALAPPDATA%\aihaus` on Windows). Override via `AIHAUS_HOME` env var. Discovery priority chain: `--package` flag > `AIHAUS_HOME` > `~/.aihaus/.install-source` > XDG default > legacy paths. The central package vs per-repo overlay distinction is internal architecture, not user-facing. See ADR-260504-A.
+
 ## Dogfooding
 
 To use aihaus on this repo itself:
