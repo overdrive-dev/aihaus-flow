@@ -3491,6 +3491,92 @@ check_external_dep_down_laundering() {
   fi
 }
 
+# ---- Check 72: completion-protocol audit-pair invariant (M024/S04) ----------
+# For each milestone manifest with status:completed AND phase:complete, assert
+# .claude/audit/curator-apply.jsonl has a row with "milestone":"M0XX" within
+# 1h (3600s) of last_updated. FIELD-PRESENCE GATE — pre-M024 milestones
+# without status:completed + phase:complete are skipped (legacy permissive).
+# GRACE-WINDOW (CHECK F2 fix): currently-running milestone (matches
+# `git branch --show-current` against milestone/M0XX-* pattern) is SKIPPED to
+# prevent M024 self-completion sequence trap. POST-HOC DETECTION (CHECK F5
+# honest framing) — phase-advance.sh has zero hook into smoke-test.sh; this
+# is offline observability, NOT runtime gating.
+check_completion_curator_audit_pair() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: completion-protocol audit-pair invariant (M024/S04)"
+  local issues=()
+  local repo_root="${PACKAGE_ROOT}/.."
+  local audit_file="${repo_root}/.claude/audit/curator-apply.jsonl"
+
+  # Grace-window: detect currently-running milestone via branch
+  local current_branch current_milestone=""
+  current_branch=$(git -C "${repo_root}" branch --show-current 2>/dev/null || echo "")
+  if [[ "$current_branch" =~ ^milestone/(M[0-9]+)- ]]; then
+    current_milestone="${BASH_REMATCH[1]}"
+  fi
+
+  while IFS= read -r manifest; do
+    # Field-presence gate: skip manifests without BOTH status:completed AND phase:complete
+    if ! grep -qE '^status:[[:space:]]*completed' "$manifest" 2>/dev/null; then
+      continue
+    fi
+    if ! grep -qE '^phase:[[:space:]]*complete' "$manifest" 2>/dev/null; then
+      continue
+    fi
+
+    # Extract milestone ID from manifest path or content
+    local milestone_id milestone_num
+    milestone_id=$(grep -E '^milestone:' "$manifest" 2>/dev/null | head -1 | awk '{print $2}' | sed -E 's/^(M[0-9]+)-.*/\1/')
+    if [[ -z "$milestone_id" ]]; then
+      continue
+    fi
+
+    # Only enforce on canonical M0XX format milestones (skip pre-canonical
+    # slug-prefixed manifests like "260414-run-M003" that predate the M0XX scheme).
+    if [[ ! "$milestone_id" =~ ^M[0-9]+$ ]]; then
+      continue
+    fi
+
+    # Pre-M020 milestones are grandfathered (curator-apply.jsonl backfill scope
+    # was M020-M023 per S05a/b; pre-M020 closed before the curator era).
+    # Field-presence-equivalent gate via numeric threshold — fork-portable
+    # (no hardcoded date), time-stable.
+    milestone_num=$(echo "$milestone_id" | sed 's/^M//' | sed 's/^0*//')
+    if [[ -z "$milestone_num" ]]; then
+      milestone_num=0
+    fi
+    if [[ "$milestone_num" =~ ^[0-9]+$ ]] && [[ "$milestone_num" -lt 20 ]]; then
+      continue
+    fi
+
+    # Grace-window: skip currently-running milestone (CHECK F2 fix)
+    if [[ -n "$current_milestone" ]] && [[ "$milestone_id" == "$current_milestone" ]]; then
+      continue
+    fi
+
+    if [[ ! -f "$audit_file" ]]; then
+      issues+=("$manifest: completed milestone but curator-apply.jsonl absent: $audit_file")
+      continue
+    fi
+
+    # Search audit log for ANY matching milestone row.
+    # NOTE: time-window check removed — retroactive backfill (M024/S05a/S05b) writes
+    # curator-apply rows long after the manifest's last_updated. Existence-only check
+    # catches the real failure mode (orchestrator skipped curator entirely) without
+    # false-positives on retroactive applies. M024+ live runs naturally write rows
+    # at completion-time so timing is implicitly current.
+    if ! grep -qF "\"milestone\":\"${milestone_id}\"" "$audit_file" 2>/dev/null; then
+      issues+=("$milestone_id: completed but no curator-apply.jsonl row found")
+    fi
+  done < <(find "${repo_root}/.aihaus/milestones" -maxdepth 2 -type f -name 'RUN-MANIFEST.md' 2>/dev/null)
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 # Parse --check / --skill flags before the full-suite run
 _CHECK_NAME=""
 _CHECK_SKILL=""
@@ -3588,15 +3674,16 @@ check_adr_260506a_present
 check_pause_class_permissive_legacy
 check_audit_pair_invariant
 check_external_dep_down_laundering
+check_completion_curator_audit_pair
 
 printf "
 "
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (71/71)
+  printf "aihaus package smoke test PASSED [OK] (72/72)
 "
   exit 0
 else
-  printf "FAILED - %d of 71 checks failed
+  printf "FAILED - %d of 72 checks failed
 " "$FAILURES"
   exit 1
 fi
