@@ -38,11 +38,11 @@ _start_check() {
   CHECK_NUMBER=$((CHECK_NUMBER + 1))
 }
 
-# ---- Check 1: 13 expected SKILL.md files in expected subdirectories ---------
+# ---- Check 1: 14 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 13 expected SKILL.md files"
-  local expected=(aih-brainstorm aih-bugfix aih-close aih-effort aih-feature aih-help aih-init aih-milestone aih-plan aih-quick aih-resume aih-sync-notion aih-update)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 14 expected SKILL.md files"
+  local expected=(aih-brainstorm aih-bugfix aih-close aih-effort aih-feature aih-help aih-init aih-install aih-milestone aih-plan aih-quick aih-resume aih-sync-notion aih-update)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -740,24 +740,25 @@ check_purity() {
   fi
 }
 
-# ---- Check 27: skill directory count = 12 (M014/S03 deletes aih-automode) ---
-# Verifies that exactly 13 aih-* skill directories exist under .aihaus/skills/.
-# Note: Check 1 verifies the NAMED SKILL.md files (13 expected names including
-# aih-close (M020/S10) and aih-effort; aih-automode deleted in M014/S03). Check 27
-# independently verifies the directory count so that unexpected directories (stale
-# renames, extra skill dirs) also cause CI failure. If the count exceeds 13, a stale
-# directory likely remains from a prior rename.
+# ---- Check 27: skill directory count = 14 (M022/Z6 adds aih-install) --------
+# Verifies that exactly 14 aih-* skill directories exist under .aihaus/skills/.
+# Note: Check 1 verifies the NAMED SKILL.md files (14 expected names including
+# aih-close (M020/S10), aih-effort, and aih-install (M022/Z6); aih-automode
+# deleted in M014/S03). Check 27 independently verifies the directory count so
+# that unexpected directories (stale renames, extra skill dirs) also cause CI
+# failure. If the count exceeds 14, a stale directory likely remains from a
+# prior rename.
 check_skill_count_and_staleness() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: exactly 13 aih-* skill dirs exist (M020/S10)"
+  local label="Check ${CHECK_NUMBER}: exactly 14 aih-* skill dirs exist (M022/Z6)"
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   local problems=()
 
   # Count aih-* directories (exclude _shared and any non-aih prefixed dirs).
   local actual_count
   actual_count=$(find "$skills_root" -maxdepth 1 -type d -name 'aih-*' | wc -l | tr -d ' ')
-  if [[ "$actual_count" -ne 13 ]]; then
-    problems+=("expected 13 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
+  if [[ "$actual_count" -ne 14 ]]; then
+    problems+=("expected 14 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -2825,6 +2826,94 @@ _run_check_submode() {
   esac
 }
 
+# ---- Check 63: CLI shim parseable (M022/Z5) ---------------------------------
+# Verifies pkg/scripts/aihaus passes bash -n, and that aihaus.cmd + aihaus.ps1
+# exist and are non-empty. Optional: parse aihaus.ps1 via pwsh if available;
+# skip (not fail) on hosts without pwsh (Linux CI).
+check_cli_shim_parseable() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: CLI shim parseable (M022/Z5 FR-33)"
+  local issues=()
+  local scripts_dir="${PACKAGE_ROOT}/scripts"
+
+  # Sub-assert 1: bash -n on the main shim
+  if [[ ! -f "${scripts_dir}/aihaus" ]]; then
+    issues+=("pkg/scripts/aihaus missing")
+  elif ! bash -n "${scripts_dir}/aihaus" 2>/dev/null; then
+    issues+=("pkg/scripts/aihaus has bash syntax error")
+  fi
+
+  # Sub-assert 2: aihaus.cmd exists and is non-empty
+  if [[ ! -f "${scripts_dir}/aihaus.cmd" ]]; then
+    issues+=("pkg/scripts/aihaus.cmd missing")
+  elif [[ ! -s "${scripts_dir}/aihaus.cmd" ]]; then
+    issues+=("pkg/scripts/aihaus.cmd is empty")
+  fi
+
+  # Sub-assert 3: aihaus.ps1 exists and is non-empty
+  if [[ ! -f "${scripts_dir}/aihaus.ps1" ]]; then
+    issues+=("pkg/scripts/aihaus.ps1 missing")
+  elif [[ ! -s "${scripts_dir}/aihaus.ps1" ]]; then
+    issues+=("pkg/scripts/aihaus.ps1 is empty")
+  fi
+
+  # Sub-assert 4: optional PowerShell parse — skip if pwsh not available
+  if command -v pwsh >/dev/null 2>&1; then
+    if [[ -f "${scripts_dir}/aihaus.ps1" ]]; then
+      if ! pwsh -NoProfile -Command "
+        \$null = [System.Management.Automation.Language.Parser]::ParseFile(
+          '${scripts_dir}/aihaus.ps1', [ref]\$null, [ref]\$errors
+        )
+        if (\$errors.Count -gt 0) { exit 1 } else { exit 0 }
+      " 2>/dev/null; then
+        issues+=("pkg/scripts/aihaus.ps1 PowerShell parse error")
+      fi
+    fi
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 64: README install section ≤30 lines + no two-layer language ------
+# Verifies the repo-root README.md Install section (Z10 V5 rewrite) stays ≤30
+# lines and contains no forbidden two-layer framing language (FR-27).
+# Uses the repo root (SCRIPT_DIR/..) not PACKAGE_ROOT (pkg/) because Z10
+# updated the repo-root README, not pkg/README.md.
+check_readme_install_section() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: README install section ≤30 lines + no two-layer language (M022/Z10 FR-27)"
+  local readme="${SCRIPT_DIR}/../README.md"
+  if [[ ! -f "$readme" ]]; then
+    _fail "$label" "README.md not found at repo root: $readme"
+    return
+  fi
+
+  # Extract the Install section: from "## Install" up to (but not including)
+  # the next H2 heading. Uses an awk state-variable approach because the
+  # [^#] character class in range patterns is unreliable on some awk builds.
+  local install_section
+  install_section=$(awk '/^## Install/{f=1} f && /^## / && !/^## Install/{f=0} f' "$readme")
+
+  local line_count
+  line_count=$(echo "$install_section" | wc -l | tr -d ' ')
+
+  if [[ "$line_count" -gt 30 ]]; then
+    _fail "$label" "install section is ${line_count} lines (limit 30) — regression of FR-27"
+    return
+  fi
+
+  if echo "$install_section" | grep -qiE "layer 1|layer 2|two layers|two-layer"; then
+    _fail "$label" "install section contains two-layer language (regression of FR-27)"
+    return
+  fi
+
+  _pass "$label"
+}
+
 # Parse --check / --skill flags before the full-suite run
 _CHECK_NAME=""
 _CHECK_SKILL=""
@@ -2913,12 +3002,14 @@ check_run_status_contract
 check_manifest_auto_close_present
 check_aih_close_skill
 check_enforcement_audit_scaffold
+check_cli_shim_parseable
+check_readme_install_section
 
 printf "\n"
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (62/62)\n"
+  printf "aihaus package smoke test PASSED [OK] (64/64)\n"
   exit 0
 else
-  printf "FAILED - %d of 62 checks failed\n" "$FAILURES"
+  printf "FAILED - %d of 64 checks failed\n" "$FAILURES"
   exit 1
 fi
