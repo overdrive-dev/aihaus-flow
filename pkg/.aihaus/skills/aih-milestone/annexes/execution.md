@@ -47,7 +47,7 @@ If the candidate is a `plan`: read the plan's "Estimated Scope" section.
 ## Milestone Execution
 
 > **Execution-phase autonomy reminder** (enforced at runtime via
-> `autonomy-guard.sh` Stop hook): during the Wave 2 per-story loop
+> `autonomy-guard.sh` Stop hook): during the per-story execution loop
 > and every step below, NEVER emit `Checkpoint honesto`, `Opção
 > sua`, `Qual prefere?`, lettered menus `(a)/(b)/(c)`, numbered
 > menus `1. → / 2. → / 3. →`, `Pausing to...`, `Three realistic
@@ -56,9 +56,22 @@ If the candidate is a `plan`: read the plan's "Estimated Scope" section.
 > (L15-31), log the choice in RUN-MANIFEST progress log, proceed
 > silently. The Stop hook blocks the turn on forbidden patterns.
 
-### Task tracking (two waves)
+## Reserved Forbidden Prose Tokens (do not reintroduce)
 
-**Wave 1** — create as `pending` at Phase-start using TaskCreate:
+The following structural nouns are **forbidden** in this annex and in any
+orchestrator output during execution phase:
+
+- `Wave-1` / `Wave-2` / `Wave-N` (any numeric suffix) — autonomy-guard.sh:73 regex blocks Wave-completion pause prose at runtime
+- `Group-N/2` / `Story-Group-N` — replaced with neutral story-position references in M024/S01
+- `Batch-A` / `Batch-B` / `Phase-X/Y` — M023 ADR-260506-A seam-decomposition catalog
+
+These tokens are runtime-enforced via `pkg/.aihaus/hooks/autonomy-guard.sh` PATTERNS heredoc.
+Re-introducing them in skill prose triggers Stop hook block + smoke Check 70b laundering detection.
+M024 + M023 compose: skill prose drops "Wave" but the runtime still blocks "Wave" prose.
+
+### Task tracking (planning + execution)
+
+**Planning tasks** — create as `pending` at Phase-start using TaskCreate:
 
 | Subject | activeForm |
 |---------|-----------|
@@ -67,7 +80,7 @@ If the candidate is a `plan`: read the plan's "Estimated Scope" section.
 | Design architecture | Designing architecture |
 | Verify plan coherence | Checking plan coherence |
 
-Chain sequentially. **Wave 2** (per-story tasks + completion) is created after planning completes.
+Chain sequentially. **Execution tasks** (per-story tasks + completion) are created after planning completes.
 
 Before each step, set its task to `in_progress`. After completion, set to `completed`.
 
@@ -150,6 +163,42 @@ Archive the draft: `mv .aihaus/milestones/drafts/[slug] .aihaus/milestones/draft
 
 **Refresh Active Milestones** (if `.aihaus/project.md` exists): spawn `project-analyst` with `--refresh-active-milestones`, then merge the content of `.aihaus/.active-milestones-scratch.md` into `project.md` between `<!-- AIHAUS:ACTIVE-MILESTONES-START -->` and `<!-- AIHAUS:ACTIVE-MILESTONES-END -->` markers. Preserve everything outside those markers. Do the same refresh whenever RUN-MANIFEST.md status changes (running → paused, paused → running, etc.).
 
+## --plan Short-Circuit Gate (Step E3 pre-check)
+
+If `--plan <slug>` is active, evaluate all three conjuncts before spawning planning agents:
+
+**Gate matcher (regex-locked per ASSUMPTIONS A1):**
+
+- **(a) OQ-resolved:** `grep -E '^##+\s*Open Questions(\s|\(|$)' .aihaus/plans/<slug>/PLAN.md` → if found, parse the section body. Section is "resolved" iff every entry tagged `[DEFERRED]` or `[RESOLVED]` or section body is empty/whitespace. Any plain bullet without a `[STATUS]` tag = unresolved.
+- **(b) Architecture-coverage:** ANY of:
+  - `grep -qE '^##+\s*Architecture(\s|$)' PLAN.md` (any H-level)
+  - `[[ -f .aihaus/plans/<slug>/architecture.md ]]`
+  - `grep -qE 'ADR-[0-9]{6}-[A-Z]' PLAN.md` (any ADR slug-ref in body)
+- **(d) Story-table:** `grep -qE '^##+\s*(Story breakdown|Stories)(\s|$)' PLAN.md` (any H-level — H2 OR H3 inside Proposed Approach) AND ≥1 row in following markdown table.
+
+All three satisfied → skip analyst/PM/architect/plan-checker spawns. Create 3 stub files in `<milestone-dir>/execution/`:
+- `analysis-brief.md` — stub body: `<!-- skipped: --plan short-circuit; upstream artifacts at .aihaus/plans/<slug>/ -->`
+- `PRD.md` — stub body: `<!-- skipped: --plan short-circuit; upstream artifacts at .aihaus/plans/<slug>/ -->`
+- `architecture.md` — stub body: `<!-- skipped: --plan short-circuit; upstream artifacts at .aihaus/plans/<slug>/ -->`
+
+Do NOT create `CHECK.md` stub (zero post-E3 production-path consumers per ASSUMPTIONS A2).
+
+Advance directly to Step E4.
+
+Log to RUN-MANIFEST: `manifest-append.sh --field progress-log --payload "Using plan: .aihaus/plans/[slug]/PLAN.md — E3 planning short-circuited (CHECK.md sha: <sha>)."`
+
+**Consumer-self-validating gate (CHECK F1 fix):** the gate is collapsed to consumer-only logic.
+No producer wiring required. `/aih-plan` does not write any audit row at plan-time (it runs
+before any milestone exists). When E3 short-circuit fires, the consumer reads the on-disk
+`CHECK.md` SHA via `git log -1 --format=%H -- .aihaus/plans/<slug>/CHECK.md`. If CHECK.md is
+absent or untracked → gate refused (gate-untrustworthy → fall back to full E3 pipeline). If
+present and the file's SHA proves it was committed, gate passes. The audit row to
+`.claude/audit/hook.jsonl` is written by **the consumer** (E3 short-circuit branch in
+execution.md) at gate-time, not by `/aih-plan` at plan-time. This sidesteps the
+MANIFEST_PATH-doesn't-exist-yet problem.
+
+`--from-brainstorm` does NOT qualify — runs full pipeline. Any conjunct fails → run full Step E3.
+
 ### Step E3 — Planning (sequential subagents)
 
 Spawn planning agents sequentially, updating RUN-MANIFEST.md progress log after each.
@@ -195,7 +244,7 @@ Resolve `<abs-path>` from the milestone directory at spawn time (same variable t
 
 ### Step E5.5 — Mid-milestone adversarial gate (ADR-M016-A governed)
 
-Invoked once per milestone, between Story Group N/2 and Story Group N/2+1
+Invoked once per milestone, after the N/2-th story's commit lands and before the N/2+1-th story starts
 (when the derived story-count is >= 12; skipped in smaller milestones).
 
 **Governing ADR:** ADR-M016-A (data-plane + file-plane evolution contracts). This step is
@@ -268,11 +317,11 @@ Overall: proceed | halt-with-findings
 ```
 
 **Proceed path:** if all three are PASS or WARN (no FAIL), log one progress line to
-RUN-MANIFEST and continue to Step E6 / Story Group N/2+1:
+RUN-MANIFEST and continue to Step E6 / story N/2+1:
 
 ```bash
 bash .aihaus/hooks/manifest-append.sh --field progress-log \
-  --payload "E5.5 mid-milestone gate: PASS — proceeding to story group N/2+1"
+  --payload "E5.5 mid-milestone gate: PASS — proceeding to story N/2+1"
 ```
 
 **Halt path:** if any agent returns FAIL, do NOT spawn the next story. Surface the
@@ -292,7 +341,7 @@ bash .aihaus/hooks/manifest-append.sh --field progress-log \
 **MANIFEST_PATH env injection:** inject `MANIFEST_PATH` into each agent spawn prompt
 (same rule as Steps E5 / E6 / E7 above) so checkpoint rows resolve Q-4 case 1.
 
-### Step E6 — Execute stories (Wave 2 task creation)
+### Step E6 — Execute stories (per-story task creation)
 
 Read story files from `stories/`. For each story, TaskCreate with:
 - **subject**: story title
@@ -307,7 +356,13 @@ Chain by story dependency order. First story blocked by "Verify plan coherence";
 
 Update RUN-MANIFEST.md after each story: `manifest-append.sh --field story-record --payload "<story_id>|complete|<started>|<sha>|<verified>|<notes>"` + `manifest-append.sh --field progress-log --payload "Story [N] complete: [title]"`.
 
-**Mid-story inventory refresh:** after each story's QA passes and commit lands, check if the committed paths fall within Inventory directories (same detection as `completion-protocol.md` Step 6). If yes, spawn `project-analyst` with `subagent_type: "project-analyst"` in `--refresh-inventory-only` mode and merge the AUTO block of `.aihaus/project.md`. Append `[ts] — project.md inventory refreshed after story [N]` to RUN-MANIFEST.md. Skip if the story was documentation-only. Also refresh Active Milestones since phase may have changed.
+**Per-story task creation (active-rows-only — F3 mitigation):**
+Do NOT create all story tasks up-front. For each story in the execution sequence:
+  1. TaskCreate the current story task (status: pending → in_progress at dispatch).
+  2. After merge-back + commit, set to completed.
+  3. TaskCreate the NEXT story task only then.
+Maximum 2 pending tasks visible at any time (current + next). This prevents
+total-count framing ("14 of 21 stories") that reintroduces the Wave-fraction pattern.
 
 **CRITICAL:** The coordinating skill is the COORDINATOR. Never write code in the coordinator itself. Delegate everything.
 
@@ -354,7 +409,7 @@ Each hook invocation below MUST land in the annex with the `--field` / `--payloa
 | Before Agent spawn (dispatcher mode, ADR-003) | `manifest-append.sh` | `--field invoke-push --payload "<skill>|<args>|<rationale>|<blocking>|<depth>"` |
 | After Agent returns | `manifest-append.sh` | `--field invoke-pop --payload "<skill>"` |
 | Per-story progress (Step E6) | `manifest-append.sh` | `--field progress-log --payload "<1-line msg>"` |
-| E5.5 gate pass (Step E5.5) | `manifest-append.sh` | `--field progress-log --payload "E5.5 mid-milestone gate: PASS — proceeding to story group N/2+1"` |
+| E5.5 gate pass (Step E5.5) | `manifest-append.sh` | `--field progress-log --payload "E5.5 mid-milestone gate: PASS — proceeding to story N/2+1"` |
 | E5.5 gate skip (Step E5.5) | `manifest-append.sh` | `--field progress-log --payload "E5.5 mid-milestone gate: SKIPPED (AIHAUS_SKIP_E55=1 or story-count < 12)"` |
 | End of milestone loop (Step F1) | `manifest-append.sh` | `--field status --payload completed` |
 | End of milestone loop (Step F1) | `manifest-append.sh` | `--field phase --payload completed` |
