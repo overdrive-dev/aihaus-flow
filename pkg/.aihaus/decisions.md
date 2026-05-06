@@ -2137,3 +2137,234 @@ The framework codifies the classification, scoring, move rule, step-counting rub
 - Sibling ADR: ADR-260502-B "Integration-branch awareness (R4) + closest-ancestor reconcile" — `pkg/.aihaus/decisions.md:1901-1981` (style template)
 - Outcome gates satisfied: SC-1 through SC-12
 - Post-mortem evidence: `.aihaus/brainstorm/260503-skill-enforcement-audit/CONVERSATION.md` + 260502-stale-manifest + 260503-step7 + 260503-getShift-completion
+
+---
+
+## ADR-260504-A — V5 global-skill-bootstrap protocol
+
+**Status:** Accepted
+**Date:** 2026-05-05
+**Milestone:** M022
+**Extends:** ADR-001 (filesystem state primitive — preserved; user-global skill symlinks are filesystem-level state); ADR-260502-A (deterministic enforcement gate — eligibility for the discovery chain inherits the determinism rule; non-deterministic arbitration is explicitly rejected per Worked example #2 below); ADR-260503-A (SKILL Enforcement Audit framework — `/aih-install` adds a 14th SKILL row + per-skill fragment, satisfying the framework's Refresh Trigger (a))
+**Pattern:** One-time machine-level bootstrap symlinks every package skill into the user-global `~/.claude/skills/aih-*` resolution layer; deterministic 8-tier discovery priority chain pinned in `~/.aihaus/.install-source`; `.aihaus-managed` marker per skill dir prevents collision with third-party skills; dogfood-mode branch refuses `git pull` when cwd is the central clone; new model-invokable `/aih-install` skill (`disable-model-invocation: false`) is the literal fix for Claude composing inconsistent compound install commands.
+
+### Decision
+
+**Ship V5 — global-skill-bootstrap protocol — as the load-bearing architectural pivot of M022.** A one-time `bash pkg/scripts/install.sh` invocation symlinks every `pkg/.aihaus/skills/aih-*` directory under `~/.claude/skills/aih-*`, making every `/aih-*` slash-command resolve from any cwd in any future Claude Code session. Per-repo `.aihaus/` overlay collapses from prerequisite to opt-in enhancement. The CLI verb is `aihaus install`; the new model-invokable skill is `/aih-install` (sibling to the existing project.md-bootstrap skill `/aih-init` which keeps `disable-model-invocation: true`).
+
+The protocol is composed of six binding pieces:
+
+**1. User-global skill install (FR-01).** `install.sh` loops over every `pkg/.aihaus/skills/aih-*` directory (excluding `_shared`) and creates a symlink (Unix) or junction (Windows, via `mklink /J`) at `~/.claude/skills/aih-<name>` pointing back at the package source. Each created dir carries a `.aihaus-managed` marker file (FR-06; threat mitigation R1).
+
+**2. Discovery priority chain (FR-03; binding 8-tier).** Order:
+
+1. `--package <path>` flag on `install.sh` (CI / shim explicit override);
+2. `$AIHAUS_HOME` env var;
+3. `~/.aihaus/.install-source` registry (one-line plaintext file written on first successful install);
+4. `$XDG_DATA_HOME/aihaus` on Unix, `$LOCALAPPDATA\aihaus` on Windows (XDG default);
+5. `~/tools/aihaus` (legacy README path);
+6. `~/Documents/GitHub/aihaus-flow` (legacy auto-clone path; the friend's case);
+7. `~/Documents/GitHub/aihaus` (legacy variant);
+8. `~/code/aihaus` (legacy variant).
+
+First-hit wins. Multiple-hits arbitrated by `git log -1 --format=%ct` on HEAD (newest commit date wins silently); pick recorded to `~/.aihaus/.install-source` for deterministic re-resolution.
+
+**3. `.aihaus-managed` marker invariant (FR-06).** Every aihaus-created `~/.claude/skills/aih-X/` directory carries a `.aihaus-managed` two-line marker (`managed_by=aihaus` + `source=<absolute path under AIHAUS_HOME>`). Install refuses to overwrite unmarked dirs (collision defense); uninstall (`--purge-user-global`) refuses to remove unmarked dirs and refuses to follow symlinks whose `readlink` target falls outside registered `AIHAUS_HOME` (R4 defense, FR-21).
+
+**4. Dogfood-mode branch (FR-05; orchestrator lock L9).** When `[ -f "$PWD/pkg/scripts/install.sh" ] && [ -d "$PWD/pkg/.aihaus/skills" ]`, `install.sh` emits one-liner ("you are inside the aihaus package; run `aihaus self-update` to refresh") and exits 0; zero symlinks created. `update.sh` likewise refuses `git pull` on dogfood cwd (R3); `aihaus self-update` aborts on dirty dogfood (R8). The maintainer's local clone at `~/OneDrive/Documents/GitHub/aihaus-flow` and the friend's auto-cloned `~/Documents/GitHub/aihaus-flow` are both structurally the dogfood case — they hit this branch.
+
+**5. Duplicate-clone deterministic resolution.** When the discovery chain finds multiple candidate clones, the arbitration rule is `git log -1 --format=%ct` on HEAD: newest wins silently. The pick is recorded; subsequent invocations read the registry and never re-elect. The other clones remain on disk untouched (no auto-prune, no auto-rename). Logs the pick to the install audit (line in stderr; not interactive).
+
+**6. `/aih-install` skill — model-invokable (FR-13; orchestrator lock L2).** The new skill `pkg/.aihaus/skills/aih-install/SKILL.md` declares `disable-model-invocation: false` and ships under V5's user-global resolution layer. When the user types "install aihaus" or "instale aihaus" in any Claude Code session post-bootstrap, Claude invokes `/aih-install` directly — no compound prompts, no improvised `bash` commands. The skill body has 4 steps: resolve `AIHAUS_HOME`, detect dogfood mode, dispatch to `bash $AIHAUS_HOME/pkg/scripts/install.sh --target .`, confirm with one-liner. **This is the literal fix for contrarian F1** — the screenshot's failure was Claude unable to invoke `/aih-init` (which declares `disable-model-invocation: true`) and improvising an inconsistent install command. The new sibling skill is the structural answer.
+
+**Z0 verification gating (orchestrator lock L1, binding).** Before Z1+ ships, Z0 runs an EXPERIMENT verifying (a) `~/.claude/skills/` resolution works on Windows native PowerShell, Git Bash on Windows, WSL2 (OQ #1) and (b) `~/.claude/hooks/` resolution works for user-global hook fragments (OQ #6). All-PASS unblocks; any FAIL routes Z3 to host-detection branches.
+
+**Graceful degradation rule (orchestrator lock L4, binding).** If OQ #6 returns FAIL, **V5 still ships** — Z7 is conditional. The user-global hook fragment (`~/.claude/hooks/session-start-aihaus.sh`) is NOT dropped; skill-only priming via the model-invokable `/aih-install` is the documented fallback. SC-1 (user-global skill install), SC-2 (per-repo opt-in), SC-3 (≤1 user input) all remain satisfiable in either branch — `/aih-install` is reachable user-globally regardless of hook resolution.
+
+**Copy-mode V5 implications (R9, FR-26).** When install runs in `--copy` mode (no symlinks; e.g., locked-down filesystems), the user-global skill install creates COPIES under `~/.claude/skills/aih-*`, not symlinks. `update.sh` (Z9) refreshes those copies on subsequent updates — otherwise edits to `pkg/.aihaus/skills/aih-help/SKILL.md` would not propagate user-globally on `--copy` installs.
+
+**Cross-platform shape.** Unix uses POSIX symlinks. Windows native PowerShell uses `mklink /J` junctions; falls back to `mklink /D` (directory symlink) on cross-volume failure (R7); falls back to `--copy` if both fail. Git Bash on Windows uses `ln -s` with MSYS native-symlink semantics. Each fallback emits a clear stderr line naming the chosen strategy.
+- Detect WSL2 via `WSL_DISTRO_NAME` env var; route to Linux-side `/home/<user>/.claude/skills/` when set. (D-Z0-A: Z0 verification confirmed WSL2 Linux home is a separate, uninitialized directory — Windows-side skills are not auto-discovered from WSL2; install.sh must target the WSL2 Linux home when running inside a WSL2 session.)
+
+### Context
+
+The friend's screenshot (`attachments/01-friend-install-friction.png`) shows ~36s of churn plus two yes/no confirmations on an install command Claude itself composed inconsistently — `bash /c/Users/perse/tools/aihaus/pkg/scripts/install.sh` against a clone Claude had just placed at `~/Documents/GitHub/aihaus-flow` (not `~/tools/aihaus`). The literal failure shape: Claude composed multiple half-decisions (clone to one path, then re-read README's recommendation pointing elsewhere, emitted contradiction, asked TWO compound prompts answered by one `s` keystroke, proposed `bash` against a path that DOES NOT EXIST). This is **Claude composing inconsistent compound decisions**, not "user lacked a verb" (CHALLENGES F1).
+
+The brainstorm produced a synthesis-blocking discovery in Turn 6: V4 (`/aih-init` self-bootstrap) is **infeasible** because `~/.claude/skills/` exists as a real user-global skill resolution layer but contains zero `aih-*` skills today (analyst's direct probe; CHALLENGES F2). V4 cannot resolve in a fresh repo because `/aih-init` itself does not yet exist as a slash-command. V5 collapses the chicken-and-egg by moving the prerequisite from "per-repo skill availability" to "machine-once skill availability": after one `bash install.sh`, every `/aih-*` skill resolves from any cwd. This matches the friend's tool-shaped mental model exactly — "install once, use everywhere".
+
+V5 is not invented from whole cloth: it inherits the architectural shape of rustup, mise, asdf, volta, pyenv, rbenv (advisor's survey of 10+ "central tool + per-project marker" precedents) — one global resolution layer + per-project marker file + two distinct verbs (install central, bind per-project). aihaus today only ships the second (`install.sh --target`); V5 ships the first.
+
+Three brainstorm panel disagreements adjudicated in this ADR:
+1. Verb = `install` (not `init`) — friend literally typed "instale"; npm/pip/gh precedent.
+2. Hide the two-layer model — XDG default, `AIHAUS_HOME` override, README never names "Layer 1 / Layer 2".
+3. `git clone` first-class; `curl|bash` deferred (security policy in companion ADR-260504-B).
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| A | V1 only — shell shim `aihaus`, no user-global skills | Minimal scope; portable; no Windows skill-resolution risk | Doesn't fix the friend's friction class — Claude inside the session still has no model-invokable install skill; "instale aihaus" still produces compound improvisation | Misses the literal F1 fix; CHALLENGES F1 unresolved |
+| B | V3a only — user-global skills, no CLI shim | Solves F1; minimal new files | Power users without Claude Code in cwd have no shell verb; `aihaus update --all` impossible without shim | Loses the rustup/mise CLI shape; advisor §1 precedent ignored |
+| C | V4 only — `/aih-init` self-bootstrap | Single slash-command UX | INFEASIBLE — verified Turn 6: `~/.claude/skills/` empty of `aih-*` today; `/aih-init` cannot resolve in fresh repo | CHALLENGES F2 hard constraint |
+| D | curl\|bash to custom domain | One-line bootstrap | Inverts security surface for project shipping 5 bypassPermissions agents; domain ownership/transfer unaddressed | CHALLENGES F3; gated by ADR-260504-B; deferred M023+ |
+| E | Two-layer mental-model preamble in README | Honest documentation | Band-aid for leaky abstraction; rustup/mise users never see central tool location; user mental model is tool-shaped | CHALLENGES F4; orchestrator lock L7 |
+| F | MCP tri-scope vocabulary verbatim (`user`/`project`/`local`) | Users already know the words | MCP's own merge-vs-replace bug (#17299) makes vocabulary import a non-trivial cognitive cost | CHALLENGES F10; rejected |
+| G | (Chosen) V5 — user-global skill install via bootstrap + CLI shim + model-invokable `/aih-install` + discovery priority chain + dogfood-mode branch + `.aihaus-managed` marker | Solves F1, F2, F4, F6, F8, F9 in one architectural pivot; matches rustup/mise precedent; preserves dogfood; deterministic chain; cross-platform with R7 fallback | Net-new ~14 fragment files + ~400 LOC scripts + 4 smoke checks + 2 ADRs; wide blast radius across install/update/uninstall + README + smoke | Highest leverage; dissolves the chicken-and-egg verified in Turn 6; matches friend's typed-input verb (`instale` → `install`) |
+
+### Applicability Examples
+
+**Worked example #1 — FITS the pattern.** A future maintainer adds a new skill `aih-foo` in `pkg/.aihaus/skills/aih-foo/`. On next `aihaus update` (or fresh `install.sh`), the user-global symlink loop picks up `aih-foo` automatically — no install.sh edit required. The `.aihaus-managed` marker is dropped on first creation; uninstall safety holds. Per-skill enforcement-audit fragment is added in the same milestone (Refresh Trigger (a) of ADR-260503-A); smoke Check 1 + Check 27 counts increment from 14 to 15. README install section line count and forbidden-language checks are unaffected (no README change required for a new skill). **Fits.** The V5 protocol's architectural invariants (deterministic chain, marker invariant, dogfood-mode branch, model-invocation policy) are all unchanged; the new skill is a pure extension via the symlink loop's universal-quantification over `pkg/.aihaus/skills/aih-*`.
+
+**Worked example #2 — DOES NOT FIT (NLP arbitration).** A future maintainer wants aihaus to "auto-detect the user's intent across multiple aihaus clones via NLP" — e.g., parse the user's recent prompt history to decide which clone is the "preferred" one when `--package` is unset and multiple candidates exist. **Does NOT fit.** ADR-260504-A's pattern requires a *deterministic priority chain* — flag > env > registry > XDG > legacy paths, arbitrated by `git log -1 --format=%ct` when ambiguous. The moment arbitration becomes "model decides," the architectural guarantee dissolves: two consecutive `aihaus install` invocations could pick different clones based on prompt-history drift, breaking I-01 (single canonical clone) and I-03 (deterministic chain). This is the same eligibility gate inherited verbatim from ADR-260502-A "Worked example #2 — DOES NOT FIT" (decisions.md:1863): non-deterministic conditions belong in model-driven prose paths (e.g., a `/aih-install` Step 1.5 prose branch asking the user to pick), never in deterministic infrastructure. Correct answer: the multi-clone disambiguation prose lives in the `/aih-install` SKILL body, not in `install.sh`'s resolver.
+
+### Consequences
+
+**Positive.** The friend's friction class is structurally eliminated: V5 collapses the per-repo prerequisite into a machine-once primitive; Claude composing inconsistent compound install commands becomes architecturally impossible because `/aih-install` is model-invokable user-globally and dispatches deterministically. The 8-tier discovery chain handles every backward-compatibility case (legacy `~/tools/aihaus`, XDG, friend's two-clone state). The dogfood branch eliminates R3/R8 silent stomps. `.aihaus-managed` marker + readlink validation prevent collision-class incidents (R1, R4). Cross-platform R7 mitigation ships in Z4. The new model-invokable `/aih-install` skill is a semantically clean extension — `/aih-init` keeps its existing project.md-bootstrap meaning unchanged (NFR-03; I-11). README install section ≤30 lines + zero "Layer 1/Layer 2" language (FR-27/I-14) matches user mental model (rustup/mise precedent).
+
+**Negative.** Net-new ~400 LOC across `install.sh` + `install.ps1` + 3 CLI shim files + new skill body + 1 enforcement-audit fragment + smoke Check 63 + 64 + regression harness. Wide blast radius: install / update / uninstall / session-start / README / CLAUDE.md / smoke / decisions.md all touched by M022. Z3 is the largest single-story commit (K-002 strict; cannot split). Windows native PowerShell parity (Z4) carries R7 cross-volume risk; verified mitigation but new failure mode if Developer Mode + admin both unavailable. The 14th SKILL bumps the M021 audit canonical baseline (smoke Check 1 + Check 27 13→14); future SKILL adds carry the same minor coordination cost.
+
+**Neutral.** No changes to the `lib/junction-safe.sh`, `lib/merge-settings.sh`, `lib/restore-effort.sh` helpers (M015 / M008 / M009 inheritance). No changes to existing per-repo `.aihaus/` topology or symlink conventions. No changes to existing ADRs (260502-A, 260502-B, 260503-A all extend cleanly). Skill count goes 13 → 14; cohort taxonomy unchanged (`aih-install` joins existing skill-not-cohort taxonomy; cohort effort presets unaffected per ADR-M012-A).
+
+### Threat Model
+
+**R1 — user-global skill collision.** Mitigated by `.aihaus-managed` marker. Install refuses to overwrite unmarked dirs; `--force` only overrides on explicit user intent. Uninstall refuses to remove unmarked dirs.
+
+**R3 — `update.sh` blind `git pull` over dogfood.** Mitigated by `is_dogfood_cwd()` predicate in `update.sh` (Z9) and `install.sh` (Z3) — same logic, both refuse `git pull` on dogfood cwd. R8 (self-update on dirty dogfood) extends with abort-not-stash.
+
+**R4 — uninstall follows symlinks outside `AIHAUS_HOME`.** Mitigated by `readlink` validation: only remove if target resolves under registered `AIHAUS_HOME`. Refusal grammar binding (I-15).
+
+**R5 — legacy `~/tools/aihaus/` users migration.** Mitigated by tier 5 of the discovery chain. No auto-relocation; legacy clone continues to work; `aihaus update` reads `.install-source`. README "Migrating" subsection (≤10 lines) documents.
+
+**R7 — Windows `mklink /J` cross-volume failure.** Mitigated by volume-identity check + `mklink /D` fallback + `--copy` final fallback. Each fallback emits stderr line naming the strategy.
+
+**R8 — `aihaus self-update` dogfood with uncommitted changes.** Mitigated by abort-not-stash semantics. Exit 3; clear "uncommitted changes — aborting" message. User stashes/commits manually; never aihaus's responsibility.
+
+### Migration
+
+Single-shot within M022. Strictly additive — no retroactive change to existing per-repo overlays. New: 1 SKILL dir + 1 audit fragment + 1 CLI shim + 1 user-global symlink loop in install.sh + 1 dogfood branch + 1 priority-chain resolver + 1 marker invariant + 1 conditional hook fragment (Z7) + 4 smoke checks + 1 regression harness + 4 fixture dirs + 2 ADRs. Modified-additively: install.sh, install.ps1, update.sh, update.ps1, uninstall.sh, uninstall.ps1, session-start.sh (cond.), enforcement-audit.md, smoke-test.sh (Check 1 + 26 numerics, then Checks 63 + 64), README.md, CLAUDE.md.
+
+User repos that ran `bash pkg/scripts/install.sh --target .` before M022 see new files appear after the next `aihaus update`. No breaking change. Existing `/aih-init` byte-unchanged. Effort sidecar (`.aihaus/.effort`) preserved (NFR-07). DSP version-gate preserved (NFR-08). M020/S05 auto-close at session-start.sh:95-99 byte-unchanged (NFR-09 / I-08).
+
+Legacy `~/tools/aihaus/` users: discovery chain finds them; `AIHAUS_HOME` pinned automatically via `.install-source`; no force-relocation. README documents in ≤10 lines.
+
+### Rollback
+
+Comment out the `install_user_global_skills()` invocation in `install.sh` (Z3 owns; one-line revert). Revert the `pkg/.aihaus/skills/aih-install/` directory and its enforcement-audit fragment. Revert the smoke Check 1 + 26 count update (14 → 13). The CLI shim files (`pkg/scripts/aihaus`, `.cmd`, `.ps1`) stay in tree (informational; no install.sh wire-up). ADR-260504-A stays accepted in commit history with Implementation Status marked "rolled back — see M022 retrospective."
+
+User-global symlinks already created on user machines remain on disk; users who want to clean up run `bash pkg/scripts/uninstall.sh --purge-user-global` (Z8) — no functional regression. ADR-260504-B (companion) remains independently valid; rolling back V5 does not invalidate the security policy.
+
+### Implementation Status
+
+V5 protocol landed in M022. Custom-domain `curl|bash` shortcut deferred to M023+ pending ADR-260504-B's three ratification fields (named owner, named renewal cadence, named transfer protocol). Pre-install hook injection (Z7) is conditional on OQ #6 PASS — Z0 verification governs whether it ships in M022 or defers to a follow-up milestone.
+
+The 8-tier discovery chain is locked in this ADR; future tier additions require an amending ADR. The `.aihaus-managed` marker shape (two-line `managed_by` + `source`) is locked. The dogfood-mode predicate (`is_dogfood_cwd`) is shared between `install.sh` and `update.sh` via the same shape (implementer may extract to `lib/dogfood-detect.sh` if reasonable; not required).
+
+### References
+
+- Scope: `.aihaus/milestones/M022-260504-install-flow-friction/PRD.md` (36 FRs / 10 NFRs / 14 SCs / L1-L10).
+- Architecture: `.aihaus/milestones/M022-260504-install-flow-friction/architecture.md` (§2 component diagram, §3 invariants I-01..I-15, §5 cross-story dep map, §6 data model, §7 threat model + worked examples, §8 smoke Check 63+64 specs, §9 backout, §10 migration, §11 testing).
+- Stories: Z0 (verification), Z1 (this ADR), Z3 (install.sh sole writer), Z4 (install.ps1), Z5 (CLI shim), Z6 (`/aih-install` + audit + smoke counts), Z7 (session-start cond.), Z8 (uninstall `--purge-user-global`), Z9 (update + dogfood guard + `--self`), Z10 (README), Z11 (CLAUDE.md), Z12 (smoke Check 63 + 64), Z13 (regression harness).
+- Brainstorm: `.aihaus/brainstorm/260504-install-flow-friction/{BRIEF.md, CHALLENGES.md, CONVERSATION.md, PERSPECTIVE-architect.md, PERSPECTIVE-advisor-researcher.md, PERSPECTIVE-ux-designer.md, attachments/01-friend-install-friction.png}`.
+- Companion ADR: ADR-260504-B (`curl|bash` security policy + custom-domain ownership requirements) — appended sequentially in Z2.
+- Inherited ADRs: ADR-001 (filesystem state primitive — `pkg/.aihaus/decisions.md` early), ADR-260502-A (deterministic enforcement gate — `pkg/.aihaus/decisions.md:1804-1899`; Worked example #2 quoted in §Decision arbitration), ADR-260503-A (SKILL Enforcement Audit framework — `pkg/.aihaus/decisions.md:1986-2138`; Refresh Trigger (a) consumed by Z6).
+- Outcome gates satisfied: SC-1 through SC-14.
+- Friend's screenshot (canonical artifact): `.aihaus/brainstorm/260504-install-flow-friction/attachments/01-friend-install-friction.png`.
+
+---
+
+## ADR-260504-B — `curl|bash` security policy + custom-domain ownership requirements
+
+**Status:** Accepted (requirements ratified); Implementation deferred to M023+
+**Date:** 2026-05-05
+**Milestone:** M022
+**Extends:** ADR-260504-A (companion ADR; V5 protocol established `git clone` as the canonical install path; this ADR locks the security boundary around any future `curl|bash` convenience shortcut)
+**Pattern:** Security-boundary ADR locking the minimum requirements (named owner, named renewal cadence, named transfer protocol) before any custom-domain `curl|bash` shortcut may ship; documents the security delta vs rustup attributable to aihaus shipping 5 `bypassPermissions` agents; `git clone` remains first-class and auditable indefinitely.
+
+### Decision
+
+**`git clone` is the first-class install path for aihaus in M022 and beyond, until and unless the three ratification fields below are populated and a domain is named in a successor ADR.** A `curl|bash` convenience shortcut to a custom domain (e.g., `aihaus.run`, `get.aihaus.dev`) is **not shipped in M022**; it is deferred to M023+ pending the three ratification prerequisites.
+
+**Domain ownership requirements (binding before any custom domain ships):**
+
+1. **Named owner.** Explicit individual or organization with registry-account ownership documented in `pkg/.aihaus/decisions.md` annex. The named owner is responsible for renewal payments and for executing the transfer protocol (#3) on org change or owner-departure. "GitHub user X owns the domain via Cloudflare Registrar account Y" is an example of a fully-named owner clause.
+
+2. **Named renewal cadence.** Explicit frequency (annual, multi-year, auto-renew enabled), payment source documented (e.g., "billed to corporate card; auto-renew enabled; payment failure notifications routed to alerts@<owner>.com"), and renewal-window slack documented (e.g., "renewal triggers 60d before expiry; 30d hard floor before manual escalation").
+
+3. **Named transfer protocol.** What happens on org change, owner-departure, acqui-hire, or sunset. Two-of-N options (escrow, backup-DNS-pointer, signed-Manifest-of-trust embedded in the package, or revocation procedure with 30d notice) MUST be documented. The rollback path to `git clone` MUST always work — the ADR explicitly preserves `git clone` as the regulated-environment fallback irrespective of any domain decision.
+
+**Additional security requirements (binding for any future `curl|bash`):**
+
+- TLS pinning + signature verification rustup-style. The bootstrap script MUST verify a signed manifest before executing any aihaus-supplied content.
+- Commit SHA visible in install logs (matching `git clone` auditability — the user can always grep the install log for the exact commit checked out).
+- Regulated-environment fallback: `git clone` ALWAYS works. No financial / healthcare / gov user is forced to trust a domain redirect.
+
+**aihaus security delta vs rustup (binding context).** aihaus ships 5 `bypassPermissions` agents (per CLAUDE.md / ADR-M017): `implementer`, `frontend-dev`, `code-fixer`, `executor`, `nyquist-auditor`. These agents have `Bash`, `Edit`, `Write` tools wired to `permissionMode: bypassPermissions`. Compromising the install channel grants persistent code-execution capability inside any future Claude Code session via the user-global skill resolution layer (V5; ADR-260504-A). The security delta vs rustup is real: rustup ships a Rust toolchain (compiler + cargo + std) which is auditable post-install via `cargo audit` and well-known supply chain tools. aihaus ships `bypassPermissions` agents which are NOT enumerated in standard supply-chain tooling. **`git clone` preserves auditability via git commit SHA + signed-tag chain; opaque domain redirect does not.**
+
+### Context
+
+The advisor-researcher panelist recommended a dedicated short domain (`aihaus.run` / `get.aihaus.dev`) for `curl|bash` bootstrap as "future-proof against repo rename" and tagged it ASSUMED-but-high-confidence. The contrarian challenged on three grounds (CHALLENGES F3): (a) panel did not name the domain owner; (b) ownership-transfer / abandonment / re-registration risk is a real supply-chain attack vector (cf. NPM `event-stream`, real-world); (c) ≥30% of professional dev shops block `curl|bash` via egress firewall (financial, healthcare, gov regulated environments). For a project shipping `bypassPermissions` agents, the security delta vs rustup matters more than rustup's because aihaus has Bash/Edit/Write tools wired to bypassPermissions in 5 agents.
+
+The brainstorm adjudicated (BRIEF Adjudicated position #3): `git clone` first-class; `curl|bash` opt-in convenience downstream, never primary. Domain ownership/transfer protocol must be documented in an ADR before any custom domain ships.
+
+This ADR locks that adjudication and codifies the three minimum ratification fields. M022 ships `git clone` only — no domain procurement, no `curl|bash` script, no `aihaus.run` reference in the codebase or README. M023+ may register a domain after the three prerequisites are populated in a successor ADR; until then, the rollback to `git clone` is the only documented install path.
+
+The recommendation also intersects orchestrator lock L3 (custom domain DEFERRED to M023+) and PRD's Out of Scope item 7 (custom domain procurement, registration, DNS setup all post-M022).
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| A | Ship `curl|bash` to `aihaus.run` first-class as primary install path | One-line user UX; matches rustup/mise precedent surface | Inverts security surface vs `git clone`; domain ownership unaddressed; ≥30% regulated environments blocked by egress firewalls; supply-chain attack vector via abandonment/re-registration; no signature verification ships in M022 | CHALLENGES F3 binding; rejected |
+| B | Ship `curl|bash` to `raw.githubusercontent.com/<org>/aihaus-flow/main/install.sh` (no custom domain) | Auditable (GitHub-hosted; commit-pinned); no domain ownership concern; works in many regulated environments that allow GitHub egress | TLS terminated at GitHub; trust shifts to GitHub Inc.; URL doesn't survive repo rename; mid-fetch repo-takeover by malicious actor with merge access still a risk | Acknowledged as conditionally-OK alternative; not shipped in M022 because it adds a second documented install path before the security policy is ratified; M023+ may consider |
+| C | Custom-domain-but-no-ratified-owner | Convenience available immediately | Unbounded supply-chain risk; no transfer protocol on owner-departure; rejected on first principles | Rejected; CHALLENGES F3 explicit |
+| D | Inherit MCP tri-scope vocabulary (`user`/`project`/`local`) for install scope | Users already know the words from MCP | MCP's own merge-vs-replace bug (issue #17299) makes vocabulary import a non-trivial cognitive cost; aihaus uses verb-shaped commands (`install`, `update`, `self-update`) without inheriting MCP's scope vocabulary | CHALLENGES F10; rejected at the verb level (companion to ADR-260504-A's verb adjudication) |
+| E | (Chosen) `git clone` first-class indefinitely; ratify three ownership requirements; defer domain procurement to M023+ | Auditable via git SHA; works in regulated environments; locks the security boundary explicitly; preserves option to ship custom domain later under named ratification | Misses the one-line bootstrap convenience until M023+; users must clone first | Highest leverage given aihaus ships 5 bypassPermissions agents; CHALLENGES F3 binding rationale; brainstorm Adjudicated position #3 |
+
+### Applicability Examples
+
+**Worked example #1 — FITS the pattern.** A future maintainer wants to add a `pkg/scripts/install-from-github.sh` bootstrap script that does `git clone` + `bash install.sh` in one command. **Fits.** The script ships in the repo (auditable); commits to it are signed via standard git workflow; install logs include the commit SHA. No custom domain. No `curl|bash` to opaque endpoint. The convenience is bounded by the same auditability as the canonical path.
+
+**Worked example #2 — DOES NOT FIT (named owner missing).** A future maintainer registers `aihaus.run` personally + writes a 5-line `curl|bash` bootstrap that fetches `install.sh` from the domain. **Does NOT fit until ADR-260504-B's three fields are populated.** Even if the maintainer is the named owner, the renewal cadence and transfer protocol MUST be documented in a successor ADR or annex. Shipping the script before the protocol exists violates ADR-260504-B's binding rule. Correct path: write the successor ADR (named owner = `<maintainer>`; renewal = `annual; auto-renew; payment source `<billing>`; transfer = `escrow with 30d revocation notice`; signature = `Ed25519 with public key in pkg/.aihaus/SIGNING-KEY.pub`); then ship the bootstrap script.
+
+### Consequences
+
+**Positive.** Security boundary is explicit and binding. M022 ships zero `curl|bash` references; the friend (and every future user) has exactly one documented install path — `git clone` + `bash install.sh` — which is auditable via commit SHA and works in every regulated environment that permits git over HTTPS. The 5 `bypassPermissions` agents named explicitly in this ADR provide a concrete rationale for any future ratification debate; "we agreed to require named ownership because of `bypassPermissions`" is a firm anchor. Rollback to `git clone` is permanent — no future ADR can delete the `git clone` path; ADR-260504-B locks it as a regulated-environment fallback.
+
+**Negative.** No one-line install convenience in M022. Users running `instale aihaus` in Claude Code today still benefit (model-invokable `/aih-install` resolves user-globally per ADR-260504-A) BUT users who want to install aihaus from a fresh shell on a new machine MUST type two commands (`git clone`, `bash install.sh`) instead of one. Marketing surface narrower than rustup's. Discoverability cost: README leads with two commands, not one — mitigated by the ≤30-line install section + IDEAL transcript shape (FR-27/FR-28).
+
+**Neutral.** No code changes ship in M022 from this ADR — it locks a *requirement*, not an implementation. Companion ADR-260504-A drives the actual install changes. Future M023+ may ship a domain after ratification; until then, no codebase reference to any candidate domain exists.
+
+### Threat Model
+
+**Class 1: supply-chain attack via opaque domain abandonment / re-registration.** Mitigated by deferral — no domain ships in M022; ADR-260504-B's three ratification fields ensure any future domain has named owner + transfer protocol BEFORE shipping. ADR-260504-A's `git clone` first-class invariant is the permanent fallback.
+
+**Class 2: ownership transfer on org change.** Mitigated by the named transfer protocol requirement (#3). Any future ADR shipping a domain MUST document the transfer protocol before merge.
+
+**Class 3: corporate egress block on `curl|bash`.** Mitigated by `git clone` first-class indefinitely. Regulated environments (financial, healthcare, gov) that block `curl|bash` egress can install aihaus via standard `git clone` over HTTPS. ADR-260504-B preserves this path permanently.
+
+**Class 4: TLS pinning / signature verification absent.** Acknowledged as binding requirement on any future `curl|bash` ship — rustup-style. M022 deferral means no script ships without these guarantees in M023+.
+
+### Migration
+
+N/A — no domain ships in M022. M023+ migration (if a domain is named in a successor ADR) is governed by that ADR; ADR-260504-B does not constrain the migration mechanics beyond the three ratification fields and the security requirements.
+
+### Rollback
+
+N/A — no domain ships, so no rollback target exists. ADR-260504-B remains accepted as a requirements gate; rolling back companion ADR-260504-A does not affect this ADR's status. If a future ADR ships a domain and is later rolled back, ADR-260504-B's `git clone` first-class fallback ensures continuity of installation.
+
+### Implementation Status
+
+Requirements ratified in M022. **No domain ships in v0.26.0.** No `curl|bash` script ships. README documents `git clone` + `bash install.sh` as the canonical install path. Future M023+ may register a domain after the three prerequisites are documented in a successor ADR (ADR-260504-B's ratification is binding before any successor proposes a `curl|bash` script).
+
+The named-owner / renewal-cadence / transfer-protocol fields are NOT populated in M022 — populating them requires a successor ADR with explicit decision-maker sign-off. ADR-260504-B is intentionally a *requirements* gate, not a decision lock — the decision to ship a domain remains future-deferrable.
+
+### References
+
+- Scope: `.aihaus/milestones/M022-260504-install-flow-friction/PRD.md` (FR-32; NFR-06; SC-8; Out of Scope items 3 and 7).
+- Architecture: `.aihaus/milestones/M022-260504-install-flow-friction/architecture.md` §4.9 (Brainstorm Key Disagreement #3 adjudication).
+- Stories: Z2 (this ADR), Z10 (README documents `git clone` only).
+- Brainstorm: `.aihaus/brainstorm/260504-install-flow-friction/{BRIEF.md (Adjudicated position #3), CHALLENGES.md (F3, F10), PERSPECTIVE-advisor-researcher.md (§2, §6, §9)}`.
+- Companion ADR: ADR-260504-A (V5 global-skill-bootstrap protocol) — appended sequentially in Z1; defines the `git clone`-as-canonical install path that this ADR locks as permanent fallback.
+- Inherited ADRs: ADR-001 (filesystem state primitive — preserved); ADR-M017-A (merge-back-as-script — context for `bypassPermissions` agent enumeration).
+- Outcome gates satisfied: SC-8 (ADRs ratified); NFR-06 (security delta vs rustup documented).
+- bypassPermissions agent inventory (5 agents): `implementer`, `frontend-dev`, `code-fixer`, `executor`, `nyquist-auditor` — per CLAUDE.md "Editing Skills and Agents" section + ADR-M017 context.
