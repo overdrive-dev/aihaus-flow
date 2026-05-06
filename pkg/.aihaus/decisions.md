@@ -2475,3 +2475,98 @@ Model emits `phase-advance --to paused --reason "Backend dep on Frontend, fronte
 
 This three-layer defense (S02 regex + S04 docs + S05 smoke) closes the F4 laundering surface without requiring an adversarial writer-gate (the M024+ deferral).
 - bypassPermissions agent inventory (5 agents): `implementer`, `frontend-dev`, `code-fixer`, `executor`, `nyquist-auditor` — per CLAUDE.md "Editing Skills and Agents" section + ADR-M017 context.
+
+---
+
+## ADR-260507-A — Milestone Workflow-Shape Parity + Auto-Improve Structural Enforcement
+
+**Status:** Accepted
+**Date:** 2026-05-06
+**Milestone:** M024
+**Extends:** ADR-001 (single-writer manifest), ADR-M005-A (autonomy protocol bound to all skills — **THIS ADR amends**), ADR-260506-A (M023 GSP-DS — composition rule explicit)
+**Pattern:** Skill-prose excision composes with byte-identical runtime regex preservation; consumer-self-validating gate replaces producer wiring; post-hoc smoke detection of completion-protocol audit-pair invariant; install-layer hotfix bundle.
+
+### Context
+
+`/aih-milestone` runs feel less assertive than `/aih-feature` runs for the same task class. Brainstorm panel quantified: milestone-skill surface 5-6× feature-skill surface (1256 vs 199 lines); 14-story milestones carry 28-42 turn-boundary ritual beats vs features' 1. Named pattern: **PSRS — Per-Story Ritual Stack**. M023 fought GSP-DS prose at the autonomy-guard layer; M024 reduces the structural cadence pressure that produces it. User framing locked: a milestone is just a feature with more tasks — same workflow shape, just N implementation steps.
+
+Bundled with two production hotfixes from 2026-05-06 dogfood:
+- **Concern B:** `install.sh` + `install.ps1` user-global path-doubling. `install_user_global_skills "${PKG_ROOT}"` where `PKG_ROOT=repo/pkg` → scans `repo/pkg/pkg/.aihaus/skills` (never exists). Fresh `git clone` install on `moviemaker` repo failed; user manually junctioned to recover.
+- **Concern C:** skill duplication in autocomplete — `/aih-plan (user) + /aih-plan (project)` both register. Per-repo `install.sh --target` always junctions `.claude/skills/aih-*` even when user-global already provides them.
+
+Plus auto-improve structural-enforcement gap (Concern A): `.claude/audit/curator-apply.jsonl` last entry M019 despite M020-M023 completed; protocol exists in skill prose but isn't structurally enforced — auto-improve silently disabled since M020.
+
+CHECK round (plan-checker REVISE) absorbed 3 BLOCKERs inline: F1 producer-wiring → consumer-self-validating gate; F2 sequence-trap → grace-window; F3 monolithic data-ops → S05a/b split. F5 reword: Check 72 is post-hoc detection (offline observability), NOT runtime gating.
+
+### Decision
+
+1. **Workflow-shape parity prose surgery.** `pkg/.aihaus/skills/aih-milestone/annexes/execution.md` excises Wave/Group structural nouns at 5 substitution sites; runtime regex (`autonomy-guard.sh:73`) preserved byte-identical. M023 + M024 compose at runtime.
+
+2. **3-way `--plan <slug>` short-circuit gate at Step E3.** Three conjuncts, H-level permissive: (a) OQ-resolved (`^##+\s*Open Questions(\s|\(|$)`); (b) architecture-coverage (`## Architecture` H2 OR `architecture.md` OR ADR slug-ref); (d) story-table H-level + ≥1 row. **Consumer-self-validating** (CHECK F1 fix): consumer reads on-disk CHECK.md SHA at gate-time via `git log -1 --format=%H -- .aihaus/plans/<slug>/CHECK.md`; no producer wiring. Fail-closed default.
+
+3. **Skipped-planning scaffolding: 3 stub files** (`analysis-brief.md`, `PRD.md`, `architecture.md`) with skip-marker citing upstream plan path. Six production-path consumers depend on them (`context-inject.sh:478-485`, `role-defaults.json:8/14`, `context-curator.md:46`, `statusline-milestone.sh:128`, `aih-update/SKILL.md:145`, `aih-resume/annexes/legacy-mode.md:66-68`). NO `CHECK.md` stub.
+
+4. **Per-repo skill-junction conditional.** `install.sh` + `install.ps1` skip `.claude/skills/aih-*` junction when user-global already provides them (sentinel: `~/.claude/skills/aih-init`). Opt-out: `--force-project-skills` (Bash) / `-ForceProjectSkills` (PowerShell) / `FORCE_PROJECT_SKILLS=1` env.
+
+5. **install.sh + install.ps1 path-doubling fixed.** `install.sh:474+480` and `install.ps1:1010+1020` use `${AIHAUS_RESOLVED}` (not `${PKG_ROOT}`). Dogfood callsite `install.sh:279` preserved byte-identical.
+
+6. **Smoke Check 72 — completion-protocol audit-pair invariant.** Detects post-hoc that `phase-advance.sh --to complete` was called for a milestone without a corresponding `.claude/audit/curator-apply.jsonl` row. Field-presence gate: skips manifests lacking `status: completed + phase: complete`; M0XX format gate skips pre-canonical slug-prefixed manifests; numeric-threshold gate skips pre-M020. Grace-window for currently-running milestone (`git branch --show-current`) prevents M024 self-completion sequence trap. **Honest framing:** offline observability, NOT runtime gating; `phase-advance.sh` has zero hook into `smoke-test.sh`. Classification: primary=A model-driven.
+
+7. **`## Reserved Forbidden Prose Tokens` H2** in execution.md citing `autonomy-guard.sh:73`. Names M024-excised tokens (Wave 1, Wave 2, Group N/2, Story Group N) AND M023 seam-decomposition catalog. Sustaining context for maintainers.
+
+### Consequences
+
+**Enables:** PSRS beat reduction 28-42 → ~8-12 per 14-story milestone; auto-improve substrate gap closed structurally; production fresh-install path repaired; autocomplete duplication eliminated when user-global skills present.
+
+**Costs:** regex/skill-prose drift maintenance via §M024 invariants; +1 smoke check (offline observability surface; no runtime cost); one-time data-ops backfill for M020-M023 amortized in S05a/b; 3-stub staleness risk (write-once); F3 task-fraction laundering ships **prose-only** mitigation (M025+ may add regex if dogfood detects).
+
+**Neutral:** Schema stays v4 (no migration). Existing `aih-milestone --execute` calls unaffected.
+
+### Migration
+
+Schema stays v4. Existing manifests grandfathered via field-presence + M0XX-format + numeric-threshold gates. M020-M023 backfilled by S05a/b. M024+ milestones receive curator-apply rows at end-of-milestone via Step 3.5.
+
+### Rollback
+
+Three opt-out env vars (all preserved from prior milestones; **NO new opt-outs introduced**):
+- `FORCE_PROJECT_SKILLS=1` — S02 skill-junction conditional override.
+- `AIHAUS_GSP_DS_REGEX=0` — M023 carryover.
+- `AIHAUS_AUTONOMY_HAIKU=0` — M011 carryover.
+
+### Implementation Status
+
+Lands in M024 (S01-S07; 8 active stories — S05 split into S05a/b per CHECK F3; S03 fixture rebuild deferred to M025).
+
+**M025+ deferrals:**
+- Noun-substitution falsification experiment (M023 F7 carryover).
+- Annex consolidation: fold execution.md (372 lines) back into SKILL.md.
+- `internal-contradiction` enum re-introduction once adversarial plan-checker writer-gate exists.
+- Autonomy-guard regex bundle for F3 task-fraction laundering if dogfood detects.
+- `tools/test-install-flow.sh` Case 1 fixture rebuild to production-mirror layout.
+
+### References
+
+- ADR-001 (single-writer manifest)
+- ADR-004 (Status projection from Metadata.phase)
+- ADR-M005-A (autonomy protocol — **THIS ADR amends**)
+- ADR-M011-A (state gate / paused-as-TRUE-blocker escape)
+- ADR-M013-A (knowledge-curator + orchestrator-applies)
+- ADR-M014-B (resume substrate, schema v3→v4 gateway)
+- ADR-M016-B (per-agent memory)
+- ADR-M017-A (merge-back hook)
+- ADR-M019-A (RUN-STATUS projection)
+- ADR-260502-A (determinism gate — Check 72 enforcement-audit classification)
+- ADR-260504-A (V5 protocol — `AIHAUS_RESOLVED` is V5-canonical)
+- ADR-260506-A (M023 GSP-DS — direct predecessor)
+
+### Worked Example #1 — FITS
+
+`/aih-plan` produces complete PLAN.md with OQs all `[DEFERRED]`/`[RESOLVED]` + `## Architecture` H2 + Story breakdown table + CHECK.md committed. `/aih-milestone --plan <slug>`: E3 short-circuit detects flag, gate PASSES, orchestrator creates 3 stubs, audit row written, dispatches Step E4 directly (skips analyst/PM/architect/plan-checker spawns).
+
+### Worked Example #2 — DOES NOT FIT (gate fails)
+
+PLAN.md contains 3 OQs without `[STATUS]` tags. Conjunct (a) FAILS. Orchestrator falls back to full Step E3 pipeline. NO stubs created. Behavioral parity with today's full-pipeline path.
+
+### Worked Example #3 — Partial fail mode (CHECK absence-#5)
+
+CHECK.md staged but NOT committed. `git log -1 --format=%H -- CHECK.md` returns empty → gate refused (gate-untrustworthy). Fall back to full E3. **Fail-closed (safe default).** Recovery: `git commit`, re-invoke; gate evaluates fresh on Worked Example #1 path. Honors ADR-260502-A determinism gate principle.
