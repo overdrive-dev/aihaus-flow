@@ -210,6 +210,19 @@ opt-out `AIHAUS_GIT_ADD_GUARD=0`. M018 corrects `AIHAUS_SKIP_E55` (no dot)
 as the canonical E5.5 skip env; prior prose used a dot-in-name variant that
 is bash-invalid (POSIX shell rejects dot in parameter names).
 
+Since v0.27.0 / M023 (ADR-260506-A), `phase-advance.sh --to paused` REQUIRES `--class <4-enum>`
+(writing `pause_class` to manifest Metadata): `{credential-missing, destructive-git-state,
+external-dep-down, user-invoked}`. `internal-contradiction` is RESERVED for M024+ adversarial-write
+gate. `autonomy-guard.sh` extends to 24 patterns (1 modified + 13 added) covering GSP-DS
+(Graceful Self-Pause at Decomposition Seam) — the PT-BR dialect the M005 fast-path missed.
+`/aih-resume` adds stranded-pause detection (no `phase-advance --to paused` audit row + ≥2
+unfinished stories + recent activity + GSP-DS regex match in `autonomy-gate.jsonl` within 60s of
+`last_updated` → emit continue-here vs re-promote-as-feature classification). Conversation length
+and decomposition seams (Backend/Frontend, Wave N/M, Batch A/B, Phase X/Y) are NEVER TRUE blockers.
+Opt-out env vars: `AIHAUS_PAUSE_CLASS=0` (S01 hook bypass), `AIHAUS_GSP_DS_REGEX=0` (S02
+fast-path bypass — skips 13 new patterns; existing 11 still fire), `AIHAUS_AUTONOMY_HAIKU=0`
+(existing M011 backstop bypass).
+
 ## Merge-Back (M017 / ADR-M017-A)
 
 Merge-back from `isolation: worktree` agents to the milestone branch is driven by
