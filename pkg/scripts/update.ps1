@@ -1,22 +1,32 @@
 # aihaus update script (Windows PowerShell)
 # Re-syncs local .aihaus/ from pkg/ package source.
 # Preserves ALL local data: project.md, plans/, milestones/, memory/, etc.
+#
+# V5 (M022/Z9): user-global skill refresh + R3 dogfood guard + -Self + R9 copy-mode
+# FR-23: user-global refresh on every update
+# FR-24: R4 marker invariant -- never touch unmarked entries
+# FR-25: R3 dogfood guard -- skip git pull on dogfood cwd
+# FR-26: R9 copy-mode user-global refresh
+# ADR-260504-A §6.4
+#
 # Flags:
 #   -Target <path>   Update in <path> instead of $PWD
+#   -Self            Pull from origin before refreshing (used by 'aihaus self-update')
 #   -Help            Show usage
 
 [CmdletBinding()]
 param(
     [string]$Target = (Get-Location).Path,
     [switch]$Help,
-    [switch]$NoGitignore
+    [switch]$NoGitignore,
+    [switch]$Self
 )
 
 $ErrorActionPreference = 'Stop'
 
 function Show-Usage {
     @'
-Usage: update.ps1 [-Target <path>] [-NoGitignore]
+Usage: update.ps1 [-Target <path>] [-NoGitignore] [-Self]
 
 Re-syncs package-managed files in .aihaus/ from the aihaus package source.
 Local data (project.md, plans/, milestones/, memory/, etc.) is preserved.
@@ -26,11 +36,24 @@ Options:
   -NoGitignore     Skip the .gitignore backfill prompt entirely (non-interactive
                    CI runs, or users who have already declined and don't want
                    to be asked again).
+  -Self            Pull from origin before refreshing. Used by 'aihaus self-update'.
+                   Aborts with exit 3 if cwd is dogfood and has uncommitted changes.
   -Help            Show this message
 '@ | Write-Host
 }
 
 if ($Help) { Show-Usage; exit 0 }
+
+# ---------------------------------------------------------------------------
+# V5 (M022/Z9): Dogfood detection -- matches Z3's is_dogfood_cwd exactly.
+# Returns $true when the current working directory IS the central aihaus clone.
+# Predicate: pkg/scripts/install.sh + pkg/.aihaus/skills/ both exist in PWD.
+# ---------------------------------------------------------------------------
+function Test-DogfoodCwd {
+    $cwd = (Get-Location).Path
+    return (Test-Path (Join-Path $cwd 'pkg\scripts\install.sh')) -and `
+           (Test-Path (Join-Path $cwd 'pkg\.aihaus\skills'))
+}
 
 # Resolve package root (the directory containing this script's parent)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -46,6 +69,30 @@ $Target = (Resolve-Path $Target).Path
 
 $Aihaus = Join-Path $Target '.aihaus'
 $Claude = Join-Path $Target '.claude'
+
+# ---------------------------------------------------------------------------
+# V5 (M022/Z9): R3 dogfood guard + -Self / R8 dirty-dogfood abort
+# Must run BEFORE preflight checks that require .aihaus/ to exist.
+# ---------------------------------------------------------------------------
+if (Test-DogfoodCwd) {
+    if ($Self) {
+        # R8: -Self on dogfood -- abort if dirty
+        $porcelain = & git -C (Get-Location).Path status --porcelain 2>$null
+        if (-not [string]::IsNullOrWhiteSpace($porcelain)) {
+            Write-Error "aihaus self-update: uncommitted changes -- aborting (commit or stash manually first)"
+            exit 3
+        }
+        Write-Host "  dogfood mode + -Self: pulling from origin..."
+        & git -C (Get-Location).Path pull
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        # After git pull, PkgRoot may have shifted; recalculate derived paths.
+        $PkgAihaus = Join-Path $PkgRoot '.aihaus'
+        $PkgTemplates = Join-Path $PkgRoot 'templates'
+    } else {
+        # R3: dogfood cwd without -Self -- skip git pull, continue with skill refresh
+        Write-Host "  dogfood mode -- git pull skipped; commit local changes before self-update"
+    }
+}
 
 # ---- Preflight checks -------------------------------------------------------
 
@@ -471,6 +518,139 @@ if (-not (Test-Path $SettingsSrc)) {
 
 # ---- Update install mode marker ----------------------------------------------
 Set-Content -Path (Join-Path $Aihaus '.install-mode') -Value $Mode -NoNewline
+
+# ---------------------------------------------------------------------------
+# V5 (M022/Z9): User-global skill refresh -- FR-23/FR-24/FR-26; ADR-260504-A §6.3
+# Refreshes %USERPROFILE%\.claude\skills\aih-* entries that carry the .aihaus-managed marker.
+# R4 invariant: never touch entries without the marker.
+# R9 copy-mode: if user-global entries are copies (no junction/symlink), re-copy skill dir.
+# Orphan removal: remove entries for skills no longer in pkg\.aihaus\skills\ (marker required).
+# ---------------------------------------------------------------------------
+function Invoke-RefreshUserGlobalSkills {
+    $pkgSkillsDir = Join-Path $PkgRoot '.aihaus\skills'
+    $userHome = [System.Environment]::GetFolderPath('UserProfile')
+    $userGlobalSkills = Join-Path $userHome '.claude\skills'
+
+    # No user-global skills dir at all -- nothing to refresh.
+    if (-not (Test-Path $userGlobalSkills)) {
+        return
+    }
+
+    $refreshedCount = 0
+    $skippedCount = 0
+    $orphanCount = 0
+
+    # ---- Pass 1: refresh existing user-global entries that carry the marker ----
+    $existingEntries = @(Get-ChildItem -Path $userGlobalSkills -Filter 'aih-*' -Force `
+                         -ErrorAction SilentlyContinue)
+    foreach ($entry in $existingEntries) {
+        $skillName = $entry.Name
+        $targetDir = $entry.FullName
+        $markerFile = Join-Path $targetDir '.aihaus-managed'
+
+        # R4: only touch marker-owned entries.
+        if (-not (Test-Path $markerFile)) {
+            $skippedCount++
+            continue
+        }
+
+        $pkgSkillDir = Join-Path $pkgSkillsDir $skillName
+
+        # Orphan removal: skill no longer in package AND carries marker.
+        if (-not (Test-Path $pkgSkillDir)) {
+            Remove-Item -Recurse -Force $targetDir -ErrorAction SilentlyContinue
+            Write-Host "  user-global orphan removed: $skillName"
+            $orphanCount++
+            continue
+        }
+
+        # Detect copy-mode for this entry:
+        # copy-mode = real directory (not a reparse point / junction / symlink)
+        # OR .aihaus-copy-mode marker at user-global level.
+        $copyModeMarker = Join-Path $userHome '.claude\.aihaus-copy-mode'
+        $entryIsCopy = $false
+        if (Test-Path $copyModeMarker) {
+            $entryIsCopy = $true
+        } else {
+            $entryItem = Get-Item $targetDir -Force -ErrorAction SilentlyContinue
+            if ($entryItem -and ($entryItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                $entryIsCopy = $false  # junction or symlink -- link mode
+            } else {
+                $entryIsCopy = $true   # real directory -- copy mode
+            }
+        }
+
+        # Remove stale entry before re-creating.
+        if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            cmd /c "rmdir `"$targetDir`"" | Out-Null
+        } else {
+            Remove-Item -Recurse -Force $targetDir -ErrorAction SilentlyContinue
+        }
+
+        if ($entryIsCopy) {
+            # R9 copy-mode: re-copy skill dir from package.
+            Copy-Item -Path $pkgSkillDir -Destination $targetDir -Recurse -Force
+            # Re-drop .aihaus-managed marker.
+            Set-Content -LiteralPath (Join-Path $targetDir '.aihaus-managed') `
+                -Value "managed_by=aihaus`nsource=$pkgSkillDir" -NoNewline
+            Write-Host "  user-global refreshed (copy): $skillName"
+        } else {
+            # Link mode: re-create junction to latest pkg path.
+            $winTarget = $targetDir
+            $winSkill  = $pkgSkillDir
+            $jOut = cmd /c "mklink /J `"$winTarget`" `"$winSkill`"" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "  warn: junction refresh failed for $skillName; falling back to copy" -ForegroundColor Yellow
+                Copy-Item -Path $pkgSkillDir -Destination $targetDir -Recurse -Force
+            }
+            # Re-drop .aihaus-managed marker.
+            Set-Content -LiteralPath (Join-Path $targetDir '.aihaus-managed') `
+                -Value "managed_by=aihaus`nsource=$pkgSkillDir" -NoNewline
+            Write-Host "  user-global refreshed (link): $skillName"
+        }
+        $refreshedCount++
+    }
+
+    # ---- Pass 2: install user-global entries for new skills not yet present ----
+    if (Test-Path $pkgSkillsDir) {
+        $pkgSkills = @(Get-ChildItem -Path $pkgSkillsDir -Filter 'aih-*' -Directory `
+                       -ErrorAction SilentlyContinue)
+        foreach ($pkgSkill in $pkgSkills) {
+            $skillName   = $pkgSkill.Name
+            $pkgSkillDir = $pkgSkill.FullName
+            $targetDir   = Join-Path $userGlobalSkills $skillName
+
+            # Already handled in Pass 1 (exists) -- skip.
+            if ((Test-Path $targetDir) -or (Test-Path $targetDir -PathType Container)) {
+                continue
+            }
+
+            # Install new skill entry.
+            $copyModeMarker = Join-Path $userHome '.claude\.aihaus-copy-mode'
+            if (Test-Path $copyModeMarker) {
+                Copy-Item -Path $pkgSkillDir -Destination $targetDir -Recurse -Force
+            } else {
+                $winTarget = $targetDir
+                $winSkill  = $pkgSkillDir
+                $jOut = cmd /c "mklink /J `"$winTarget`" `"$winSkill`"" 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "  warn: junction for new skill $skillName failed; falling back to copy" -ForegroundColor Yellow
+                    Copy-Item -Path $pkgSkillDir -Destination $targetDir -Recurse -Force
+                }
+            }
+
+            Set-Content -LiteralPath (Join-Path $targetDir '.aihaus-managed') `
+                -Value "managed_by=aihaus`nsource=$pkgSkillDir" -NoNewline
+            Write-Host "  user-global new: $skillName"
+            $refreshedCount++
+        }
+    }
+
+    Write-Host ("  user-global skills: {0} refreshed, {1} skipped (unmanaged), {2} orphans removed" `
+                -f $refreshedCount, $skippedCount, $orphanCount)
+}
+
+Invoke-RefreshUserGlobalSkills
 
 # ---- Gitignore backfill (existing-install gate) ------------------------------
 # TODO: Document this carve-out prominently in v0.19.2 release notes --
