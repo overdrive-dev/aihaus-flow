@@ -98,9 +98,20 @@ if [ -x "$AUTOCLOSE_HOOK" ]; then
   bash "$AUTOCLOSE_HOOK" 2>/dev/null || true
 fi
 
-jq -n --arg status "${PLANNING_STATUS:-no artifacts yet}" --arg notice "$STASH_NOTICE" '{
+# --- Z7 / ADR-260504-A L4 — pre-install prime for user-global-only repos ---
+# Emits a one-line discovery nudge when aihaus is globally installed but the
+# per-repo overlay (.aihaus/) is absent from the current working directory.
+# D-Z0-B: OQ #6 FAIL by architecture (file-system presence insufficient);
+# Z3 already landed settings.json merge; this block is the per-repo
+# source-of-truth for the prime text that settings.json-registered hook uses.
+PREINSTALL_PRIME=""
+if [ -d "$HOME/.claude/skills/aih-install" ] && [ ! -d "$PWD/.aihaus" ]; then
+  PREINSTALL_PRIME=" aihaus is available globally; per-repo overlay not active in this directory — type /aih-install to enable."
+fi
+
+jq -n --arg status "${PLANNING_STATUS:-no artifacts yet}" --arg notice "$STASH_NOTICE" --arg prime "$PREINSTALL_PRIME" '{
   hookSpecificOutput: {
     hookEventName: "SessionStart",
-    additionalContext: ("aihaus status: " + $status + ". Use /aih-init to bootstrap project.md, /aih-plan to scope work, /aih-milestone to build, /aih-help for all commands." + $notice)
+    additionalContext: ("aihaus status: " + $status + ". Use /aih-init to bootstrap project.md, /aih-plan to scope work, /aih-milestone to build, /aih-help for all commands." + $notice + $prime)
   }
 }'
