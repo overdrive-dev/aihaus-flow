@@ -243,6 +243,29 @@ grace-window for currently-running milestone (`git branch --show-current`) preve
 self-completion sequence trap. M024 introduces NO new opt-out env vars. See
 `pkg/.aihaus/skills/_shared/autonomy-protocol.md` §M024 invariants for runtime composition rule.
 
+Since v0.29.0 / M025 (ADR-260508-A), `pkg/.aihaus/hooks/autonomy-guard.sh` ships the **LSDD
+pack** — 16 anchored cadence-noun + Sigo-question + task-fraction patterns under
+`AIHAUS_LSDD_REGEX=0` env opt-out (composes byte-identical with M005 fast-path + M023 GSP-DS
+pack: 11 + 13 + 16 = 40 active patterns total). Every cadence-noun pattern (`Phase`, `Round`,
+`Stage`, `Tranche`, `Etapa`, `Bloco`, `Fase`, `Rodada`, `Seção`) anchors to a completion-prose
+verb-set on the same line via `.*(complete|completa|completo|done|paralelo|seguir|working|
+remaining|shipped|finalizada|finalizado|pronta|in progress)` — anchoring preserves §M023
+catalog at L147+L487 ("Etapa/Bloco/Fase/Phase X/Y" enumeration as legitimate decomposition
+seams) AND ~30+ legitimate `## Phase N` H2 headers in skill prose at runtime emission.
+**Onda DROPPED** per F1 absorption (no fabricated user mandate). Known-uncovered slots
+(Tier/Cycle/Iteration/Sprint/Slice/Pass/Bucket/Cohort/Greek-letters) have a mechanical M026
+trigger via `.claude/audit/autonomy-gate.jsonl` haiku-backstop monitoring (30-day window
+post-release). `pkg/.aihaus/agents/roadmapper.md` L64-83 cadence-noun template excised →
+"Delivery 1/Delivery 2/N" substitution (avoids `/aih-milestone` skill-name collision and
+LSDD-uncovered slots). `pkg/.aihaus/agents/brainstorm-synthesizer.md` Round 1/Round 2 panel
+mechanics + `*-r2.md` filename convention preserved (load-bearing per F-CRIT-2). The L353
+serialization invariant (M017+) is canonical and explicit — `--parallel` flag NOT introduced;
+`AIHAUS_PARALLEL_EXEC` token reserved for M026+ if dogfood ever reproduces story-level fan-out.
+Smoke Check 76 enforces M027 architectural decision deadline via semantic-gate ADR-presence
+(requires `Status: Accepted` + token from `{denylist-extension, haiku-classifier,
+whitelist-on-cadence}` + `Date:` line). 2 fixture-fail tests prove not green-but-vacuous.
+M025 introduces `AIHAUS_LSDD_REGEX=0` opt-out env var.
+
 ## Merge-Back (M017 / ADR-M017-A)
 
 Merge-back from `isolation: worktree` agents to the milestone branch is driven by
