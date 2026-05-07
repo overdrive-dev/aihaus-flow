@@ -7,7 +7,7 @@
 | frontend-dev | `.aihaus/agents/aihaus-frontend-dev.md` | frontend source tree |
 | qa | `.aihaus/agents/aihaus-reviewer.md` | `{milestone_dir}/execution/reviews/**` |
 
-Skip frontend-dev if backend-only (vice versa). Spawn second dev if >8 stories.
+Skip frontend-dev if backend-only (vice versa). A second dev (e.g. backend-dev-2) MAY be added when >8 stories warrant parallel ownership zones — but **story dispatch remains sequential** per the L353 serialization invariant in `annexes/execution.md` (ADR-260508-A I1, M017+). Multiple devs spawn one-at-a-time per story, never simultaneously across stories.
 
 ## Task Description Template
 Every task MUST include:

@@ -350,7 +350,7 @@ Read story files from `stories/`. For each story, TaskCreate with:
 
 Chain by story dependency order. First story blocked by "Verify plan coherence"; last story blocks completion. After all story tasks, create final task `Run completion protocol`. Assign stories to teammates, monitor progress, handle QA cycles.
 
-**Story serialization (prevents commit attribution race):** complete each story's full cycle — implement → QA pass → merge-back → commit → `git status` clean — BEFORE spawning the next story's teammate.
+**Story serialization (prevents commit attribution race):** complete each story's full cycle — implement → QA pass → merge-back → commit → `git status` clean — BEFORE spawning the next story's teammate. **This is the linear-default invariant since M017 (per ADR-260508-A I1):** story-level dispatch is sequential by design; no `--parallel` flag exists. The token `AIHAUS_PARALLEL_EXEC` is reserved for M026+ if dogfood ever reproduces story-level fan-out; do not introduce parallel story dispatch in any milestone without an accompanying ADR amendment.
 
 **Merge-back:** after each story's QA passes, invoke `bash .aihaus/hooks/merge-back.sh --story S<NN> --manifest <path> --worktree <path>`. On exit 0, proceed to next story. On non-zero exit, HALT and surface refusal grammar to user per `aih-milestone/annexes/merge-back-recovery.md`.
 

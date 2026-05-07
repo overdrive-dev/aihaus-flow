@@ -102,8 +102,7 @@ For each candidate manifest with unfinished work AND `Metadata.status` ∈ {`run
   > Recommend: **continue here** with the remaining stories OR **re-promote** the unfinished
   > stories as a feature scoped to one window via `/aih-feature --plan <new-slug>`. Which?
 
-> **This is the ONLY M023-introduced user-facing question in this skill.** C4 gates against
-> false positives from routine context-window resumes (per CHECK F6 / ADR-260506-A I-08).
+> **ONLY user-facing question in this skill** (M023). C4 gates against context-window resume false positives (CHECK F6 / ADR-260506-A I-08). **M025 widening (ADR-260508-A I2):** C4 also fires on LSDD pack matches (cadence+verb, Sigo, fraction); F6 prose round-trip `bash autonomy-guard.sh` exit 0 invariant binding.
 
 ### 5. Candidate selection
 

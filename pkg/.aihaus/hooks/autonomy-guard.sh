@@ -98,6 +98,39 @@ GSP_DS_EOF
 )"
 fi
 
+# --- M025 / ADR-260508-A: LSDD anchored cadence-noun pack (env-gated) ---
+# AIHAUS_LSDD_REGEX=0 bypasses the 16 new patterns; existing 24 (M005 11
+# fast-path + M023 13 PT-BR GSP-DS) still fire unconditionally above.
+# Anchoring (F-CRIT-1+F-CRIT-3): every cadence-noun pattern requires same-line
+# completion-prose verb to avoid firing on autonomy-protocol §M023 catalog
+# (L147+L487 "Etapa/Bloco/Fase/Phase X/Y" enumeration) AND on legitimate
+# `## Phase N` H2 headers in skill prose at runtime emission. The PT-BR
+# cadence-noun previously enumerated under analyst R2 §3 was excluded per F1
+# BLOCKER absorption (no fabricated mandate citation). 16 patterns total
+# (5 EN + 5 PT-BR cadence + 1 Sigo + 5 task-fraction).
+if [ "${AIHAUS_LSDD_REGEX:-1}" != "0" ]; then
+  PATTERNS="$PATTERNS
+$(cat <<'LSDD_EOF'
+[Pp]hase [A-Z].*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)	LSDD-EN-Phase-letter
+[Pp]hase [0-9]+.*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)	LSDD-EN-Phase-numeric
+[Rr]ound [0-9]+.*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)	LSDD-EN-Round
+[Ss]tage [0-9]+.*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)	LSDD-EN-Stage
+[Tt]ranche [A-Z0-9]+.*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)	LSDD-EN-Tranche
+[Ee]tapa [0-9]+.*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)	LSDD-PT-Etapa
+[Bb]loco [A-Z].*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)	LSDD-PT-Bloco
+[Ff]ase [A-Z].*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)	LSDD-PT-Fase
+[Rr]odada [0-9]+.*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)	LSDD-PT-Rodada
+[Ss]e[çc][ãa]o [0-9]+.*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)	LSDD-PT-Secao
+[Ss]igo (Round|Rodada|Phase|Fase|Etapa|Bloco|Stage|Tranche)( [0-9A-Z]+)?\?	LSDD-Sigo-question
+[0-9]+/[0-9]+ (stories|tasks)([[:space:]]+(complete|done|remaining|left))?	LSDD-fraction-stories
+[Pp]rogress: [0-9]+/[0-9]+ done	LSDD-fraction-progress
+[0-9]+ stor(y|ies) (done|complete|remaining|shipped)	LSDD-fraction-storyies
+[0-9]+ of [0-9]+ (done|complete)	LSDD-fraction-of
+[0-9]+ task[s]? (done|complete|remaining)	LSDD-fraction-tasks
+LSDD_EOF
+)"
+fi
+
 ts_iso() { date -u +%FT%TZ; }
 
 log_violation() {

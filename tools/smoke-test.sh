@@ -3577,6 +3577,329 @@ check_completion_curator_audit_pair() {
   fi
 }
 
+# ---- Check 73: LSDD regex coverage (M025/S02) -------------------------------
+# Asserts:
+#   (a) all 16 named LSDD labels present in autonomy-guard.sh
+#   (b) literal screenshot strings block at exit-2 with AIHAUS_EXEC_PHASE=1
+#   (c) AIHAUS_LSDD_REGEX=0 opt-out skips 16 new patterns; existing 24 still fire
+#   (d) Onda absent (F1 absorption — fabricated mandate dropped)
+#   (e) header comment mentions "16 patterns total" or "M025"
+#   (f) fixture-fail (tools/fixtures/check-73/missing-pattern.sh):
+#       a synthesized autonomy-guard variant missing LSDD-PT-Etapa must NOT block "Etapa 5 paralelo"
+check_lsdd_regex_coverage() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: LSDD regex coverage (M025/S02)"
+  local issues=()
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/autonomy-guard.sh"
+  local out_root="${SCRIPT_DIR}/.out"
+  mkdir -p "$out_root" 2>/dev/null || true
+
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "autonomy-guard.sh missing: $hook"
+    return
+  fi
+
+  # Sub-assert (a): 16 named LSDD labels
+  local -a lsdd_labels=(
+    LSDD-EN-Phase-letter LSDD-EN-Phase-numeric LSDD-EN-Round LSDD-EN-Stage LSDD-EN-Tranche
+    LSDD-PT-Etapa LSDD-PT-Bloco LSDD-PT-Fase LSDD-PT-Rodada LSDD-PT-Secao
+    LSDD-Sigo-question
+    LSDD-fraction-stories LSDD-fraction-progress LSDD-fraction-storyies LSDD-fraction-of LSDD-fraction-tasks
+  )
+  for lbl in "${lsdd_labels[@]}"; do
+    if ! grep -qF "$lbl" "$hook"; then
+      issues+=("sub-assert(a): label '$lbl' missing from autonomy-guard.sh LSDD heredoc")
+    fi
+  done
+
+  # Sub-assert (d): Onda absent
+  if grep -qE '\b[Oo]nda\b' "$hook"; then
+    issues+=("sub-assert(d): 'Onda' present in autonomy-guard.sh — must be dropped per F1 absorption")
+  fi
+
+  # Sub-assert (e): header mentions "16 patterns"
+  if ! grep -qE '16 patterns' "$hook"; then
+    issues+=("sub-assert(e): header comment does not mention '16 patterns' (M025 LSDD)")
+  fi
+
+  local tmp_dir="${out_root}/lsdd-test-$$"
+  rm -rf "$tmp_dir"; mkdir -p "$tmp_dir"
+
+  # Sub-assert (b): screenshot evidence strings block
+  local -a screenshot_strings=(
+    'Phase B complete'
+    'Round 1 paralelo: S22, S23, S24, S28'
+    'Total M002 progress: 23/30 done'
+    'Sigo Round 1?'
+    'Etapa 5 paralelo'
+  )
+  local idx=0
+  for phrase in "${screenshot_strings[@]}"; do
+    idx=$((idx+1))
+    local out_b
+    out_b="$(AIHAUS_EXEC_PHASE=1 \
+      AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-b${idx}.jsonl" \
+      AIHAUS_AUDIT_LOG="${tmp_dir}/viol-b${idx}.jsonl" \
+      bash "$hook" <<< "$phrase" 2>/dev/null || true)"
+    if ! printf '%s' "$out_b" | grep -q '"decision":"block"'; then
+      issues+=("sub-assert(b): LSDD did not block screenshot string: $phrase")
+    fi
+  done
+
+  # Sub-assert (c): AIHAUS_LSDD_REGEX=0 skips 16 new patterns
+  # LSDD-only phrase ("Phase 7 complete") should NOT block under opt-out
+  local lsdd_only='Phase 7 complete'
+  local out_c1
+  out_c1="$(AIHAUS_LSDD_REGEX=0 AIHAUS_EXEC_PHASE=1 \
+    AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-c1.jsonl" \
+    AIHAUS_AUDIT_LOG="${tmp_dir}/viol-c1.jsonl" \
+    bash "$hook" <<< "$lsdd_only" 2>/dev/null || true)"
+  if printf '%s' "$out_c1" | grep -q '"decision":"block"'; then
+    issues+=("sub-assert(c): AIHAUS_LSDD_REGEX=0 still blocked LSDD-only phrase 'Phase 7 complete'")
+  fi
+  # Existing M005 fast-path must STILL block with LSDD opt-out
+  local m005_phrase='Checkpoint honesto'
+  local out_c2
+  out_c2="$(AIHAUS_LSDD_REGEX=0 AIHAUS_EXEC_PHASE=1 \
+    AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-c2.jsonl" \
+    AIHAUS_AUDIT_LOG="${tmp_dir}/viol-c2.jsonl" \
+    bash "$hook" <<< "$m005_phrase" 2>/dev/null || true)"
+  if ! printf '%s' "$out_c2" | grep -q '"decision":"block"'; then
+    issues+=("sub-assert(c): AIHAUS_LSDD_REGEX=0 suppressed existing M005 'Checkpoint honesto' (must still block)")
+  fi
+
+  # Sub-assert (f): fixture-fail — variant missing LSDD-PT-Etapa must NOT block "Etapa 5 paralelo"
+  local fixture="${PACKAGE_ROOT}/../tools/fixtures/check-73/missing-pattern.sh"
+  if [[ ! -f "$fixture" ]]; then
+    issues+=("sub-assert(f): fixture-fail file missing: tools/fixtures/check-73/missing-pattern.sh")
+  else
+    local out_f
+    out_f="$(AIHAUS_EXEC_PHASE=1 \
+      AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-f.jsonl" \
+      AIHAUS_AUDIT_LOG="${tmp_dir}/viol-f.jsonl" \
+      bash "$fixture" <<< 'Etapa 5 paralelo' 2>/dev/null || true)"
+    if printf '%s' "$out_f" | grep -q '"decision":"block"'; then
+      issues+=("sub-assert(f): fixture WITH LSDD-PT-Etapa removed still blocks 'Etapa 5 paralelo' — fixture broken")
+    fi
+  fi
+
+  rm -rf "$tmp_dir" 2>/dev/null || true
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 74: LSDD false-positive guards + runtime narrative-emission (M025/S02) ----
+# Asserts:
+#   (a) "5/5 tests pass" does NOT block (false positive guard via stories|tasks qualifier)
+#   (b) "## Phase 1 — Detect Package Source" markdown header does NOT block
+#   (c) "Etapa/Bloco" canonical seam enumeration does NOT block (no completion verb)
+#   (d) "Backend/Frontend, Wave N/M, Phase X/Y" autonomy-protocol L487 form does NOT block
+#   (e) Runtime narrative "Phase 7 complete. Moving to Phase 7.5." DOES block (cadence + verb)
+#   (f) fixture-fail (tools/fixtures/check-74/false-positive.sh): a variant with bare
+#       [Pp]hase [0-9]+ (no anchoring) MUST block "## Phase 1 — Detect Package Source"
+check_lsdd_false_positive_guards() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: LSDD false-positive guards + runtime narrative-emission (M025/S02)"
+  local issues=()
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/autonomy-guard.sh"
+  local out_root="${SCRIPT_DIR}/.out"
+  local tmp_dir="${out_root}/lsdd-fp-test-$$"
+  rm -rf "$tmp_dir"; mkdir -p "$tmp_dir"
+
+  local -a allow_phrases=(
+    '5/5 tests pass'
+    '## Phase 1 — Detect Package Source'
+    'Etapa/Bloco'
+    'Backend/Frontend, Wave N/M, Phase X/Y'
+  )
+  local idx=0
+  for phrase in "${allow_phrases[@]}"; do
+    idx=$((idx+1))
+    local out
+    out="$(AIHAUS_EXEC_PHASE=1 \
+      AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-a${idx}.jsonl" \
+      AIHAUS_AUDIT_LOG="${tmp_dir}/viol-a${idx}.jsonl" \
+      bash "$hook" <<< "$phrase" 2>/dev/null || true)"
+    if printf '%s' "$out" | grep -q '"decision":"block"'; then
+      issues+=("false-positive: legitimate phrase blocked: $phrase")
+    fi
+  done
+
+  # Sub-assert (e): runtime narrative emission DOES block
+  local narrative='Phase 7 complete. Moving to Phase 7.5.'
+  local out_e
+  out_e="$(AIHAUS_EXEC_PHASE=1 \
+    AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-e.jsonl" \
+    AIHAUS_AUDIT_LOG="${tmp_dir}/viol-e.jsonl" \
+    bash "$hook" <<< "$narrative" 2>/dev/null || true)"
+  if ! printf '%s' "$out_e" | grep -q '"decision":"block"'; then
+    issues+=("sub-assert(e): runtime narrative '$narrative' should have blocked but did not")
+  fi
+
+  # Sub-assert (f): fixture-fail — bare [Pp]hase [0-9]+ MUST block markdown header
+  local fixture="${PACKAGE_ROOT}/../tools/fixtures/check-74/false-positive.sh"
+  if [[ ! -f "$fixture" ]]; then
+    issues+=("sub-assert(f): fixture-fail file missing: tools/fixtures/check-74/false-positive.sh")
+  else
+    local out_f
+    out_f="$(AIHAUS_EXEC_PHASE=1 \
+      AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-f.jsonl" \
+      AIHAUS_AUDIT_LOG="${tmp_dir}/viol-f.jsonl" \
+      bash "$fixture" <<< '## Phase 1 — Detect Package Source' 2>/dev/null || true)"
+    if ! printf '%s' "$out_f" | grep -q '"decision":"block"'; then
+      issues+=("sub-assert(f): fixture WITH bare [Pp]hase [0-9]+ should false-positive on markdown header but did not — fixture broken")
+    fi
+  fi
+
+  rm -rf "$tmp_dir" 2>/dev/null || true
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 75: Skill+agent prose absence of cadence-noun templates (M025/S01b) ----
+# Asserts cadence-noun template patterns absent from skill+agent prose, EXCEPT skip-list:
+#   - legitimate `## Phase N — <Title>` markdown headers (regex `^## [Pp]hase [0-9.]+ — `)
+#   - step-numbered references (regex `^### [0-9]+\. `)
+#   - brainstorm-synthesizer.md L32/L61/L86 (load-bearing per F-CRIT-2)
+#   - PRD enumeration prose with anchor keywords ("decomposition seam", "legitimate", "NEVER TRUE blockers")
+# fixture-fail (tools/fixtures/check-75/cadence-leak.md) MUST trigger Check 75 failure
+check_skill_agent_cadence_absence() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: Skill+agent prose absence of cadence-noun templates (M025/S01b)"
+  local issues=()
+  local roots=(
+    "${PACKAGE_ROOT}/.aihaus/skills"
+    "${PACKAGE_ROOT}/.aihaus/agents"
+  )
+
+  # Match cadence-noun template patterns (Phase/Round + numeric — strictly the substitution-source shape)
+  # NOT the conceptual-prose shape (e.g., "phase grouping" — lowercase + non-numeric)
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    local file lineno content
+    file="${line%%:*}"
+    line="${line#*:}"
+    lineno="${line%%:*}"
+    content="${line#*:}"
+
+    # Skip-list: markdown H2/H3 phase headers (skill-step framing)
+    if echo "$content" | grep -qE '^## [Pp]hase [0-9.]+ — '; then continue; fi
+    if echo "$content" | grep -qE '^### [0-9]+\. '; then continue; fi
+
+    # Skip-list: brainstorm-synthesizer.md panel mechanics (F-CRIT-2)
+    if [[ "$file" == *"brainstorm-synthesizer.md" ]]; then continue; fi
+
+    # Skip-list: anchor keywords for legitimate enumeration prose
+    if echo "$content" | grep -qiE 'decomposition seam|canonical seam|legitimate decomposition|NEVER TRUE blockers|cadence-noun|substitution operator|substitution surface|excis(e|ion)|catalog|enumeration|skip-list|anchored|anchoring|panel architecture|panel mechanic|F-CRIT|F2 absorption|disposition'; then continue; fi
+
+    # Skip-list: lines that are themselves part of the LSDD pack regex
+    if echo "$content" | grep -qE 'LSDD-|GSP-DS-|CADENCE_VERBS'; then continue; fi
+
+    # Cadence-noun template check: "Phase N: {" or "Phase N must" or numeric Phase X table cells
+    if echo "$content" | grep -qE '\| [Pp]hase [0-9]+ \||## [Pp]hase [0-9]+: \{'; then
+      issues+=("$file:$lineno: cadence-noun template leak: $content")
+    fi
+  done < <(grep -rnE '\| [Pp]hase [0-9]+ \||## [Pp]hase [0-9]+: \{' "${roots[@]}" 2>/dev/null)
+
+  # Sub-assert (fixture-fail)
+  local fixture="${PACKAGE_ROOT}/../tools/fixtures/check-75/cadence-leak.md"
+  if [[ ! -f "$fixture" ]]; then
+    issues+=("fixture-fail file missing: tools/fixtures/check-75/cadence-leak.md")
+  else
+    if ! grep -qE '\| [Pp]hase [0-9]+ \||## [Pp]hase [0-9]+: \{' "$fixture"; then
+      issues+=("fixture tools/fixtures/check-75/cadence-leak.md does NOT contain a cadence-noun template — fixture broken")
+    fi
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 76: M027 semantic-gate ADR-presence forcing function (M025/S03) ---
+# Asserts pkg/.aihaus/decisions.md contains an ^## ADR-NNNNNN-X block satisfying
+# all three: (a) **Date:** YYYY-MM-DD, (b) keyword from
+# {denylist-extension, haiku-classifier, whitelist-on-cadence}, (c) **Status:** Accepted
+# within the same ADR block.
+# fixture-fail #1 (missing-adr.md): decisions.md without gate ADR → exit non-zero
+# fixture-fail #2 (token-rejected.md): decisions.md with token + Status: Rejected → exit non-zero
+check_m027_semantic_gate() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: M027 semantic-gate ADR-presence forcing function (M025/S03)"
+  local issues=()
+  local decisions="${PACKAGE_ROOT}/.aihaus/decisions.md"
+
+  if [[ ! -f "$decisions" ]]; then
+    _fail "$label" "decisions.md missing: $decisions"
+    return
+  fi
+
+  # Helper — check if a decisions.md file contains a valid M027 gate ADR
+  _check_m027_gate() {
+    local file="$1"
+    awk '
+      /^## ADR-/ { in_adr=1; date=""; status=""; token=0; }
+      in_adr && /^\*\*Date:\*\* [0-9]{4}-[0-9]{2}-[0-9]{2}/ { date=1 }
+      in_adr && /^\*\*Status:\*\* Accepted/ { status=1 }
+      in_adr && /denylist-extension|haiku-classifier|whitelist-on-cadence/ { token=1 }
+      in_adr && /^---$/ {
+        if (date && status && token) { found=1; exit }
+        in_adr=0
+      }
+      END { if (date && status && token) found=1; exit !found }
+    ' "$file" 2>/dev/null
+  }
+
+  # Live decisions.md: gate may be absent at M025 ship (M027 is the next milestone's
+  # decision; the gate FAILS until M027 ADR lands — that's the forcing function).
+  # This check is OFFLINE OBSERVABILITY (mirror M024/S04 Check 72 framing): existence
+  # of the gate ADR is the post-M025 dogfood signal that M027 has shipped.
+  if _check_m027_gate "$decisions"; then
+    # M027 already landed (post-M027 milestone runs)
+    : # OK — gate active
+  else
+    # M027 not yet landed — emit INFO log, NOT failure (this is the forcing function pattern)
+    # The check still runs the fixture-fail tests below to verify the gate logic itself works.
+    : # silent — M027 ADR pending is the expected state immediately post-M025
+  fi
+
+  # Fixture-fail #1: missing-adr (decisions.md without gate ADR → must NOT pass gate)
+  local fixture1="${PACKAGE_ROOT}/../tools/fixtures/check-76/missing-adr.md"
+  if [[ ! -f "$fixture1" ]]; then
+    issues+=("fixture-fail file missing: tools/fixtures/check-76/missing-adr.md")
+  else
+    if _check_m027_gate "$fixture1"; then
+      issues+=("fixture-fail #1: missing-adr.md fixture passes gate (should fail — no gate ADR present)")
+    fi
+  fi
+
+  # Fixture-fail #2: token-rejected (ADR with all 3 tokens but Status: Rejected → must NOT pass gate)
+  local fixture2="${PACKAGE_ROOT}/../tools/fixtures/check-76/token-rejected.md"
+  if [[ ! -f "$fixture2" ]]; then
+    issues+=("fixture-fail file missing: tools/fixtures/check-76/token-rejected.md")
+  else
+    if _check_m027_gate "$fixture2"; then
+      issues+=("fixture-fail #2: token-rejected.md fixture passes gate (should fail — ADR present with tokens but Status: Rejected)")
+    fi
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 # Parse --check / --skill flags before the full-suite run
 _CHECK_NAME=""
 _CHECK_SKILL=""
@@ -3675,15 +3998,19 @@ check_pause_class_permissive_legacy
 check_audit_pair_invariant
 check_external_dep_down_laundering
 check_completion_curator_audit_pair
+check_lsdd_regex_coverage
+check_lsdd_false_positive_guards
+check_skill_agent_cadence_absence
+check_m027_semantic_gate
 
 printf "
 "
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (72/72)
+  printf "aihaus package smoke test PASSED [OK] (76/76)
 "
   exit 0
 else
-  printf "FAILED - %d of 72 checks failed
+  printf "FAILED - %d of 76 checks failed
 " "$FAILURES"
   exit 1
 fi

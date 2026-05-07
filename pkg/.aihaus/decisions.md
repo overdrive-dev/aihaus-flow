@@ -2570,3 +2570,85 @@ PLAN.md contains 3 OQs without `[STATUS]` tags. Conjunct (a) FAILS. Orchestrator
 ### Worked Example #3 — Partial fail mode (CHECK absence-#5)
 
 CHECK.md staged but NOT committed. `git log -1 --format=%H -- CHECK.md` returns empty → gate refused (gate-untrustworthy). Fall back to full E3. **Fail-closed (safe default).** Recovery: `git commit`, re-invoke; gate evaluates fresh on Worked Example #1 path. Honors ADR-260502-A determinism gate principle.
+
+---
+
+## ADR-260508-A — LSDD Extension + Phase 0 Verification + Linear-Default Invariants
+
+**Date:** 2026-05-07
+**Status:** Accepted
+**Milestone:** M025-260506-linear-exec-noun-extension
+
+### Context
+
+Two concerns surfaced post-M024 v0.28.0 from a different project's M002 dogfood (screenshot evidence): (1) user expressed linear-execution preference ("default do milestone é linear"); (2) the model emitted "Phase B complete", "Round 1 paralelo", "23/30 done", "Sigo Round 1 (4 paralelo)?" — exactly what M024 contrarian F7 predicted. M024 excised Wave from skill prose; the model substituted Phase nouns from the agent template surface (`roadmapper.md` L64-83) which M023+M024 left untouched. The named pattern is **LSDD — Lexical Substitution at Decomposition Drift** (analyst R1 nomenclature). This ADR closes the substitution-operator's source surface + extends the autonomy-guard runtime denylist + introduces a Phase 0 verification gate pattern.
+
+### Decision
+
+**4 §Decision invariants (I1-I4):**
+
+#### I1 — Linear-default at story-loop layer
+
+The L353 invariant in `pkg/.aihaus/skills/aih-milestone/annexes/execution.md` ("complete each story's full cycle ... BEFORE spawning the next story's teammate") is the canonical M025 invariant since M017 — verified at S00 via documentary evidence (M023 + M024 commit logs show monotonic per-story commits, zero batched-parallel sha lineage). **No `--parallel` flag introduced** (S00 Branch A). The token `AIHAUS_PARALLEL_EXEC` is reserved for M026+ if dogfood ever reproduces story-level fan-out under future conditions; introducing it requires accompanying ADR amendment. S00 Branch B (flag plumbing) remains an option for M026; S00 Branch C (ambiguous outcome) defaults to Branch A + records OQ for M026 follow-up dogfood with broader fixture matrix.
+
+#### I2 — LSDD 16-pattern reservation (all anchored to CADENCE_VERBS)
+
+`pkg/.aihaus/hooks/autonomy-guard.sh` LSDD heredoc (gated by `AIHAUS_LSDD_REGEX=0` env opt-out). 16 patterns total:
+
+- **5 EN cadence-noun:** Phase letter, Phase numeric, Round, Stage, Tranche
+- **5 PT-BR cadence-noun:** Etapa, Bloco, Fase, Rodada, Seção (`Se[çc][ãa]o` for ç/c + ã/a normalization)
+- **1 Sigo-question:** `[Ss]igo (Round|Rodada|Phase|Fase|Etapa|Bloco|Stage|Tranche)( [0-9A-Z]+)?\?`
+- **5 task-fraction laundering:** `[0-9]+/[0-9]+ (stories|tasks)`, `Progress: x/y done`, `x stor(y|ies)`, `x of y`, `x task[s]`
+
+**Substrate-conflict resolution (per plan-checker F-CRIT-1+F-CRIT-3):** every cadence-noun pattern anchors to completion-prose verb-set on the same line via `.*(complete|completa|completo|done|paralelo|seguir|working|remaining|shipped|finalizada|finalizado|pronta|in progress)`. Without anchoring, bare patterns would fire on autonomy-protocol §M023 catalog at L147+L487 ("Etapa/Bloco/Fase/Phase X/Y" enumeration as legitimate decomposition seams) AND on ~30+ legitimate `## Phase N` H2 headers in skill prose at runtime emission (`aih-brainstorm` Phase 1, 1.5, 2, 3, 4, 5, 6, 7, 7.5, 8; `aih-bugfix`, `aih-feature`, `aih-init`, `aih-plan`, `aih-effort`).
+
+**Onda DROPPED** per F1 BLOCKER absorption (analyst R2's restoration was decorated with a fabricated mandate citation; no technical merit).
+
+**Known-uncovered substitution slots (per F7 — mechanical M026 trigger):** Tier, Cycle, Iteration, Sprint, Slice, Pass, Bucket, Cohort, Greek-letters (α/β/γ). If `.claude/audit/autonomy-gate.jsonl` records a haiku-backstop block within 30 days post-M025 release on prose containing any of these tokens, M026 brainstorm SHALL extend the LSDD pack with anchored regex for the offending token. Mechanical, not aspirational.
+
+#### I3 — Agent-template excision (roadmapper.md only)
+
+Cadence nouns excised from `pkg/.aihaus/agents/roadmapper.md` L64-83 (4 occurrences in 1 file): "Phase 1: {Name}" / "Phase 2: {Name}" / Coverage Matrix `| REQ-001 | Phase 1 | SC-1.1 |` → **"Delivery 1: {Name}" / "Delivery 2: {Name}" / `| REQ-001 | Delivery 1 | SC-1.1 |`** (per plan-checker F-HIGH-7 — "Delivery {N}" avoids the `/aih-milestone` skill-name semantic collision that "Milestone {N}" would create, and is uncovered by F7 LSDD slots). The substitution operator's source surface treated.
+
+**Explicitly out-of-scope (per plan-checker F-CRIT-2):** `pkg/.aihaus/agents/brainstorm-synthesizer.md` Round 1/Round 2 references at L32/L61/L86 are load-bearing 2-round panel mechanics + system-wide `*-r2.md` filename convention; preserved intentionally. Excising would break the synthesizer's input-spec contract.
+
+**Explicitly out-of-scope (per ASSUMPTIONS A1.1):** `pkg/.aihaus/agents/eval-auditor.md:37` + `pkg/.aihaus/agents/eval-planner.md:40` step-headers (skill-step framing, not orchestrator-read templates). M026 follow-up if S00 dogfood reveals propagation.
+
+#### I4 — M027 architectural decision deadline (mechanical semantic-gate, NOT declarative theater)
+
+Smoke Check 76 fails iff a `^## ADR-NNNNNN-X` block in `pkg/.aihaus/decisions.md` satisfying **all three** is absent: (a) `**Date:** YYYY-MM-DD` line present; (b) body contains at least one keyword from `{denylist-extension, haiku-classifier, whitelist-on-cadence}`; (c) body contains `**Status:** Accepted` (NOT `Rejected` / `Deferred` / `Proposed`) within the same ADR block. The `Status: Accepted` requirement (per plan-checker F-HIGH-6) prevents "we considered X and rejected it" prose from passing the gate. Fixture-fail acceptance: 2 fixtures (missing-ADR + token-rejected) prove the check is not green-but-vacuous. **Replaces R2's declarative deadline theater** per CHECK F4.
+
+### Migration
+
+- **Existing manifests:** unaffected. RUN-MANIFEST stays at v4 (no schema bump).
+- **Existing autonomy-guard:** the new LSDD pack is appended after the M023 GSP-DS heredoc with a distinct `LSDD_EOF` terminator. M005 fast-path (11 patterns) + M023 GSP-DS pack (13 PT-BR patterns) + M025 LSDD pack (16 anchored patterns) = 40 active patterns total, composing byte-identical at runtime (per ADR-260506-A composition rule + ADR-260507-A workflow-shape parity rule).
+- **Existing skill prose:** Wave/Group excisions from M024 (`aih-milestone/annexes/execution.md`) preserved byte-identical. New L353 invariant strengthening adds 1 sentence (Branch A — S01a). New `roadmapper.md` "Delivery {N}" template + cadence-noun substitution rationale block (S01b).
+- **Existing F6 message (M023 §4c stranded-pause UX):** preserved byte-identical. M025 widening note added inline (`bash autonomy-guard.sh` round-trip exit 0 invariant binding) — extends §4c blockquote without exceeding 199-line cap.
+
+### Rollback
+
+- **`AIHAUS_LSDD_REGEX=0`** env opt-out skips the 16 new patterns; existing 24 (M005 11 + M023 13) still fire. Single-flip rollback.
+- **revert `roadmapper.md`** edit restores "Phase {N}" template; LSDD substrate keeps anchored patterns (zero false-positive risk because L64-83 prose has no completion verbs on same line).
+- **Smoke Check 76 fixture-fail tests** validate the gate before any rollback; if M027 ADR is rolled back, Check 76 starts failing immediately, surfacing the regression mechanically.
+
+### References
+
+- ADR-001 (single-writer files-as-state)
+- ADR-M005-A (autonomy protocol — RESOLVED via canonical-vocabulary protection in §M025 amendment; anchoring strategy preserves L147+L487 catalog)
+- ADR-M011-A/B (autonomy state gate + statusLine)
+- ADR-M017-A (merge-back per-story commits)
+- ADR-M017-C (same-file rule — split S01 → S01a + S01b per F-CRIT-4)
+- ADR-260506-A (M023 GSP-DS — direct predecessor, composes byte-identical)
+- ADR-260507-A (M024 workflow-shape parity — direct predecessor, composes byte-identical)
+
+### Worked Example #1 — FITS
+
+Model emits "Round 1 paralelo: S22, S23, S24, S28" mid-execution. autonomy-guard.sh `LSDD-EN-Round` pattern matches (`[Rr]ound [0-9]+.*paralelo`). Stop hook returns `decision: block`. Orchestrator falls back to safer default per autonomy-protocol §TRUE-blocker test, logs choice in RUN-MANIFEST progress log, proceeds silently. No A/B/C menu surfaced.
+
+### Worked Example #2 — DOES NOT FIT (legitimate seam catalog)
+
+User pastes "Backend/Frontend, Wave N/M, Batch A/B, Phase X/Y, Etapa/Bloco" in a brainstorm conversation explaining the canonical decomposition-seam catalog. NO LSDD pattern fires (no completion verb on same line as cadence noun). NO false-positive block. Worked example invariant preserves the autonomy-protocol §M023 enumeration semantics.
+
+### Worked Example #3 — Partial fail mode (uncovered slot)
+
+Model substitutes "Tier 1 done" mid-execution (uncovered per F7). NO LSDD pattern matches (Tier not in 5 EN cadence list). autonomy-guard.sh hot-path passes; haiku backstop catches via the conservative JSON-out prompt OR M026 brainstorm extends the pack post-detection per the mechanical trigger in I2 §F7 inventory. Honest about the denylist arms-race; mechanical trigger converts admission into binding M026 work.
