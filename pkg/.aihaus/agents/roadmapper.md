@@ -61,8 +61,8 @@ Every v1 requirement maps to exactly one phase. No orphans. No duplicates.
 ```markdown
 # Project Roadmap
 
-## Phase 1: {Name}
-**Goal:** {What must be true when this phase completes}
+## Delivery 1: {Name}
+**Goal:** {What must be true when this delivery completes}
 **Requirements:** [REQ-001, REQ-002, ...]
 
 ### Success Criteria
@@ -70,17 +70,19 @@ Every v1 requirement maps to exactly one phase. No orphans. No duplicates.
 2. System {observable state}
 
 ### Dependencies
-- None | Phase N must complete first
+- None | Delivery N must complete first
 
 ---
 
-## Phase 2: {Name}
+## Delivery 2: {Name}
 ...
 
 ## Coverage Matrix
-| Requirement | Phase | Success Criterion |
-|-------------|-------|-------------------|
-| REQ-001 | Phase 1 | SC-1.1 |
+| Requirement | Delivery | Success Criterion |
+|-------------|----------|-------------------|
+| REQ-001 | Delivery 1 | SC-1.1 |
+
+> **Cadence-noun substitution rationale (M025 / ADR-260508-A I3):** "Delivery {N}" is the canonical roadmap-grouping noun; "Phase {N}" was excised as the LSDD substitution operator's training surface (per F2 absorption). "Delivery" avoids the `/aih-milestone` skill-name collision that "Milestone {N}" would create, and is uncovered by the LSDD-uncovered slot list (Tier/Cycle/Sprint/etc.) per F7. Do not revert to "Phase" in roadmap output prose.
 ```
 
 ## Process
