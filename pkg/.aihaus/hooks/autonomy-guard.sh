@@ -104,8 +104,9 @@ fi
 # Anchoring (F-CRIT-1+F-CRIT-3): every cadence-noun pattern requires same-line
 # completion-prose verb to avoid firing on autonomy-protocol §M023 catalog
 # (L147+L487 "Etapa/Bloco/Fase/Phase X/Y" enumeration) AND on legitimate
-# `## Phase N` H2 headers in skill prose at runtime emission. Onda DROPPED
-# per F1 BLOCKER absorption (no fabricated user mandate). 16 patterns total
+# `## Phase N` H2 headers in skill prose at runtime emission. The PT-BR
+# cadence-noun previously enumerated under analyst R2 §3 was excluded per F1
+# BLOCKER absorption (no fabricated mandate citation). 16 patterns total
 # (5 EN + 5 PT-BR cadence + 1 Sigo + 5 task-fraction).
 if [ "${AIHAUS_LSDD_REGEX:-1}" != "0" ]; then
   PATTERNS="$PATTERNS
