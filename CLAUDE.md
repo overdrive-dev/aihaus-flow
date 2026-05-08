@@ -266,6 +266,31 @@ Smoke Check 76 enforces M027 architectural decision deadline via semantic-gate A
 whitelist-on-cadence}` + `Date:` line). 2 fixture-fail tests prove not green-but-vacuous.
 M025 introduces `AIHAUS_LSDD_REGEX=0` opt-out env var.
 
+Since v0.30.0 / M026 (ADR-260508-B), `/aih-brainstorm` ships the **Brainstorm Artifact
+Actionability** stack closing the BRIEF→PLAN absorption gap. Empirical baseline across
+M023+M024+M025: plan-checker catches 3-4 CRITICAL BLOCKERs every PLAN with only 9-45% of
+those tracing back to BRIEF Open Questions. M026 fixes two layered defects: schema-level
+(Alt D inline OQ sub-fields + Synthesis stance-marker) + substrate-level (Phase 6.5
+`--substrate` opt-in). **Alt D OQ schema (per ADR-260508-B I1)** — every Open Question ships
+inline `**Recommendation:**` + `**Panel-Confidence:** H/M/L` + `**Defer if:**` + `**Source:**`
+sub-fields. H/M Panel-Confidence requires `**Source:**` citation grammar
+(`PERSPECTIVE-<role>.md:Lstart-Lend` OR `CONVERSATION.md ## Turn N` OR
+`pkg/.aihaus/<path>:Lstart-Lend`); Smoke Check 77 enforces. Synthesis bullets ship
+`**Stance:**` markers eliminating two-surface scanning. **Phase 6.5 substrate-scan (per
+ADR-260508-B I2)** — opt-in `--substrate` flag spawns `assumptions-analyzer` (REUSED, not
+new agent build); skill writes SUBSTRATE-FINDINGS.md verbatim from agent return (PM Path B
+Option α — preserves synthesizer single-file write scope + ADR-001). Catches 55-64% of
+substrate-discoverable BLOCKERs per F1-VERIFICATION; complements (not replaces) plan-checker.
+**Phase 7.5 sub-field validator (per ADR-260508-B I3)** — awk-based per-OQ block scoping
+extends existing 8-H2-headers check; field-presence-permissive gate skips legacy schema-v1
+BRIEFs. **Panelist-template composed rules (per ADR-260508-B I4)** — R1+R2 panelist prompts
+include mandatory PM ground-check (citation grammar) + UX argue-against (R2 dissent OR
+`NO-R1-DISSENT-JUSTIFIED`). Annex-split mandatory (`aih-brainstorm/annexes/sub-field-validator.md`,
+`/substrate-scan.md`, `/panelist-template.md`) keeps SKILL.md ≤199 line cap. Cost-cap +1 per
+flow when `--substrate`; max combo = 14. M026 adds Smoke Check 77 (count 76 → 77) with 2
+fixture-fail tests (missing-recommendation + source-prose-violation) proving gate not
+green-but-vacuous on M025 PM-cohort fabrication anti-pattern.
+
 ## Merge-Back (M017 / ADR-M017-A)
 
 Merge-back from `isolation: worktree` agents to the milestone branch is driven by
