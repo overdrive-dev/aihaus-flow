@@ -2652,3 +2652,87 @@ User pastes "Backend/Frontend, Wave N/M, Batch A/B, Phase X/Y, Etapa/Bloco" in a
 ### Worked Example #3 — Partial fail mode (uncovered slot)
 
 Model substitutes "Tier 1 done" mid-execution (uncovered per F7). NO LSDD pattern matches (Tier not in 5 EN cadence list). autonomy-guard.sh hot-path passes; haiku backstop catches via the conservative JSON-out prompt OR M026 brainstorm extends the pack post-detection per the mechanical trigger in I2 §F7 inventory. Honest about the denylist arms-race; mechanical trigger converts admission into binding M026 work.
+
+---
+
+## ADR-260508-B — Brainstorm Artifact Actionability + Phase 6.5 Substrate Scan + Alt D OQ Schema
+
+**Date:** 2026-05-08
+**Status:** Accepted
+**Milestone:** M026-260507-brainstorm-actionability
+
+### Context
+
+The brainstorm pipeline's BRIEF.md ends on `## Open Questions` (unresolved questions) followed by `## Suggested Next Command`. There is no section that commits the panel to a binding path-forward for each question raised. Empirical evidence across M023+M024+M025: plan-checker catches **3-4 CRITICAL BLOCKERs every PLAN**, BRIEF→PLAN line expansion runs **3.8×-4.3×**, and only **9-45%** of plan-checker BLOCKERs trace back to BRIEF Open Questions (per F1-VERIFICATION.md STRICT/LENIENT classification). Two layered defects: schema-level (Recommendations buried in Synthesis prose; consumers can't distinguish panel-bound decisions from deferred-to-plan) and substrate-level (synthesizer is fan-in, not substrate auditor; 55-64% of BLOCKERs are substrate-discoverable per F1-VERIFICATION).
+
+The M026 brainstorm went 3 rounds (R1 + R2 + walk-backs); contrarian surfaced 12 findings (1 BLOCKER + 6 HIGH + 4 MEDIUM + 1 LOW); F1-VERIFICATION ratified 55-64% catch-rate; ASSUMPTIONS verified F5 BLOCKER (UX β option violates synthesizer constraints — must use PM Path B Option α); plan-checker REVISE absorbed 3 CRITICAL + 4 HIGH + 3 MED/LOW inline.
+
+### Decision
+
+**4 §Decision invariants (I1-I4):**
+
+#### I1 — Alt D OQ sub-field schema (committed-contract amendment)
+
+`brainstorm-synthesizer.md` BRIEF.md schema extended with per-OQ inline sub-fields:
+```markdown
+1. **<Question text>**
+   - **Recommendation:** <single-classification path-forward; NOT A/B/C menu>
+   - **Panel-Confidence:** H | M | L
+   - **Defer if:** <criterion under which OQ defers to PLAN-time>
+   - **Source:** <PERSPECTIVE-<role>.md:Lstart-Lend | CONVERSATION.md ## Turn N | pkg/.aihaus/<path>:Lstart-Lend>
+```
+**Forward-only schema bump** (no migration; legacy 9 BRIEFs remain schema-v1 per M023 field-presence-gate precedent). H/M `**Panel-Confidence:**` requires `**Source:**` citation grammar matching one of three regexes (Smoke Check 77 enforces). L Panel-Confidence may use prose attribution. **`**Confidence:**` renamed to `**Panel-Confidence:**`** — synthesizer cannot read substrate; "Panel-" qualifier makes scope explicit. Synthesis section ships `**Stance:**` markers per bullet (eliminates two-surface scanning per UX FM-8).
+
+#### I2 — Phase 6.5 `--substrate` opt-in via assumptions-analyzer reuse
+
+`/aih-brainstorm` Phase 6.5 (NEW between Phase 6 research + Phase 7 synthesis) spawned by opt-in `--substrate` flag (matches `--research` precedent). Catches **55-64% of CRITICAL BLOCKERs** per F1-VERIFICATION substrate-discoverable classification (regex case-shape, transcript coverage gaps, gate producer absence, autonomy-protocol catalog conflicts, Phase numeric ubiquity, brainstorm-synthesizer load-bearing refs). NOT first-order — **complements** plan-checker's adversarial-review domain (36-45% remaining BLOCKERs: enum loophole, sequence trap, scope explosion, K-002 ownership). assumptions-analyzer **reused** (NOT new agent build) per F7 — 80% of proposed sub-agent's spec already exists in agent's `## Output Format` (Confident/Likely/Unclear confidence + evidence-with-file-paths). Skill writes SUBSTRATE-FINDINGS.md from agent return (PM Path B Option α per F5 — preserves synthesizer single-file write scope + ADR-001 single-writer). SUBSTRATE-FINDINGS.md schema = assumptions-analyzer's existing output format (NOT extended).
+
+#### I3 — Phase 7.5 sub-field validator (Smoke Check 77 + 2 fixture-fail tests)
+
+Phase 7.5 schema validator extended with awk-based per-OQ block scoping (Check 76 `_check_m027_gate` analog). Validates Alt D fields presence + `**Source:**` grammar regex for H/M Panel-Confidence. Field-presence permissive: legacy schema-v1 BRIEFs (no `**Panel-Confidence:**`) skip sub-field check. Composes with existing 8-H2-headers check (compose, don't replace). 2 fixture-fail tests prove gate not green-but-vacuous: missing-recommendation.md (OQ#1 missing field) + source-prose-violation.md (H Panel-Confidence + prose-only Source attribution).
+
+#### I4 — Panelist-template composed prompt rules (R1+R2 binding)
+
+Phase 3 R1 + Phase 4 R2 panelist scaffolds gain mandatory sub-rules from `annexes/panelist-template.md`: (1) PM ground-check rule (citation grammar: `<file>:<line>` or `CONVERSATION.md ## Turn N`) + (2) UX argue-against rule (R2 must dissent OR emit `NO-R1-DISSENT-JUSTIFIED` fail-closed token) + (3) Alt D Recommendation discipline (R2 perspectives MAY end with `## Recommendations` for synthesizer aggregation). **Drops:** analyst's scope-dissent rule (redundant per analyst R2's own concession) + UX auto-R3 escape hatch (walked back per UX R2 — composed prompt eliminates need; hard cap stays 2 rounds).
+
+### Migration
+
+- **Existing BRIEFs (9 pre-M026):** unchanged. Field-presence-permissive gate skips sub-field validation when `**Panel-Confidence:**` absent. Legacy schema-v1 remains valid forever.
+- **Existing autonomy-guard / SKILL surface:** unchanged. M026 adds opt-in flag + new annex files + thin SKILL.md references; pre-M026 invocations work unchanged.
+- **Existing assumptions-analyzer contract:** unchanged. `## Output Format` byte-identical; only `## Input` section gained 1-sentence brainstorm-shape note.
+
+### Rollback
+
+- **`--substrate` flag absent** → Phase 6.5 skipped; brainstorm reverts to pre-M026 behavior.
+- **Phase 7.5 sub-field validator failure on M026+ BRIEF** → field-presence gate skips legacy; canonical M026+ BRIEFs auto-validated with explicit error on missing fields.
+- **Synthesizer schema rollback** → revert brainstorm-synthesizer.md amendments; legacy schema-v1 BRIEFs continue working; M026+ BRIEFs need re-synthesis.
+- **Smoke Check 77 fixture-fail validation** ensures rollback paths surface immediately if mechanical gate degrades.
+
+### References
+
+- ADR-001 (single-writer files-as-state)
+- ADR-003 (skill invocation marker)
+- ADR-260507-A (M024 consumer-self-validating gate — BRIEF.md is consumer contract)
+- ADR-260508-A (M025 LSDD pack — forward-only schema + mechanical-gate pattern precedent)
+- ADR-M003-E (Disposition column / iteration policy default 1)
+- ADR-M017-C (same-file rule — S1b+S2+S3 line-range disjointness within shared SKILL.md)
+
+### Worked Example #1 — FITS
+
+M027 brainstorm runs `--substrate`; assumptions-analyzer surfaces 4 substrate findings (3 Confident + 1 Unclear); skill writes SUBSTRATE-FINDINGS.md verbatim from agent return; synthesizer reads SUBSTRATE-FINDINGS.md as new input; binds 3 of 4 findings into Alt D Open Questions with H Panel-Confidence + file:line `**Source:**` citations; Phase 7.5 sub-field validator passes; `/aih-plan --from-brainstorm` consumes BRIEF.md mechanically; plan-checker REVISE finds 1-2 BLOCKERs (vs M025's 4-BLOCKER baseline).
+
+### Worked Example #2 — DOES NOT FIT (default flow)
+
+Brainstorm runs without `--substrate` (default off); no Phase 6.5; SUBSTRATE-FINDINGS.md absent; synthesizer's Phase 7 prompt's "if present" guard handles cleanly. BRIEF still ships Alt D schema (Phase 7.5 sub-field validator passes on Alt D OQ structure regardless of substrate-scan presence). Plan-checker behavior matches M025 baseline.
+
+### Worked Example #3 — Partial fail mode
+
+Brainstorm runs `--substrate`; assumptions-analyzer fails or returns malformed payload (no `## Assumptions` header). Skill catches failure (read-fail / schema-fail), writes minimal SUBSTRATE-FINDINGS.md with `(scan failed; see CONVERSATION.md)` body, logs error to CONVERSATION.md as substrate turn block. Synthesizer's "if present" guard handles cleanly — BRIEF still ships Alt D from R1/R2 inputs.
+
+### Worked Example #4 — Legacy schema-v1 BRIEF compat
+
+Consumer (`/aih-plan --from-brainstorm 260413-port-to-cursor-feasibility`) reads pre-M026 BRIEF.md without Alt D fields. Phase 7.5 sub-field validator detects `**Panel-Confidence:**` absent → field-presence permissive gate fires → validator skips OQ sub-field check, runs only existing 8-H2-headers check. BRIEF accepted; no false-positive failure on legacy artifacts. M027+ legacy BRIEFs continue working without re-synthesis.
+
+### Worked Example #5 — Fabricated-citation rejection (M025 anti-pattern caught at synthesis layer)
+
+Synthesizer emits OQ#1 with `**Panel-Confidence:** H` + `**Source:** "discussed by panel during R2 convergence"` (prose-only, no file:line). Check 77 grammar regex fails (no PERSPECTIVE-*.md / CONVERSATION.md Turn / pkg/.aihaus path match). BRIEF.md schema validation aborts with explicit `BRIEF.md at <slug> failed Source grammar — OQ#1 Panel-Confidence:H requires file:line citation`. M025 PM-cohort fabrication anti-pattern caught at synthesis layer (not just panelist layer).

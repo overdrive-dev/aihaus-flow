@@ -26,6 +26,7 @@ Parse from `$ARGUMENTS`:
 - `--panel "a,b,c"` (optional; comma-separated agent `name` values; max 5).
 - `--deep` (optional; enables Round 2).
 - `--research` (optional; enables Phase 6).
+- `--substrate` (optional, M026+; enables Phase 6.5 substrate-scan via assumptions-analyzer reuse — see ADR-260509-A I2).
 
 ## --panel Whitelist Validation (up-front)
 Whitelist = all agents under `pkg/.aihaus/agents/` **minus the three write-capable agents** (`implementer`, `frontend-dev`, `code-fixer`). Validated at skill invocation — **before any Agent spawn**. If any `--panel` member is not on the whitelist, abort with this exact string:
@@ -35,16 +36,16 @@ Invalid --panel member(s): <comma-separated bad names>. Valid agents are listed 
 ```
 
 ## Cost-Cap Pre-check (before any spawn)
-Count planned invocations as `panelists × rounds + 1 contrarian + 1 synthesizer + (1 if --research else 0)`. Rounds is `2` with `--deep`, else `1`. Cap table (binding):
+Count planned invocations as `panelists × rounds + 1 contrarian + 1 synthesizer + (1 if --research else 0) + (1 if --substrate else 0)`. Rounds is `2` with `--deep`, else `1`. Cap table (binding):
 
 | Flow | Panelists | Invocations | Cap |
 |------|-----------|-------------|-----|
 | default | 3 | 5 | 5 |
 | `--deep` | 3 | 8 | 8 |
 | `--deep --research` | 3 | 9 | 9 |
-| max (`--panel` 5 + `--deep` + `--research`) | 5 | 13 | 13 |
+| max (`--panel` 5 + `--deep` + `--research` + `--substrate`) | 5 | 14 | 14 |
 
-Hard ceilings regardless: 5 panelists, 2 rounds, 1 contrarian, 1 research agent. If the count exceeds the cap for the requested flag combination, abort with: `Invocation cap exceeded: requested <N>, cap <C> for flags <flags>. Reduce --panel size or drop --deep/--research.` Counted before spawn — not discovered mid-run.
+`--substrate` (M026+) adds +1 invocation and +1 cap to any flow above (e.g., `--deep --substrate` = 9). Hard ceilings: 5 panelists, 2 rounds, 1 contrarian, 1 research, 1 substrate-scan. Abort: `Invocation cap exceeded: requested <N>, cap <C> for flags <flags>. Reduce --panel size or drop --deep/--research/--substrate.`
 
 ## Phase 1 — Intake
 
@@ -98,23 +99,20 @@ Default panel size: 3 agents. Pick by topic-pattern match against this table:
 
 ## Phase 3 — Round 1 (PARALLEL)
 
-**No prior precedent in the repo for this specific fan-out mechanic.** `aih-milestone/annexes/execution.md` (Step E7) describes end-gate parallelism in prose but does not document the single-turn multi-Agent-call pattern. Story 4 (this skill) authors it first.
-
-**Mechanic — instruction to the operating assistant (binding):**
-
-> In a single assistant turn, issue one Agent tool call per panelist. Wait for all to return before proceeding to Phase 4.
+**Mechanic (binding):** In a single assistant turn, issue one Agent tool call per panelist. Wait for all to return before proceeding to Phase 4.
 
 Per-panelist prompt scaffolds:
 - Read `.aihaus/brainstorm/[slug]/CONVERSATION.md` (Turn 1 is all that is visible).
 - Write your perspective to `.aihaus/brainstorm/[slug]/PERSPECTIVE-<your-role>.md` where `<your-role>` is your agent `name` field.
 - Return a one-paragraph summary as your string response — the skill distills it into your turn block.
+- **Mandatory sub-rules (M026+ / ADR-260509-A I4):** include the 3 composed sub-rules from `annexes/panelist-template.md` (citation grammar + argue-against + Alt D Recommendation discipline) in every R1 panelist prompt.
 
 **After all panelists return**, the skill (not any agent) appends turn blocks to `CONVERSATION.md` in **alphabetical-by-role order** via heredoc. Ordering is load-bearing — Story 8 criterion 3 asserts turn counts assuming this determinism. Each block: `## Turn N — <role> — <ISO-8601>` then the distilled body then `---`.
 
 ## Phase 4 — Round 2 (SEQUENTIAL, opt-in `--deep`)
 Default: **skipped.** Round 2 is flag-only (`--deep`) — no auto-enable based on contrarian or any other runtime signal. Rationale: predictable cost.
 
-If `--deep`: for each panelist in alphabetical-by-role order, re-spawn with full `CONVERSATION.md` visible. Agent writes `PERSPECTIVE-<role>-r2.md` and returns a summary. Skill appends one turn per panelist immediately after that panelist returns (sequential, not batched — each later panelist should see prior Round 2 turns).
+If `--deep`: for each panelist in alphabetical-by-role order, re-spawn with full `CONVERSATION.md` visible. Agent writes `PERSPECTIVE-<role>-r2.md` and returns a summary. Skill appends one turn per panelist immediately after that panelist returns (sequential, not batched — each later panelist should see prior Round 2 turns). **R2 mandatory sub-rules (M026+ / ADR-260509-A I4):** R2 prompts MUST include argue-against discipline + ground-check rule from `annexes/panelist-template.md`. Failure mode: emit `NO-R1-DISSENT-JUSTIFIED` (not silent ratification).
 
 ## Phase 5 — Contrarian
 Spawn `contrarian` (`subagent_type: "contrarian"`) with full `CONVERSATION.md` + all `PERSPECTIVE-*.md` in scope. Contrarian has tools `Read, Grep, Glob` — **no Write.** It returns its findings as a string payload terminating with `CHALLENGES-FOUND: <N>` or `NO-FINDINGS-JUSTIFIED`.
@@ -129,12 +127,13 @@ Default: **skipped.** If `--research`, pick exactly one researcher by topic fit:
 
 Spawn. The researcher writes `.aihaus/brainstorm/[slug]/RESEARCH.md` with VERIFIED / CITED / ASSUMED provenance tags (convention from `phase-researcher.md:48`). Skill appends a research turn block.
 
+## Phase 6.5 — Substrate Scan (opt-in `--substrate`, M026+)
+Default: **skipped.** If `--substrate`, see `annexes/substrate-scan.md` (ADR-260509-A I2 — catches 55-64% of substrate-discoverable BLOCKERs).
+
 ## Phase 7 — Synthesis
 Spawn `brainstorm-synthesizer` (`subagent_type: "brainstorm-synthesizer"`). It reads every `PERSPECTIVE-*.md` + `CHALLENGES.md` + `RESEARCH.md` (if present) + `CONVERSATION.md` and writes `BRIEF.md`. The synthesizer fails closed if `CONVERSATION.md` has fewer than 3 `## Turn ` lines; surface its error verbatim and halt — no partial `BRIEF.md`.
 
-**Prompt-construction discipline — LOAD-BEARING.** The synthesizer's agent definition (`brainstorm-synthesizer.md`) owns the BRIEF.md 8-header schema as a Committed Contract. The operator MUST pass a minimal prompt that delegates schema entirely to the agent. Do NOT re-list section names, do NOT describe what to "cover," do NOT rename headers to fit the current topic. Re-specifying section names in the prompt is a contract violation — downstream `/aih-plan --from-brainstorm` and `/aih-milestone --from-brainstorm` consumers assert the exact 8 headers and will abort on drift.
-
-Use this minimal prompt template verbatim:
+**Prompt-construction discipline — LOAD-BEARING.** The synthesizer agent owns BRIEF.md's 8-header schema as Committed Contract. Pass a minimal prompt; do NOT re-list section names or rename headers — that's a contract violation. Use the template verbatim:
 
 ```
 You are the synthesizer for the brainstorm at `.aihaus/brainstorm/<slug>/`.
@@ -142,8 +141,6 @@ Read CONVERSATION.md, every PERSPECTIVE-*.md, CHALLENGES.md, and RESEARCH.md if 
 Produce .aihaus/brainstorm/<slug>/BRIEF.md per your agent definition's committed 8-header schema.
 Return a one-line string after writing: the path to BRIEF.md and the Suggested Next Command line.
 ```
-
-Additional context about panelist disagreements or contrarian findings belongs in the agent's *inputs* (the perspective files and CHALLENGES.md), not in the spawn prompt.
 
 ## Phase 7.5 — BRIEF.md Schema Validation
 After the synthesizer returns, the skill (not the agent) reads `.aihaus/brainstorm/[slug]/BRIEF.md` and asserts the 8 H2 headers are present in exact order, spelling, and capitalization:
@@ -164,6 +161,8 @@ If any required header is missing or out-of-order, abort with this exact string 
 ```
 BRIEF.md at <slug> failed schema validation — missing/out-of-order section(s): <list>. Re-run /aih-brainstorm <slug> or patch BRIEF.md manually before promoting.
 ```
+
+**Sub-field validation (M026+ Alt D per ADR-260509-A I3):** after H2 pass, validate per-OQ Alt D fields + Source grammar — see `annexes/sub-field-validator.md`. Legacy-permissive: BRIEFs without `**Panel-Confidence:**` skip sub-field check.
 
 Pass-through is silent — success emits no output and proceeds to Phase 8.
 
