@@ -41,7 +41,7 @@ awk '
     }
     # Citation grammar check on H/M Panel-Confidence (per ADR-260509-A I1)
     if ((conf_value == "H" || conf_value == "M") && src_line) {
-      if (!match(src_line, /(PERSPECTIVE-[a-z-]+(\.r2)?\.md:L?[0-9]+-L?[0-9]+|CONVERSATION\.md ## Turn [0-9]+|pkg\/\.aihaus\/.+:L?[0-9]+-L?[0-9]+|\.aihaus\/.+ (F[0-9]+|A[0-9]+|L[0-9]+))/)) {
+      if (!match(src_line, /(PERSPECTIVE-[a-z-]+(\.r2)?\.md:L?[0-9]+-L?[0-9]+|CONVERSATION\.md ## Turn [0-9]+|pkg\/\.aihaus\/.+:L?[0-9]+-L?[0-9]+|\.aihaus\/.+[ `]+(F[0-9]+|A[0-9]+|L[0-9]+)|[A-Z][A-Z-]*\.md[ `]+(F[0-9]+|A[0-9]+|L[0-9]+))/)) {
         printf "OQ#%d Panel-Confidence:%s requires file:line citation in **Source:**; got: %s\n", oq_num, conf_value, src_line
         exit 1
       }
