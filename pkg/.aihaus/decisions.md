@@ -2736,3 +2736,438 @@ Consumer (`/aih-plan --from-brainstorm 260413-port-to-cursor-feasibility`) reads
 ### Worked Example #5 — Fabricated-citation rejection (M025 anti-pattern caught at synthesis layer)
 
 Synthesizer emits OQ#1 with `**Panel-Confidence:** H` + `**Source:** "discussed by panel during R2 convergence"` (prose-only, no file:line). Check 77 grammar regex fails (no PERSPECTIVE-*.md / CONVERSATION.md Turn / pkg/.aihaus path match). BRIEF.md schema validation aborts with explicit `BRIEF.md at <slug> failed Source grammar — OQ#1 Panel-Confidence:H requires file:line citation`. M025 PM-cohort fabrication anti-pattern caught at synthesis layer (not just panelist layer).
+
+## ADR-260509-V — `--substrate` tier-conditional default-on (M027/S6)
+
+**Date:** 2026-05-08
+**Status:** Proposed
+**Milestone:** M027-260508-skills-agents-perf-review
+**Supersedes:** ADR-260508-B I2 (opt-in `--substrate` flag — partial supersession; only the default-eligibility logic; rest of I2 preserved)
+
+### Context
+
+ADR-260508-B I2 introduced `--substrate` as an opt-in flag for `/aih-brainstorm` Phase 6.5, catching 55-64% of substrate-discoverable BLOCKERs per F1-VERIFICATION. Empirically, brainstorms invoked with `--research` or `--deep` (research-flagged tiers) carry higher BLOCKER density than default brainstorms — they typically explore new territory where substrate-divergence risk is highest. M027 dogfood evidence (analyst-brief §3 S6) supports flipping the default for the cohort that benefits most while preserving opt-in semantics for the lighter-weight default tier.
+
+### Decision
+
+`--substrate` defaults to **ON** when invoked under `/aih-brainstorm --research` or `/aih-brainstorm --deep`. Default brainstorms (no research-tier flag) remain opt-in (must pass `--substrate` explicitly to enable Phase 6.5).
+
+New flag `--no-substrate` opts out, valid ONLY in combination with `--research`/`--deep`. Invoking `--no-substrate` without a research-tier flag produces an explicit error (`--no-substrate is meaningful only with --research/--deep; default brainstorms are already opt-in`).
+
+Cost-cap recalculation: `--research --substrate` combo cost unchanged (was 14 max, remains 14 max — `--substrate` was already part of the worst-case combo). Default brainstorm cost cap drops by 1 (substrate-scan is no longer in the default-tier worst case).
+
+### Options Considered
+
+1. **Tier-conditional default-on (CHOSEN)** — flips for research tiers; preserves opt-in for default. Pros: ships catch-rate gain to cohort that benefits most; preserves backward-compat for users invoking `/aih-brainstorm` without flags; cost-cap gain for default tier. Cons: introduces second flag (`--no-substrate`) which expands the surface.
+2. **Default-on for all tiers** — flips universally. Pros: simplest mental model. Cons: substantially raises default-tier cost cap; risks Goodhart's law (substrate-scan everywhere → noise overwhelms signal in low-stakes brainstorms).
+3. **Status quo (opt-in everywhere)** — keep ADR-260508-B I2 unchanged. Pros: zero churn. Cons: catch-rate evidence under-utilized; users invoking `--research`/`--deep` are signaling high-stakes brainstorms but get default-off substrate.
+
+### Rationale
+
+Research-tier brainstorms are the cohort where substrate-discoverable BLOCKERs are most painful (they consume more rounds, attract more contrarian energy, and typically gate larger downstream commitments). Default-on within those tiers turns the catch-rate evidence into a behavior win without affecting low-stakes brainstorms.
+
+### Consequences
+
+- `aih-brainstorm/SKILL.md` Phase 6.5 logic flips at 2 sites (eligibility check + flag enumeration). Line-count budget preserved (≤199).
+- Substrate-scan annex unchanged.
+- New `--no-substrate` flag documented in SKILL.md + annexes.
+- Cost-cap row in SKILL.md updated.
+- ADR-260508-B I2 §Decision-block prose retains validity for the opt-in semantics; only the default-eligibility line is superseded.
+
+### Rollback
+
+- Revert `aih-brainstorm/SKILL.md` Phase 6.5 eligibility check to opt-in.
+- Remove `--no-substrate` flag handler.
+- Substrate-scan annex untouched (no rollback needed there).
+
+### References
+
+- ADR-260508-B (M026 substrate-scan introduction)
+- analyst-brief §3 S6 (supersedence preferred over amendment)
+
+## ADR-260509-W — `plan-calibrator` agent + adaptive-interrogator calibration-gate (M027/S5)
+
+**Date:** 2026-05-08
+**Status:** Proposed
+**Milestone:** M027-260508-skills-agents-perf-review
+**Anchored to:** ADR-260508-B Path B α (orchestrator-applies pattern), ADR-001 (single-writer), ADR-M014-B (resume classification framework)
+
+### Context
+
+Empirical evidence across M023+M024+M025+M026: plan-checker catches 3-4 CRITICAL BLOCKERs every PLAN, with only 9-45% tracing back to BRIEF Open Questions. M026 closed the BRIEF→PLAN absorption gap at the brainstorm layer (ADR-260508-B). The next layer down — PRD ↔ user business-rules divergence — remains a recurring blind spot. plan-checker verifies plan-achieves-goal but does NOT verify plan-encodes-user's-actual-business-rules. The pattern repeats: defaults applied without ask in PRD, gaps in analyst-brief, plan-checker CHECK.md flagging inconsistencies that a 60-second user confirmation would have prevented.
+
+The brainstorm panel (M027 brainstorm 260508-skills-agents-perf-review) locked DECISION A: a new agent `plan-calibrator` runs adaptive interrogation AFTER plan-checker emits CHECK.md, conducts turn-by-turn confirmation with the user, and writes BUSINESS-RULES.md with source-line citations. Trigger: ambiguity-surface-detection. Stop condition: business-rules coverage exhaustion + user "no more questions" sinal. NEVER auto-stop heuristic.
+
+### Decision
+
+**New agent `plan-calibrator`** ships in `pkg/.aihaus/agents/plan-calibrator.md` with the 8-field frontmatter:
+
+```yaml
+---
+name: plan-calibrator
+description: Adaptive interrogator. Reads PRD + analyst-brief + architecture + CHECK.md, surfaces ambiguities (defaults applied without ask, gaps in brief, plan-checker inconsistencies), and conducts turn-by-turn confirmation with the user until business-rules coverage is exhausted or user signals "no more questions". Read-only — returns BUSINESS-RULES.md payload to parent skill.
+tools: Read, Grep, Glob, Bash
+model: opus
+effort: max
+color: red
+memory: project
+resumable: false
+checkpoint_granularity: step
+---
+```
+
+**Cohort:** `:adversarial-scout` (preset-immune; baseline opus/max). Post-S10 cohort fork: `:adversarial` with per-agent `effort: max` override.
+
+**Trigger:** ambiguity-surface-detection — defaults applied without ask in PRD, gaps in analyst-brief, plan-checker CHECK.md inconsistencies. NOT story-count threshold. A trivial plan with no ambiguity skips natural — calibrator detects zero ambiguities and emits `BUSINESS-RULES-EXHAUSTED` after turn 1.
+
+**Stop condition:**
+- Explicit user signal ("no more questions" / "satisfeito" / "encerrar" / "stop") in turn, OR
+- `--no-calibrate` re-invoked mid-flow (escape hatch), OR
+- Calibrator emits `BUSINESS-RULES-EXHAUSTED` terminating token, OR
+- Hard cap 30 turns (safety guard).
+
+NEVER auto-stop heuristic.
+
+**Pipeline anchor:** AFTER plan-checker emits CHECK.md. Calibrator verifies `git log -1 --format=%H -- .aihaus/plans/<slug>/CHECK.md` SHA against HEAD CHECK.md write-commit (idempotência per Risk R4 — same pattern as M024 short-circuit).
+
+**Tools whitelist:** Read, Grep, Glob, Bash (Bash restricted to `git log -1 --format=%H` for SHA verification — NEVER `git apply`, `git checkout`, or shell-out to runners). NO `Write`, NO `Edit`. Output is a string payload returned to parent skill, which writes BUSINESS-RULES.md verbatim and applies PRD patches via `Edit` (orchestrator-applies pattern preserves ADR-001 single-writer).
+
+**Resume classification:** `resumable: false` + `checkpoint_granularity: step` per ADR-M014-B. Adaptive interrogation has per-step state (turn N depends on user reply to turn N-1) that cannot be re-derived idempotently. Multi-cycle, similar to `debug-session-manager`.
+
+**Scope-fence vs assumptions-analyzer (Risk R1 mitigation):** assumptions-analyzer is brainstorm Phase 6.5 only (per ADR-260508-B I2) — codebase-grounded; reads panelist-named files in `.aihaus/brainstorm/<slug>/PERSPECTIVE-*.md`. plan-calibrator is plan/feature/milestone post-CHECK.md only — conversation-grounded; reads CHECK.md inconsistencies + analyst-brief gaps + PRD defaults. Distinct trigger, distinct surface, distinct lifecycle. NO double-run because the brainstorm phase ends before the plan-checker phase begins.
+
+**Single-session composition (HIGH #7 closure — `--from-brainstorm` path):** for the `/aih-brainstorm <slug>` → `/aih-plan --from-brainstorm <slug>` (or `/aih-feature --from-brainstorm <slug>`) single-session path, plan-calibrator MUST read `.aihaus/brainstorm/<slug>/SUBSTRATE-FINDINGS.md` (if present) BEFORE turn 1 and dedupe its question set against ambiguities already surfaced by assumptions-analyzer. This prevents the user from being asked the same question twice across the brainstorm Phase 6.5 → plan post-CHECK.md boundary. Implementation: calibrator's pre-turn-1 setup includes `Read .aihaus/brainstorm/<slug>/SUBSTRATE-FINDINGS.md` (file-not-found is non-fatal — calibrator proceeds with full ambiguity set if no substrate scan ran). The list of "already-surfaced ambiguities" is parsed from SUBSTRATE-FINDINGS.md `## Findings` section + cross-checked against the calibrator's own ambiguity-detection scan. The skill (parent) passes the brainstorm slug as part of the calibrator's invocation context.
+
+**`--no-calibrate` flag** wired into `/aih-plan`, `/aih-feature`, `/aih-milestone --plan`. Audit-logged via `bash .aihaus/hooks/manifest-append.sh --audit calibration-skip --reason "<text>"` as conscious override.
+
+**Skill integration sites (3):**
+- `aih-plan/SKILL.md` — Step 7.5 (after plan-checker)
+- `aih-feature/SKILL.md` — same anchor
+- `aih-milestone/SKILL.md` — under `--plan` short-circuit; default skip when M024 3-way short-circuit fires (consistent with analyst/PM/architect skip), `--calibrate` opts in.
+
+### BUSINESS-RULES.md schema (orchestrator-applies pattern)
+
+```markdown
+# Business Rules: <slug>
+
+**Calibrator:** plan-calibrator
+**Calibrated at:** <ISO-8601 UTC>
+**CHECK.md SHA verified:** <7-char SHA>
+**Turns:** <N>
+**Stop reason:** user-no-more-questions | exhaustion | --no-calibrate-override
+
+## Confirmed Rules
+
+| # | Rule | Source-line in CHECK.md / PRD | Confidence |
+|---|------|-------------------------------|------------|
+| 1 | <single-classification rule> | PRD.md:L<n> or CHECK.md:L<m> | H/M/L |
+
+## PRD Patches Applied
+
+| # | File | Lines | Diff summary |
+
+## Open Questions Promoted to PLAN-time
+
+(Items where Defer-if criterion fired.)
+```
+
+### Options Considered
+
+1. **New `plan-calibrator` agent (CHOSEN)** — clean separation, distinct cohort role.
+2. **Reuse `contrarian` with new prompt mode** — rejected per CONTEXT.md DECISION A; semantic mixing breaks contrarian's adversarial-idea-challenger role.
+3. **Reuse `assumptions-analyzer` with new input shape** — rejected; would conflate brainstorm-time codebase analysis with plan-time conversation-grounded interrogation.
+
+### Rationale
+
+Build-new is favored over reuse when scope-fence and trigger-fence diverge enough that conflation creates double-run risk (Risk R1). Calibrator's lifecycle (plan-time) and surface (CHECK.md inconsistencies) are disjoint from contrarian (brainstorm-time, panel artifacts) and assumptions-analyzer (brainstorm Phase 6.5, codebase). Three distinct agents with three distinct triggers prevents semantic drift and preserves audit-trail clarity.
+
+### Consequences
+
+- 1 new agent file in `pkg/.aihaus/agents/`.
+- 3 SKILL.md edits (aih-plan + aih-feature + aih-milestone).
+- 1 new artifact contract (BUSINESS-RULES.md).
+- ADR-001 single-writer preserved (parent skill is sole writer).
+- Risk R5 (testability) addressed via fixture-fail tests for ambiguity-DETECTION trigger only.
+- Hard cap 30 turns prevents runaway interrogation.
+
+### Rollback
+
+- Delete `pkg/.aihaus/agents/plan-calibrator.md`.
+- Revert 3 SKILL.md edits.
+- BUSINESS-RULES.md is per-invocation runtime artifact — no schema migration concerns.
+
+### References
+
+- ADR-001 (single-writer)
+- ADR-M014-B (resume classification: false + step)
+- ADR-260507-A (M024 short-circuit gate; SHA idempotência pattern)
+- ADR-260508-B (Path B α orchestrator-applies pattern)
+- analyst-brief §3 S5 (scope-fence rationale)
+
+## ADR-260509-X — Smoke Check 76 two-tier autonomy-guard (M027/S7)
+
+**Date:** 2026-05-08
+**Status:** Accepted
+**Milestone:** M027-260508-skills-agents-perf-review
+**Token:** `haiku-classifier`
+**Resolves:** M025/ADR-260508-A I4 mechanical deadline (Smoke Check 76 forcing function)
+
+### Context
+
+M025/ADR-260508-A I4 introduced Smoke Check 76 as a forcing function: M027 must emit an ADR with `Status: Accepted` + `Date:` + a token from `{denylist-extension, haiku-classifier, whitelist-on-cadence}` in the same ADR block, or the gate stays inactive (offline observability per smoke-test.sh:3850-3859 awk parser).
+
+The known-uncovered slots tracked by M025 (Tier/Cycle/Iteration/Sprint/Slice/Pass/Bucket/Cohort/Greek-letters) plus 30-day haiku-backstop monitoring of `.claude/audit/autonomy-gate.jsonl` produced empirical evidence: top-6 M005 patterns dominate 99.7% of regex hits (1427/1431); M023 GSP-DS + M025 LSDD packs (29 patterns) total 4 cumulative hits across the 30-day window. The pattern-arms-race-by-extension hypothesis (`denylist-extension`) is empirically uneconomical. The cadence-noun whitelist hypothesis (`whitelist-on-cadence`) cannot scale to LSDD-uncovered slots without re-introducing the false-positive class M025 anchored away.
+
+The remaining viable path is `haiku-classifier`: a context-aware two-tier dispatch where the haiku backstop becomes primary in milestone-execution turns (where +600-900ms p95 latency amortizes against agent turns) and the regex fast-path remains primary in `/aih-quick` + PreToolUse paths (where pattern-match latency <50ms is the right tradeoff and milestone-state coupling is loose).
+
+### Decision
+
+`autonomy-guard.sh` is extended with a context-aware two-tier dispatch. The 40-pattern total (M005=11 + M023 GSP-DS=13 + M025 LSDD=16) is **frozen** at runtime — total locked, NOT per-pack. Per-pack env-gates (`AIHAUS_GSP_DS_REGEX`, `AIHAUS_LSDD_REGEX`) preserved.
+
+**Two-tier dispatch:**
+
+- **regex-primary** in `/aih-quick` paths + PreToolUse paths + idle/planning contexts. The 40-pattern walk runs first; on miss + opt-in haiku enabled, falls back to haiku backstop (M011 logic preserved).
+- **haiku-primary** in milestone-execution turns (Stop hook fires AFTER an execution turn). Haiku classifier runs first via `claude --print --model haiku-4.5` with the existing CONTEXT.md §Q-3 prompt; on classify=block → block; on classify=allow → exit 0; on timeout/error → fall back to regex-primary 40-pattern walk.
+
+**Dispatch fields (HIGH #9 + BLOCKER #5 amendment):**
+
+`manifest_status` is an **8-value enum** per ADR-260502-A schema v4. Dispatch tier per status value:
+
+| `manifest_status` | Tier route |
+|-------------------|------------|
+| `running` | haiku-primary (when `exec_phase="1"`) |
+| `in-progress` | haiku-primary (when `exec_phase="1"`) |
+| `null` | regex-primary (no active milestone state) |
+| `paused` | regex-primary (terminal-pending state) |
+| `complete` | regex-primary (terminal state) |
+| `aborted` | regex-primary (terminal state) |
+| `stopped` | regex-primary (terminal state) |
+| `superseded` | regex-primary (terminal state) |
+| `auto-closed-stale` | regex-primary (terminal state) |
+| any unknown future value | regex-primary (default fail-safe) |
+
+`exec_phase` is the **binary string** `"0"` (idle) or `"1"` (in execution) per existing `autonomy-guard.sh:294-300` printf. This ADR amends the dispatch logic to map `exec_phase="1"` (existing binary semantics) → milestone-execution tier route. **NO printf-format change** in autonomy-guard.sh — the 4185+ existing JSONL rows continue to parse identically. **NO parent-skill `AIHAUS_EXEC_PHASE=milestone-execution` env-string mandate.** The string `"milestone-execution"` is documentation prose describing the SEMANTICS of `exec_phase="1"`, NOT a wire value. This path is chosen over re-versioning the JSONL schema because the blast radius is smaller (zero changes to historical row parseability, zero parent-skill wire-contract changes).
+
+Both fields are already present in JSONL rows; the empirical value distribution (1441/1441 rows of `exec_phase="1"`, zero rows of `exec_phase="milestone-execution"`) confirmed during plan-checker review prompted this clarification. Existing schema is preserved verbatim; dispatch semantics are documented to match.
+
+**Opt-out env vars:**
+- New `AIHAUS_AUTONOMY_TIER=regex|haiku|two-tier` ships with default unset → context-route. `AIHAUS_AUTONOMY_TIER=regex` forces regex-primary on every invocation.
+- Existing `AIHAUS_AUTONOMY_HAIKU=0` preserved (disables haiku entirely on every path).
+- Existing `AIHAUS_GSP_DS_REGEX=0` preserved.
+- Existing `AIHAUS_LSDD_REGEX=0` preserved.
+
+**M005 byte-identical preservation:** the 11 M005 patterns + their pattern strings + their match order are byte-identical at runtime. The only behavior change is the DISPATCH (which tier runs first); within regex-primary, the 40-pattern walk is unchanged.
+
+**Pattern-arms-race halt:** total=40 frozen. Adding a new pattern requires a new ADR that explicitly amends ADR-260509-X. Per-pack env-gates remain (per-pack disable still permitted via env, additive only).
+
+**Latency p95 retention:** ADR includes `haiku_p95_ms` retention review at 30-day burn-in. Target P95 600-900ms (per RESEARCH §1.5). If post-M027 30-day window shows p95 >1s consistently in milestone-execution turns, M028 hotfix flips `AIHAUS_AUTONOMY_TIER=regex` as install-default.
+
+**JSONL schema extension (additive):** new field `tier_used` per row (regex|haiku|two-tier-fallback) + `haiku_p95_ms` when haiku invoked. Existing fields unchanged.
+
+**Error-grammar (S3 verdict integration):** if S3's error-grammar audit returns **opaque** verdict, this ADR adds a `rephrase_suggestion` field obligation on haiku-classifier output (haiku must emit a 1-line rephrase suggestion when it classifies block). If S3 returns **clear/partial**, the field obligation is deferred to M028.
+
+### Options Considered
+
+1. **`haiku-classifier` two-tier dispatch (CHOSEN)** — context-aware. Pros: economical (only milestone-execution turns pay the +600-900ms p95); empirical evidence supports two-tier hypothesis (top-6 patterns 99.7%); preserves M005 fast-path byte-identical. Cons: dispatch logic adds ~80 lines to autonomy-guard.sh.
+2. **`denylist-extension` (more patterns)** — REJECTED. M025 30-day data shows pack 2+3 (GSP-DS + LSDD) total 4 cumulative hits across 29 patterns. Adding more patterns is empirically uneconomical and entrenches the pattern-arms-race anti-pattern.
+3. **`whitelist-on-cadence`** — REJECTED. Cannot scale to LSDD-uncovered slots without re-introducing the false-positive class M025 anchored away. Whitelisting cadence-noun headers risks regression on legitimate `## Phase N` H2 emissions.
+
+### Rationale
+
+Two-tier composes with the existing pattern packs without forking them. Latency cost is paid only where it amortizes (milestone-execution turns where agent turns are 30s-3min, not in `/aih-quick` paths where the user is typing fast). The 40-pattern freeze is the quid-pro-quo — pattern growth halted, classifier accuracy is the new lever.
+
+### Consequences
+
+- ~80 lines added to `pkg/.aihaus/hooks/autonomy-guard.sh` (existing 591 + dispatch prelude).
+- 1 new env var (`AIHAUS_AUTONOMY_TIER`).
+- CLAUDE.md autonomy-protocol section gains M027 paragraph documenting two-tier composition rule.
+- `pkg/.aihaus/skills/_shared/autonomy-protocol.md` §M027 invariants section appended.
+- Smoke Check 76 fires GREEN post-merge — the awk parser at smoke-test.sh:3850-3859 finds the `haiku-classifier` token + `**Date:** 2026-05-08` + `**Status:** Accepted` in this ADR block, satisfying the M025 forcing-function gate.
+- 30-day burn-in monitors `haiku_p95_ms`; M028 hotfix path defined if p95 >1s.
+
+**Honest framing (BLOCKER #1 path b — mechanical-vs-architectural distinction):** the awk parser at `tools/smoke-test.sh:3850-3859` is **token-presence permissive across the whole decisions.md file** — it walks `^## ADR-` blocks looking for any block carrying `Status: Accepted` + `Date:` + a token from the 3-set. Because ADR-260508-A (M025) §I4 enumeration prose contains the literal `haiku-classifier` token alongside its own `Status: Accepted` + `Date:`, the gate already fires GREEN against the existing decisions.md — Smoke Check 76 was **mechanically discharged at M025 merge**, before this ADR was even drafted. M027/S7 ADR-260509-X is therefore **architecturally additive** (it introduces the two-tier dispatch substrate that the M025 forcing function pointed at — context-aware regex vs haiku tier-routing, 40-pattern freeze, P95 retention review) but **mechanically redundant** for the gate itself. Tightening the awk parser to anchor the token to a `### Decision` heading or a `**Token:**` frontmatter line would close this parse-side-effect, but that requires editing `tools/smoke-test.sh` and is out of scope for M027. This ADR's load-bearing-ness is therefore the architectural substance (two-tier dispatch + 40-pattern freeze + audit-grammar extension), NOT the M025 gate-discharge claim. The PRD §Goals #2 prose is updated to reflect this honestly.
+
+**Telemetry-contradicts fail-safe (HIGH #10):** if S1 telemetry shows GSP-DS or LSDD pack hit-rate >5% of total `regex-match` rows over the 30-day window, the empirical foundation of the two-tier hypothesis (top-6 patterns 99.7%, 4 cumulative GSP-DS/LSDD hits) is contradicted. In that case, S7-FINAL MUST be re-designed BEFORE commit. Possible re-designs: (a) `denylist-extension` per-pack tightening, (b) `haiku-classifier-with-pack-pruning` (haiku tier handles packs 2+3 only, regex handles M005 always), (c) deferred two-tier with M028+ scope. This ADR's commit explicitly waits for S1 closure; the parallelization of S7-spike with S1 (per architecture.md §Migration Strategy Phase 1) is a drafting/design overlap only, NOT an early commit.
+
+### Rollback
+
+- Revert ~80 lines in autonomy-guard.sh (the dispatch prelude).
+- Revert this ADR.
+- JSONL schema is additive (new field absence is field-presence-permissive).
+- Smoke Check 76 reverts to its forcing-function pre-M027 state (silent — gate not yet active).
+
+### References
+
+- ADR-260508-A (M025 LSDD pack + Smoke Check 76 forcing function)
+- ADR-260506-A (M023 GSP-DS pattern pack + opt-out env policy)
+- M005 fast-path (autonomy-guard.sh L60-77; byte-identical preserved)
+- analyst-brief §3 S7 (dispatch fields already present in JSONL)
+
+---
+
+## ADR-260509-Y — Cohort fork 6→5 + schema v4 migration (M027/S10)
+
+**Date:** 2026-05-08
+**Status:** Proposed
+**Milestone:** M027-260508-skills-agents-perf-review
+**Supersedes (partial):** ADR-M012-A (6-cohort taxonomy → 5-cohort)
+**Rejects:** advisor `--router` opt-in (per locked DECISION C)
+
+### Context
+
+ADR-M012-A (M012/v0.17.0) introduced the 6-cohort taxonomy by splitting `:adversarial` into `:adversarial-scout` + `:adversarial-review` (preset-immunity carried by both). M027 brainstorm + RESEARCH.md §4.4 evidence shows: (a) the 2-member sub-distinction is more cleanly expressed as per-agent `effort:` overrides than as cohort baselines; (b) per-agent `effort:` frontmatter already exists across all 46 agents and is byte-identical to the 6-cohort baseline plus 2 overrides (plan-checker + contrarian carry `(opus, max)`); (c) the cohort layer is UX additive over per-agent role-based tuning per Anthropic published guidance.
+
+Locked DECISION C in CONTEXT.md: cohort fork to 4 included in M027 wave 3, advisor `--router` opt-in REJECTED (conflicts with ADR-001 single-writer + auditable-spend story).
+
+Locked OQ-OPEN-5 in PRD: schema v3 → v4 migration policy = `v4 + .effort.v3.backup + 1-milestone deprecation + abort-on-parse-fail`.
+
+### Decision
+
+**Cohort taxonomy forks 6 → 5** (5 cohort names — earlier prose said "6 → 4" which was a counting error per plan-checker Finding #12):
+
+- `:planner-binding` (4 agents, opus/xhigh) — preserved (M015 carve-out load-bearing).
+- `:planner` (13 agents, opus/high) — preserved.
+- `:doer` (15 agents, sonnet/high) — preserved.
+- `:verifier` (9 agents, haiku/high) — preserved.
+- `:adversarial-scout` (2 agents) + `:adversarial-review` (2 agents) → **merged → `:adversarial`** (4 agents, opus baseline). Cohort-baseline effort = `high`. The `(opus, max)` profile for `plan-checker` + `contrarian` is preserved at the **per-agent override** level via `effort: max` in their respective frontmatter (NOT via cohort baseline).
+
+**Per-agent `effort:` frontmatter authoritative.** cohorts.md becomes derivative — the table exists for human readability, but Smoke Check 6 validates against per-agent frontmatter as authoritative source of truth. If frontmatter and cohorts.md disagree, frontmatter wins.
+
+**Schema v3 → v4 migration:**
+
+- `update.sh --target .` writes `.effort.v3.backup` BEFORE migration begins. Atomic write — if backup write fails, abort with stable error grammar; do not touch v3 file.
+- `:adversarial-scout.*` keys folded into `:adversarial.*` with cohort-baseline effort = `high`.
+- `:adversarial-review.*` keys folded into `:adversarial.*` with no effort change.
+- If both `:adversarial-scout.effort` AND `:adversarial-review.effort` exist in user `.effort` with conflicting values, the migrator emits a **conflict** error to stderr and **aborts** — does NOT silently pick one. User runs `update.sh --target . --resolve-cohort-merge <effort-value>` to confirm intent.
+- Per-agent overrides preserved verbatim (parser does not re-cohort them).
+- 1-milestone deprecation window: schema-v3 read-compat in `update.sh` preserved through M028; M029 `update.sh` removes v3 reader.
+- **Abort on parse fail.** Any malformed key/value in v3 file → emit error, preserve original v3 file untouched, abort migration. NO silent drop.
+
+**Preset-immunity preservation invariant (BLOCKER #2):** the v3 baseline `:adversarial-scout.effort = max` is silently demoted to v4 cohort-baseline `:adversarial.effort = high` during the cohort fold. Without compensating per-agent overrides, this regresses the preset-immune `(opus, max)` profile that motivated the original `:adversarial-scout` split (per cohorts.md "false-negatives catastrophic"). The migration MUST therefore preserve the per-agent `(opus, max)` profile via explicit per-agent override entries:
+
+```
+plan-checker.effort = max
+contrarian.effort = max
+plan-calibrator.effort = max   # new in M027/S5; joins :adversarial post-S10
+```
+
+Migration rules for these entries:
+- If user `.effort` v3 already has these per-agent overrides → preserved verbatim into v4 (no warning).
+- If user `.effort` v3 lacks one or more (relying on cohort baseline) → migrator INJECTS the missing entries on-the-fly with an INFO-level row in the migration log: `injected per-agent override <agent>.effort=max (preset-immunity preservation; v4 cohort baseline would have demoted to high)`.
+- Smoke Check 6 sub-assert (added in S10): when an agent has `cohort: :adversarial`, validate that `{plan-checker, contrarian, plan-calibrator}.effort == max`. Failure → smoke test fails → migration is reverted.
+
+This honors the architecture's "per-agent override preserved verbatim" prose at an enforceable level instead of an honor-system check.
+
+**`tools/restore-effort.sh` map update (BLOCKER #2 — explicit):**
+
+```bash
+# v3 → v4 cohort name mapping
+case "$cohort" in
+  ":adversarial-scout"|":adversarial-review") echo ":adversarial" ;;
+  *) echo "$cohort" ;;
+esac
+
+# Per-agent override preservation (binding):
+# plan-checker.effort = max
+# contrarian.effort = max
+# plan-calibrator.effort = max
+# These three lines MUST appear in v4 verbatim, regardless of whether v3
+# carried them explicitly. The restore-script also inspects the input v3
+# file and emits these lines if absent (defensive injection).
+```
+
+**Smoke Check 6 extension:**
+
+- Cohort 5-set validated: `{:planner-binding, :planner, :doer, :verifier, :adversarial}` (5 cohort names — Finding #12 corrects "6 → 4" which was wrong by count).
+- Per-agent `effort:` validated against cohort baseline OR per-agent override.
+- **Preset-immunity preservation sub-assert (BLOCKER #2):** when an agent has `cohort: :adversarial`, validate that `{plan-checker, contrarian, plan-calibrator}.effort == max`. Failure indicates the v3 → v4 migration silently demoted the (opus, max) profile.
+- `tools/smoke-test.sh` `_cohort_model_map` bash declare -A array at lines 244-250 patched: remove `:adversarial-scout`/`:adversarial-review` keys, add single `:adversarial` key with model=opus.
+- 3 fixture-fail tests:
+  (a) agent with cohort `:adversarial-scout` (legacy) → MUST FAIL.
+  (b) agent with effort `ultraplus` (invalid enum) → MUST FAIL.
+  (c) agent in `{plan-checker, contrarian, plan-calibrator}` with `cohort: :adversarial` AND `effort: high` → MUST FAIL (preset-immunity violation).
+
+**`--router` opt-in REJECTED.** Advisor §4.4 proposed dynamic per-request classifier. Conflicts with ADR-001 single-writer + auditable-spend story (a runtime-routed model choice cannot be deterministically replayed from manifest). Not introduced. NOT to be re-proposed without an ADR amendment explicitly addressing the auditable-spend conflict.
+
+**`install.sh` / `install.ps1` impact:** unchanged. The Windows regex `(?<cohort>:\w[\w-]*)` is opaque-parse — accepts any cohort token shape. Only `tools/restore-effort.sh` cohort-name map updates.
+
+**CLAUDE.md cohort table:** rewritten to 5-cohort shape. M027 paragraph appended documenting the fork + per-agent `effort:` authoritative.
+
+### Options Considered
+
+1. **6 → 5 merge `:adversarial-scout` + `:adversarial-review` → `:adversarial` (CHOSEN)** — preset-immunity becomes one rule; per-agent override expresses the 2-member sub-distinction. Pros: simpler taxonomy; per-agent already exists; status-quo-codifying; Anthropic-aligned. Cons: 1 cohort name change in user-facing surface (CLAUDE.md + cohorts.md); migration required.
+2. **Status quo (6 cohorts)** — REJECTED per locked DECISION C.
+3. **6 → 5 (drop `:adversarial-scout`, leave `:adversarial-review`)** — REJECTED. Asymmetric. Loses the preset-immunity unification motivation.
+4. **Advisor `--router` opt-in** — REJECTED per locked DECISION C; conflicts with auditable-spend.
+
+### Rationale
+
+Per-agent `effort:` frontmatter already encodes the granularity that the 6-cohort taxonomy was approximating. Merging to 4 simplifies the cohort layer to its natural role (rough cut by compute profile) while preserving the fine cut (per-agent override) where it matters. The `(opus, max)` profile for `plan-checker` + `contrarian` is preserved exactly via per-agent override.
+
+The `--router` rejection is binding because dynamic per-request routing breaks the auditable-spend chain: `.claude/audit/autonomy-gate.jsonl` records the model used, but a router that re-decides per-request makes spend non-deterministic-from-manifest. ADR-001 requires deterministic replay from files-as-state.
+
+### Consequences
+
+- ~30-40 frontmatter edits across `pkg/.aihaus/agents/*.md` (only the 4 `:adversarial-scout` + `:adversarial-review` agents change cohort value; other 42 agents already declare correct cohort + effort).
+- 1 `update.sh` extension (schema v3 → v4 migration logic).
+- 1 `restore-effort.sh` map update.
+- 1 cohorts.md regeneration (derivative).
+- 1 CLAUDE.md update (cohort table + M027 paragraph).
+- Smoke Check 6 extension (cohort 4-set + 2 fixture-fail tests).
+- 1-milestone deprecation window for v3 reader (M028 retains compat; M029 removes).
+
+### Rollback
+
+- Schema v4 → v3 path via `update.sh --rollback-v4` (reads `.effort.v3.backup` + restores).
+- Cohort frontmatter reverted per-agent.
+- cohorts.md regenerated.
+- CLAUDE.md cohort table reverted.
+- This ADR reverted.
+- 1-milestone deprecation window in update.sh keeps v3 reader active through M028 — rollback within the window is mechanical.
+
+### References
+
+- ADR-M012-A (6-cohort taxonomy — partial supersession)
+- ADR-001 (single-writer; auditable-spend foundation)
+- ADR-M014-B (per-agent frontmatter resume classification)
+- locked DECISION C (CONTEXT.md `--router` rejection)
+- analyst-brief §3 S10 (status-quo-codification + Smoke Check 6 extension)
+
+## ADR-260509-Z — `enforcement-audit.md` consumer scope (M027/S5+S7 — resolves OQ-7)
+
+**Date:** 2026-05-08
+**Status:** Proposed
+**Milestone:** M027-260508-skills-agents-perf-review
+**Resolves:** brainstorm OQ-7 (enforcement-audit external consumers)
+
+### Context
+
+`pkg/.aihaus/skills/_shared/enforcement-audit.md` (293 rows post-M026) is referenced by ADR-260503-A move-rule and Smoke Check 62 scaffold check. Brainstorm OQ-7 surfaced the open question: does this audit have external consumers (third-party tools, dashboards, downstream packages) that warrant a Statement-of-Coverage promise + stable-format guarantee, or is it maintainer-internal?
+
+Contrarian Finding #10 (M027 brainstorm) recommended deferring any external-consumer mandate; analyst-brief recommended maintainer-internal default with mini-ADR resolution.
+
+### Decision
+
+`pkg/.aihaus/skills/_shared/enforcement-audit.md` is a **maintainer-internal artifact**. Its consumers are:
+
+- The maintainer running the move-rule check (per ADR-260503-A) when promoting A-rows to B/C.
+- The smoke-test scaffold check (Check 62) when validating audit existence + structural shape.
+- Future maintainer-driven refactors that re-classify rows during structural changes.
+
+It does NOT carry an external-consumer mandate. It does NOT require a Statement-of-Coverage. It does NOT need to be documented for end users in CLAUDE.md beyond the existing reference.
+
+### Rationale
+
+The audit is a structural inventory used to decide whether A-rows promote to B/C. End-user-facing surface is the actual hook/skill behavior, not the classification table. Treating the audit as maintainer-internal preserves move-rule velocity (rows can be re-classified during refactors without external-consumer breakage anxiety) while keeping the eligibility-gate authority (per ADR-260502-A) intact.
+
+### Consequences
+
+- No external-consumer mandate; no Statement-of-Coverage obligation.
+- Future audit edits remain mechanical (regenerate via `tools/audit-skill-reconcile.sh --concat`).
+- If a genuine external consumer ever emerges (e.g., a third-party tool that reads the audit to build a skill-coverage dashboard), this ADR is amended explicitly in a new ADR — not silently extended.
+
+### References
+
+- ADR-260503-A (audit framework + move rule)
+- ADR-260502-A (eligibility-gate authority)
+- M027 brainstorm OQ-7 + Contrarian Finding #10 + analyst-brief §5
