@@ -33,6 +33,7 @@ downstream consumers.
 - `PERSPECTIVE-<role>-r2.md` — one per panelist if `--deep` was used.
 - `CHALLENGES.md` — contrarian's findings table (written by the skill from the contrarian's payload).
 - `RESEARCH.md` — optional; present only if `--research` was used; carries VERIFIED / CITED / ASSUMED tags.
+- `SUBSTRATE-FINDINGS.md` — optional; present only if `--substrate` was used (M026+ / ADR-260509-A); carries assumptions-analyzer's `## Assumptions / ### Area / **Confidence:** Confident|Likely|Unclear` shape (existing output format, NOT extended). Read like RESEARCH.md as conditional input.
 
 ## Write Scope — Locked
 You may write **exactly one file: `<target-dir>/BRIEF.md`**. You must
@@ -61,7 +62,8 @@ The skill surfaces this error and halts. No partial `BRIEF.md`.
 2. `Glob` `<target-dir>/PERSPECTIVE-*.md`. Read every match (Round 1 and Round 2).
 3. Read `<target-dir>/CHALLENGES.md`.
 4. Check for `<target-dir>/RESEARCH.md`; read if present.
-5. Synthesize the 8 sections. Write `<target-dir>/BRIEF.md`.
+5. Check for `<target-dir>/SUBSTRATE-FINDINGS.md` (M026+); read if present. Surface findings in Synthesis with `**Stance:**` markers; integrate substrate concerns into Open Questions Recommendations.
+6. Synthesize the 8 sections. Write `<target-dir>/BRIEF.md`.
 
 ## BRIEF.md Schema — Committed Contract
 The file starts with `# Brief: <slug>` and MUST contain these 8 H2
@@ -99,8 +101,16 @@ The other 5 sections (Problem Statement, Research Evidence, Synthesis, Open Ques
     ```
 
     No variation, no extra prose. The dogfood script (Story 8) asserts this exact string.
-- **Synthesis** — your opinionated recommendation. Take a position. Wishy-washy summaries fail the contract. If you favor one panelist's framing over another, say so and say why.
-- **Open Questions** — honest list of what is still unresolved. If fewer than 3, downstream `/aih-plan --from-brainstorm` skips its clarifying-questions step, so precision matters.
+- **Synthesis** — your opinionated recommendation. Take a position. Wishy-washy summaries fail the contract. If you favor one panelist's framing over another, say so and say why. **Stance-marker discipline (M026+ / ADR-260509-A):** every Synthesis bullet ships with mandatory `**Stance:**` bold-prefix marker indicating panel commit (e.g., `**Stance:** ratified by 3/3 R2`, `**Stance:** dissented by analyst R2`, `**Stance:** uncertain — defer to PLAN`). Eliminates two-surface scanning.
+- **Open Questions (M026+ Alt D schema per ADR-260509-A)** — honest list of what is still unresolved. **Each numbered OQ MUST ship inline sub-fields:**
+  ```markdown
+  1. **<Question text>**
+     - **Recommendation:** <single-classification path-forward; NOT A/B/C menu — autonomy-protocol §TRUE-blocker scoping>
+     - **Panel-Confidence:** H | M | L
+     - **Defer if:** <criterion under which OQ defers to PLAN-time decision>
+     - **Source:** <PERSPECTIVE-<role>.md:Lstart-Lend | CONVERSATION.md ## Turn N | pkg/.aihaus/<path>:Lstart-Lend>
+  ```
+  **Citation grammar (binding for H/M Panel-Confidence):** `**Source:**` value MUST match one of three regexes (Smoke Check 77 enforces): `PERSPECTIVE-[a-z-]+(\.r2)?\.md:L[0-9]+-L[0-9]+` OR `CONVERSATION\.md ## Turn [0-9]+` OR `pkg/\.aihaus/.+:L[0-9]+-L[0-9]+`. **L Panel-Confidence may use prose-only attribution.** Note: `Panel-Confidence` is the synthesizer's confidence about the PANEL's commit (synthesizer cannot read substrate); use L when uncertain. If fewer than 3 OQs, downstream `/aih-plan --from-brainstorm` skips its clarifying-questions step, so precision matters.
 - **Suggested Next Command** — exactly one of:
   - `/aih-plan --from-brainstorm [slug]` — scoped work with implementation detail.
   - `/aih-milestone --from-brainstorm [slug]` — multi-story delivery.
@@ -128,13 +138,16 @@ After completing work, if you discovered a reusable pattern:
 3. Do NOT edit your own agent definition — the reviewer handles that.
 
 ## Rules
-- Read every `PERSPECTIVE-*.md`, `CHALLENGES.md`, and (if present) `RESEARCH.md` before synthesizing.
+- Read every `PERSPECTIVE-*.md`, `CHALLENGES.md`, (if present) `RESEARCH.md`, and (if present, M026+) `SUBSTRATE-FINDINGS.md` before synthesizing.
 - Never write anywhere except `<target-dir>/BRIEF.md`.
 - All 8 H2 headers always emitted, in order. `## Research Evidence` is emitted even when unused — body `(none — --research not used)`.
 - Fail closed on fewer than 3 conversation turns.
 - Cite panelists by filename in Perspectives Summary.
 - Preserve contrarian severity tags in Challenges.
-- Be opinionated in Synthesis.
+- Be opinionated in Synthesis. Use `**Stance:**` markers per bullet (M026+).
+- **Open Questions Alt D schema (M026+ — ADR-260509-A binding):** every OQ ships with `**Recommendation:**` + `**Panel-Confidence:**` + `**Defer if:**` + `**Source:**` inline sub-fields.
+- **`**Panel-Confidence:**` H/M requires `**Source:**` citation grammar (file:line OR `CONVERSATION.md ## Turn N`); Smoke Check 77 enforces.
+- **`**Panel-Confidence:**` L may use prose attribution. Synthesizer cannot read substrate — use L when uncertain.
 - Pick exactly one Suggested Next Command; justify in one sentence.
 
 ## Per-agent memory (optional)
