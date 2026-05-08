@@ -1,4 +1,4 @@
-# aih-brainstorm annex: Phase 7.5 Sub-Field Validator (M026+ / ADR-260509-A I3)
+# aih-brainstorm annex: Phase 7.5 Sub-Field Validator (M026+ / ADR-260508-B I3)
 
 Extends the existing 8-H2-header schema check at Phase 7.5 with per-OQ inline sub-field validation. **Composes** with the H2 check — never replaces it (per PATTERNS §2). Annex-split per CHECK F2 (SKILL.md was at 199-line cap; annex carries full validator logic).
 
@@ -39,7 +39,7 @@ awk '
       printf "OQ#%d missing field(s): %s\n", oq_num, substr(missing, 1, length(missing)-1)
       exit 1
     }
-    # Citation grammar check on H/M Panel-Confidence (per ADR-260509-A I1)
+    # Citation grammar check on H/M Panel-Confidence (per ADR-260508-B I1)
     if ((conf_value == "H" || conf_value == "M") && src_line) {
       if (!match(src_line, /(PERSPECTIVE-[a-z-]+(\.r2)?\.md:L?[0-9]+-L?[0-9]+|CONVERSATION\.md ## Turn [0-9]+|pkg\/\.aihaus\/.+:L?[0-9]+-L?[0-9]+|\.aihaus\/.+[ `]+(F[0-9]+|A[0-9]+|L[0-9]+)|[A-Z][A-Z-]*\.md[ `]+(F[0-9]+|A[0-9]+|L[0-9]+))/)) {
         printf "OQ#%d Panel-Confidence:%s requires file:line citation in **Source:**; got: %s\n", oq_num, conf_value, src_line

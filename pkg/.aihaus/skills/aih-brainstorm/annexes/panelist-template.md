@@ -1,4 +1,4 @@
-# aih-brainstorm annex: Panelist-Template Composed Prompt (M026+ / ADR-260509-A I4)
+# aih-brainstorm annex: Panelist-Template Composed Prompt (M026+ / ADR-260508-B I4)
 
 Mandatory sub-rules block for Phase 3 (R1) AND Phase 4 (R2) panelist prompts. R1+R2 binding per contrarian F8 (rules ship as panelist-template not R2-only). Per PATTERNS §4 (Phase 7 synthesizer minimal-prompt analog + team-template.md mandatory-sub-rules pattern).
 
@@ -41,9 +41,9 @@ R2 panelist perspectives MAY end with a `## Recommendations` section using Alt D
    **Source:** <CONVERSATION.md ## Turn N | PERSPECTIVE-<role>.md:Lstart-Lend | pkg/.aihaus/<path>:Lstart-Lend>
 ```
 
-The synthesizer's Phase 7 aggregates these into BRIEF Open Questions sub-fields (per ADR-260509-A I1).
+The synthesizer's Phase 7 aggregates these into BRIEF Open Questions sub-fields (per ADR-260508-B I1).
 
-## Drops (per ADR-260509-A absorption)
+## Drops (per ADR-260508-B absorption)
 
 - **Analyst's scope-dissent rule** — redundant per analyst R2's own concession (composed PM ground-check + UX argue-against catches both M025 PM-R2 fabrication AND R2-frame-ratification anti-pattern).
 - **UX auto-R3 escape hatch** — walked back per UX R2 (M025 R3 was workaround for under-disciplined R2; composed prompt eliminates need; hard cap stays 2 rounds).

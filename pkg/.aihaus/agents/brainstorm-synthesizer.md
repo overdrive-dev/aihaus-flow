@@ -33,7 +33,7 @@ downstream consumers.
 - `PERSPECTIVE-<role>-r2.md` — one per panelist if `--deep` was used.
 - `CHALLENGES.md` — contrarian's findings table (written by the skill from the contrarian's payload).
 - `RESEARCH.md` — optional; present only if `--research` was used; carries VERIFIED / CITED / ASSUMED tags.
-- `SUBSTRATE-FINDINGS.md` — optional; present only if `--substrate` was used (M026+ / ADR-260509-A); carries assumptions-analyzer's `## Assumptions / ### Area / **Confidence:** Confident|Likely|Unclear` shape (existing output format, NOT extended). Read like RESEARCH.md as conditional input.
+- `SUBSTRATE-FINDINGS.md` — optional; present only if `--substrate` was used (M026+ / ADR-260508-B); carries assumptions-analyzer's `## Assumptions / ### Area / **Confidence:** Confident|Likely|Unclear` shape (existing output format, NOT extended). Read like RESEARCH.md as conditional input.
 
 ## Write Scope — Locked
 You may write **exactly one file: `<target-dir>/BRIEF.md`**. You must
@@ -101,8 +101,8 @@ The other 5 sections (Problem Statement, Research Evidence, Synthesis, Open Ques
     ```
 
     No variation, no extra prose. The dogfood script (Story 8) asserts this exact string.
-- **Synthesis** — your opinionated recommendation. Take a position. Wishy-washy summaries fail the contract. If you favor one panelist's framing over another, say so and say why. **Stance-marker discipline (M026+ / ADR-260509-A):** every Synthesis bullet ships with mandatory `**Stance:**` bold-prefix marker indicating panel commit (e.g., `**Stance:** ratified by 3/3 R2`, `**Stance:** dissented by analyst R2`, `**Stance:** uncertain — defer to PLAN`). Eliminates two-surface scanning.
-- **Open Questions (M026+ Alt D schema per ADR-260509-A)** — honest list of what is still unresolved. **Each numbered OQ MUST ship inline sub-fields:**
+- **Synthesis** — your opinionated recommendation. Take a position. Wishy-washy summaries fail the contract. If you favor one panelist's framing over another, say so and say why. **Stance-marker discipline (M026+ / ADR-260508-B):** every Synthesis bullet ships with mandatory `**Stance:**` bold-prefix marker indicating panel commit (e.g., `**Stance:** ratified by 3/3 R2`, `**Stance:** dissented by analyst R2`, `**Stance:** uncertain — defer to PLAN`). Eliminates two-surface scanning.
+- **Open Questions (M026+ Alt D schema per ADR-260508-B)** — honest list of what is still unresolved. **Each numbered OQ MUST ship inline sub-fields:**
   ```markdown
   1. **<Question text>**
      - **Recommendation:** <single-classification path-forward; NOT A/B/C menu — autonomy-protocol §TRUE-blocker scoping>
@@ -145,7 +145,7 @@ After completing work, if you discovered a reusable pattern:
 - Cite panelists by filename in Perspectives Summary.
 - Preserve contrarian severity tags in Challenges.
 - Be opinionated in Synthesis. Use `**Stance:**` markers per bullet (M026+).
-- **Open Questions Alt D schema (M026+ — ADR-260509-A binding):** every OQ ships with `**Recommendation:**` + `**Panel-Confidence:**` + `**Defer if:**` + `**Source:**` inline sub-fields.
+- **Open Questions Alt D schema (M026+ — ADR-260508-B binding):** every OQ ships with `**Recommendation:**` + `**Panel-Confidence:**` + `**Defer if:**` + `**Source:**` inline sub-fields.
 - **`**Panel-Confidence:**` H/M requires `**Source:**` citation grammar (file:line OR `CONVERSATION.md ## Turn N`); Smoke Check 77 enforces.
 - **`**Panel-Confidence:**` L may use prose attribution. Synthesizer cannot read substrate — use L when uncertain.
 - Pick exactly one Suggested Next Command; justify in one sentence.

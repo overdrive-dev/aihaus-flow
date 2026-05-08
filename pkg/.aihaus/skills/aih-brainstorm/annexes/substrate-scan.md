@@ -1,4 +1,4 @@
-# aih-brainstorm annex: Phase 6.5 Substrate Scan (M026+ / ADR-260509-A I2)
+# aih-brainstorm annex: Phase 6.5 Substrate Scan (M026+ / ADR-260508-B I2)
 
 Opt-in via `--substrate` flag. Spawned between Phase 6 (research) and Phase 7 (synthesis). Catches 55-64% of substrate-discoverable BLOCKERs per F1-VERIFICATION classification. Complements (not replaces) plan-checker's adversarial-review domain.
 
@@ -66,4 +66,4 @@ If `assumptions-analyzer` returns malformed payload (no `## Assumptions` header)
 - Skill logs error to CONVERSATION.md as a substrate turn block
 - Skill writes minimal SUBSTRATE-FINDINGS.md with `# Substrate Findings — <slug>\n\n(scan failed; see CONVERSATION.md)` body
 - Synthesizer's "if present" guard handles cleanly — BRIEF still ships from R1/R2 inputs
-- This is the partial-fail mode worked example in ADR-260509-A
+- This is the partial-fail mode worked example in ADR-260508-B

@@ -35,7 +35,7 @@ You receive via prompt:
 - Codebase hints (relevant files, components, patterns found)
 - Calibration tier: `full_maturity`, `standard`, or `minimal_decisive`
 
-**Brainstorm Phase 6.5 invocation (M026+ / ADR-260509-A I2):** when invoked from `/aih-brainstorm` Phase 6.5, the input scope is panelist-named files in `.aihaus/brainstorm/<slug>/PERSPECTIVE-*.md` + files referenced in CONVERSATION.md Turn 1 (NOT a "phase" concept — the brainstorm is pre-plan). Existing `/aih-plan` Phase 1 "ONE phase" contract preserved byte-identical.
+**Brainstorm Phase 6.5 invocation (M026+ / ADR-260508-B I2):** when invoked from `/aih-brainstorm` Phase 6.5, the input scope is panelist-named files in `.aihaus/brainstorm/<slug>/PERSPECTIVE-*.md` + files referenced in CONVERSATION.md Turn 1 (NOT a "phase" concept — the brainstorm is pre-plan). Existing `/aih-plan` Phase 1 "ONE phase" contract preserved byte-identical.
 
 ## Calibration Tiers
 

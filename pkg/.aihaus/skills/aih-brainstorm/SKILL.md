@@ -26,7 +26,7 @@ Parse from `$ARGUMENTS`:
 - `--panel "a,b,c"` (optional; comma-separated agent `name` values; max 5).
 - `--deep` (optional; enables Round 2).
 - `--research` (optional; enables Phase 6).
-- `--substrate` (optional, M026+; enables Phase 6.5 substrate-scan via assumptions-analyzer reuse — see ADR-260509-A I2).
+- `--substrate` (optional, M026+; enables Phase 6.5 substrate-scan via assumptions-analyzer reuse — see ADR-260508-B I2).
 
 ## --panel Whitelist Validation (up-front)
 Whitelist = all agents under `pkg/.aihaus/agents/` **minus the three write-capable agents** (`implementer`, `frontend-dev`, `code-fixer`). Validated at skill invocation — **before any Agent spawn**. If any `--panel` member is not on the whitelist, abort with this exact string:
@@ -105,14 +105,14 @@ Per-panelist prompt scaffolds:
 - Read `.aihaus/brainstorm/[slug]/CONVERSATION.md` (Turn 1 is all that is visible).
 - Write your perspective to `.aihaus/brainstorm/[slug]/PERSPECTIVE-<your-role>.md` where `<your-role>` is your agent `name` field.
 - Return a one-paragraph summary as your string response — the skill distills it into your turn block.
-- **Mandatory sub-rules (M026+ / ADR-260509-A I4):** include the 3 composed sub-rules from `annexes/panelist-template.md` (citation grammar + argue-against + Alt D Recommendation discipline) in every R1 panelist prompt.
+- **Mandatory sub-rules (M026+ / ADR-260508-B I4):** include the 3 composed sub-rules from `annexes/panelist-template.md` (citation grammar + argue-against + Alt D Recommendation discipline) in every R1 panelist prompt.
 
 **After all panelists return**, the skill (not any agent) appends turn blocks to `CONVERSATION.md` in **alphabetical-by-role order** via heredoc. Ordering is load-bearing — Story 8 criterion 3 asserts turn counts assuming this determinism. Each block: `## Turn N — <role> — <ISO-8601>` then the distilled body then `---`.
 
 ## Phase 4 — Round 2 (SEQUENTIAL, opt-in `--deep`)
 Default: **skipped.** Round 2 is flag-only (`--deep`) — no auto-enable based on contrarian or any other runtime signal. Rationale: predictable cost.
 
-If `--deep`: for each panelist in alphabetical-by-role order, re-spawn with full `CONVERSATION.md` visible. Agent writes `PERSPECTIVE-<role>-r2.md` and returns a summary. Skill appends one turn per panelist immediately after that panelist returns (sequential, not batched — each later panelist should see prior Round 2 turns). **R2 mandatory sub-rules (M026+ / ADR-260509-A I4):** R2 prompts MUST include argue-against discipline + ground-check rule from `annexes/panelist-template.md`. Failure mode: emit `NO-R1-DISSENT-JUSTIFIED` (not silent ratification).
+If `--deep`: for each panelist in alphabetical-by-role order, re-spawn with full `CONVERSATION.md` visible. Agent writes `PERSPECTIVE-<role>-r2.md` and returns a summary. Skill appends one turn per panelist immediately after that panelist returns (sequential, not batched — each later panelist should see prior Round 2 turns). **R2 mandatory sub-rules (M026+ / ADR-260508-B I4):** R2 prompts MUST include argue-against discipline + ground-check rule from `annexes/panelist-template.md`. Failure mode: emit `NO-R1-DISSENT-JUSTIFIED` (not silent ratification).
 
 ## Phase 5 — Contrarian
 Spawn `contrarian` (`subagent_type: "contrarian"`) with full `CONVERSATION.md` + all `PERSPECTIVE-*.md` in scope. Contrarian has tools `Read, Grep, Glob` — **no Write.** It returns its findings as a string payload terminating with `CHALLENGES-FOUND: <N>` or `NO-FINDINGS-JUSTIFIED`.
@@ -128,7 +128,7 @@ Default: **skipped.** If `--research`, pick exactly one researcher by topic fit:
 Spawn. The researcher writes `.aihaus/brainstorm/[slug]/RESEARCH.md` with VERIFIED / CITED / ASSUMED provenance tags (convention from `phase-researcher.md:48`). Skill appends a research turn block.
 
 ## Phase 6.5 — Substrate Scan (opt-in `--substrate`, M026+)
-Default: **skipped.** If `--substrate`, see `annexes/substrate-scan.md` (ADR-260509-A I2 — catches 55-64% of substrate-discoverable BLOCKERs).
+Default: **skipped.** If `--substrate`, see `annexes/substrate-scan.md` (ADR-260508-B I2 — catches 55-64% of substrate-discoverable BLOCKERs).
 
 ## Phase 7 — Synthesis
 Spawn `brainstorm-synthesizer` (`subagent_type: "brainstorm-synthesizer"`). It reads every `PERSPECTIVE-*.md` + `CHALLENGES.md` + `RESEARCH.md` (if present) + `CONVERSATION.md` and writes `BRIEF.md`. The synthesizer fails closed if `CONVERSATION.md` has fewer than 3 `## Turn ` lines; surface its error verbatim and halt — no partial `BRIEF.md`.
@@ -162,7 +162,7 @@ If any required header is missing or out-of-order, abort with this exact string 
 BRIEF.md at <slug> failed schema validation — missing/out-of-order section(s): <list>. Re-run /aih-brainstorm <slug> or patch BRIEF.md manually before promoting.
 ```
 
-**Sub-field validation (M026+ Alt D per ADR-260509-A I3):** after H2 pass, validate per-OQ Alt D fields + Source grammar — see `annexes/sub-field-validator.md`. Legacy-permissive: BRIEFs without `**Panel-Confidence:**` skip sub-field check.
+**Sub-field validation (M026+ Alt D per ADR-260508-B I3):** after H2 pass, validate per-OQ Alt D fields + Source grammar — see `annexes/sub-field-validator.md`. Legacy-permissive: BRIEFs without `**Panel-Confidence:**` skip sub-field check.
 
 Pass-through is silent — success emits no output and proceeds to Phase 8.
 
