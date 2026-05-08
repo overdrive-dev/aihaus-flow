@@ -3900,6 +3900,112 @@ check_m027_semantic_gate() {
   fi
 }
 
+# ---- Check 77: BRIEF.md sub-field schema (M026/S1b) ----------------------
+# Validates Alt D OQ inline sub-fields per ADR-26050X-A I3.
+# Asserts:
+#   (a) every BRIEF.md with **Panel-Confidence:** marker has each OQ block
+#       containing **Recommendation:** + **Panel-Confidence:** + **Defer if:**
+#       + **Source:**
+#   (b) H/M Panel-Confidence requires **Source:** matching one of three regexes
+#       (file:line citation grammar)
+#   (c) field-presence permissive: legacy schema-v1 BRIEFs (no **Panel-Confidence:**)
+#       skip sub-field check
+#   (d) fixture-fail #1: tools/fixtures/check-77/missing-recommendation.md
+#       (OQ#1 missing **Recommendation:**) must exit non-zero
+#   (e) fixture-fail #2: tools/fixtures/check-77/source-prose-violation.md
+#       (OQ#1 H Panel-Confidence + prose-only Source) must exit non-zero
+check_brief_subfield_schema() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: BRIEF.md sub-field schema (M026/S1b)"
+  local issues=()
+  local repo_root="${PACKAGE_ROOT}/.."
+
+  # Helper: validate a single BRIEF.md against Alt D sub-field schema
+  _validate_brief() {
+    local brief="$1"
+    awk '
+      /^## Open Questions/ { in_oq=1; oq_num=0; rec=0; conf=0; defer=0; src=0; conf_value=""; src_line=""; next }
+      in_oq && /^## / { check_block(); in_oq=0 }
+      in_oq && /^[0-9]+\. \*\*/ {
+        if (oq_num > 0) check_block()
+        oq_num++; rec=0; conf=0; defer=0; src=0; conf_value=""; src_line=""
+      }
+      in_oq && /\*\*Recommendation:\*\*/ { rec=1 }
+      in_oq && /\*\*Panel-Confidence:\*\*/ {
+        conf=1
+        if (match($0, /Panel-Confidence:\*\* H( |$)/)) conf_value="H"
+        else if (match($0, /Panel-Confidence:\*\* M( |$)/)) conf_value="M"
+        else if (match($0, /Panel-Confidence:\*\* L( |$)/)) conf_value="L"
+      }
+      in_oq && /\*\*Defer (if|to PLAN if):\*\*/ { defer=1 }
+      in_oq && /\*\*Source:\*\*/ { src=1; src_line=$0 }
+      END { if (oq_num > 0) check_block() }
+
+      function check_block() {
+        if (oq_num == 0) return
+        missing=""
+        if (!rec) missing=missing "Recommendation,"
+        if (!conf) missing=missing "Panel-Confidence,"
+        if (!defer) missing=missing "Defer if,"
+        if (!src) missing=missing "Source,"
+        if (length(missing) > 0) {
+          printf "OQ#%d missing field(s): %s\n", oq_num, substr(missing, 1, length(missing)-1)
+          exit 1
+        }
+        if ((conf_value == "H" || conf_value == "M") && src_line != "") {
+          if (!match(src_line, /(PERSPECTIVE-[a-z-]+(\.r2)?\.md:L[0-9]+-L[0-9]+|CONVERSATION\.md ## Turn [0-9]+|pkg\/\.aihaus\/.+:L[0-9]+-L[0-9]+)/)) {
+            printf "OQ#%d Panel-Confidence:%s grammar fail: %s\n", oq_num, conf_value, src_line
+            exit 1
+          }
+        }
+      }
+    ' "$brief" 2>/dev/null
+  }
+
+  # Sub-assert (a)+(b)+(c): validate every shipped BRIEF.md with Panel-Confidence marker
+  while IFS= read -r brief; do
+    [ -f "$brief" ] || continue
+    if ! grep -q '\*\*Panel-Confidence:\*\*' "$brief" 2>/dev/null; then
+      continue  # legacy schema-v1 — skip
+    fi
+    local out
+    out="$(_validate_brief "$brief")"
+    if [[ -n "$out" ]]; then
+      issues+=("$(basename $(dirname "$brief")): $out")
+    fi
+  done < <(find "${repo_root}/.aihaus/brainstorm" -maxdepth 2 -type f -name 'BRIEF.md' 2>/dev/null)
+
+  # Sub-assert (d): fixture-fail #1 (missing-recommendation)
+  local fixture1="${repo_root}/tools/fixtures/check-77/missing-recommendation.md"
+  if [[ ! -f "$fixture1" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-77/missing-recommendation.md")
+  else
+    local out1
+    out1="$(_validate_brief "$fixture1")"
+    if [[ -z "$out1" ]]; then
+      issues+=("fixture-fail #1 did NOT trigger validator (missing-recommendation should fail)")
+    fi
+  fi
+
+  # Sub-assert (e): fixture-fail #2 (source-prose-violation)
+  local fixture2="${repo_root}/tools/fixtures/check-77/source-prose-violation.md"
+  if [[ ! -f "$fixture2" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-77/source-prose-violation.md")
+  else
+    local out2
+    out2="$(_validate_brief "$fixture2")"
+    if [[ -z "$out2" ]]; then
+      issues+=("fixture-fail #2 did NOT trigger validator (source-prose-violation should fail grammar)")
+    fi
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 # Parse --check / --skill flags before the full-suite run
 _CHECK_NAME=""
 _CHECK_SKILL=""
@@ -4002,15 +4108,16 @@ check_lsdd_regex_coverage
 check_lsdd_false_positive_guards
 check_skill_agent_cadence_absence
 check_m027_semantic_gate
+check_brief_subfield_schema
 
 printf "
 "
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (76/76)
+  printf "aihaus package smoke test PASSED [OK] (77/77)
 "
   exit 0
 else
-  printf "FAILED - %d of 76 checks failed
+  printf "FAILED - %d of 77 checks failed
 " "$FAILURES"
   exit 1
 fi
