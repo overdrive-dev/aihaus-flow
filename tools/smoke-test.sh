@@ -57,10 +57,10 @@ check_skills() {
   fi
 }
 
-# ---- Check 2: .aihaus/agents/ has 46 .md files (M013/S07 adds knowledge-curator) --
+# ---- Check 2: .aihaus/agents/ has 47 .md files (M027/S9 adds migration-reviewer) --
 check_agents() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 46 .md files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 47 .md files"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   if [[ ! -d "$agents_root" ]]; then
     _fail "$label" "directory not found: $agents_root"
@@ -68,10 +68,10 @@ check_agents() {
   fi
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 46 ]]; then
+  if [[ "$count" -eq 47 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 46 .md files, found $count"
+    _fail "$label" "expected 47 .md files, found $count"
   fi
 }
 
@@ -768,11 +768,11 @@ check_skill_count_and_staleness() {
   fi
 }
 
-# ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M013/S07) --
+# ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M027/S9) --
 # Seven sub-assertions covering the 6-cohort taxonomy in cohorts.md:
-#   C1 each of the 46 agents appears under exactly one cohort
+#   C1 each of the 47 agents appears under exactly one cohort
 #   C2 cohort counts match: planner-binding=4, planner=14, doer=15, verifier=9,
-#      adversarial-scout=2, adversarial-review=2 (total=46)
+#      adversarial-scout=2, adversarial-review=3 (total=47)
 #   C3 no :verifier-rich or :investigator cohort name appears in the table
 #   C4 F-006 parse contract: every data row yields NF=7 (awk -F'|' | sort -u == "7")
 #   C5 header row literal match: "| # | Agent | Cohort | Model | Effort |"
@@ -846,8 +846,8 @@ check_cohort_membership_roundtrip() {
   done
 
   local total_agents="${#_seen_agents[@]}"
-  if [[ "$total_agents" -ne 46 ]]; then
-    problems+=("C1: expected 46 agents in membership table; found ${total_agents}")
+  if [[ "$total_agents" -ne 47 ]]; then
+    problems+=("C1: expected 47 agents in membership table; found ${total_agents}")
   fi
 
   # C2: expected cohort counts.
@@ -857,7 +857,7 @@ check_cohort_membership_roundtrip() {
     [":doer"]=15
     [":verifier"]=9
     [":adversarial-scout"]=2
-    [":adversarial-review"]=2
+    [":adversarial-review"]=3
   )
   for cohort in ":planner-binding" ":planner" ":doer" ":verifier" ":adversarial-scout" ":adversarial-review"; do
     local got="${_cohort_counts[$cohort]}"
@@ -1455,7 +1455,7 @@ check_context_curator() {
 #   (c) learning-advisor model is haiku (cohort :verifier default)
 #   (d) learning-advisor tools are Read, Grep, Glob (no Write/Edit per ADR-001)
 #   (e) templates/settings.local.json references learning-advisor.sh under SubagentStop
-#   (f) agent count at 46 (knowledge-curator added in M013/S07)
+#   (f) agent count at 47 (migration-reviewer added in M027/S9)
 # Note: COMPAT-MATRIX check removed in M015/ADR-M015-A (Cursor support dropped).
 check_learning_advisor() {
   _start_check
@@ -1514,12 +1514,12 @@ check_learning_advisor() {
     fi
   fi
 
-  # (f) agent count at 46 (knowledge-curator added in M013/S07)
+  # (f) agent count at 47 (migration-reviewer added in M027/S9)
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -ne 46 ]]; then
-    problems+=("expected 46 agents total (knowledge-curator bumps from 45); found ${count}")
+  if [[ "$count" -ne 47 ]]; then
+    problems+=("expected 47 agents total (migration-reviewer bumps from 46); found ${count}")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then

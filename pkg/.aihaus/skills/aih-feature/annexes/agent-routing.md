@@ -68,6 +68,50 @@ the following BEFORE crediting the agent's work or moving to the next story step
 Source: downstream consumer audit, 2026-05-03 (two consecutive frontend-dev sessions produced
 reports referencing non-existent paths; each caused a full redo costing ~1 hour).
 
+## Step 9: migration-reviewer conditional dispatch (M027/S9)
+
+After the staged diff is computed at Step 9, run the following filter before
+spawning `code-reviewer`:
+
+```bash
+git diff --staged --name-only | grep -E '(^migrations/|\.sql$)'
+```
+
+**Dispatch rule:**
+
+| Diff regex match | Action |
+|---|---|
+| No match | Spawn `code-reviewer` only (existing baseline) |
+| Match | Spawn `code-reviewer` AND `migration-reviewer` in parallel |
+
+**Diff regex (binding — copied from architecture.md OQ-OPEN-4):**
+`^(diff --git.*migrations/|.*\.sql$)`
+
+For `--name-only` output (no `diff --git` prefix), the effective filter is:
+`grep -E '(^migrations/|\.sql$)'`
+
+**Output contract (ADR-001 single-writer preserved):**
+- `code-reviewer` returns payload → parent skill writes `.aihaus/features/[YYMMDD]-[slug]/REVIEW.md` (sole writer: code-reviewer path).
+- If `migration-reviewer` is also dispatched: it returns a `MIGRATION-REVIEW-PAYLOAD-START/END` block → parent skill APPENDs a `## Migration Review` section to the same REVIEW.md (one file; no write-race because parent is the sole writer in both cases).
+- `migration-reviewer` has NO Write and NO Edit tools — it returns a payload string only.
+
+**Review loop (CRITICAL/HIGH from EITHER reviewer):**
+- CRITICAL or HIGH from code-reviewer → spawn `code-fixer`, then re-run BOTH reviewers.
+- CRITICAL or HIGH from migration-reviewer only → spawn `code-fixer` for migration fixes, then re-run BOTH reviewers.
+- Cap at 2 review+fix iterations.
+
+**Spawn prompt additions for migration-reviewer:**
+Include in the spawn prompt:
+```
+MANIFEST_PATH="<abs>/.aihaus/features/[YYMMDD]-[slug]/RUN-MANIFEST.md"
+Dispatch mode: parallel-to-code-reviewer (Step 9 aih-feature)
+Migration files to review: <list from git diff --staged --name-only | grep -E '(^migrations/|\.sql$)'>
+Return a MIGRATION-REVIEW-PAYLOAD-START...END block (see agent definition for schema).
+Do NOT write any files.
+```
+
+---
+
 ## Why this exists
 
 Raw-model orchestrator inline edits lose three things specialty agents bring:
