@@ -2789,7 +2789,7 @@ Research-tier brainstorms are the cohort where substrate-discoverable BLOCKERs a
 ## ADR-260509-W — `plan-calibrator` agent + adaptive-interrogator calibration-gate (M027/S5)
 
 **Date:** 2026-05-08
-**Status:** Proposed
+**Status:** Accepted
 **Milestone:** M027-260508-skills-agents-perf-review
 **Anchored to:** ADR-260508-B Path B α (orchestrator-applies pattern), ADR-001 (single-writer), ADR-M014-B (resume classification framework)
 

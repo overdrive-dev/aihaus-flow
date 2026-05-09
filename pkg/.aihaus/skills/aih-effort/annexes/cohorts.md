@@ -161,9 +161,10 @@ catastrophic.
 Members (alphabetical):
 
 - contrarian
+- plan-calibrator
 - plan-checker
 
-**Count: 2**
+**Count: 3**
 
 ---
 
@@ -242,24 +243,25 @@ cohort.
 | 29 | nyquist-auditor          | :doer             | sonnet | high  |
 | 30 | pattern-mapper           | :doer             | sonnet | high  |
 | 31 | phase-researcher         | :planner          | opus   | high  |
-| 32 | plan-checker             | :adversarial-scout | opus  | max   |
-| 33 | planner                  | :planner-binding  | opus   | xhigh |
-| 34 | product-manager          | :planner-binding  | opus   | xhigh |
-| 35 | project-analyst          | :doer             | sonnet | high  |
-| 36 | project-researcher       | :planner          | opus   | high  |
-| 37 | research-synthesizer     | :planner          | opus   | high  |
-| 38 | reviewer                 | :adversarial-review | opus | high  |
-| 39 | roadmapper               | :planner-binding  | opus   | xhigh |
-| 40 | security-auditor         | :verifier         | haiku  | high  |
-| 41 | test-writer              | :doer             | sonnet | high  |
-| 42 | ui-auditor               | :verifier         | haiku  | high  |
-| 43 | ui-checker               | :verifier         | haiku  | high  |
-| 44 | ui-researcher            | :planner          | opus   | high  |
-| 45 | user-profiler            | :doer             | sonnet | high  |
-| 46 | ux-designer              | :planner          | opus   | high  |
-| 47 | verifier                 | :verifier         | haiku  | high  |
+| 32 | plan-calibrator          | :adversarial-scout | opus  | max   |
+| 33 | plan-checker             | :adversarial-scout | opus  | max   |
+| 34 | planner                  | :planner-binding  | opus   | xhigh |
+| 35 | product-manager          | :planner-binding  | opus   | xhigh |
+| 36 | project-analyst          | :doer             | sonnet | high  |
+| 37 | project-researcher       | :planner          | opus   | high  |
+| 38 | research-synthesizer     | :planner          | opus   | high  |
+| 39 | reviewer                 | :adversarial-review | opus | high  |
+| 40 | roadmapper               | :planner-binding  | opus   | xhigh |
+| 41 | security-auditor         | :verifier         | haiku  | high  |
+| 42 | test-writer              | :doer             | sonnet | high  |
+| 43 | ui-auditor               | :verifier         | haiku  | high  |
+| 44 | ui-checker               | :verifier         | haiku  | high  |
+| 45 | ui-researcher            | :planner          | opus   | high  |
+| 46 | user-profiler            | :doer             | sonnet | high  |
+| 47 | ux-designer              | :planner          | opus   | high  |
+| 48 | verifier                 | :verifier         | haiku  | high  |
 
-**Totals:** :planner-binding=4 · :planner=14 · :doer=15 · :verifier=9 · :adversarial-scout=2 · :adversarial-review=3 · Sum=47
+**Totals:** :planner-binding=4 · :planner=14 · :doer=15 · :verifier=9 · :adversarial-scout=3 · :adversarial-review=3 · Sum=48
 
 ---
 
