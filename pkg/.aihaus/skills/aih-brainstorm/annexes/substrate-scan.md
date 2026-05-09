@@ -1,10 +1,10 @@
 # aih-brainstorm annex: Phase 6.5 Substrate Scan (M026+ / ADR-260508-B I2)
 
-Opt-in via `--substrate` flag. Spawned between Phase 6 (research) and Phase 7 (synthesis). Catches 55-64% of substrate-discoverable BLOCKERs per F1-VERIFICATION classification. Complements (not replaces) plan-checker's adversarial-review domain.
+**Auto-enabled** when `--research` or `--deep` is present (unless `--no-substrate`). Explicit `--substrate` also enables. Plain brainstorms: opt-in only (ADR-260509-V supersedes ADR-260509-A I2 opt-in-only). Spawned between Phase 6 (research) and Phase 7 (synthesis). Catches 55-64% of substrate-discoverable BLOCKERs per F1-VERIFICATION classification. Complements (not replaces) plan-checker's adversarial-review domain.
 
 ## Mechanic
 
-When `--substrate` is present:
+When substrate is active (`--substrate` explicit, OR `--research`/`--deep` present AND NOT `--no-substrate`):
 
 1. **Spawn `assumptions-analyzer`** (`subagent_type: "assumptions-analyzer"`) with brainstorm-shape input scope. Use this minimal prompt:
 

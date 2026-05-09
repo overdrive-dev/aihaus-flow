@@ -31,7 +31,7 @@ There is no build command, no type checker, and no unit test framework. The smok
 
 - `pkg/.aihaus/skills/*/SKILL.md` — 12 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code.
 - `pkg/.aihaus/skills/_shared/autonomy-protocol.md` — binding execution-autonomy rules (M005 / ADR-bound-to-all-skills): 3-phase rule, TRUE blocker definition, no option menus, no delegated typing. Every SKILL.md references it.
-- `pkg/.aihaus/agents/*.md` — 46 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
+- `pkg/.aihaus/agents/*.md` — 48 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, plan-calibrator, migration-reviewer, etc.).
 - `pkg/.aihaus/hooks/*.sh` — 30 shell hooks for Claude Code lifecycle events: M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance) plus v0.12.0 runtime autonomy enforcement (autonomy-guard blocks forbidden execution-phase patterns) plus M017+ merge-back/git-add/lock-leak guards.
 - `pkg/.aihaus/skills/aih-plan/annexes/*.md` — 4 annex files (attachments, intake-discipline, from-brainstorm, guardrails) — M004 enxugamento of the aih-plan core SKILL.md.
 - `pkg/.aihaus/templates/SESSION-LOG.md` — template for `/aih-update --session-log <slug>` post-hoc retrospective (M004 story L).
@@ -91,34 +91,35 @@ presets, invoked via `/aih-effort --preset <name>`:
   swap; sonnet caps at `high` so xhigh silently clips), `:verifier (haiku, high)`
   (unchanged). Prone to overthinking on `:planner`, use sparingly.
 
-**Cohort aliases** (v0.17.0 / M012 / ADR-M012-A). All 46 agents are
-grouped into **6** uniform cohorts — one fixed default model per cohort:
+**Cohort aliases** (v0.31.0 / M027 / ADR-260509-Y — 6→5 fork). All 48 agents are
+grouped into **5** uniform cohorts — one fixed default model per cohort:
 
 | Cohort | Count | Default model | Notes |
 |--------|-------|---------------|-------|
 | `:planner-binding` | 4 | opus | Split from `:planner` (v0.15.0 intra-cohort xhigh carve-out → first-class cohort). Members: architect, planner, product-manager, roadmapper |
-| `:planner` | 13 | opus | Research + structured planning agents upstream of code. Was 17 before `:planner-binding` split |
+| `:planner` | 14 | opus | Research + structured planning agents upstream of code. Was 17 before `:planner-binding` split |
 | `:doer` | 15 | sonnet | Forward-edit implementation agents. Absorbed former `:investigator` (deleted M012) — default tier byte-identical. Only cohort with model swap: `high` preset → `(opus, high)` |
-| `:verifier` | 7 | haiku | Read-only assessment agents. Former `verifier-rich` subset (sonnet overrides) deleted |
-| `:adversarial-scout` | 2 | opus | `plan-checker`, `contrarian` — preset-immune, `(opus, max)` baseline. Split from `:adversarial` |
-| `:adversarial-review` | 2 | opus | `reviewer`, `code-reviewer` — preset-immune, `(opus, high)` baseline. Split from `:adversarial` |
+| `:verifier` | 9 | haiku | Read-only assessment agents. Former `verifier-rich` subset (sonnet overrides) deleted |
+| `:adversarial` | 6 | opus | Merged from `:adversarial-scout` + `:adversarial-review` (M027/ADR-260509-Y). Preset-immune as one rule. plan-checker, contrarian, plan-calibrator carry per-agent `effort: max` override; reviewer, code-reviewer, migration-reviewer carry cohort baseline `effort: high`. |
 
-**Deleted cohorts (M012):** `:investigator` (absorbed into `:doer`) and
-`:verifier-rich` subset (agents reassigned individually). The single
-`:adversarial` cohort (v0.15.0) is replaced by two cohorts above.
+**Deleted cohorts (M012 + M027):** `:investigator` (absorbed into `:doer` in M012);
+`:verifier-rich` subset (agents reassigned individually in M012); `:adversarial-scout`
+and `:adversarial-review` (merged into `:adversarial` in M027/ADR-260509-Y).
 
 Invoke via `/aih-effort --cohort :<name> --model X --effort Y` (both axes
 required). Per-agent escape hatch via `/aih-effort --agent <name> --model X
---effort Y` (ADR-M008-A amendment). The `:adversarial-scout` and
-`:adversarial-review` cohorts are preset-immune — only an explicit
-`--cohort :adversarial-scout` or `--cohort :adversarial-review` (with
-literal-word `adversarial` confirmation) or `--agent <member>` can mutate
-them. Full 46-agent mapping + prose rationale:
-`pkg/.aihaus/skills/aih-effort/annexes/cohorts.md`.
+--effort Y` (ADR-M008-A amendment). The `:adversarial` cohort is preset-immune —
+only an explicit `--cohort :adversarial` (with literal-word `adversarial`
+confirmation) or `--agent <member>` can mutate it. Full 48-agent mapping + prose
+rationale: `pkg/.aihaus/skills/aih-effort/annexes/cohorts.md`.
 
 **Sidecars.** Effort calibration survives `/aih-update` via a
-`.aihaus/.effort` sidecar (schema v3; renamed from `.aihaus/.calibration`
-v2 in M012 / ADR-M012-A; ownership preserved per ADR-M009-A).
+`.aihaus/.effort` sidecar (schema v4 post-M027; schema v3 in M012-M026;
+renamed from `.aihaus/.calibration` v2 in M012 / ADR-M012-A; ownership preserved
+per ADR-M009-A). Schema v4 folds `:adversarial-scout.*` + `:adversarial-review.*`
+keys → `:adversarial.*` and injects per-agent `effort=max` overrides for
+plan-checker/contrarian/plan-calibrator. v3→v4 migration on next `update.sh`
+run; `.effort.v3.backup` written before migration; abort on parse fail.
 Both files are user-owned, never committed, and live at `.aihaus/` root so
 the refresh loop (which only touches `skills/`, `agents/`, `hooks/`,
 `templates/`) leaves them alone. `update.sh` re-applies recorded
@@ -161,7 +162,7 @@ New modes: `--checkpoint-enter <story> <agent> <substep>` and
 `--checkpoint-exit <story> <agent> <substep> <result> [<sha>]`.
 
 **Agent frontmatter classification (LD-6).** Every agent in `pkg/.aihaus/agents/*.md`
-declares two new YAML fields (46 agents classified; smoke-test Check 6 enforces both):
+declares two new YAML fields (48 agents classified; smoke-test Check 6 enforces both):
 
 ```yaml
 resumable: true | false
@@ -290,6 +291,10 @@ include mandatory PM ground-check (citation grammar) + UX argue-against (R2 diss
 flow when `--substrate`; max combo = 14. M026 adds Smoke Check 77 (count 76 → 77) with 2
 fixture-fail tests (missing-recommendation + source-prose-violation) proving gate not
 green-but-vacuous on M025 PM-cohort fabrication anti-pattern.
+
+Since v0.31.0 / M027 (ADR-260509-X), `pkg/.aihaus/hooks/autonomy-guard.sh` ships **two-tier dispatch** — the composition rule M005 + M023 + M025 + M027 = **40 patterns frozen** (total locked, NOT per-pack). Two-tier routes by `manifest_status` + `exec_phase` binary field: `exec_phase="1"` AND `manifest_status ∈ {running, in-progress}` → **haiku-primary** (milestone-execution turns where +600-900ms p95 latency amortizes against agent turns); all other statuses + `exec_phase="0"` → **regex-primary** (40-pattern walk, `<50ms`). Adding a new pattern requires a new ADR that explicitly amends ADR-260509-X. New env var `AIHAUS_AUTONOMY_TIER=regex|haiku|two-tier` ships with default unset → context-route. Existing `AIHAUS_AUTONOMY_HAIKU=0` opt-out preserved (disables haiku on all paths). JSONL schema extended additively: `tier_used` (`regex`|`haiku`|`two-tier-fallback`) per row + `rephrase_suggestion` (static human-readable string on `regex-match` rows only — S3 OPAQUE verdict obligation, static lookup, `<1ms`). 30-day burn-in monitors `haiku_p95_ms`; M028 hotfix path defined if p95 >1s. M027 adds `AIHAUS_AUTONOMY_TIER` opt-out env var.
+
+M027 also ships: **(1) cohort fork 6→5** (ADR-260509-Y / S10) — `:adversarial-scout` + `:adversarial-review` merged → single `:adversarial` cohort (6 members: plan-checker, contrarian, plan-calibrator, reviewer, code-reviewer, migration-reviewer). Preset-immunity becomes one rule. Per-agent `effort: max` frontmatter preserves the `(opus, max)` profile for the 3 scout-tier agents (plan-checker, contrarian, plan-calibrator); Smoke Check 6 Part C enforces. Schema v4 sidecar: `:adversarial-scout.*`/`:adversarial-review.*` keys folded → `:adversarial.*`; max-effort per-agent overrides injected if absent; `.effort.v3.backup` written before migration; abort on parse fail. 1-milestone deprecation window (v3 read-compat through M028). **(2) `plan-calibrator` agent** (ADR-260509-W / S5) — adaptive interrogator spawned after `plan-checker` emits CHECK.md; surfaces ambiguities, conducts turn-by-turn confirmation, produces BUSINESS-RULES.md payload; `--no-calibrate` flag on all 3 skills skips it. **(3) `migration-reviewer` agent** (S9) — read-only migration reviewer spawned when diff matches `^(migrations/|*.sql)`; reviews schema migrations for reversibility, lock impact, data-loss risk. Smoke Check 6 sub-assert (preset-immunity) + Smoke Check 78 (calibration-gate ambiguity-detection) added. Total agents: 48. Total cohorts: 5.
 
 ## Merge-Back (M017 / ADR-M017-A)
 

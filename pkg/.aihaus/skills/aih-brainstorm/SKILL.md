@@ -26,7 +26,7 @@ Parse from `$ARGUMENTS`:
 - `--panel "a,b,c"` (optional; comma-separated agent `name` values; max 5).
 - `--deep` (optional; enables Round 2).
 - `--research` (optional; enables Phase 6).
-- `--substrate` (optional, M026+; enables Phase 6.5 substrate-scan via assumptions-analyzer reuse — see ADR-260508-B I2).
+- `--substrate` (optional, M026+; explicit Phase 6.5 enable — auto-on under `--research`/`--deep`, ADR-260509-V supersedes ADR-260508-B I2 opt-in-only). `--no-substrate` opts out; error if present without `--research`/`--deep`: `Error: --no-substrate requires --research or --deep (substrate is opt-in by default in plain brainstorms).`
 
 ## --panel Whitelist Validation (up-front)
 Whitelist = all agents under `pkg/.aihaus/agents/` **minus the three write-capable agents** (`implementer`, `frontend-dev`, `code-fixer`). Validated at skill invocation — **before any Agent spawn**. If any `--panel` member is not on the whitelist, abort with this exact string:
@@ -36,16 +36,17 @@ Invalid --panel member(s): <comma-separated bad names>. Valid agents are listed 
 ```
 
 ## Cost-Cap Pre-check (before any spawn)
-Count planned invocations as `panelists × rounds + 1 contrarian + 1 synthesizer + (1 if --research else 0) + (1 if --substrate else 0)`. Rounds is `2` with `--deep`, else `1`. Cap table (binding):
+`substrate_active = (--substrate OR (--research OR --deep)) AND NOT --no-substrate`. Count: `panelists × rounds + 1 contrarian + 1 synthesizer + (1 if --research) + (1 if substrate_active)`. Rounds = `2` with `--deep`, else `1`. Cap table (binding):
 
 | Flow | Panelists | Invocations | Cap |
 |------|-----------|-------------|-----|
 | default | 3 | 5 | 5 |
-| `--deep` | 3 | 8 | 8 |
-| `--deep --research` | 3 | 9 | 9 |
-| max (`--panel` 5 + `--deep` + `--research` + `--substrate`) | 5 | 14 | 14 |
+| `--research` | 3 | 7 | 7 |
+| `--deep` | 3 | 9 | 9 |
+| `--deep --research` | 3 | 10 | 10 |
+| max (`--panel` 5 + `--deep` + `--research`) | 5 | 14 | 14 |
 
-`--substrate` (M026+) adds +1 invocation and +1 cap to any flow above (e.g., `--deep --substrate` = 9). Hard ceilings: 5 panelists, 2 rounds, 1 contrarian, 1 research, 1 substrate-scan. Abort: `Invocation cap exceeded: requested <N>, cap <C> for flags <flags>. Reduce --panel size or drop --deep/--research/--substrate.`
+Hard ceilings: 5 panelists, 2 rounds, 1 contrarian, 1 research, 1 substrate-scan. Abort: `Invocation cap exceeded: requested <N>, cap <C> for flags <flags>. Reduce --panel size or drop --deep/--research/--substrate.`
 
 ## Phase 1 — Intake
 
@@ -127,8 +128,8 @@ Default: **skipped.** If `--research`, pick exactly one researcher by topic fit:
 
 Spawn. The researcher writes `.aihaus/brainstorm/[slug]/RESEARCH.md` with VERIFIED / CITED / ASSUMED provenance tags (convention from `phase-researcher.md:48`). Skill appends a research turn block.
 
-## Phase 6.5 — Substrate Scan (opt-in `--substrate`, M026+)
-Default: **skipped.** If `--substrate`, see `annexes/substrate-scan.md` (ADR-260508-B I2 — catches 55-64% of substrate-discoverable BLOCKERs).
+## Phase 6.5 — Substrate Scan (M026+; auto-on with `--research`/`--deep`, ADR-260509-V)
+Default: **skipped** for plain brainstorms. **Auto-enabled** when `--research` or `--deep` is present (unless `--no-substrate`). Explicit `--substrate` also enables. See `annexes/substrate-scan.md` (ADR-260508-B I2 — catches 55-64% of substrate-discoverable BLOCKERs).
 
 ## Phase 7 — Synthesis
 Spawn `brainstorm-synthesizer` (`subagent_type: "brainstorm-synthesizer"`). It reads every `PERSPECTIVE-*.md` + `CHALLENGES.md` + `RESEARCH.md` (if present) + `CONVERSATION.md` and writes `BRIEF.md`. The synthesizer fails closed if `CONVERSATION.md` has fewer than 3 `## Turn ` lines; surface its error verbatim and halt — no partial `BRIEF.md`.
@@ -162,7 +163,7 @@ If any required header is missing or out-of-order, abort with this exact string 
 BRIEF.md at <slug> failed schema validation — missing/out-of-order section(s): <list>. Re-run /aih-brainstorm <slug> or patch BRIEF.md manually before promoting.
 ```
 
-**Sub-field validation (M026+ Alt D per ADR-260508-B I3):** after H2 pass, validate per-OQ Alt D fields + Source grammar — see `annexes/sub-field-validator.md`. Legacy-permissive: BRIEFs without `**Panel-Confidence:**` skip sub-field check.
+**Sub-field validation (M026+ Alt D per ADR-260508-B I3):** after H2 pass, validate per-OQ Alt D fields + Source grammar — see `annexes/sub-field-validator.md`. Schema definition (sub-fields + citation grammar + stance-marker): `_shared/oq-schema.md`. Legacy-permissive: BRIEFs without `**Panel-Confidence:**` skip sub-field check.
 
 Pass-through is silent — success emits no output and proceeds to Phase 8.
 

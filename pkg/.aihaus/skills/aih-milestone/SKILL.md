@@ -60,7 +60,7 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, run before Step 1. Otherwis
 
 **If `--execute` is present:** Skip Steps 2–5. Create a minimal draft from $ARGUMENTS, then follow `annexes/execution.md` (milestone execution pipeline — so `/aih-resume` can recover if interrupted). Print: "Executing directly (--execute flag). Use `/aih-milestone` without the flag for conversational gathering."
 
-**If `--plan [slug]` is present:** Follow `annexes/promotion.md` Steps P1–P5 to seed a milestone draft from the plan (M### auto-propose, force-split gate, PLAN→CONTEXT mapping, attachment reference, backlink footer, threshold gate). Skip Step 2 (drafts listing). Threshold gate in P5 either dispatches execution or hands back to Step 5 gathering here.
+**If `--plan [slug]` is present:** Follow `annexes/promotion.md` Steps P1–P5 to seed a milestone draft from the plan (M### auto-propose, force-split gate, PLAN→CONTEXT mapping, attachment reference, backlink footer, threshold gate). Skip Step 2 (drafts listing). Threshold gate in P5 either dispatches execution or hands back to Step 5 gathering here. Calibration-gate Step 7.5 fires after plan-checker unless `--no-calibrate` or M024 short-circuit — see `annexes/calibration-gate.md` (M027/S5).
 
 ## Step 2 — List Existing Drafts
 
@@ -183,10 +183,7 @@ During gathering, if the user describes an implementable change (e.g. "and also 
 2. Acknowledge: "Captured — added to CONTEXT.md as a story/item."
 3. Continue gathering. Do NOT checkout a branch, edit code, or commit.
 
-The only exception is an explicit out-of-band execution signal ("fix this now", "just do it", "execute right away"). In that case:
-1. State clearly: "Switching out of gathering to execute — draft remains at `gathering`."
-2. Hand off to `/aih-quick` or `/aih-bugfix` (proper execution skill).
-3. Return to gathering context when done.
+The only exception is an explicit out-of-band execution signal ("fix this now", "just do it", "execute right away") — hand off to `/aih-quick` or `/aih-bugfix`; return to gathering when done.
 ## Guardrails
 - Gathering mode NEVER auto-executes without start-intent or `--execute`. Default posture is capture, not run.
 - NEVER delete CONTEXT.md — only append/update sections.

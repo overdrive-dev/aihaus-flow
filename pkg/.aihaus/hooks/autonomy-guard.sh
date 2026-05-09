@@ -25,11 +25,24 @@
 #      3s timeout, strict JSON parse, fail-safe allow on every ambiguous
 #      path. Opt-out via AIHAUS_AUTONOMY_HAIKU=0.
 #
+# M027/S7 (ADR-260509-X): two-tier dispatch. Decision paths become:
+#   1. status=paused short-circuit → exit 0 silent (unchanged)
+#   2. tier_decision() → haiku-primary | regex-primary (NEW)
+#      AIHAUS_AUTONOMY_TIER=regex|haiku|two-tier (default unset → context-route)
+#      context-route: exec_phase="1" AND manifest_status ∈ {running, in-progress}
+#         → haiku-primary (milestone-execution turns)
+#      all other manifest_status or exec_phase="0" → regex-primary (fail-safe)
+#   3. haiku-primary path: haiku first → on timeout/error falls back to regex
+#   4. regex-primary path: 40-pattern walk (M005 byte-identical) + haiku backstop
+#   AIHAUS_AUTONOMY_HAIKU=0 preserves M011 opt-out (disables haiku on all paths).
+#   Pattern total frozen at 40 (M005=11 + GSP-DS=13 + LSDD=16).
+#   rephrase_suggestion: static lookup emitted on regex-match rows only (S3/OPAQUE).
+#
 # Gate decisions are emitted to .claude/audit/autonomy-gate.jsonl (S06
 # owns the schema); legacy M005 pattern matches keep their existing
 # .claude/audit/autonomy-violations.jsonl sink unchanged.
 #
-# Story 7 of plan 260414-exec-auto-approve; extended by M011/S05.
+# Story 7 of plan 260414-exec-auto-approve; extended by M011/S05, M027/S7.
 set -uo pipefail
 
 AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/autonomy-violations.jsonl}"
@@ -241,11 +254,17 @@ log_gate_decision() {
     ' "$_rmp" 2>/dev/null | awk -F'|' '{gsub(/[[:space:]]/, "", $2); if ($2 != "") print $2}' 2>/dev/null || true)"
     [ -n "$_itop" ] && invoke_top="$_itop"
   fi
-  printf '{"ts":"%s","decision":"%s","message_hash":%s,"matched_pattern":%s,"section":%s,"haiku_reason":%s,"matched_whitelist":%s,"haiku_latency_ms":%s,"exec_phase":"%s","manifest_status":%s,"cli_available":"%s","cache_hit":"%s","rate_limited":"%s","timeout":"%s","session_id":%s,"story_id":%s,"message_head":%s,"active_invoke_top":%s}\n' \
+  # M027/S7 — additive fields: tier_used + rephrase_suggestion (ADR-260509-X).
+  # tier_used: regex | haiku | two-tier-fallback
+  # rephrase_suggestion: static human-readable string for regex-match rows; null otherwise.
+  local tier_used="${GATE_TIER_USED:-regex}"
+  local rephrase="${GATE_REPHRASE_SUGGESTION:-null}"
+  printf '{"ts":"%s","decision":"%s","message_hash":%s,"matched_pattern":%s,"section":%s,"haiku_reason":%s,"matched_whitelist":%s,"haiku_latency_ms":%s,"exec_phase":"%s","manifest_status":%s,"cli_available":"%s","cache_hit":"%s","rate_limited":"%s","timeout":"%s","session_id":%s,"story_id":%s,"message_head":%s,"active_invoke_top":%s,"tier_used":"%s","rephrase_suggestion":%s}\n' \
     "$ts" "$decision" \
     "$(_qq "$hash")" "$(_qq "$pat")" "$(_qq "$sec")" "$(_qq "$hreason")" "$(_qq "$hwhite")" "$hlat" \
     "$in_execution" "$(_qq "$mstatus")" "$cliok" "$chit" "$rlim" "$tmo" \
     "$(_qq "$sess")" "$(_qq "$story_id")" "$(_qq "$mhead")" "$(_qq "$invoke_top")" \
+    "$tier_used" "$(_qq "$rephrase")" \
     >> "$AUDIT_GATE_LOG" 2>/dev/null || true
 }
 
@@ -288,6 +307,100 @@ emit_block_haiku() {
     printf '{"decision":"block","reason":"%s"}\n' "$reason_json"
   fi
 }
+
+# M027/S7 — static rephrase_suggestion lookup (ADR-260509-X, S3 OPAQUE verdict).
+# Keyed on $GATE_SECTION. Emitted only on regex-match decision rows.
+# Mapping: 6 canonical section namespace prefixes → 1 canonical human-readable string.
+# <1 ms overhead (no LLM call; pure shell case-statement).
+lookup_rephrase_suggestion() {
+  local sec="$1"
+  case "$sec" in
+    L65-72:no-delegated-typing*)
+      printf '%s' "Dispatch the next skill directly via the Skill tool. Do not print 'type /aih-...' instructions for the user."
+      ;;
+    L52-63:no-honest-checkpoints*)
+      printf '%s' "Remove the checkpoint prose and proceed. If a TRUE blocker exists, use: bash .aihaus/hooks/phase-advance.sh --to paused --reason '<reason>'."
+      ;;
+    L32-50:no-option-menus*)
+      printf '%s' "Pick one option, log the choice as a one-liner in RUN-MANIFEST progress log, and continue silently."
+      ;;
+    L52-63:no-reality-renegotiation*)
+      printf '%s' "Continue executing. Log the time estimate correction in RUN-MANIFEST. Let the user interrupt via ESC if needed."
+      ;;
+    GSP-DS-*)
+      printf '%s' "Remove scope-reduction or quality-preserve framing. Proceed silently. If a TRUE blocker applies, use phase-advance --to paused."
+      ;;
+    LSDD-*)
+      printf '%s' "Remove cadence-noun progress summary. Use a flat one-liner status update (e.g., 'S3 complete, proceeding to S4') instead."
+      ;;
+    *)
+      printf 'null'
+      ;;
+  esac
+}
+
+# M027/S7 — tier_decision(): determine dispatch tier for this invocation.
+# Returns: "haiku-primary" | "regex-primary"
+# Reads: AIHAUS_AUTONOMY_TIER env, in_execution (set by detect-exec-phase block),
+#        GATE_MANIFEST_STATUS (resolved by resolve_manifest_status()).
+# Called AFTER paused short-circuit (line ~340) and AFTER manifest status resolved.
+# AIHAUS_AUTONOMY_HAIKU=0 forces regex-primary on all paths (M011 opt-out preserved).
+tier_decision() {
+  # M011 opt-out: AIHAUS_AUTONOMY_HAIKU=0 disables haiku entirely.
+  if [ "${AIHAUS_AUTONOMY_HAIKU:-1}" = "0" ]; then
+    printf 'regex-primary'
+    return
+  fi
+  # Explicit tier override.
+  local tier_env="${AIHAUS_AUTONOMY_TIER:-}"
+  case "$tier_env" in
+    regex)
+      printf 'regex-primary'
+      return
+      ;;
+    haiku)
+      printf 'haiku-primary'
+      return
+      ;;
+    two-tier|"")
+      # Context-route (default when unset or explicit two-tier).
+      ;;
+    *)
+      # Unknown value → fail-safe regex-primary.
+      printf 'regex-primary'
+      return
+      ;;
+  esac
+  # Context-route: exec_phase="1" AND manifest_status ∈ {running, in-progress}
+  # → haiku-primary. All other states → regex-primary (fail-safe).
+  if [ "${in_execution:-0}" = "1" ]; then
+    case "${GATE_MANIFEST_STATUS:-null}" in
+      running|in-progress)
+        printf 'haiku-primary'
+        return
+        ;;
+    esac
+  fi
+  printf 'regex-primary'
+}
+
+# Compute message hash (first 4000 chars; sha256 or md5 fallback).
+# Defined here (before haiku-primary path) so both Step 1.5 and Step 3 can call it.
+compute_hash() {
+  local head="$(printf '%s' "$MSG" | head -c 4000)"
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$head" | sha256sum | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$head" | shasum -a 256 | awk '{print $1}'
+  else
+    # Fallback: md5sum — not cryptographic but fine for cache key.
+    printf '%s' "$head" | md5sum 2>/dev/null | awk '{print $1}' || printf 'nohash'
+  fi
+}
+
+# M027/S7 — tier tracking globals (set after tier_decision call below).
+GATE_TIER_USED="regex"  # default; overwritten per dispatch path
+GATE_REPHRASE_SUGGESTION="null"
 
 # Detect execution phase.
 in_execution=0
@@ -352,8 +465,166 @@ fi
 #     exit 0
 #   fi
 
+# --- M027/S7 Step 1.5: two-tier dispatch decision (ADR-260509-X) --------------
+# Determine tier AFTER paused-short-circuit + manifest-status resolved.
+# tier_decision() reads AIHAUS_AUTONOMY_TIER env + in_execution + GATE_MANIFEST_STATUS.
+# Result: "haiku-primary" → run haiku first (milestone-execution turns)
+#         "regex-primary" → run 40-pattern walk first (all other contexts)
+_ACTIVE_TIER="$(tier_decision)"
+
+# --- M027/S7 haiku-primary path (NEW) ----------------------------------------
+# Fires ONLY when _ACTIVE_TIER=haiku-primary (exec_phase="1" AND
+# manifest_status ∈ {running, in-progress} AND AIHAUS_AUTONOMY_HAIKU != 0).
+# On block → emit block + log tier_used=haiku. Exit.
+# On allow → exit 0 (log tier_used=haiku).
+# On timeout/error → set tier_used=two-tier-fallback, fall through to regex path.
+_HAIKU_PRIMARY_DONE=0
+if [ "$_ACTIVE_TIER" = "haiku-primary" ]; then
+  # CLI availability probe for haiku-primary path.
+  # No claude → fall through to regex-primary silently (no JSONL row for this probe).
+  # Step 3 haiku backstop (below) will emit no-cli-skip when it fires (regex-miss path).
+  if ! command -v claude >/dev/null 2>&1; then
+    GATE_CLI_AVAILABLE=0
+    _ACTIVE_TIER="regex-primary"
+  else
+    # Compute message hash for cache.
+    GATE_MSG_HASH="$(compute_hash)"
+    GATE_CLI_AVAILABLE=1
+
+    # Cache lookup for haiku-primary path (same 5-min TTL, 30-s rate-limit).
+    now_unix_hp="$(date +%s 2>/dev/null || echo 0)"
+    mkdir -p "$(dirname "$GATE_CACHE")" 2>/dev/null || true
+    _HP_CACHE_HIT=0
+    if [ -f "$GATE_CACHE" ]; then
+      while IFS='|' read -r c_ts c_hash c_decision; do
+        [ -z "$c_ts" ] && continue
+        age=$((now_unix_hp - c_ts))
+        if [ "$age" -le 300 ] && [ "$c_hash" = "$GATE_MSG_HASH" ]; then
+          _HP_CACHE_HIT=1
+          GATE_CACHE_HIT=1
+          GATE_TIER_USED="haiku"
+          log_gate_decision "cache-hit-$c_decision"
+          if [ "$c_decision" = "block" ]; then
+            emit_block_haiku "Cached haiku decision (block) for identical message within 5 min."
+          fi
+          exit 0
+        fi
+      done < "$GATE_CACHE"
+      # Rate limit check for haiku-primary.
+      _hp_newest_ts="$(awk -F'|' 'NF>=1 {if ($1+0 > max) max=$1+0} END {print max+0}' "$GATE_CACHE" 2>/dev/null || echo 0)"
+      if [ "$_hp_newest_ts" -gt 0 ] && [ $((now_unix_hp - _hp_newest_ts)) -lt 30 ]; then
+        GATE_RATE_LIMITED=1
+        GATE_TIER_USED="haiku"
+        log_gate_decision "rate-limit-skip-allow"
+        exit 0
+      fi
+    fi
+
+    # Build prompt (reuse same PROMPT_BODY structure).
+    _hp_manifest_tail="(manifest unavailable)"
+    if [ -n "${MANIFEST_PATH:-}" ] && [ -f "${MANIFEST_PATH}" ]; then
+      _hp_manifest_tail="$(tail -50 "$MANIFEST_PATH" 2>/dev/null)"
+    fi
+    _hp_msg_trunc="$(printf '%s' "$MSG" | head -c 4000)"
+
+    _HP_PROMPT_BODY="$(cat <<EOF
+SYSTEM: You are a stop-gate judge for the aihaus milestone system.
+Be conservative: when in doubt, prefer allowing the stop (user can
+re-engage) over blocking (which risks infinite loops).
+
+USER:
+## Assistant's final message
+$_hp_msg_trunc
+
+## RUN-MANIFEST state (last 50 lines)
+$_hp_manifest_tail
+
+## Legitimate-stop whitelist
+- status=completed or phase=complete in manifest
+- status=paused (user or model explicit pause with reason)
+- API key / secret genuinely missing (not a test/placeholder)
+- Unresolvable git merge conflict
+- User-requested abort
+- Migration blocking continuation (schema version mismatch, etc.)
+
+## GSP-DS counter-patterns (M023 / ADR-260506-A) — NOT TRUE blockers
+Self-elected pauses framed as virtue (honesto sobre escopo / preservar qualidade / conversa longa) are NOT TRUE blockers. Block these as anti-patterns.
+Decomposition seams (Backend/Frontend, Wave 1/Wave 2, Batch A/Batch B, Phase N/M, Etapa/Bloco) are NOT TRUE blockers.
+
+Return JSON ONLY, no prose:
+{"decision": "continue" | "block", "reason": "<1 sentence>", "matched_whitelist"?: "<item>", "rephrase_suggestion"?: "<1 line if block>"}
+EOF
+)"
+
+    # Invoke haiku with 3-s timeout.
+    _HP_START_MS="$(date +%s%3N 2>/dev/null || echo 0)"
+    if command -v timeout >/dev/null 2>&1; then
+      _HP_OUT="$(printf '%s' "$_HP_PROMPT_BODY" | timeout 3s claude --print --model haiku-4.5 2>/dev/null)"
+      _HP_RC=${PIPESTATUS[1]:-$?}
+    else
+      _HP_OUT="$(printf '%s' "$_HP_PROMPT_BODY" | claude --print --model haiku-4.5 2>/dev/null)"
+      _HP_RC=${PIPESTATUS[1]:-$?}
+    fi
+    _HP_END_MS="$(date +%s%3N 2>/dev/null || echo 0)"
+    GATE_HAIKU_LATENCY_MS=$((_HP_END_MS - _HP_START_MS))
+    [ "$GATE_HAIKU_LATENCY_MS" -lt 0 ] && GATE_HAIKU_LATENCY_MS=0
+
+    if [ "${_HP_RC:-0}" = "124" ] || [ -z "$_HP_OUT" ]; then
+      # Timeout or empty → two-tier-fallback to regex-primary.
+      GATE_TIMEOUT=1
+      GATE_TIER_USED="two-tier-fallback"
+      _ACTIVE_TIER="regex-primary"
+      append_cache_entry "$now_unix_hp|$GATE_MSG_HASH|timeout"
+    else
+      # Parse haiku output.
+      _HP_DECISION=""
+      _HP_HREASON=""
+      _HP_HWHITE=""
+      _HP_REPHRASE=""
+      if command -v jq >/dev/null 2>&1; then
+        _HP_DECISION="$(printf '%s' "$_HP_OUT" | jq -r '.decision // empty' 2>/dev/null || true)"
+        _HP_HREASON="$(printf '%s' "$_HP_OUT" | jq -r '.reason // empty' 2>/dev/null || true)"
+        _HP_HWHITE="$(printf '%s' "$_HP_OUT" | jq -r '.matched_whitelist // empty' 2>/dev/null || true)"
+        _HP_REPHRASE="$(printf '%s' "$_HP_OUT" | jq -r '.rephrase_suggestion // empty' 2>/dev/null || true)"
+      else
+        _HP_DECISION="$(printf '%s' "$_HP_OUT" | grep -oE '"decision"[[:space:]]*:[[:space:]]*"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+        _HP_HREASON="$(printf '%s' "$_HP_OUT" | grep -oE '"reason"[[:space:]]*:[[:space:]]*"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+        _HP_HWHITE="$(printf '%s' "$_HP_OUT" | grep -oE '"matched_whitelist"[[:space:]]*:[[:space:]]*"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+        _HP_REPHRASE="$(printf '%s' "$_HP_OUT" | grep -oE '"rephrase_suggestion"[[:space:]]*:[[:space:]]*"[^"]+"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+      fi
+      [ -n "$_HP_HREASON" ] && GATE_HAIKU_REASON="$_HP_HREASON"
+      [ -n "$_HP_HWHITE" ]  && GATE_HAIKU_WHITELIST="$_HP_HWHITE"
+      GATE_TIER_USED="haiku"
+
+      case "$_HP_DECISION" in
+        continue)
+          log_gate_decision "haiku-continue"
+          append_cache_entry "$now_unix_hp|$GATE_MSG_HASH|continue"
+          exit 0
+          ;;
+        block)
+          # If haiku provided rephrase_suggestion, store it for the JSONL row.
+          [ -n "$_HP_REPHRASE" ] && GATE_REPHRASE_SUGGESTION="$_HP_REPHRASE"
+          log_gate_decision "haiku-block"
+          append_cache_entry "$now_unix_hp|$GATE_MSG_HASH|block"
+          emit_block_haiku "${_HP_HREASON:-Stop-gate haiku-primary blocked the turn (no TRUE-blocker match).}"
+          exit 0
+          ;;
+        *)
+          # Parse failure → two-tier-fallback to regex-primary.
+          GATE_TIER_USED="two-tier-fallback"
+          _ACTIVE_TIER="regex-primary"
+          append_cache_entry "$now_unix_hp|$GATE_MSG_HASH|parsefail"
+          ;;
+      esac
+    fi
+    _HAIKU_PRIMARY_DONE=1
+  fi
+fi
+
 # --- M011/S05 Step 2: regex fast-path (M005 byte-identical) ------------------
 # Scan message against each pattern. First match in exec phase blocks.
+# M027: tier_used=regex for all blocks from this path.
 REGEX_MATCHED=0
 while IFS=$'\t' read -r pattern section; do
   [ -z "$pattern" ] && continue
@@ -362,6 +633,11 @@ while IFS=$'\t' read -r pattern section; do
     if [ "$in_execution" = "1" ]; then
       GATE_MATCHED_PATTERN="$pattern"
       GATE_SECTION="$section"
+      # M027: tier_used is "two-tier-fallback" if haiku-primary failed and fell back;
+      # otherwise "regex". Do not overwrite two-tier-fallback (it carries fallback info).
+      [ "${GATE_TIER_USED:-regex}" = "regex" ] && GATE_TIER_USED="regex"
+      # rephrase_suggestion: static lookup keyed on section (S3 OPAQUE verdict obligation).
+      GATE_REPHRASE_SUGGESTION="$(lookup_rephrase_suggestion "$section")"
       log_gate_decision "regex-match"
       emit_block "$pattern" "$section"
       exit 0
@@ -429,19 +705,16 @@ if [ "${AIHAUS_AUTONOMY_HAIKU:-1}" = "0" ]; then
   exit 0
 fi
 
-# Compute message hash (first 4000 chars; sha256 or md5 fallback).
-compute_hash() {
-  local head="$(printf '%s' "$MSG" | head -c 4000)"
-  if command -v sha256sum >/dev/null 2>&1; then
-    printf '%s' "$head" | sha256sum | awk '{print $1}'
-  elif command -v shasum >/dev/null 2>&1; then
-    printf '%s' "$head" | shasum -a 256 | awk '{print $1}'
-  else
-    # Fallback: md5sum — not cryptographic but fine for cache key.
-    printf '%s' "$head" | md5sum 2>/dev/null | awk '{print $1}' || printf 'nohash'
-  fi
-}
-GATE_MSG_HASH="$(compute_hash)"
+# M027: if haiku-primary already attempted but timed out/failed (two-tier-fallback),
+# skip Step 3 haiku backstop to avoid double-haiku invocation. Allow silently.
+if [ "${GATE_TIER_USED:-}" = "two-tier-fallback" ]; then
+  log_gate_decision "timeout-fallback-allow"
+  exit 0
+fi
+
+# Message hash for Step 3 cache lookup (compute_hash() defined above in helpers section).
+# M027: GATE_MSG_HASH may already be set by haiku-primary path; only recompute if unset.
+[ -z "${GATE_MSG_HASH:-}" ] && GATE_MSG_HASH="$(compute_hash)"
 
 # CLI availability probe.
 GATE_CLI_AVAILABLE=0
