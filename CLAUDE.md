@@ -291,6 +291,8 @@ flow when `--substrate`; max combo = 14. M026 adds Smoke Check 77 (count 76 → 
 fixture-fail tests (missing-recommendation + source-prose-violation) proving gate not
 green-but-vacuous on M025 PM-cohort fabrication anti-pattern.
 
+Since v0.31.0 / M027 (ADR-260509-X), `pkg/.aihaus/hooks/autonomy-guard.sh` ships **two-tier dispatch** — the composition rule M005 + M023 + M025 + M027 = **40 patterns frozen** (total locked, NOT per-pack). Two-tier routes by `manifest_status` + `exec_phase` binary field: `exec_phase="1"` AND `manifest_status ∈ {running, in-progress}` → **haiku-primary** (milestone-execution turns where +600-900ms p95 latency amortizes against agent turns); all other statuses + `exec_phase="0"` → **regex-primary** (40-pattern walk, `<50ms`). Adding a new pattern requires a new ADR that explicitly amends ADR-260509-X. New env var `AIHAUS_AUTONOMY_TIER=regex|haiku|two-tier` ships with default unset → context-route. Existing `AIHAUS_AUTONOMY_HAIKU=0` opt-out preserved (disables haiku on all paths). JSONL schema extended additively: `tier_used` (`regex`|`haiku`|`two-tier-fallback`) per row + `rephrase_suggestion` (static human-readable string on `regex-match` rows only — S3 OPAQUE verdict obligation, static lookup, `<1ms`). 30-day burn-in monitors `haiku_p95_ms`; M028 hotfix path defined if p95 >1s. M027 adds `AIHAUS_AUTONOMY_TIER` opt-out env var.
+
 ## Merge-Back (M017 / ADR-M017-A)
 
 Merge-back from `isolation: worktree` agents to the milestone branch is driven by

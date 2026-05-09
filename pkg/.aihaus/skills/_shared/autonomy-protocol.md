@@ -173,3 +173,21 @@ previously update.sh only touched skills/agents/hooks/templates).
 > - **Agent-template excision (orchestrator-read templates targeted).** `roadmapper.md` L64-83 cadence-noun template excised → "Delivery 1/Delivery 2/N" substitution (per ADR-260508-A I3). `brainstorm-synthesizer.md` Round 1/Round 2 panel mechanics + `*-r2.md` filename convention preserved (load-bearing). `eval-auditor.md`/`eval-planner.md` step-headers untouched (skill-step framing surface).
 >
 > - **M027 mechanical forcing function via Smoke Check 76.** Calendar-anchored ADR-presence gate with `Status: Accepted` semantic requirement (NOT declarative deadline theater). Fixture-fail tests (missing-ADR + token-rejected) prove gate is not green-but-vacuous. Replaces R2 declarative theater per CHECK F4.
+
+## §M027 invariants (post-2026-05-08; ADR-260509-X)
+
+> **M027 amendments to the two-tier dispatch + pattern freeze:**
+>
+> - **Composition rule (M005 + M023 + M024 + M025 + M027).** All packs compose at runtime. M005 fast-path (11 patterns) + M023 GSP-DS (13 patterns) + M025 LSDD (16 patterns) = **40 active patterns total — FROZEN**. Adding any new pattern requires a new ADR explicitly amending ADR-260509-X. Per-pack env-gates (`AIHAUS_GSP_DS_REGEX=0`, `AIHAUS_LSDD_REGEX=0`) preserved — per-pack disable still permitted, but total cannot grow.
+>
+> - **Two-tier dispatch (NEW — ADR-260509-X).** `autonomy-guard.sh` routes by `manifest_status` + `exec_phase` binary field. `exec_phase="1"` AND `manifest_status ∈ {running, in-progress}` → **haiku-primary** (milestone-execution turns); all other statuses + `exec_phase="0"` → **regex-primary** (40-pattern fast-path). On haiku-primary timeout/error: falls back to regex-primary with `tier_used=two-tier-fallback` in JSONL row. Default when `AIHAUS_AUTONOMY_TIER` unset: context-route (two-tier).
+>
+> - **`exec_phase` wire-contract preserved.** The JSONL field `exec_phase` continues to emit binary string `"0"` (idle) or `"1"` (in execution) per existing `autonomy-guard.sh` printf. The string `"milestone-execution"` is documentation prose (ADR-260509-X §Dispatch fields), NOT a wire value. NO parent-skill `AIHAUS_EXEC_PHASE=milestone-execution` env mandate. Existing 4185+ JSONL rows continue to parse identically.
+>
+> - **New env opt-out: `AIHAUS_AUTONOMY_TIER=regex|haiku|two-tier`.** Default unset → context-route. `AIHAUS_AUTONOMY_TIER=regex` forces regex-primary on every invocation. `AIHAUS_AUTONOMY_HAIKU=0` (M011) preserved — disables haiku on all paths regardless of tier setting. The two controls are orthogonal: `AIHAUS_AUTONOMY_HAIKU=0` is always the stronger kill-switch.
+>
+> - **`rephrase_suggestion` JSONL field (S3 OPAQUE verdict obligation).** Static lookup keyed on `$GATE_SECTION`; emitted only on `regex-match` decision rows. Maps 6 section namespaces (`L65-72:no-delegated-typing`, `L52-63:no-honest-checkpoints`, `L32-50:no-option-menus`, `L52-63:no-reality-renegotiation`, `GSP-DS-*`, `LSDD-*`) to canonical human-readable rephrase strings. `<1ms` overhead (no LLM call). `null` for all non-regex-match decisions. Backward-compatible: prior rows simply lack the field.
+>
+> - **`tier_used` JSONL field (additive).** Values: `regex` | `haiku` | `two-tier-fallback`. Present on every decision row from M027 forward. Prior rows lack the field — schema is field-presence-permissive.
+>
+> - **Pattern-arms-race halted.** Total=40 frozen per ADR-260509-X. The M025 30-day window (known-uncovered slots: Tier/Cycle/Iteration/Sprint/Slice/Pass/Bucket/Cohort/Greek-letters) is now resolved via `haiku-primary` tier (classifier accuracy on novel phrasing) rather than pattern extension. Any new pattern is a policy decision requiring an explicit ADR amendment — not a mechanical addition.
