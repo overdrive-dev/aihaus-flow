@@ -3171,3 +3171,26 @@ The audit is a structural inventory used to decide whether A-rows promote to B/C
 - ADR-260503-A (audit framework + move rule)
 - ADR-260502-A (eligibility-gate authority)
 - M027 brainstorm OQ-7 + Contrarian Finding #10 + analyst-brief §5
+
+---
+
+## ADR-260509-CURATE-A — Researcher consolidation overlap threshold (PARK rule)
+
+**Status:** Accepted
+**Date:** 2026-05-08
+**Milestone:** M027 (curator pass)
+
+### Context
+
+S8 spike (PARK verdict) measured 7 researcher agents (phase, advisor, domain, ai, project, ui + research-synthesizer) at ~32% mean body overlap — far below the >70% threshold the spike PRD set as PROCEED-WITH-MERGE precondition. Shared content was structural scaffolding (stack-read, conflict-prevention, self-evolution, memory template) common to ALL 46 agents, NOT researcher-specific logic. Domain logic (210-380 unique words per agent) was genuinely divergent: different output schemas, input enums, downstream consumer contracts. advisor-researcher has no Write/Bash (in-context structured output), research-synthesizer is a downstream aggregator+committer (different pipeline stage), ui-researcher anchors a hard ui-checker contract (UI-SPEC.md).
+
+### Decision
+
+Adopt a binary >70% / PARK rule for any future agent-consolidation spike: cross-agent body-overlap below 70% means PARK regardless of telemetry confirmation. Telemetry alone (zero per-agent invocations) is insufficient justification for a merge — overlap measures the structural cost of preserving distinct contracts, telemetry only measures runtime tuning friction. Both axes must clear independently. Partial-merge candidates (e.g., phase-researcher + project-researcher at ~45% overlap, identical YAML, shared planner/roadmapper consumer family) require an explicit M028+ scoping decision and contract-impact analysis before any merge proceeds.
+
+### Consequences
+
+- Future spike PRDs can cite this rule rather than re-deriving the threshold.
+- Researcher cohort frozen at 7 agents; codebase-mapper remains separate (different cohort/model/tools).
+- M028+ partial-merge work is a deliberate, scoped story — not a side-effect of researcher tuning.
+- The 70% threshold is REVISABLE — if a future milestone produces evidence that lower-overlap merges are viable (e.g., kind-dispatch refactor), the threshold can be amended via a successor ADR.
