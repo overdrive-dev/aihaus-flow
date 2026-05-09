@@ -2737,11 +2737,10 @@ Consumer (`/aih-plan --from-brainstorm 260413-port-to-cursor-feasibility`) reads
 
 Synthesizer emits OQ#1 with `**Panel-Confidence:** H` + `**Source:** "discussed by panel during R2 convergence"` (prose-only, no file:line). Check 77 grammar regex fails (no PERSPECTIVE-*.md / CONVERSATION.md Turn / pkg/.aihaus path match). BRIEF.md schema validation aborts with explicit `BRIEF.md at <slug> failed Source grammar — OQ#1 Panel-Confidence:H requires file:line citation`. M025 PM-cohort fabrication anti-pattern caught at synthesis layer (not just panelist layer).
 
-<<<<<<< HEAD
 ## ADR-260509-V — `--substrate` tier-conditional default-on (M027/S6)
 
 **Date:** 2026-05-08
-**Status:** Proposed
+**Status:** Accepted
 **Milestone:** M027-260508-skills-agents-perf-review
 **Supersedes:** ADR-260508-B I2 (opt-in `--substrate` flag — partial supersession; only the default-eligibility logic; rest of I2 preserved)
 
@@ -3137,7 +3136,7 @@ The `--router` rejection is binding because dynamic per-request routing breaks t
 ## ADR-260509-Z — `enforcement-audit.md` consumer scope (M027/S5+S7 — resolves OQ-7)
 
 **Date:** 2026-05-08
-**Status:** Proposed
+**Status:** Accepted
 **Milestone:** M027-260508-skills-agents-perf-review
 **Resolves:** brainstorm OQ-7 (enforcement-audit external consumers)
 
@@ -3172,49 +3171,3 @@ The audit is a structural inventory used to decide whether A-rows promote to B/C
 - ADR-260503-A (audit framework + move rule)
 - ADR-260502-A (eligibility-gate authority)
 - M027 brainstorm OQ-7 + Contrarian Finding #10 + analyst-brief §5
-=======
----
-
-## ADR-260509-V — `--substrate` tier-conditional default-on for `--research`/`--deep`
-
-**Status:** Accepted
-**Date:** 2026-05-08
-**Supersedes:** ADR-260508-B I2 (opt-in `--substrate` flag — plain-brainstorm behavior retained; this ADR adds tier-conditional auto-enable)
-**Story:** M027 S6
-
-### Decision
-
-`--substrate` (Phase 6.5 substrate-scan) defaults to **ON** when `/aih-brainstorm` is invoked with `--research` or `--deep`. For default brainstorms (no flags), substrate remains opt-in (unchanged from M026). New flag `--no-substrate` opts out of auto-enable; it is an error to use `--no-substrate` without `--research` or `--deep` (since there is nothing to opt out of in default mode). Explicit `--substrate` flag continues to work as before.
-
-**Error string (binding):** `Error: --no-substrate requires --research or --deep (substrate is opt-in by default in plain brainstorms).`
-
-### Rationale
-
-F1-VERIFICATION shows substrate-scan catches 55-64% of substrate-discoverable BLOCKERs. M026 dogfood shows research-flagged and deep-flagged brainstorms have higher BLOCKER density. Flipping the default within those tiers ships the catch-rate gain to the cohort that benefits most, at +1 invocation cost (within existing cap ceiling). Plain brainstorms remain low-cost; the opt-in model is preserved for the default path.
-
-### Cost-Cap Recalculation (M027/S6)
-
-Formula: `substrate_active = (--substrate OR (--research OR --deep)) AND NOT --no-substrate`.
-
-| Flow | Invocations | Cap | Delta vs M026 |
-|------|-------------|-----|----------------|
-| default | 5 | 5 | 0 (unchanged) |
-| `--research` | 7 | 7 | +1 (substrate auto-on) |
-| `--deep` | 9 | 9 | +1 (substrate auto-on) |
-| `--deep --research` | 10 | 10 | +1 (substrate auto-on) |
-| max (`--panel 5 --deep --research`) | 14 | 14 | 0 (unchanged — was already 14 with explicit `--substrate`) |
-
-### Consequences
-
-- `aih-brainstorm/SKILL.md` Phase 6.5 condition flips at 2 sites (argument parsing + Phase 6.5 header/body).
-- Cost-cap table gains `--research` row; `--deep` and `--deep --research` rows updated.
-- `aih-brainstorm/annexes/substrate-scan.md` opening prose updated to reflect auto-on behavior.
-- SKILL.md line count remains ≤199.
-- Smoke Check 77 unchanged (checks Source grammar, not Phase 6.5 trigger logic).
-
-### References
-
-- ADR-260508-B I2 (original `--substrate` opt-in — superseded for `--research`/`--deep` tiers)
-- ADR-001 (single-writer — SUBSTRATE-FINDINGS.md write path unchanged)
-- M027 architecture.md §ADR-260509-V
->>>>>>> af66ea8 (feat(M027/S6): --substrate tier-conditional default-on for --research/--deep)

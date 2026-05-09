@@ -31,7 +31,7 @@ There is no build command, no type checker, and no unit test framework. The smok
 
 - `pkg/.aihaus/skills/*/SKILL.md` — 12 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code.
 - `pkg/.aihaus/skills/_shared/autonomy-protocol.md` — binding execution-autonomy rules (M005 / ADR-bound-to-all-skills): 3-phase rule, TRUE blocker definition, no option menus, no delegated typing. Every SKILL.md references it.
-- `pkg/.aihaus/agents/*.md` — 46 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, etc.).
+- `pkg/.aihaus/agents/*.md` — 48 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, plan-calibrator, migration-reviewer, etc.).
 - `pkg/.aihaus/hooks/*.sh` — 30 shell hooks for Claude Code lifecycle events: M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance) plus v0.12.0 runtime autonomy enforcement (autonomy-guard blocks forbidden execution-phase patterns) plus M017+ merge-back/git-add/lock-leak guards.
 - `pkg/.aihaus/skills/aih-plan/annexes/*.md` — 4 annex files (attachments, intake-discipline, from-brainstorm, guardrails) — M004 enxugamento of the aih-plan core SKILL.md.
 - `pkg/.aihaus/templates/SESSION-LOG.md` — template for `/aih-update --session-log <slug>` post-hoc retrospective (M004 story L).
@@ -162,7 +162,7 @@ New modes: `--checkpoint-enter <story> <agent> <substep>` and
 `--checkpoint-exit <story> <agent> <substep> <result> [<sha>]`.
 
 **Agent frontmatter classification (LD-6).** Every agent in `pkg/.aihaus/agents/*.md`
-declares two new YAML fields (46 agents classified; smoke-test Check 6 enforces both):
+declares two new YAML fields (48 agents classified; smoke-test Check 6 enforces both):
 
 ```yaml
 resumable: true | false
