@@ -162,7 +162,7 @@ If any required header is missing or out-of-order, abort with this exact string 
 BRIEF.md at <slug> failed schema validation — missing/out-of-order section(s): <list>. Re-run /aih-brainstorm <slug> or patch BRIEF.md manually before promoting.
 ```
 
-**Sub-field validation (M026+ Alt D per ADR-260508-B I3):** after H2 pass, validate per-OQ Alt D fields + Source grammar — see `annexes/sub-field-validator.md`. Legacy-permissive: BRIEFs without `**Panel-Confidence:**` skip sub-field check.
+**Sub-field validation (M026+ Alt D per ADR-260508-B I3):** after H2 pass, validate per-OQ Alt D fields + Source grammar — see `annexes/sub-field-validator.md`. Schema definition (sub-fields + citation grammar + stance-marker): `_shared/oq-schema.md`. Legacy-permissive: BRIEFs without `**Panel-Confidence:**` skip sub-field check.
 
 Pass-through is silent — success emits no output and proceeds to Phase 8.
 

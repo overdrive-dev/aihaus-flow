@@ -102,15 +102,7 @@ The other 5 sections (Problem Statement, Research Evidence, Synthesis, Open Ques
 
     No variation, no extra prose. The dogfood script (Story 8) asserts this exact string.
 - **Synthesis** — your opinionated recommendation. Take a position. Wishy-washy summaries fail the contract. If you favor one panelist's framing over another, say so and say why. **Stance-marker discipline (M026+ / ADR-260508-B):** every Synthesis bullet ships with mandatory `**Stance:**` bold-prefix marker indicating panel commit (e.g., `**Stance:** ratified by 3/3 R2`, `**Stance:** dissented by analyst R2`, `**Stance:** uncertain — defer to PLAN`). Eliminates two-surface scanning.
-- **Open Questions (M026+ Alt D schema per ADR-260508-B)** — honest list of what is still unresolved. **Each numbered OQ MUST ship inline sub-fields:**
-  ```markdown
-  1. **<Question text>**
-     - **Recommendation:** <single-classification path-forward; NOT A/B/C menu — autonomy-protocol §TRUE-blocker scoping>
-     - **Panel-Confidence:** H | M | L
-     - **Defer if:** <criterion under which OQ defers to PLAN-time decision>
-     - **Source:** <PERSPECTIVE-<role>.md:Lstart-Lend | CONVERSATION.md ## Turn N | pkg/.aihaus/<path>:Lstart-Lend>
-  ```
-  **Citation grammar (binding for H/M Panel-Confidence):** `**Source:**` value MUST match one of three regexes (Smoke Check 77 enforces): `PERSPECTIVE-[a-z-]+(\.r2)?\.md:L[0-9]+-L[0-9]+` OR `CONVERSATION\.md ## Turn [0-9]+` OR `pkg/\.aihaus/.+:L[0-9]+-L[0-9]+`. **L Panel-Confidence may use prose-only attribution.** Note: `Panel-Confidence` is the synthesizer's confidence about the PANEL's commit (synthesizer cannot read substrate); use L when uncertain. If fewer than 3 OQs, downstream `/aih-plan --from-brainstorm` skips its clarifying-questions step, so precision matters.
+- **Open Questions (M026+ Alt D schema per ADR-260508-B)** — honest list of what is still unresolved. Full schema (sub-fields, citation grammar, stance-marker): `pkg/.aihaus/skills/_shared/oq-schema.md`. Summary: each OQ ships `**Recommendation:**` + `**Panel-Confidence:** H|M|L` + `**Defer if:**` + `**Source:**` inline. H/M Panel-Confidence requires file:line citation (Smoke Check 77 enforces). `Panel-Confidence` is synthesizer's confidence about the PANEL's commit — use L when uncertain. If fewer than 3 OQs, downstream `/aih-plan --from-brainstorm` skips clarifying-questions step.
 - **Suggested Next Command** — exactly one of:
   - `/aih-plan --from-brainstorm [slug]` — scoped work with implementation detail.
   - `/aih-milestone --from-brainstorm [slug]` — multi-story delivery.
@@ -145,9 +137,7 @@ After completing work, if you discovered a reusable pattern:
 - Cite panelists by filename in Perspectives Summary.
 - Preserve contrarian severity tags in Challenges.
 - Be opinionated in Synthesis. Use `**Stance:**` markers per bullet (M026+).
-- **Open Questions Alt D schema (M026+ — ADR-260508-B binding):** every OQ ships with `**Recommendation:**` + `**Panel-Confidence:**` + `**Defer if:**` + `**Source:**` inline sub-fields.
-- **`**Panel-Confidence:**` H/M requires `**Source:**` citation grammar (file:line OR `CONVERSATION.md ## Turn N`); Smoke Check 77 enforces.
-- **`**Panel-Confidence:**` L may use prose attribution. Synthesizer cannot read substrate — use L when uncertain.
+- **Open Questions Alt D schema (M026+ — ADR-260508-B binding):** conform to `pkg/.aihaus/skills/_shared/oq-schema.md` — sub-fields, citation grammar, H/M enforcement, L permissive. Smoke Check 77 enforces.
 - Pick exactly one Suggested Next Command; justify in one sentence.
 
 ## Per-agent memory (optional)
