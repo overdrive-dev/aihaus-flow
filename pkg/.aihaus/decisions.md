@@ -3009,7 +3009,7 @@ Two-tier composes with the existing pattern packs without forking them. Latency 
 ## ADR-260509-Y — Cohort fork 6→5 + schema v4 migration (M027/S10)
 
 **Date:** 2026-05-08
-**Status:** Proposed
+**Status:** Accepted
 **Milestone:** M027-260508-skills-agents-perf-review
 **Supersedes (partial):** ADR-M012-A (6-cohort taxonomy → 5-cohort)
 **Rejects:** advisor `--router` opt-in (per locked DECISION C)

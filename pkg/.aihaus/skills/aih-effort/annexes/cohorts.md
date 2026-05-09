@@ -1,11 +1,12 @@
-# Cohort Taxonomy — 46 Agents → 6 Uniform Cohorts
+# Cohort Taxonomy — 48 Agents → 5 Uniform Cohorts
 
 This annex is the single source of truth for cohort membership, consumed by
 `/aih-effort` (preset filter, sidecar write) and by the restore path in
 `pkg/scripts/lib/restore-effort.sh` + `install.ps1`. Membership lives ONLY
 here — no `cohort:` frontmatter field per agent (keeps the sync surface
-minimal). See **ADR-M012-A** in `.aihaus/decisions.md` for the formal
-cohort semantics; see `annexes/presets.md` for the 3-preset effort matrix.
+minimal). See **ADR-M012-A** in `.aihaus/decisions.md` for the original 6-cohort
+semantics; see **ADR-260509-Y** for the 6→5 fork. See `annexes/presets.md`
+for the 3-preset effort matrix.
 
 A **cohort** is a group of agents sharing one fixed default model + a
 calibratable effort tier. Every cohort below declares exactly one
@@ -129,73 +130,59 @@ Members (alphabetical):
 - doc-verifier
 - eval-auditor
 - integration-checker
+- learning-advisor
 - security-auditor
 - ui-auditor
 - ui-checker
 - verifier
 
-**Count: 8**
+**Count: 9**
 
 ---
 
-### `:adversarial-scout`
+### `:adversarial`
 
 **Default model:** opus
-**Default effort:** max (preset-immune baseline)
+**Default effort:** high (cohort baseline)
 
 **Preset-immune:** true
 
 No `--preset <name>` invocation mutates any member of this cohort. Only
-an explicit `--cohort :adversarial-scout --model X --effort Y` (with
+an explicit `--cohort :adversarial --model X --effort Y` (with
 literal-word `adversarial` confirmation) or `--agent <member> --model X
 --effort Y` invocation may alter a member. Immunity enforced via the
 `is_preset_immune(cohort)` helper in `pkg/scripts/lib/restore-effort.sh`
-(PowerShell: `Test-PresetImmune` in `install.ps1`). See ADR-M012-A for the
+(PowerShell: `Test-PresetImmune` in `install.ps1`). See ADR-260509-Y for the
 `is_preset_immune` binding contract.
 
-Scout-tier agents produce pre-merge findings that are binding on downstream
-plan approval. `(opus, max)` effort reflects the highest-stakes review
-position: a scout finding blocks story execution, making false-negatives
-catastrophic.
+This cohort merges the former `:adversarial-scout` (3 agents, opus/max) and
+`:adversarial-review` (3 agents, opus/high) cohorts into a single preset-immune
+group. Cohort-baseline effort = `high`. The `(opus, max)` profile for
+`plan-checker`, `contrarian`, and `plan-calibrator` is preserved via
+**per-agent `effort: max` frontmatter** — NOT via cohort baseline.
 
-Members (alphabetical):
-
-- contrarian
-- plan-calibrator
-- plan-checker
-
-**Count: 3**
-
----
-
-### `:adversarial-review`
-
-**Default model:** opus
-**Default effort:** high (preset-immune baseline)
-
-**Preset-immune:** true
-
-No `--preset <name>` invocation mutates any member of this cohort. Only
-an explicit `--cohort :adversarial-review --model X --effort Y` (with
-literal-word `adversarial` confirmation) or `--agent <member> --model X
---effort Y` invocation may alter a member. Immunity enforced via the same
-`is_preset_immune(cohort)` helper referenced above. See ADR-M012-A.
-
-Review-tier agents produce post-implementation code and logic review findings
-that gate merge. `(opus, high)` rather than `(opus, max)` — review scope is
-bounded to an already-implemented diff, not an open-ended plan.
+**Per-agent effort overrides (binding — Smoke Check 6 sub-assert enforces):**
+- `plan-checker` → `effort: max` (false-negative catastrophic for pre-execution gate)
+- `contrarian` → `effort: max` (adversarial idea-challenger; pre-plan position)
+- `plan-calibrator` → `effort: max` (adaptive interrogator; pre-execution gate)
+- `code-reviewer` → `effort: high` (cohort baseline, bounded diff scope)
+- `migration-reviewer` → `effort: high` (cohort baseline, bounded diff scope)
+- `reviewer` → `effort: high` (cohort baseline, bounded diff scope)
 
 Members (alphabetical):
 
 - code-reviewer
+- contrarian
 - migration-reviewer
+- plan-calibrator
+- plan-checker
 - reviewer
 
-**Count: 3**
+**Count: 6**
 
 ---
 
-## Membership table (46 agents)
+## Membership table (48 agents)
 
 **Parse contract (F-006 — binding per ADR-M012-A).** This table has exactly
 5 data columns. The header is `| # | Agent | Cohort | Model | Effort |`.
@@ -208,7 +195,7 @@ on every data row at CI time.
 
 Model column reflects the cohort's **fixed default model** for a balanced
 install. Effort column reflects the **balanced preset** default for each
-cohort.
+cohort (or per-agent override for `:adversarial` max-tier members).
 
 | # | Agent | Cohort | Model | Effort |
 |---|-------|--------|-------|--------|
@@ -219,10 +206,10 @@ cohort.
 |  5 | assumptions-analyzer     | :planner          | opus   | high  |
 |  6 | brainstorm-synthesizer   | :planner          | opus   | high  |
 |  7 | code-fixer               | :doer             | sonnet | high  |
-|  8 | code-reviewer            | :adversarial-review | opus | high  |
+|  8 | code-reviewer            | :adversarial      | opus   | high  |
 |  9 | codebase-mapper          | :doer             | sonnet | high  |
 | 10 | context-curator          | :verifier         | haiku  | high  |
-| 11 | contrarian               | :adversarial-scout | opus  | max   |
+| 11 | contrarian               | :adversarial      | opus   | max   |
 | 12 | debug-session-manager    | :doer             | sonnet | high  |
 | 13 | debugger                 | :doer             | sonnet | high  |
 | 14 | doc-verifier             | :verifier         | haiku  | high  |
@@ -238,19 +225,19 @@ cohort.
 | 24 | intel-updater            | :doer             | sonnet | high  |
 | 25 | knowledge-curator        | :planner          | opus   | high  |
 | 26 | learning-advisor         | :verifier         | haiku  | high  |
-| 27 | migration-reviewer       | :adversarial-review | opus | high  |
+| 27 | migration-reviewer       | :adversarial      | opus   | high  |
 | 28 | notion-sync              | :doer             | sonnet | high  |
 | 29 | nyquist-auditor          | :doer             | sonnet | high  |
 | 30 | pattern-mapper           | :doer             | sonnet | high  |
 | 31 | phase-researcher         | :planner          | opus   | high  |
-| 32 | plan-calibrator          | :adversarial-scout | opus  | max   |
-| 33 | plan-checker             | :adversarial-scout | opus  | max   |
+| 32 | plan-calibrator          | :adversarial      | opus   | max   |
+| 33 | plan-checker             | :adversarial      | opus   | max   |
 | 34 | planner                  | :planner-binding  | opus   | xhigh |
 | 35 | product-manager          | :planner-binding  | opus   | xhigh |
 | 36 | project-analyst          | :doer             | sonnet | high  |
 | 37 | project-researcher       | :planner          | opus   | high  |
 | 38 | research-synthesizer     | :planner          | opus   | high  |
-| 39 | reviewer                 | :adversarial-review | opus | high  |
+| 39 | reviewer                 | :adversarial      | opus   | high  |
 | 40 | roadmapper               | :planner-binding  | opus   | xhigh |
 | 41 | security-auditor         | :verifier         | haiku  | high  |
 | 42 | test-writer              | :doer             | sonnet | high  |
@@ -261,16 +248,16 @@ cohort.
 | 47 | ux-designer              | :planner          | opus   | high  |
 | 48 | verifier                 | :verifier         | haiku  | high  |
 
-**Totals:** :planner-binding=4 · :planner=14 · :doer=15 · :verifier=9 · :adversarial-scout=3 · :adversarial-review=3 · Sum=48
+**Totals:** :planner-binding=4 · :planner=14 · :doer=15 · :verifier=9 · :adversarial=6 · Sum=48
 
 ---
 
-## Reassignments vs v0.15.0
+## Reassignments vs v0.15.0 / v0.16.0
 
-The following moves occurred relative to the v0.15.0 5-cohort taxonomy. All
-rationale is authoritative (ADR-M012-A binding).
+The following moves occurred relative to the v0.15.0 5-cohort taxonomy and the
+v0.16.0 6-cohort taxonomy. All rationale is authoritative (ADR-M012-A + ADR-260509-Y binding).
 
-#### Agent reassignments
+#### Agent reassignments (v0.15.0 → v0.16.0)
 
 | Agent | v0.15.0 cohort | v0.16.0 cohort | Rationale |
 |-------|---------------|----------------|-----------|
@@ -288,6 +275,17 @@ rationale is authoritative (ADR-M012-A binding).
 | reviewer | `:adversarial` | `:adversarial-review` | Adversarial split: reviewers carry the `(opus, high)` tier. |
 | code-reviewer | `:adversarial` | `:adversarial-review` | Same rationale as `reviewer`. |
 
+#### Agent reassignments (v0.16.0 → v0.17.0 / M027)
+
+| Agent | v0.16.0 cohort | M027 cohort | Rationale |
+|-------|----------------|-------------|-----------|
+| plan-checker | `:adversarial-scout` | `:adversarial` | 6→5 cohort fork (ADR-260509-Y). Preset-immunity preserved as per-agent `effort: max` override. |
+| contrarian | `:adversarial-scout` | `:adversarial` | Same rationale as `plan-checker`. |
+| plan-calibrator | `:adversarial-scout` | `:adversarial` | New agent (M027/S5). Joined `:adversarial-scout` at S5; moves to merged `:adversarial` at S10. |
+| reviewer | `:adversarial-review` | `:adversarial` | 6→5 cohort fork (ADR-260509-Y). Cohort baseline `(opus, high)` preserved. |
+| code-reviewer | `:adversarial-review` | `:adversarial` | Same rationale as `reviewer`. |
+| migration-reviewer | `:adversarial-review` | `:adversarial` | New agent (M027/S9). Joined `:adversarial-review` at S9; moves to merged `:adversarial` at S10. |
+
 #### Cohort-level changes
 
 | Change | Detail |
@@ -295,9 +293,10 @@ rationale is authoritative (ADR-M012-A binding).
 | `verifier-rich` subset deleted | Was an architect-voice label for the 2-member sonnet-override subset inside v0.15.0 `:verifier` (nyquist-auditor, ui-auditor). Never a formal cohort name in the sidecar; removed from discourse entirely. Members reassigned individually above. |
 | `investigator` cohort deleted | 3-member cohort (`debugger`, `debug-session-manager`, `user-profiler`) folded into `:doer`. Default tier was `(sonnet, high)` — byte-identical to `:doer` default. Cohort was not a meaningful calibration target; absorbing into `:doer` eliminates a category without loss of calibration resolution. |
 | `:planner` (17) split into `:planner-binding` (4) + `:planner` (13) | The intra-cohort carve-out that granted 4 binding agents `(opus, xhigh)` while the other 13 ran `(opus, high)` becomes two distinct cohorts. Users can now target `--cohort :planner-binding` independently, preserving the tier distinction without intra-cohort special-casing. |
-| `:adversarial` (4) split into `:adversarial-scout` (2) + `:adversarial-review` (2) | The internal 2-tier structure (max vs high effort) inside v0.15.0 `adversarial` cohort is now expressed as two cohorts. Both remain preset-immune. Sidecar migration maps old `adversarial.*` settings to `adversarial-scout.*` only (conservative; see ADR-M012-A migration table). |
+| `:adversarial` (4) split into `:adversarial-scout` (2) + `:adversarial-review` (2) | The internal 2-tier structure (max vs high effort) inside v0.15.0 `adversarial` cohort is now expressed as two cohorts. Both remain preset-immune. Sidecar migration maps old `adversarial.*` settings to `adversarial-scout.*` only (conservative; see ADR-M012-A migration table). — **Superseded in M027/ADR-260509-Y** |
+| `:adversarial-scout` (3) + `:adversarial-review` (3) → `:adversarial` (6) | M027/S10 6→5 fork (ADR-260509-Y). Preset-immunity becomes one rule. The `(opus, max)` sub-distinction is expressed as per-agent `effort:` frontmatter overrides on plan-checker, contrarian, plan-calibrator — NOT as a cohort baseline. Schema v4 migration: `.effort.v3.backup` written before fold; per-agent max-effort overrides injected if absent. |
 
-#### Rationale for the 4 non-trivial moves
+#### Rationale for the 4 non-trivial moves (v0.15.0 → v0.16.0)
 
 1. **`nyquist-auditor` → `:doer`:** `nyquist-auditor` generates tests and
    iteratively debugs them until behavioral coverage is satisfied. This is

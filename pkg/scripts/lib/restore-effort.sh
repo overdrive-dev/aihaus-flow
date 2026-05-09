@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # restore-effort.sh — shared library sourced by update.sh and
-# install.sh --update. Reads .aihaus/.calibration (schema v2) or
-# .aihaus/.effort (schema v3) and re-applies recorded calibration state
-# to .aihaus/agents/*.md after an agents-directory wipe.
+# install.sh --update. Reads .aihaus/.calibration (schema v2),
+# .aihaus/.effort (schema v3), or .aihaus/.effort (schema v4) and
+# re-applies recorded calibration state to .aihaus/agents/*.md after
+# an agents-directory wipe.
 #
 # ADR references: ADR-M012-A (schema v3, 6-cohort taxonomy, migration),
-#                 ADR-M009-A (sidecar ownership, absolute-restore, record-defer).
+#                 ADR-M009-A (sidecar ownership, absolute-restore, record-defer),
+#                 ADR-260509-Y (schema v4, 5-cohort fork, v3→v4 migration).
 #
 # Usage:
 #   source "$(dirname "$0")/lib/restore-effort.sh"
@@ -14,14 +16,16 @@
 # Contract:
 #   - $1 is the .aihaus root (e.g. "$TARGET/.aihaus"). Must exist.
 #   - Missing sidecar = silent no-op (return 0).
-#   - schema=3 -> v3 idempotent restore.
+#   - schema=4 -> v4 idempotent restore (5-cohort taxonomy, ADR-260509-Y).
+#   - schema=3 -> v3 idempotent restore (6-cohort, read-compat through M028).
+#     v3->v4 migration is triggered ONLY by update.sh post-M027 or aih-effort --status.
 #   - schema=2 -> v2->v3 migration path (writes .effort, renames .calibration to .calibration.v2.bak).
 #   - Unknown/missing schema = loud !! warning, no mutation (return 0).
 #   - All state is confined to function locals -- sourcing script's globals
 #     are not polluted.
 #
 # Schema contract: <aihaus_root>/skills/aih-effort/annexes/state-file.md.
-# Cohort membership (v3): <aihaus_root>/skills/aih-effort/annexes/cohorts.md.
+# Cohort membership (v4/v3): <aihaus_root>/skills/aih-effort/annexes/cohorts.md.
 #
 # ---- Migration table (v2 -> v3) -------------------------------------------
 # v2 field                          v3 destination                      Lossy? Warning shape
@@ -47,6 +51,19 @@
 # <agent>=<effort> (per-agent)      <agent>=<effort>                    no     silent
 # <agent>.model=<m> (per-agent)     <agent>.model=<m>                   no     silent
 #
+# ---- Migration table (v3 -> v4) -------------------------------------------
+# v3 field                             v4 destination                      Lossy? Warning shape
+# schema=3                             schema=4                            no     silent
+# cohort.adversarial-scout.model=X     cohort.adversarial.model=X          yes    INFO row in migration log
+# cohort.adversarial-scout.effort=X    cohort.adversarial.effort=high       yes    INFO row (effort demoted to baseline high; per-agent max injected)
+# cohort.adversarial-review.model=X    cohort.adversarial.model=X (if unset) yes  INFO row
+# cohort.adversarial-review.effort=X   cohort.adversarial.effort=X          no     silent (if high)
+# conflict: scout.effort != review.effort  ABORT + stable error grammar     yes    !! CONFLICT block
+# plan-checker=<effort> (per-agent)    plan-checker=max INJECTED if absent  yes    INFO row (preset-immunity preservation)
+# contrarian=<effort> (per-agent)      contrarian=max INJECTED if absent    yes    INFO row (same)
+# plan-calibrator=<effort> (per-agent) plan-calibrator=max INJECTED if absent yes  INFO row (same)
+# all other fields                     verbatim passthrough                  no     silent
+#
 # Preset effort-distribution delta reference (for FR-M10 warning):
 #   cost-optimized -> cost:
 #     :planner (opus, high) -> (opus, medium)    [effort shift]
@@ -61,16 +78,23 @@
 
 # ============================================================================
 # is_preset_immune -- AUTHORITATIVE HELPER (F-010 resolution, R3 mitigation)
-# Returns 0 (immune) for :adversarial-scout and :adversarial-review; 1 otherwise.
+# Returns 0 (immune) for :adversarial (v4) and legacy v3 scout/review names.
 # This is the SINGLE definition. All preset-write call sites MUST use this helper.
-# No scattered `if cohort == "adversarial"` literals permitted (ADR-M012-A).
+# No scattered `if cohort == "adversarial"` literals permitted (ADR-M012-A /
+# ADR-260509-Y).
 #
-# Post-S06 verification: rg '^is_preset_immune' pkg/scripts/ pkg/.aihaus/ = 1 match.
+# v4 canonical name: :adversarial (merged from v3 :adversarial-scout +
+# :adversarial-review per M027/S10 6→5 cohort fork).
+# Legacy v3 names retained during 1-milestone deprecation window (M028).
+#
+# Post-S10 verification: rg '^is_preset_immune' pkg/scripts/ pkg/.aihaus/ = 1 match.
 # PowerShell equivalent: Test-PresetImmune in pkg/scripts/install.ps1.
 # ============================================================================
 is_preset_immune() {
   local cohort="$1"
   case "$cohort" in
+    :adversarial|adversarial) return 0 ;;
+    # Legacy v3 names — retained through M028 deprecation window.
     :adversarial-scout|adversarial-scout) return 0 ;;
     :adversarial-review|adversarial-review) return 0 ;;
     *) return 1 ;;
@@ -104,14 +128,21 @@ restore_effort() {
     return 0
   fi
 
-  if [[ "$detected_schema" == "3" ]]; then
-    # Idempotent v3 restore.
-    _restore_effort_v3 "$aihaus_root" "$v3_file"
+  if [[ "$detected_schema" == "4" ]]; then
+    # Idempotent v4 restore.
+    _restore_effort_v4 "$aihaus_root" "$v3_file"
+  elif [[ "$detected_schema" == "3" ]]; then
+    # Idempotent v3 restore (read-compat through M028 deprecation window).
+    # v3→v4 migration is triggered ONLY by update.sh post-M027 refresh or
+    # by /aih-effort --status — NOT by a plain restore_effort call.
+    # This keeps Check 29 idempotence invariant intact.
+    _restore_effort_v4 "$aihaus_root" "$v3_file"
   elif [[ "$detected_schema" == "2" ]]; then
-    # Migrate v2 -> v3, then restore.
+    # Migrate v2 -> v3 only (single-step). v3→v4 migration fires on next
+    # explicit trigger (update.sh / aih-effort --status).
     _migrate_v2_to_v3 "$aihaus_root" "$v2_file" "$v3_file"
     if [[ -f "$v3_file" ]]; then
-      _restore_effort_v3 "$aihaus_root" "$v3_file"
+      _restore_effort_v4 "$aihaus_root" "$v3_file"
     fi
   else
     echo "  !!" >&2
@@ -332,11 +363,28 @@ _migrate_v2_to_v3() {
 }
 
 # ============================================================================
-# _restore_effort_v3 -- idempotent v3 restore loop
+# _restore_effort_v3 -- idempotent v3 restore loop (legacy, read-compat through M028)
+# v3 sidecars are restored idempotently via _restore_effort_v4 (which accepts
+# v3 cohort names during the deprecation window). v3→v4 migration is NOT triggered
+# by a plain restore_effort call — only by update.sh post-M027 or aih-effort --status.
 # Pass 1: cohort-level (model, effort) apply (skipping preset-immune via helper).
 # Pass 2: per-agent overrides -- always win over cohort-level (apply-order ADR-M012-A).
 # ============================================================================
 _restore_effort_v3() {
+  local aihaus_root="$1"
+  local state_file="$2"
+  # v3 cohort names accepted by _restore_effort_v4 during M028 deprecation window.
+  _restore_effort_v4 "$aihaus_root" "$state_file"
+}
+
+# ============================================================================
+# _restore_effort_v4 -- idempotent v4 restore loop (ADR-260509-Y, M027/S10)
+# Accepts both v4 cohort names (:adversarial) and legacy v3 names
+# (:adversarial-scout, :adversarial-review) during M028 deprecation window.
+# Pass 1: cohort-level (model, effort) apply (skipping preset-immune via helper).
+# Pass 2: per-agent overrides -- always win over cohort-level (apply-order ADR-M012-A).
+# ============================================================================
+_restore_effort_v4() {
   local aihaus_root="$1"
   local state_file="$2"
   local cohorts_md="${aihaus_root}/skills/aih-effort/annexes/cohorts.md"
@@ -349,8 +397,8 @@ _restore_effort_v3() {
   else
     while IFS='=' read -r key value; do
       [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-      # Accept all 6 v3 cohort names (hyphenated).
-      [[ "$key" =~ ^cohort\.(planner-binding|planner|doer|verifier|adversarial-scout|adversarial-review)\.(model|effort)$ ]] || continue
+      # Accept v4 cohort names (5) + legacy v3 names during deprecation window.
+      [[ "$key" =~ ^cohort\.(planner-binding|planner|doer|verifier|adversarial|adversarial-scout|adversarial-review)\.(model|effort)$ ]] || continue
       value="${value%$'\r'}"
       [[ -z "$value" || "$value" =~ ^[[:space:]]+$ ]] && continue
       [[ "$value" == "custom" ]] && continue  # Defer to per-agent overrides.
@@ -361,10 +409,15 @@ _restore_effort_v3() {
       field="${cohort_name##*.}"
       cohort_name="${cohort_name%.*}"
 
-      # Skip preset-immune cohorts (is_preset_immune helper -- R3 / ADR-M012-A).
+      # Skip preset-immune cohorts (is_preset_immune helper -- R3 / ADR-M012-A / ADR-260509-Y).
       if is_preset_immune "$cohort_name"; then
         continue
       fi
+
+      # Normalize legacy v3 cohort names to v4 canonical name.
+      case "$cohort_name" in
+        adversarial-scout|adversarial-review) cohort_name="adversarial" ;;
+      esac
 
       # Extract members from cohorts.md 5-col pipe-table.
       # Column layout: | # | Agent | Cohort | Model | Effort |
@@ -406,9 +459,10 @@ _restore_effort_v3() {
     value="${value%$'\r'}"
     [[ -z "$value" || "$value" =~ ^[[:space:]]+$ ]] && continue
 
-    # Skip cohort.* -- handled in Pass 1. Warn on unknown v3 cohort names.
+    # Skip cohort.* -- handled in Pass 1. Warn on unknown cohort names
+    # (warn for anything not in v4 5-set + legacy v3 names).
     if [[ "$key" =~ ^cohort\. ]]; then
-      if ! [[ "$key" =~ ^cohort\.(planner-binding|planner|doer|verifier|adversarial-scout|adversarial-review)\.(model|effort)$ ]]; then
+      if ! [[ "$key" =~ ^cohort\.(planner-binding|planner|doer|verifier|adversarial|adversarial-scout|adversarial-review)\.(model|effort)$ ]]; then
         local bad
         bad="${key#cohort.}"
         bad="${bad%.*}"
@@ -447,4 +501,184 @@ _restore_effort_v3() {
   else
     echo "  restored ${restored} effort entry(ies) from .aihaus/.effort"
   fi
+}
+
+# ============================================================================
+# _migrate_v3_to_v4 -- v3 .effort -> v4 .effort migration (ADR-260509-Y)
+# Folds :adversarial-scout + :adversarial-review → :adversarial.
+# Preserves/injects per-agent effort=max for plan-checker, contrarian, plan-calibrator.
+# Writes .effort.v3.backup BEFORE any mutation. Aborts on parse fail.
+# ============================================================================
+_migrate_v3_to_v4() {
+  local aihaus_root="$1"
+  local v3_file="$2"
+  local v4_file="$3"
+  local v3_backup="$4"
+  local tmp_file="${v4_file}.v4.tmp"
+
+  # ---- Step 1: Abort on parse fail check ------------------------------------
+  # Scan for malformed lines (non-comment, non-blank, no '=' separator).
+  local line_num=0 parse_error=0
+  while IFS= read -r raw_line; do
+    line_num=$((line_num + 1))
+    # Strip CRLF.
+    local line="${raw_line%$'\r'}"
+    # Skip blank lines and comments.
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    # Every non-blank non-comment line must contain '='.
+    if [[ "$line" != *=* ]]; then
+      echo "  !!" >&2
+      echo "  !!  v3 sidecar parse fail at line ${line_num}: '${line}'" >&2
+      echo "  !!  No '=' separator found. Migration aborted. v3 file preserved." >&2
+      echo "  !!" >&2
+      parse_error=1
+      break
+    fi
+  done < "$v3_file"
+  if [[ "$parse_error" -eq 1 ]]; then
+    return 1
+  fi
+
+  # ---- Step 2: Write .effort.v3.backup BEFORE mutation ----------------------
+  if ! cp "$v3_file" "$v3_backup"; then
+    echo "  !!" >&2
+    echo "  !!  Could not write v3 backup at ${v3_backup}. Migration aborted." >&2
+    echo "  !!" >&2
+    return 1
+  fi
+
+  # ---- Step 3: Parse v3 fields ----------------------------------------------
+  local v3_last_preset="" v3_last_commit=""
+  local v3_scout_model="" v3_scout_effort=""
+  local v3_review_model="" v3_review_effort=""
+  local per_agent_effort_lines="" per_agent_model_lines=""
+  # Track preset-immune per-agent overrides for injection check.
+  local has_plan_checker_effort=0 has_contrarian_effort=0 has_plan_calibrator_effort=0
+  local other_cohort_lines=""
+
+  while IFS='=' read -r key rest; do
+    [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+    local value="${rest%$'\r'}"
+    value="${value#"${value%%[! ]*}"}"  # ltrim
+    [[ -z "$value" || "$value" =~ ^[[:space:]]+$ ]] && continue
+
+    case "$key" in
+      schema)                              ;;   # Skip.
+      last_preset)                         v3_last_preset="$value" ;;
+      last_commit)                         v3_last_commit="$value" ;;
+      cohort.adversarial-scout.model)      v3_scout_model="$value" ;;
+      cohort.adversarial-scout.effort)     v3_scout_effort="$value" ;;
+      cohort.adversarial-review.model)     v3_review_model="$value" ;;
+      cohort.adversarial-review.effort)    v3_review_effort="$value" ;;
+      cohort.*)
+        # All other cohort lines pass through verbatim.
+        other_cohort_lines="${other_cohort_lines}${key}=${value}"$'\n'
+        ;;
+      plan-checker|plan-checker.effort)    has_plan_checker_effort=1 ; per_agent_effort_lines="${per_agent_effort_lines}${key}=${value}"$'\n' ;;
+      contrarian|contrarian.effort)        has_contrarian_effort=1   ; per_agent_effort_lines="${per_agent_effort_lines}${key}=${value}"$'\n' ;;
+      plan-calibrator|plan-calibrator.effort) has_plan_calibrator_effort=1 ; per_agent_effort_lines="${per_agent_effort_lines}${key}=${value}"$'\n' ;;
+      *.model)
+        per_agent_model_lines="${per_agent_model_lines}${key}=${value}"$'\n'
+        ;;
+      *)
+        per_agent_effort_lines="${per_agent_effort_lines}${key}=${value}"$'\n'
+        ;;
+    esac
+  done < "$v3_file"
+
+  # ---- Step 4: Conflict detection for scout vs review effort ----------------
+  if [[ -n "$v3_scout_effort" && -n "$v3_review_effort" && "$v3_scout_effort" != "$v3_review_effort" ]]; then
+    echo "  !!" >&2
+    echo "  !!  CONFLICT: v3 sidecar has conflicting effort for :adversarial-scout (${v3_scout_effort})" >&2
+    echo "  !!    and :adversarial-review (${v3_review_effort})." >&2
+    echo "  !!  Migration aborted. Restore backup: cp '${v3_backup}' '${v3_file}'" >&2
+    echo "  !!  To resolve: bash update.sh --target . --resolve-cohort-merge <effort-value>" >&2
+    echo "  !!" >&2
+    # Restore backup (we already wrote it; remove it to signal clean state).
+    rm -f "$v3_backup"
+    return 1
+  fi
+
+  # ---- Step 5: Derive v4 :adversarial cohort settings ----------------------
+  # Model: prefer scout model, then review model (both should be opus; warn if differ).
+  local v4_adv_model=""
+  if [[ -n "$v3_scout_model" ]]; then
+    v4_adv_model="$v3_scout_model"
+  elif [[ -n "$v3_review_model" ]]; then
+    v4_adv_model="$v3_review_model"
+  fi
+
+  # Effort: cohort baseline = high; per-agent max overrides carry the sub-distinction.
+  # We do NOT propagate scout.effort=max to cohort-level (would override all 6 members).
+  local v4_adv_effort="high"  # Cohort baseline.
+  # (scout.effort=max handled by per-agent injection below.)
+
+  # ---- Step 6: Write v4 .effort.tmp ----------------------------------------
+  local migration_ts
+  migration_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  {
+    printf '# aihaus effort state -- managed by /aih-effort, consumed by /aih-update\n'
+    printf '# Schema: v4 -- 5-cohort taxonomy (ADR-260509-Y); no permission_mode field.\n'
+    printf '# This file is USER-OWNED and derived state. Safe to delete. Do not commit.\n'
+    printf '# Migrated from schema v3 on %s\n' "$migration_ts"
+    printf '\n'
+    printf 'schema=4\n'
+    [[ -n "$v3_last_preset" ]] && printf 'last_preset=%s\n' "$v3_last_preset"
+    [[ -n "$v3_last_commit" ]] && printf 'last_commit=%s\n' "$v3_last_commit"
+    printf '\n'
+    printf '# Cohort-level rows (migrated from v3)\n'
+    # Pass through non-adversarial cohort rows verbatim.
+    [[ -n "$other_cohort_lines" ]] && printf '%s' "$other_cohort_lines"
+    # Write folded :adversarial cohort (if any scout/review settings existed).
+    if [[ -n "$v4_adv_model" ]]; then
+      printf 'cohort.adversarial.model=%s\n' "$v4_adv_model"
+      echo "  migrated cohort.adversarial-scout.model + cohort.adversarial-review.model → cohort.adversarial.model=${v4_adv_model}"
+    fi
+    # We deliberately do NOT write cohort.adversarial.effort (preset-immune: not calibrated).
+    printf '\n'
+    printf '# Per-agent overrides (preset-immunity preservation -- ADR-260509-Y)\n'
+    printf '# plan-checker, contrarian, plan-calibrator carry (opus, max) via per-agent override.\n'
+  } > "$tmp_file"
+
+  # ---- Step 7: Inject preset-immunity per-agent overrides ------------------
+  local injected_lines=""
+  if [[ "$has_plan_checker_effort" -eq 0 ]]; then
+    injected_lines="${injected_lines}plan-checker=max"$'\n'
+    echo "  migrated: injected per-agent override plan-checker=max (preset-immunity preservation; v4 cohort baseline would have demoted to high)"
+  fi
+  if [[ "$has_contrarian_effort" -eq 0 ]]; then
+    injected_lines="${injected_lines}contrarian=max"$'\n'
+    echo "  migrated: injected per-agent override contrarian=max (preset-immunity preservation; v4 cohort baseline would have demoted to high)"
+  fi
+  if [[ "$has_plan_calibrator_effort" -eq 0 ]]; then
+    injected_lines="${injected_lines}plan-calibrator=max"$'\n'
+    echo "  migrated: injected per-agent override plan-calibrator=max (preset-immunity preservation; v4 cohort baseline would have demoted to high)"
+  fi
+
+  # Append injected + existing per-agent lines.
+  {
+    [[ -n "$injected_lines" ]] && printf '%s' "$injected_lines"
+    if [[ -n "$per_agent_effort_lines" ]]; then
+      printf '\n'
+      printf '# Per-agent effort overrides (from v3)\n'
+      printf '%s' "$per_agent_effort_lines"
+    fi
+    if [[ -n "$per_agent_model_lines" ]]; then
+      printf '\n'
+      printf '# Per-agent model overrides (from v3)\n'
+      printf '%s' "$per_agent_model_lines"
+    fi
+  } >> "$tmp_file"
+
+  # ---- Step 8: Atomic swap: tmp → v4 ----------------------------------------
+  if ! mv "$tmp_file" "$v4_file"; then
+    echo "  !!" >&2
+    echo "  !!  Could not write v4 file at ${v4_file}. Migration aborted." >&2
+    echo "  !!  v3 backup preserved at ${v3_backup}" >&2
+    echo "  !!" >&2
+    return 1
+  fi
+
+  echo "  migrated .aihaus/.effort schema v3 → v4 (5-cohort taxonomy, ADR-260509-Y)"
+  echo "  v3 backup preserved at ${v3_backup}"
 }

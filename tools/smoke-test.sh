@@ -173,16 +173,21 @@ check_skill_length() {
 
 # ---- Check 6: every agent frontmatter declares the six required fields ------
 # AND each agent's model: value matches the cohort default from cohorts.md
-# (per-cohort value-validation, ADR-M012-A § smoke-test Check 6).
-# effort: is presence-only (values differ across presets).
+# (per-cohort value-validation, ADR-M012-A § smoke-test Check 6 + ADR-260509-Y).
+# effort: is presence-only for most agents; preset-immunity sub-assert (Part C)
+# enforces effort=max for plan-checker, contrarian, plan-calibrator.
 #
-# Cohort default-model table (6-cohort, balanced preset):
+# Cohort default-model table (5-cohort post-M027/S10 fork, balanced preset):
 #   :planner-binding → opus
 #   :planner         → opus
 #   :doer            → sonnet
 #   :verifier        → haiku
-#   :adversarial-scout  → opus
-#   :adversarial-review → opus
+#   :adversarial     → opus  (merged from :adversarial-scout + :adversarial-review)
+#
+# Part C: Preset-immunity preservation sub-assert (BLOCKER #2 — ADR-260509-Y)
+#   When cohort = :adversarial AND agent ∈ {plan-checker, contrarian, plan-calibrator}
+#   → MUST have effort: max (per-agent override preserving the (opus,max) profile).
+#   Failure indicates v3→v4 migration silently demoted the preset-immune agents.
 #
 # get_cohort_members <:cohort-name>
 #   Reads the 5-column pipe-table from cohorts.md (F-006 parse contract).
@@ -240,17 +245,16 @@ check_agent_frontmatter() {
   if [[ ! -f "$cohorts_file" ]]; then
     offenders+=("cohorts.md not found at ${cohorts_file#${PACKAGE_ROOT}/}; cannot validate model baselines")
   else
-    # Cohort → expected model map (6-cohort balanced baseline, ADR-M012-A).
+    # Cohort → expected model map (5-cohort balanced baseline, ADR-M012-A + ADR-260509-Y).
     declare -A _cohort_model_map
     _cohort_model_map[":planner-binding"]="opus"
     _cohort_model_map[":planner"]="opus"
     _cohort_model_map[":doer"]="sonnet"
     _cohort_model_map[":verifier"]="haiku"
-    _cohort_model_map[":adversarial-scout"]="opus"
-    _cohort_model_map[":adversarial-review"]="opus"
+    _cohort_model_map[":adversarial"]="opus"
 
     local cohort expected_model members agent_file actual_model
-    for cohort in ":planner-binding" ":planner" ":doer" ":verifier" ":adversarial-scout" ":adversarial-review"; do
+    for cohort in ":planner-binding" ":planner" ":doer" ":verifier" ":adversarial"; do
       expected_model="${_cohort_model_map[$cohort]}"
       # Read members from cohorts.md (not hardcoded).
       while IFS= read -r member; do
@@ -267,6 +271,64 @@ check_agent_frontmatter() {
       done < <(_get_cohort_members "$cohort")
     done
     unset _cohort_model_map
+
+    # ---- Part C: Preset-immunity preservation sub-assert (ADR-260509-Y BLOCKER #2) --
+    # plan-checker, contrarian, plan-calibrator MUST have effort: max (not high)
+    # because v4 cohort baseline is high; per-agent override carries the (opus,max) profile.
+    # Failure here means v3→v4 migration silently demoted these preset-immune agents.
+    local _preset_immune_agents=("plan-checker" "contrarian" "plan-calibrator")
+    local pi_agent pi_file pi_effort
+    for pi_agent in "${_preset_immune_agents[@]}"; do
+      pi_file="${agents_root}/${pi_agent}.md"
+      if [[ ! -f "$pi_file" ]]; then
+        offenders+=("preset-immunity sub-assert: ${pi_agent}.md not found -- cannot verify effort=max")
+        continue
+      fi
+      pi_effort=$(awk '/^---$/{c++; next} c==1 && /^effort:/{print $2; exit}' "$pi_file")
+      if [[ "$pi_effort" != "max" ]]; then
+        offenders+=("preset-immunity VIOLATION: agents/${pi_agent}.md has effort=${pi_effort} (must be max -- v4 cohort baseline=high would demote unless per-agent override present)")
+      fi
+    done
+    unset _preset_immune_agents
+
+    # ---- Part D: Fixture-fail tests (ADR-260509-Y — prove gate is not vacuous) --
+    # Three inline synthetic-fixture tests using tmpdir agent files.
+    # Each test creates a fake agent with effort: high (preset-immunity violation).
+    # Part C logic extracts effort and compares to "max" — MUST detect violation.
+    # If awk extraction fails to return "high" (returns "max" or empty) → gate broken.
+    local _tmpdir
+    _tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t smoke6) || true
+    if [[ -d "$_tmpdir" ]]; then
+      # fixture-fail-c (load-bearing BLOCKER #2): plan-checker effort=high → must NOT read as max.
+      local _fake_pc="${_tmpdir}/plan-checker.md"
+      printf -- '---\nname: plan-checker\ntools: Read\nmodel: opus\neffort: high\ncolor: amber\nmemory: project\nresumable: true\ncheckpoint_granularity: story\n---\n' > "$_fake_pc"
+      local _fake_effort_pc
+      _fake_effort_pc=$(awk '/^---$/{c++; next} c==1 && /^effort:/{print $2; exit}' "$_fake_pc")
+      # Gate broken if extraction returns "max" (it should return "high" → Part C would fire).
+      if [[ "$_fake_effort_pc" == "max" || -z "$_fake_effort_pc" ]]; then
+        offenders+=("fixture-fail-c BROKEN: awk extracted '${_fake_effort_pc}' from synthetic plan-checker effort=high (expected 'high' — gate would not detect preset-immunity demotion)")
+      fi
+
+      # fixture-fail-b: contrarian effort=high → must NOT read as max.
+      local _fake_ct="${_tmpdir}/contrarian.md"
+      printf -- '---\nname: contrarian\ntools: Read\nmodel: opus\neffort: high\ncolor: indigo\nmemory: project\nresumable: true\ncheckpoint_granularity: story\n---\n' > "$_fake_ct"
+      local _fake_effort_ct
+      _fake_effort_ct=$(awk '/^---$/{c++; next} c==1 && /^effort:/{print $2; exit}' "$_fake_ct")
+      if [[ "$_fake_effort_ct" == "max" || -z "$_fake_effort_ct" ]]; then
+        offenders+=("fixture-fail-b BROKEN: awk extracted '${_fake_effort_ct}' from synthetic contrarian effort=high (expected 'high' — gate would not detect preset-immunity demotion)")
+      fi
+
+      # fixture-fail-a: plan-calibrator effort=high → must NOT read as max.
+      local _fake_cal="${_tmpdir}/plan-calibrator.md"
+      printf -- '---\nname: plan-calibrator\ntools: Read\nmodel: opus\neffort: high\ncolor: red\nmemory: project\nresumable: false\ncheckpoint_granularity: step\n---\n' > "$_fake_cal"
+      local _fake_effort_cal
+      _fake_effort_cal=$(awk '/^---$/{c++; next} c==1 && /^effort:/{print $2; exit}' "$_fake_cal")
+      if [[ "$_fake_effort_cal" == "max" || -z "$_fake_effort_cal" ]]; then
+        offenders+=("fixture-fail-a BROKEN: awk extracted '${_fake_effort_cal}' from synthetic plan-calibrator effort=high (expected 'high' — gate would not detect preset-immunity demotion)")
+      fi
+
+      rm -rf "$_tmpdir" 2>/dev/null || true
+    fi
   fi
 
   if [[ ${#offenders[@]} -eq 0 ]]; then
@@ -768,19 +830,20 @@ check_skill_count_and_staleness() {
   fi
 }
 
-# ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M027/S5) --
-# Seven sub-assertions covering the 6-cohort taxonomy in cohorts.md:
+# ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M027/S10) --
+# Seven sub-assertions covering the 5-cohort taxonomy in cohorts.md (post-M027/S10 fork):
 #   C1 each of the 48 agents appears under exactly one cohort
 #   C2 cohort counts match: planner-binding=4, planner=14, doer=15, verifier=9,
-#      adversarial-scout=3, adversarial-review=3 (total=48)
-#   C3 no :verifier-rich or :investigator cohort name appears in the table
+#      adversarial=6 (total=48); :adversarial-scout + :adversarial-review merged per ADR-260509-Y
+#   C3 no :verifier-rich or :investigator or legacy :adversarial-scout or :adversarial-review
+#      cohort name appears in the table (deprecated names forbidden post-M027/S10)
 #   C4 F-006 parse contract: every data row yields NF=7 (awk -F'|' | sort -u == "7")
 #   C5 header row literal match: "| # | Agent | Cohort | Model | Effort |"
 # Self-contained: reads cohorts.md directly; no invocation of /aih-effort
 # (R7 cycle prevention preserved).
 check_cohort_membership_roundtrip() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: cohort membership + counts + F-006 parse contract (M012/S07)"
+  local label="Check ${CHECK_NUMBER}: cohort membership + counts + F-006 parse contract (M012/S07 + M027/S10)"
   local cohorts_md="${PACKAGE_ROOT}/.aihaus/skills/aih-effort/annexes/cohorts.md"
   local problems=()
 
@@ -809,8 +872,7 @@ check_cohort_membership_roundtrip() {
   _cohort_counts[":planner"]=0
   _cohort_counts[":doer"]=0
   _cohort_counts[":verifier"]=0
-  _cohort_counts[":adversarial-scout"]=0
-  _cohort_counts[":adversarial-review"]=0
+  _cohort_counts[":adversarial"]=0
 
   local duplicates=()
   local unknown_cohorts=()
@@ -850,16 +912,15 @@ check_cohort_membership_roundtrip() {
     problems+=("C1: expected 48 agents in membership table; found ${total_agents}")
   fi
 
-  # C2: expected cohort counts.
+  # C2: expected cohort counts (5-cohort post-M027/S10 fork, ADR-260509-Y).
   local -A _expected_counts=(
     [":planner-binding"]=4
     [":planner"]=14
     [":doer"]=15
     [":verifier"]=9
-    [":adversarial-scout"]=3
-    [":adversarial-review"]=3
+    [":adversarial"]=6
   )
-  for cohort in ":planner-binding" ":planner" ":doer" ":verifier" ":adversarial-scout" ":adversarial-review"; do
+  for cohort in ":planner-binding" ":planner" ":doer" ":verifier" ":adversarial"; do
     local got="${_cohort_counts[$cohort]}"
     local want="${_expected_counts[$cohort]}"
     if [[ "$got" -ne "$want" ]]; then
@@ -872,6 +933,10 @@ check_cohort_membership_roundtrip() {
   # ---------- C3: no deprecated cohort names in table ----------------------
   if grep -qE '^\|[^|]*\| *:(verifier-rich|investigator) *\|' "$cohorts_md"; then
     problems+=("C3: deprecated cohort name ':verifier-rich' or ':investigator' still present in membership table")
+  fi
+  # Post-M027/S10: :adversarial-scout and :adversarial-review are deprecated names.
+  if grep -qE '^\|[^|]*\| *:adversarial-(scout|review) *\|' "$cohorts_md"; then
+    problems+=("C3: deprecated cohort name ':adversarial-scout' or ':adversarial-review' still present in membership table (merged to :adversarial per ADR-260509-Y)")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then

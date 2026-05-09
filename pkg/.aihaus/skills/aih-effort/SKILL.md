@@ -4,7 +4,7 @@ description: Retune agent effort tiers and model assignments after install. Inte
 ---
 
 ## Task
-Retune effort tiers (`effort:` frontmatter) and model assignments across the 43
+Retune effort tiers (`effort:` frontmatter) and model assignments across the 48
 agents. Every invocation produces exactly one git commit; `git revert HEAD` is
 the canonical rollback.
 
@@ -27,19 +27,19 @@ option menus, no delegated typing.
 |-----------|----------|
 | `/aih-effort` | Interactive: print current distribution; offer 3 presets. |
 | `/aih-effort --inspect` | Read-only report of all 46 agents. No commit. |
-| `/aih-effort --status` | Print recorded `.aihaus/.effort` sidecar state. Triggers v2→v3 migration if sidecar is still schema v2. No commit. |
+| `/aih-effort --status` | Print recorded `.aihaus/.effort` sidecar state. Triggers v2→v3 or v3→v4 migration if sidecar is on older schema. No commit. |
 | `/aih-effort --preset cost` | `:verifier` to `(haiku, medium)`; `:doer` sonnet; binding planners kept at `(opus, xhigh)`. |
 | `/aih-effort --preset balanced` | Default post-v0.16.0. Zero-diff no-op on clean install. |
 | `/aih-effort --preset high` | `:doer` escalates from `(sonnet, high)` to `(opus, high)`; planners to `max`. |
 | `/aih-effort --agent <name> --model <m> --effort <e>` | Per-agent joint override — both axes required (ADR-M008-A amendment). |
-| `/aih-effort --cohort :<name> --model <m> --effort <e>` | Joint cohort apply — both axes required. `:adversarial-scout`/`:adversarial-review` require literal-word `adversarial` confirm. |
+| `/aih-effort --cohort :<name> --model <m> --effort <e>` | Joint cohort apply — both axes required. `:adversarial` requires literal-word `adversarial` confirm. |
 
 **Removed flag:** `--permission-mode` was removed in v0.16.0. Invoking it exits
 nonzero with stderr: `--permission-mode flag removed in v0.16.0; use bash .aihaus/auto.sh for autonomous launch (DSP mode)`.
 
 Preset → cohort tuple map: `annexes/presets.md`.
-Cohort membership (46 agents → 6 cohorts): `annexes/cohorts.md`.
-CLI surface detail + adversarial bypass + Phase-4 v3 write: `annexes/cli-surface.md`.
+Cohort membership (48 agents → 5 cohorts): `annexes/cohorts.md`.
+CLI surface detail + adversarial bypass + Phase-4 v4 write: `annexes/cli-surface.md`.
 
 ## Execution Protocol
 
@@ -47,7 +47,7 @@ CLI surface detail + adversarial bypass + Phase-4 v3 write: `annexes/cli-surface
 1. Silent context load: `.aihaus/project.md`, `.aihaus/decisions.md`
    (ADR-M012-A is binding — supersedes ADR-M008-C + ADR-M010-A),
    `.aihaus/knowledge.md`.
-2. Read all 46 agent frontmatters at `pkg/.aihaus/agents/*.md` —
+2. Read all 48 agent frontmatters at `pkg/.aihaus/agents/*.md` —
    `grep '^effort:' pkg/.aihaus/agents/*.md | sort | uniq -c` gives the
    current tier distribution.
 3. Print the distribution report as a GFM Markdown pipe table
@@ -67,10 +67,10 @@ CLI surface detail + adversarial bypass + Phase-4 v3 write: `annexes/cli-surface
 7. **Load preset-immune cohorts via `is_preset_immune(cohort)` from
    `pkg/scripts/lib/restore-effort.sh`** (F-010 resolution: single
    authoritative location — SKILL.md and annexes reference the helper, never
-   embed it). Filter `:adversarial-scout` + `:adversarial-review` out of
-   any preset-driven diff. Only explicit `--cohort :adversarial-*`
-   (with literal-word `adversarial` confirm) or `--agent <member>` can
-   mutate adversarial frontmatter.
+   embed it). Filter `:adversarial` out of any preset-driven diff (merged from
+   former `:adversarial-scout` + `:adversarial-review` per ADR-260509-Y).
+   Only explicit `--cohort :adversarial` (with literal-word `adversarial`
+   confirm) or `--agent <member>` can mutate adversarial frontmatter.
 8. For `--preset`, load cohort tuples from `annexes/presets.md` and
    expand each member via `annexes/cohorts.md`; compute the file-by-file
    diff (target `(model, effort)` per agent). Diff entry exists when
@@ -87,7 +87,7 @@ CLI surface detail + adversarial bypass + Phase-4 v3 write: `annexes/cli-surface
     <target>` per agent file when both differ (two Edit calls per file;
     `git checkout -- <file>` on mid-sequence failure). Never sed/awk —
     Edit's Read precondition is free safety.
-12. **Adversarial bypass (explicit `--cohort :adversarial-*` or
+12. **Adversarial bypass (explicit `--cohort :adversarial` or
     `--agent <adversarial-member>`):** layered full-word `adversarial`
     confirmation required. Full prompt shape in `annexes/cli-surface.md`.
 
@@ -103,12 +103,13 @@ CLI surface detail + adversarial bypass + Phase-4 v3 write: `annexes/cli-surface
     print the failing check output, exit without retry.
 16. On green: print final distribution delta + one-line cost-estimate
     change; print the `git revert <sha>` rollback one-liner.
-17. **Post-gate sidecar write** (`.aihaus/.effort`, `schema=3`). Only after
+17. **Post-gate sidecar write** (`.aihaus/.effort`, `schema=4`). Only after
     the commit + gate pass; never on `--inspect` / `--status` / self-revert.
-    Emit `schema=3`, `last_preset=<name>`, `last_commit=$(git rev-parse
+    Emit `schema=4`, `last_preset=<name>`, `last_commit=$(git rev-parse
     --short HEAD)`, one `cohort.<name>.model` + `cohort.<name>.effort`
-    pair per cohort touched (preset runs filter adversarial cohorts via
-    `is_preset_immune()`), and per-agent override lines. Schema contract:
+    pair per cohort touched (preset runs filter adversarial cohort via
+    `is_preset_immune()`), and per-agent override lines (REQUIRED:
+    plan-checker=max, contrarian=max, plan-calibrator=max). Schema contract:
     `annexes/state-file.md`.
     - **17-guard** — if step 15 self-reverted, SKIP the write.
     - **17-ownership** — NEVER `git add .aihaus/.effort` (ADR-M009-A).
@@ -116,12 +117,14 @@ CLI surface detail + adversarial bypass + Phase-4 v3 write: `annexes/cli-surface
 
 ## Guardrails
 
-1. **Both adversarial cohorts are preset-immune.** `:adversarial-scout`
-   (plan-checker, contrarian) and `:adversarial-review` (reviewer,
-   code-reviewer) are skipped by all `--preset` invocations. Enforced via
+1. **`:adversarial` cohort is preset-immune.** All 6 members (plan-checker,
+   contrarian, plan-calibrator, reviewer, code-reviewer, migration-reviewer)
+   are skipped by all `--preset` invocations. Enforced via
    `is_preset_immune(cohort)` in `pkg/scripts/lib/restore-effort.sh`.
-   Only explicit `--cohort :adversarial-*` (literal-word `adversarial`
-   confirmation) or `--agent <member>` can mutate them. See ADR-M012-A.
+   Only explicit `--cohort :adversarial` (literal-word `adversarial`
+   confirmation) or `--agent <member>` can mutate them. See ADR-260509-Y.
+   Per-agent `effort: max` overrides for plan-checker/contrarian/plan-calibrator
+   MUST be preserved in `.aihaus/.effort` (schema v4 enforces via Smoke Check 6).
 2. **`model:` edits are scoped to cohort iteration or explicit per-agent
    dual-axis.** Single-axis `--agent X --model Y` without `--effort` is
    rejected. Single-axis `--cohort :<name>` without both model+effort is
@@ -140,10 +143,10 @@ byte-identical pre-invocation state. `--reset` re-applies the `balanced`
 preset without searching git history.
 
 ## Annexes (referenced, not duplicated)
-- `annexes/presets.md` — 3 preset sections + 6×3 Distribution Matrix.
-- `annexes/cohorts.md` — 46 agents → 6 cohorts; single source of truth.
-- `annexes/cli-surface.md` — CLI validation, adversarial bypass, v3 sidecar write.
-- `annexes/state-file.md` — `.aihaus/.effort` schema v3, ownership, migration.
+- `annexes/presets.md` — 3 preset sections + 5×3 Distribution Matrix.
+- `annexes/cohorts.md` — 48 agents → 5 cohorts; single source of truth.
+- `annexes/cli-surface.md` — CLI validation, adversarial bypass, v4 sidecar write.
+- `annexes/state-file.md` — `.aihaus/.effort` schema v4, ownership, migration.
 - `annexes/renamed-from-*.md` — rename history note (M012 BREAKING).
 
 ## Autonomy

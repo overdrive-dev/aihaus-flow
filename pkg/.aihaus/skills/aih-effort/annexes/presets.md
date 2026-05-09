@@ -1,16 +1,16 @@
 # Preset → Cohort Tuple Map
 
 This annex is the contract that `/aih-effort` Phase-2 reads. Every preset is
-expressed as **6** cohort tuples. The Distribution Matrix below is the
+expressed as **5** cohort tuples. The Distribution Matrix below is the
 authoritative reference; per-preset sub-sections enumerate cohort tuples plus
 any override lines.
 
 **Source of truth for cohort membership + defaults:** `annexes/cohorts.md`
-(M012 / ADR-M012-A). The matrix describes preset intent; per-preset sections
-enumerate cohort tuples + grouped override lines.
+(M012 / ADR-M012-A; 6→5 fork ADR-260509-Y). The matrix describes preset intent;
+per-preset sections enumerate cohort tuples + grouped override lines.
 
 **`balanced` reversibility contract:** applying `--preset balanced` on a clean
-**v0.16.0-state** install MUST produce a zero-diff no-op commit. The override
+**v0.17.0-state** install MUST produce a zero-diff no-op commit. The override
 lines in the `balanced` section pin every agent at its installed default so no
 frontmatter flip occurs.
 
@@ -22,8 +22,7 @@ frontmatter flip occurs.
 | `:planner` | (opus, high) | (opus, high) | (opus, max) |
 | `:doer` | (sonnet, high) | (sonnet, high) | (opus, high) |
 | `:verifier` | (haiku, medium) | (haiku, high) | (haiku, high) |
-| `:adversarial-scout` | preset-immune | preset-immune | preset-immune |
-| `:adversarial-review` | preset-immune | preset-immune | preset-immune |
+| `:adversarial` | preset-immune | preset-immune | preset-immune |
 
 **Footnotes:**
 
@@ -33,11 +32,13 @@ frontmatter flip occurs.
 2. `sonnet`/`haiku` agents silently clip to `effort: high` when a preset would
    request `xhigh` or `max` — these effort levels are only meaningful on Opus
    (ADR-M012-A §4, M008 rule).
-3. `:adversarial-scout` and `:adversarial-review` are preset-immune. Preset
-   writes skip both cohorts via `is_preset_immune(cohort)` in
-   `pkg/scripts/lib/restore-effort.sh`. Only explicit
-   `/aih-effort --cohort :adversarial-* --model X --effort Y` (literal-word
+3. `:adversarial` is preset-immune (merged from former `:adversarial-scout` +
+   `:adversarial-review` per M027/ADR-260509-Y). Preset writes skip the cohort via
+   `is_preset_immune(cohort)` in `pkg/scripts/lib/restore-effort.sh`. Only explicit
+   `/aih-effort --cohort :adversarial --model X --effort Y` (literal-word
    `adversarial` confirmation) or `--agent <member>` can mutate them.
+   **Note:** plan-checker, contrarian, plan-calibrator carry per-agent `effort: max`
+   overrides (NOT from cohort baseline) — preserved by `.aihaus/.effort` schema v4.
 
 ---
 
@@ -53,15 +54,14 @@ this preset to reduce cost further.
 | `:planner` | opus | high |
 | `:doer` | sonnet | high |
 | `:verifier` | haiku | medium |
-| `:adversarial-scout` | — | preset-immune |
-| `:adversarial-review` | — | preset-immune |
+| `:adversarial` | — | preset-immune |
 
 ---
 
 ## Preset: balanced
 
-**Intent:** default post-v0.16.0. Matches cohort defaults byte-identically on
-clean v0.16.0 install. `:planner-binding` escalated to `(opus, xhigh)` to keep
+**Intent:** default post-v0.17.0. Matches cohort defaults byte-identically on
+clean v0.17.0 install. `:planner-binding` escalated to `(opus, xhigh)` to keep
 architect/planner/product-manager/roadmapper at maximum planning quality.
 
 | Cohort | Model | Effort |
@@ -70,10 +70,9 @@ architect/planner/product-manager/roadmapper at maximum planning quality.
 | `:planner` | opus | high |
 | `:doer` | sonnet | high |
 | `:verifier` | haiku | high |
-| `:adversarial-scout` | — | preset-immune |
-| `:adversarial-review` | — | preset-immune |
+| `:adversarial` | — | preset-immune |
 
-Applying `balanced` on a clean v0.16.0 install = zero frontmatter diff.
+Applying `balanced` on a clean v0.17.0 install = zero frontmatter diff.
 
 ---
 
@@ -89,8 +88,7 @@ haiku at `high` — artifact checks don't benefit from opus-level reasoning.
 | `:planner` | opus | max |
 | `:doer` | opus | high |
 | `:verifier` | haiku | high |
-| `:adversarial-scout` | — | preset-immune |
-| `:adversarial-review` | — | preset-immune |
+| `:adversarial` | — | preset-immune |
 
 **Note:** sonnet/haiku per-agent overrides within `:doer` or `:planner` clip to
 `effort: high` regardless of preset request (clip is silent).

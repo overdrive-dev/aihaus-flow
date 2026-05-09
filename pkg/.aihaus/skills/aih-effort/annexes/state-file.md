@@ -8,12 +8,16 @@ M009 shipped **schema v1** (effort-only per-agent overrides, file `.calibration`
 M010 shipped **schema v2** additively — cohort-level fields + per-agent `model:`
 overrides (file `.calibration`). M012 ships **schema v3** — sidecar renamed to
 `.effort`, `permission_mode` field dropped, `last_preset` enum updated to
-`cost | balanced | high | custom`, 6-cohort taxonomy.
+`cost | balanced | high | custom`, 6-cohort taxonomy. M027 ships **schema v4** —
+cohort taxonomy 6→5 (`:adversarial-scout` + `:adversarial-review` merged →
+`:adversarial`); per-agent `effort: max` overrides for plan-checker, contrarian,
+plan-calibrator preserved/injected; `.effort.v3.backup` written before migration.
 
 v1/v2 sidecars restore byte-identically via the legacy dispatch; v2→v3
 migration is triggered by `/aih-update` (silent) OR first
-`/aih-effort --status` (idempotent). Schema contract: ADR-M009-A (preserved)
-+ ADR-M012-A §4.
+`/aih-effort --status` (idempotent); v3→v4 migration triggered by
+`/aih-update` on first run after M027 package refresh. Schema contract:
+ADR-M009-A (preserved) + ADR-M012-A §4 + ADR-260509-Y §Migration.
 
 
 ## Purpose, location, ownership (ADR-M009-A — preserved verbatim)
@@ -33,7 +37,88 @@ Records absolute restore targets so `/aih-update` can re-apply `effort:` +
 - **Not source of truth.** Git history (`chore(effort):` commits) is
   authoritative; sidecar is a re-application target.
 
-## Schema v3 (current — written by v0.16.0+)
+## Schema v4 (current — written by v0.31.0+ / M027)
+
+```
+# aihaus effort state — managed by /aih-effort, consumed by /aih-update
+# Schema: v4 — 5-cohort taxonomy (6→5 fork per ADR-260509-Y); no permission_mode field.
+# This file is USER-OWNED and derived state. Safe to delete. Do not commit.
+
+schema=4
+last_preset=balanced
+last_commit=deadbee
+
+# Cohort-level — written per cohort on preset/--cohort apply.
+# value=custom → non-uniform; per-agent lines take over.
+cohort.planner-binding.model=opus
+cohort.planner-binding.effort=xhigh
+cohort.planner.model=opus
+cohort.planner.effort=high
+cohort.doer.model=sonnet
+cohort.doer.effort=high
+cohort.verifier.model=haiku
+cohort.verifier.effort=high
+# adversarial intentionally absent — preset-immune.
+
+# Per-agent overrides — applied AFTER cohort-level (overrides win).
+# REQUIRED for preset-immunity preservation (Smoke Check 6 sub-assert enforces):
+plan-checker=max
+contrarian=max
+plan-calibrator=max
+# effort-only grammar:
+implementer=high
+# model grammar (dotted key):
+implementer.model=sonnet
+```
+
+### v4 fields
+
+- **`schema=4`** — mandatory first non-comment line; dispatches to v4 restore.
+- **`last_preset`** — `cost | balanced | high | custom`. v3 preset names carry through.
+- **`last_commit`** — short SHA of the `chore(effort):` commit.
+- **`cohort.<name>.model`** — accepted names (5): `planner-binding`, `planner`,
+  `doer`, `verifier`, `adversarial`. No colon on disk (`:` is CLI ergonomics only).
+  `custom` signals non-uniform.
+- **`cohort.<name>.effort`** — `low | medium | high | xhigh | max | custom`.
+- **Per-agent effort** `<agent-basename>=<effort-level>` — retained from v1.
+  **REQUIRED** for `plan-checker`, `contrarian`, `plan-calibrator` (must be `max`);
+  migrator injects these if absent from v3.
+- **Per-agent model** `<agent-basename>.model=<m>` — retained from v2.
+
+**Accepted cohort names (5):** `planner-binding`, `planner`, `doer`, `verifier`,
+`adversarial`. Unknown cohort values warn + skip (forward-compat). The old v3
+names `adversarial-scout` and `adversarial-review` warn + are folded to
+`adversarial` during the 1-milestone deprecation window (M028 retains compat;
+M029 removes v3 reader).
+
+### Schema v4 migration policy (ADR-260509-Y)
+
+**Deprecation window:** v3 read-compat preserved through M028. M029 `update.sh`
+removes the v3 reader. Users on v3 sidecars have 1 milestone to migrate.
+
+**Migration trigger:** `update.sh --target .` on first run after M027 package
+refresh detects `schema=3` → triggers `_migrate_v3_to_v4`.
+
+**Migration steps:**
+1. Write `.effort.v3.backup` BEFORE any mutation (abort if backup write fails).
+2. Abort on parse fail — any malformed key/value in v3 file emits error, preserves
+   v3 file untouched, aborts migration. NO silent drop.
+3. Fold `:adversarial-scout.*` keys → `:adversarial.*` (cohort-baseline effort = high).
+4. Fold `:adversarial-review.*` keys → `:adversarial.*` (no effort change from high).
+5. Conflict detection: if both `:adversarial-scout.effort` AND `:adversarial-review.effort`
+   exist with conflicting values, emit conflict error to stderr + abort. User resolves
+   via `update.sh --target . --resolve-cohort-merge <effort-value>`.
+6. Per-agent overrides preserved verbatim.
+7. Preset-immunity injection: if plan-checker / contrarian / plan-calibrator lack
+   per-agent `effort=max` entries, INJECT with INFO-level log row:
+   `injected per-agent override <agent>.effort=max (preset-immunity preservation;
+   v4 cohort baseline would have demoted to high)`.
+8. Write new v4 `.effort` file; rename old v3 to `.effort.v3.backup`.
+9. Emit migration log per row to stdout.
+
+---
+
+## Schema v3 (legacy — written by v0.16.0–v0.30.0; read-compat through M028)
 
 ```
 # aihaus effort state — managed by /aih-effort, consumed by /aih-update
@@ -122,8 +207,35 @@ Restore reads `schema=` field first:
 - `schema=1` → legacy v1 handler (effort-only per-agent).
 - `schema=2` → v2 handler (cohort-level apply first, per-agent overrides
   second — overrides win). Triggers v2→v3 migration prompt.
-- `schema=3` → v3 handler (6-cohort apply + per-agent overrides).
+- `schema=3` → v3 handler (5-cohort apply + per-agent overrides). Triggers
+  v3→v4 migration (1-milestone deprecation window; v3 reader retained through M028).
+- `schema=4` → v4 handler (5-cohort apply + per-agent overrides; plan-checker /
+  contrarian / plan-calibrator effort=max sub-assert runs before apply).
 - any other value → `warn: unknown .effort schema='X' — skipping restore` + return 0.
+
+## Migration v3 → v4 (M027 / ADR-260509-Y)
+
+Triggered by `update.sh --target .` on first run after M027 package refresh.
+**Authoritative implementation:** `pkg/scripts/lib/restore-effort.sh` (`_migrate_v3_to_v4`).
+
+Summary of migration actions:
+
+- `.aihaus/.effort` (v3) preserved verbatim as `.aihaus/.effort.v3.backup` BEFORE any
+  mutation. Atomic write — backup-write failure aborts migration.
+- Abort on parse fail — any malformed key/value in v3 file emits stable error grammar
+  to stderr, preserves v3 file untouched, aborts. NO silent drop.
+- `cohort.adversarial-scout.*` entries folded to `cohort.adversarial.*` (effort baseline
+  = high; per-agent `effort=max` overrides carry the sub-distinction).
+- `cohort.adversarial-review.*` entries folded to `cohort.adversarial.*` (high effort
+  unchanged; if both scout + review coexist with conflicting effort values, emit
+  conflict error + abort — user resolves via `--resolve-cohort-merge <effort-value>`).
+- Per-agent overrides preserved verbatim.
+- Preset-immunity injection: if `plan-checker`, `contrarian`, or `plan-calibrator`
+  lack per-agent `effort=max` entries, migrator INJECTS them with INFO-level log:
+  `injected per-agent override <agent>=max (preset-immunity preservation; v4 cohort
+  baseline would have demoted to high)`.
+- New v4 `.effort` written; old v3 file renamed `.effort.v3.backup`.
+- Migration log emitted to stdout (one row per field action).
 
 ## Migration v2 → v3
 
