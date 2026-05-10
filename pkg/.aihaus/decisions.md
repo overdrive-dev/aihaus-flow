@@ -3475,3 +3475,49 @@ This is honest scoping, not a deferred decision. The maintainer's behavior IS th
 - ADR-260510-C (hook contract — tdd-guard.sh fires on user code Edits, not aihaus's own substrate)
 - CHALLENGES MED #7 (self-eating-cake observation)
 - M027/S7 ADR-260509-X autonomy-guard.sh expansion precedent (LOC = 864 at draft time)
+
+---
+
+## ADR-M028-CURATE-A — Hook bypass for skill-specific lifecycles uses explicit env-var, not implicit marker file
+
+**Status:** Accepted
+**Date:** 2026-05-10
+**Milestone:** M028 (curator pass)
+
+### Context
+
+When `aih-quick` needed to bypass `tdd-guard.sh` (M028/S2 PreToolUse hook), two designs surfaced during PLAN remediation: implicit detection (hook scans for active-skill marker) vs explicit env-var lifecycle (skill Step 0 sets `AIHAUS_TDD_GUARD=0`, Step 6 unsets). Plan-checker BLOCKER #1 surfaced that implicit detection was broken — `/aih-quick` writes no manifest, has no marker. Decision B replaced it with the env-var lifecycle (ADR-260510-C).
+
+### Decision
+
+For any future PreToolUse hook needing context-aware bypass for one specific skill, **prefer explicit env-var lifecycle owned by the skill** (set in entry, unset in exit) over implicit marker-file or manifest-existence detection. Skill declares; hook honors. No reverse-direction discovery.
+
+### Consequences
+
+- Bypass is auditable via `grep AIHAUS_<HOOK>_GUARD pkg/.aihaus/skills/`.
+- Lifecycle symmetric and self-cleaning.
+- Cost: one env-var name per bypass surface.
+- Pattern established for M029+.
+
+---
+
+## ADR-M028-CURATE-B — Honest-scope-fence for self-modifying tooling — disciplines apply to user code only
+
+**Status:** Accepted
+**Date:** 2026-05-10
+**Milestone:** M028 (curator pass)
+
+### Context
+
+M028 brainstorm raised Surface 4 (apply TDD baseline stance to implementer/frontend-dev/code-fixer so aihaus's own bash hooks would also be test-first). Decision G rejected on two grounds: (a) stack-agnosticism — agents can't assume specific test framework exists in user repo; (b) maintainer behavior across M001-M027 is empirical evidence — 864 LOC autonomy-guard.sh shipped without co-evolving test suite. ADR-260510-D captured the specific scope-fence; this curator-rule generalizes.
+
+### Decision
+
+When designing any discipline (TDD, contract-tests, fuzz harnesses, etc.) shipped to user repos, **explicitly fence scope to user code at ADR-write time**. Document that aihaus's own bash hooks, skill markdown, shell scripts are out of scope — and cite maintainer's commit history as evidence rather than aspirational adoption.
+
+### Consequences
+
+- Future discipline ADRs must include Scope section naming what is in/out. Vague "applies to all aihaus-touched code" claims rejected.
+- Stack-agnosticism + honest-scoping compose: a discipline cannot baseline-apply to agents that read user-stack at runtime.
+- Honest-scoping ADRs ship verification commands (e.g., `wc -l autonomy-guard.sh = 864` for ADR-260510-D).
+- Pattern reusable for M029+ governance ADRs (per ADR-260510-B sunset clause).
