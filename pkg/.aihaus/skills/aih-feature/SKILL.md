@@ -105,8 +105,9 @@ Classify the planned changes by file area, then **spawn specialty agents** in pa
 ### Step 8: Verify
 Run the verification commands appropriate to the areas touched (build, typecheck, unit tests, smoke tests). Use whatever the project already defines in its README or CONTRIBUTING docs. Run all relevant checks for every subsystem you changed. If tests fail, fix them. Do not skip.
 
-### Step 7.5: Calibration-gate — see `annexes/calibration-gate.md` (M027/S5)
-After plan-checker (if it ran), spawn `plan-calibrator` unless `--no-calibrate`; writes `BUSINESS-RULES.md`; applies PRD patches. Full trigger logic, stop conditions, spawn contract, and output contract in annex.
+### Step 7.5: Calibration-gate — see `annexes/calibration-gate.md` (M027/S5). After plan-checker (if ran), spawn `plan-calibrator` unless `--no-calibrate`; writes `BUSINESS-RULES.md`; applies PRD patches.
+## Phase 7.6 — TDD discipline (M028/S3)
+If project.md `testing_discipline=tdd` AND `--no-tdd` not in $ARGUMENTS, see annexes/tdd-discipline.md.
 
 ### Step 9: Adversarial Review (delegate to code-reviewer, loop max 2)
 Spawn `code-reviewer` with `subagent_type: "code-reviewer"` on the staged diff. Adversarial contract — must produce findings or written justification. Writes `.aihaus/features/[YYMMDD]-[slug]/REVIEW.md`.

@@ -30,8 +30,12 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, follow `annexes/from-brains
 
 If `--no-calibrate` flag is present → skip + `bash .aihaus/hooks/manifest-append.sh --audit calibration-skip --reason "user-override"`. Otherwise, spawn `plan-calibrator` (`:adversarial-scout`, read-only). Pass: analyst-brief path, PRD path, architecture path, CHECK.md path, and `git log -1 --format=%H -- .aihaus/plans/<slug>/CHECK.md` SHA. If a brainstorm slug was passed via `--from-brainstorm`, pass it so the calibrator can dedupe against SUBSTRATE-FINDINGS.md. Trigger: ambiguity-surface-detection (defaults applied without ask, gaps in brief, CHECK.md inconsistencies — NOT story-count). Stop: user "no more questions" OR calibrator emits `BUSINESS-RULES-EXHAUSTED` OR hard cap 30 turns. Parent skill writes `.aihaus/plans/<slug>/BUSINESS-RULES.md` verbatim from payload; applies PRD patches via Edit.
 
+## Phase 3.6 — --no-tdd flag (M028/S3)
+
+If `--no-tdd` flag is present in `$ARGUMENTS` → audit-log and suppress downstream tdd-discipline dispatch: `bash .aihaus/hooks/manifest-append.sh --audit tdd-skip --reason "user-override"`. Sets `AIHAUS_TDD_GUARD=0` to bypass `tdd-guard.sh` PreToolUse hook for this invocation. Mirrors `--no-calibrate` opt-out pattern (Phase 3.5). If `--no-tdd` absent, no-op — tdd-discipline dispatch follows project.md `testing_discipline` field at execution time.
+
 ## Phase 4 — Report + threshold gate
-10. **Summarize** the plan in 3-5 bullets. Print: PLAN.md path; auxiliary artifacts (ASSUMPTIONS.md, PATTERNS.md, CHECK.md, RESEARCH.md, BUSINESS-RULES.md if present).
+10. **Summarize** the plan in 3-5 bullets. Print: PLAN.md path; auxiliary artifacts (ASSUMPTIONS.md, PATTERNS.md, CHECK.md, RESEARCH.md, BUSINESS-RULES.md if present). Honor `--no-tdd` flag (audit-logged).
 11. **Threshold gate (see `_shared/autonomy-protocol.md`):** planning is complete → ask ONE natural-language question in the conversation. Small scope: *"Posso executar agora?"* Large scope (>10 files or multi-story): *"Posso promover para milestone draft e seguir até execução?"* On affirmative (y/sim/vai/go/enter), dispatch the appropriate skill via the Skill tool (`aih-milestone --plan [slug]` for large, `aih-feature --plan [slug]` for small). On negative, plan stays standalone — user retoma quando quiser. **Never print "Suggested Next Command: /aih-xxx" as an instruction for the user to type** — that delegates keyboard work. Opt-out: `--no-chain` in `$ARGUMENTS` reverts to print-suggestion behavior.
 
 ## Annexes (referenced, not duplicated)

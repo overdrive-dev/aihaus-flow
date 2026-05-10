@@ -4237,6 +4237,62 @@ check_tdd_guard_hook() {
   fi
 }
 
+# ---- Check 80: tdd-discipline annex pointer (M028/S3) -------------------------
+# Validates that aih-feature Step 7.6 tdd-discipline annex is wired correctly:
+#   (a) annex file exists at aih-feature/annexes/tdd-discipline.md
+#   (b) aih-feature/SKILL.md contains the tdd-discipline annex pointer
+#   (c) annex has expected H2 sections (Trigger, Step 7.6, --no-tdd opt-out, Composition)
+#   (d) aih-plan/SKILL.md contains --no-tdd Phase 3.6 entry
+#   (e) aih-milestone/SKILL.md contains --no-tdd propagation prose
+#
+# ADR-260510-A: testing_discipline schema (project.md field + enum).
+# ADR-260510-C: tdd-guard.sh PreToolUse hook contract.
+check_tdd_discipline_annex() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: tdd-discipline annex pointer + --no-tdd flag wiring (M028/S3)"
+  local issues=()
+  local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
+  local annex="${skills_root}/aih-feature/annexes/tdd-discipline.md"
+  local feature_skill="${skills_root}/aih-feature/SKILL.md"
+  local plan_skill="${skills_root}/aih-plan/SKILL.md"
+  local milestone_skill="${skills_root}/aih-milestone/SKILL.md"
+
+  # Sub-assert (a): annex file exists
+  if [[ ! -f "$annex" ]]; then
+    issues+=("tdd-discipline.md annex missing at aih-feature/annexes/tdd-discipline.md")
+  fi
+
+  # Sub-assert (b): SKILL.md contains annex pointer
+  if ! grep -q "tdd-discipline" "$feature_skill" 2>/dev/null; then
+    issues+=("aih-feature/SKILL.md missing tdd-discipline annex pointer")
+  fi
+
+  # Sub-assert (c): annex contains expected H2 sections
+  if [[ -f "$annex" ]]; then
+    for section in "## Trigger" "## Step 7.6" "## --no-tdd opt-out" "## Composition"; do
+      if ! grep -qF "$section" "$annex"; then
+        issues+=("tdd-discipline.md missing section: ${section}")
+      fi
+    done
+  fi
+
+  # Sub-assert (d): aih-plan/SKILL.md contains --no-tdd Phase 3.6 prose
+  if ! grep -q "no-tdd" "$plan_skill" 2>/dev/null; then
+    issues+=("aih-plan/SKILL.md missing --no-tdd flag handling")
+  fi
+
+  # Sub-assert (e): aih-milestone/SKILL.md contains --no-tdd propagation prose
+  if ! grep -q "no-tdd" "$milestone_skill" 2>/dev/null; then
+    issues+=("aih-milestone/SKILL.md missing --no-tdd propagation prose")
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 # Parse --check / --skill flags before the full-suite run
 _CHECK_NAME=""
 _CHECK_SKILL=""
@@ -4342,11 +4398,12 @@ check_m027_semantic_gate
 check_brief_subfield_schema
 check_calibration_trigger
 check_tdd_guard_hook
+check_tdd_discipline_annex
 
 printf "
 "
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (79/79)
+  printf "aihaus package smoke test PASSED [OK] (80/80)
 "
   exit 0
 else
