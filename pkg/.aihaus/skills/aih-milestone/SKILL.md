@@ -60,7 +60,7 @@ If `$ARGUMENTS` contains `--from-brainstorm <slug>`, run before Step 1. Otherwis
 
 **If `--execute` is present:** Skip Steps 2–5. Create a minimal draft from $ARGUMENTS, then follow `annexes/execution.md` (milestone execution pipeline — so `/aih-resume` can recover if interrupted). Print: "Executing directly (--execute flag). Use `/aih-milestone` without the flag for conversational gathering."
 
-**If `--plan [slug]` is present:** Follow `annexes/promotion.md` Steps P1–P5 to seed a milestone draft from the plan (M### auto-propose, force-split gate, PLAN→CONTEXT mapping, attachment reference, backlink footer, threshold gate). Skip Step 2 (drafts listing). Threshold gate in P5 either dispatches execution or hands back to Step 5 gathering here. Calibration-gate Step 7.5 fires after plan-checker unless `--no-calibrate` or M024 short-circuit — see `annexes/calibration-gate.md` (M027/S5).
+**If `--plan [slug]` is present:** Follow `annexes/promotion.md` Steps P1–P5 to seed a milestone draft from the plan (M### auto-propose, force-split gate, PLAN→CONTEXT mapping, attachment reference, backlink footer, threshold gate). Skip Step 2 (drafts listing). Threshold gate in P5 either dispatches execution or hands back to Step 5 gathering here. Calibration-gate Step 7.5 fires after plan-checker unless `--no-calibrate` or M024 short-circuit — see `annexes/calibration-gate.md` (M027/S5). **`--no-tdd` propagation (M028/S3):** if `$ARGUMENTS` contains `--no-tdd`, audit-log via `bash .aihaus/hooks/manifest-append.sh --audit tdd-skip --reason "user-override"` and propagate `--no-tdd` to all dispatched skills (aih-feature, aih-plan) so tdd-discipline dispatch is suppressed end-to-end.
 
 ## Step 2 — List Existing Drafts
 

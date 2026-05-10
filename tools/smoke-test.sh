@@ -4128,6 +4128,171 @@ check_calibration_trigger() {
   fi
 }
 
+# ---- Check 79: tdd-guard.sh hook fixture-fail tests (M028/S2) ---------------
+# Validates tdd-guard.sh PreToolUse hook via 3 fixture JSON payloads:
+#
+#   fixture 1: tdd-on-no-test.json — Write on non-test file, AIHAUS_TESTING_DISCIPLINE=tdd,
+#              no session marker → hook MUST exit 2 (block)
+#   fixture 2: tdd-on-with-test.json — Edit on non-test file, AIHAUS_TESTING_DISCIPLINE=tdd,
+#              session marker present → hook MUST exit 0 (allow)
+#   fixture 3: aih-quick-bypass.json — Write with AIHAUS_TDD_GUARD=0 → hook MUST exit 0 (bypass)
+#
+# ADR-260510-C: hook contract (env bypass + session-marker + test-file allowlist).
+check_tdd_guard_hook() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: tdd-guard.sh PreToolUse hook fixture-fail tests (M028/S2)"
+  local issues=()
+  local repo_root="${PACKAGE_ROOT}/.."
+  local fixture_dir="${repo_root}/tools/fixtures/check-79"
+  local hook="${PACKAGE_ROOT}/.aihaus/hooks/tdd-guard.sh"
+
+  # Verify hook exists
+  if [[ ! -f "$hook" ]]; then
+    _fail "$label" "tdd-guard.sh missing: ${hook}"
+    return
+  fi
+
+  # Verify fixture directory exists
+  if [[ ! -d "$fixture_dir" ]]; then
+    _fail "$label" "fixture directory missing: tools/fixtures/check-79/"
+    return
+  fi
+
+  local tmpdir
+  tmpdir="$(mktemp -d 2>/dev/null || echo "/tmp/tdd-guard-check-$$")"
+  mkdir -p "${tmpdir}/.claude/audit" 2>/dev/null || true
+
+  # Helper: run hook with controlled env, returns exit code
+  # Usage: _run_hook_exit <fixture> <extra-env-assignments...>
+  _run_hook_exit() {
+    local fixture="$1"
+    shift
+    # Run in subshell with overridden env; redirect stderr to /dev/null for clean output
+    local exit_code=0
+    (
+      # Point audit log to tmpdir to avoid polluting real dirs
+      export AIHAUS_AUDIT_LOG="${tmpdir}/.claude/audit/hook.jsonl"
+      # Point session marker dir to tmpdir so we control the marker file location
+      export AIHAUS_SESSION_MARKER_DIR="${tmpdir}/.claude/audit"
+      # Apply caller-specified env
+      for e in "$@"; do
+        export "${e?}"
+      done
+      bash "${hook}" < "${fixture}" >/dev/null 2>/dev/null
+    ) || exit_code=$?
+    echo "${exit_code}"
+  }
+
+  # Sub-assert 1: tdd-on-no-test.json — no session marker, tdd discipline → MUST block (exit 2)
+  local fixture1="${fixture_dir}/tdd-on-no-test.json"
+  if [[ ! -f "$fixture1" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-79/tdd-on-no-test.json")
+  else
+    # Ensure no session marker exists in tmpdir (clean state)
+    rm -f "${tmpdir}/.claude/audit"/tdd-guard.session.*.json 2>/dev/null || true
+    local exit1
+    exit1="$(_run_hook_exit "$fixture1" "AIHAUS_TESTING_DISCIPLINE=tdd" "AIHAUS_TDD_GUARD=1")"
+    if [[ "$exit1" -ne 2 ]]; then
+      issues+=("fixture-fail #1: tdd-on-no-test.json exit ${exit1} (expected 2 — hook must block non-test Write with tdd discipline and no session marker)")
+    fi
+  fi
+
+  # Sub-assert 2: tdd-on-with-test.json — session marker present, tdd discipline → MUST allow (exit 0)
+  local fixture2="${fixture_dir}/tdd-on-with-test.json"
+  if [[ ! -f "$fixture2" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-79/tdd-on-with-test.json")
+  else
+    # Create a valid session marker under a known CLAUDE_SESSION_ID in tmpdir
+    local sess_id="smoke-check-79"
+    mkdir -p "${tmpdir}/.claude/audit" 2>/dev/null || true
+    printf '{"session_id":"%s","ts":"%s","test_files":["tests/test_service.py"]}\n' \
+      "${sess_id}" "$(date -u +%FT%TZ 2>/dev/null || echo "2026-05-09T00:00:00Z")" \
+      > "${tmpdir}/.claude/audit/tdd-guard.session.${sess_id}.json" 2>/dev/null || true
+    local exit2
+    exit2="$(_run_hook_exit "$fixture2" "AIHAUS_TESTING_DISCIPLINE=tdd" "AIHAUS_TDD_GUARD=1" "CLAUDE_SESSION_ID=${sess_id}")"
+    if [[ "$exit2" -ne 0 ]]; then
+      issues+=("fixture-fail #2: tdd-on-with-test.json exit ${exit2} (expected 0 — hook must allow non-test Edit when session marker shows prior test-file edit)")
+    fi
+  fi
+
+  # Sub-assert 3: aih-quick-bypass.json — AIHAUS_TDD_GUARD=0 → MUST allow (exit 0)
+  local fixture3="${fixture_dir}/aih-quick-bypass.json"
+  if [[ ! -f "$fixture3" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-79/aih-quick-bypass.json")
+  else
+    local exit3
+    exit3="$(_run_hook_exit "$fixture3" "AIHAUS_TESTING_DISCIPLINE=tdd" "AIHAUS_TDD_GUARD=0")"
+    if [[ "$exit3" -ne 0 ]]; then
+      issues+=("fixture-fail #3: aih-quick-bypass.json exit ${exit3} (expected 0 — AIHAUS_TDD_GUARD=0 must bypass hook)")
+    fi
+  fi
+
+  # Cleanup tmpdir
+  rm -rf "${tmpdir}" 2>/dev/null || true
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 80: tdd-discipline annex pointer (M028/S3) -------------------------
+# Validates that aih-feature Step 7.6 tdd-discipline annex is wired correctly:
+#   (a) annex file exists at aih-feature/annexes/tdd-discipline.md
+#   (b) aih-feature/SKILL.md contains the tdd-discipline annex pointer
+#   (c) annex has expected H2 sections (Trigger, Step 7.6, --no-tdd opt-out, Composition)
+#   (d) aih-plan/SKILL.md contains --no-tdd Phase 3.6 entry
+#   (e) aih-milestone/SKILL.md contains --no-tdd propagation prose
+#
+# ADR-260510-A: testing_discipline schema (project.md field + enum).
+# ADR-260510-C: tdd-guard.sh PreToolUse hook contract.
+check_tdd_discipline_annex() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: tdd-discipline annex pointer + --no-tdd flag wiring (M028/S3)"
+  local issues=()
+  local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
+  local annex="${skills_root}/aih-feature/annexes/tdd-discipline.md"
+  local feature_skill="${skills_root}/aih-feature/SKILL.md"
+  local plan_skill="${skills_root}/aih-plan/SKILL.md"
+  local milestone_skill="${skills_root}/aih-milestone/SKILL.md"
+
+  # Sub-assert (a): annex file exists
+  if [[ ! -f "$annex" ]]; then
+    issues+=("tdd-discipline.md annex missing at aih-feature/annexes/tdd-discipline.md")
+  fi
+
+  # Sub-assert (b): SKILL.md contains annex pointer
+  if ! grep -q "tdd-discipline" "$feature_skill" 2>/dev/null; then
+    issues+=("aih-feature/SKILL.md missing tdd-discipline annex pointer")
+  fi
+
+  # Sub-assert (c): annex contains expected H2 sections
+  if [[ -f "$annex" ]]; then
+    for section in "## Trigger" "## Step 7.6" "## --no-tdd opt-out" "## Composition"; do
+      if ! grep -qF "$section" "$annex"; then
+        issues+=("tdd-discipline.md missing section: ${section}")
+      fi
+    done
+  fi
+
+  # Sub-assert (d): aih-plan/SKILL.md contains --no-tdd Phase 3.6 prose
+  if ! grep -q "no-tdd" "$plan_skill" 2>/dev/null; then
+    issues+=("aih-plan/SKILL.md missing --no-tdd flag handling")
+  fi
+
+  # Sub-assert (e): aih-milestone/SKILL.md contains --no-tdd propagation prose
+  if ! grep -q "no-tdd" "$milestone_skill" 2>/dev/null; then
+    issues+=("aih-milestone/SKILL.md missing --no-tdd propagation prose")
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 # Parse --check / --skill flags before the full-suite run
 _CHECK_NAME=""
 _CHECK_SKILL=""
@@ -4232,15 +4397,17 @@ check_skill_agent_cadence_absence
 check_m027_semantic_gate
 check_brief_subfield_schema
 check_calibration_trigger
+check_tdd_guard_hook
+check_tdd_discipline_annex
 
 printf "
 "
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (78/78)
+  printf "aihaus package smoke test PASSED [OK] (80/80)
 "
   exit 0
 else
-  printf "FAILED - %d of 78 checks failed
+  printf "FAILED - %d of 79 checks failed
 " "$FAILURES"
   exit 1
 fi

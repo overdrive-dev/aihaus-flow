@@ -3194,3 +3194,330 @@ Adopt a binary >70% / PARK rule for any future agent-consolidation spike: cross-
 - Researcher cohort frozen at 7 agents; codebase-mapper remains separate (different cohort/model/tools).
 - M028+ partial-merge work is a deliberate, scoped story — not a side-effect of researcher tuning.
 - The 70% threshold is REVISABLE — if a future milestone produces evidence that lower-overlap merges are viable (e.g., kind-dispatch refactor), the threshold can be amended via a successor ADR.
+
+---
+
+## ADR-260510-A — `testing_discipline` schema for `project.md` (M028/S1)
+
+**Status:** Accepted
+**Date:** 2026-05-09
+**Milestone:** M028
+
+### Context
+
+M028 introduces TDD discipline as an opt-in user preference for aihaus clients.
+The brainstorm `260509-tdd-aihaus-clients` + plan-checker surfaced that aihaus
+currently has no mechanism for users to declare a testing methodology preference —
+the `project.md` template captures stack details (language, framework, test
+framework) but not process discipline (TDD, test-after, or none). Without a
+machine-readable field, downstream enforcement (the `tdd-guard.sh` PreToolUse
+hook — ADR-260510-C) and skill-level dispatch (Step 7.6 in aih-feature —
+S3) have no authoritative source to gate on.
+
+The PLAN (Decision D) established the enum shape after ruling out alternatives:
+a Stack-table row was rejected because the Stack table is AUTO-GENERATED and
+testing discipline is a process choice, not a file-system fingerprint that
+aih-init can reliably detect. A new `## Practices` MANUAL section preserves
+"user owns the choice" semantics (ASSUMPTIONS S2 + Alternatives §5).
+
+### Decision
+
+Introduce a `testing_discipline` field in `pkg/.aihaus/templates/project.md`
+as the 10th H2 section (`## Practices`), within its own MANUAL block.
+
+**Enum:** `tdd | test-after | none`
+
+- `tdd` — implementer/frontend-dev prepend "draft a failing test before writing
+  implementation" to their internal briefing; `tdd-guard.sh` PreToolUse hook
+  active.
+- `test-after` — implementer treats tests as required acceptance criteria but not
+  pre-implementation; `tdd-guard.sh` inactive.
+- `none` (default) — no test discipline change; `tdd-guard.sh` inactive; current
+  behavior preserved for all existing installs.
+
+**Template default:** `testing_discipline: none`
+
+This preserves current behavior for all existing installs. No breaking change.
+
+**Auto-detection at install time:** `aih-init` Step 9.5 runs heuristic detection
+and seeds the value before writing `project.md`. Detection logic (full spec in
+`aih-init/annexes/testing-discipline-detection.md`):
+
+1. If `.tdd-discipline` marker file exists OR `tdd:` commit-message prefix
+   found in last 30 commits → seed `tdd`.
+2. If test directory (`tests/`, `__tests__/`, `test/`, `spec/`) AND framework
+   declared in manifest (`package.json`, `pyproject.toml`, `Cargo.toml`,
+   `go.mod`) → seed `test-after`.
+3. Otherwise → seed `none`.
+
+Auto-detection applies on FIRST RUN only. Re-run mode (Step 10b) skips
+Step 9.5 entirely — the user's current value in `## Practices` is preserved.
+
+### Rationale
+
+- **Stack-agnostic:** `testing_discipline` is a process choice, not a
+  file-system fingerprint. Keeping it in the MANUAL section and seeding via
+  heuristics (not enforcing via AUTO-GENERATED) respects the user's authority
+  over methodology decisions.
+- **Opt-in preserves current behavior:** default `none` means zero behavior
+  change for the ~100% of current aihaus users who have not declared a
+  testing discipline.
+- **Pairs field with consumer:** shipping the schema in S1 alongside the
+  enforcement hook (S2) and skill dispatch (S3) avoids the "vestigial-by-design"
+  anti-pattern the contrarian flagged in the brainstorm (CHALLENGES HIGH #4).
+- **Self-eating-cake scope-fence (Decision G):** `testing_discipline` is offered
+  to aihaus USERS working on application code. It does NOT apply to aihaus's own
+  bash hooks/scripts, which are integration-tested via smoke-test, not unit-tested
+  via bats. This honest scoping is explicit here to avoid user confusion (see
+  ADR-260510-D for full scope-fence).
+
+### Consequences
+
+- `pkg/.aihaus/templates/project.md` gains a 10th H2 (`## Practices`) after the
+  existing 9 sections.
+- `aih-init` Step 9.5 (new) runs heuristic detection at install time; annex
+  `aih-init/annexes/testing-discipline-detection.md` holds the full spec.
+- Downstream consumers read `testing_discipline` at runtime from `project.md`
+  (existing Stack-read pattern at `implementer.md:39-46`).
+- Performance: `tdd-guard.sh` caches the value in env at session start
+  (R4 mitigation from PLAN Risk Assessment — full spec in ADR-260510-C).
+- `tdd | test-after | none` is the COMPLETE enum. Adding a new value requires
+  a new ADR amendment to this ADR.
+- Governance: each new structured key added to a MANUAL-block section of
+  `project.md` requires a milestone-tagged ADR — see ADR-260510-B for the
+  full governance rule.
+
+### References
+
+- M028 BRIEF/PLAN (`260509-tdd-aihaus-clients`) — Decision D (enum shape),
+  Alternatives §5 (Practices vs Stack-table)
+- ADR-260510-B — project.md structured-keys governance + sunset clause (S6)
+- ADR-260510-C — `tdd-guard.sh` PreToolUse hook contract (S2)
+- ADR-260510-D — TDD scope-fence / Surface 4 permanent rejection (S6)
+
+## ADR-260510-C — `tdd-guard.sh` PreToolUse hook contract (M028/S2)
+
+**Status:** Accepted
+**Date:** 2026-05-09
+**Milestone:** M028-260509-tdd-aihaus-clients
+
+### Context
+
+M028 ships TDD enforcement as a first-class aihaus primitive. The PLAN Decision A table
+identified aihaus's hook architecture as the correct enforcement surface (CHALLENGES HIGH #6):
+30 hooks already ship; the hook-level enforcement pattern is empirically stronger than
+prose-level prescription per RESEARCH F5 (alexop.dev measured 20%→84% compliance jump with
+hook-based enforcement vs documentation alone).
+
+Two blockers required pre-commit resolution:
+
+**BLOCKER #1 (aih-quick bypass):** The original design used a `MANIFEST_PATH` active-skill
+marker to detect when `aih-quick` was the active skill. However, `aih-quick` by design
+creates no manifest — it skips planning per ASSUMPTIONS A7, sets no `MANIFEST_PATH`, and has
+no `## Invoke stack`. The hook cannot detect "active skill = aih-quick" via this mechanism.
+
+**BLOCKER #2 (ADR overscoping):** The original single ADR-260510-A was flagged by plan-checker
+for covering 4 distinct decisions. Per Decision C2, split into 4 ADRs (A/B/C/D) for
+traceability and rollback granularity, mirroring M027's V/W/X/Y/Z 5-ADR split precedent.
+
+### Decision
+
+**`tdd-guard.sh`** is a PreToolUse hook that fires on `Write` and `Edit` tool events.
+
+**Lifecycle contract:**
+
+1. **Env bypass first:** `[ "${AIHAUS_TDD_GUARD:-1}" = "0" ] && exit 0` — silent bypass when
+   `AIHAUS_TDD_GUARD=0`. Audit row written to `.claude/audit/hook.jsonl` even on bypass.
+
+2. **Discipline check:** reads `AIHAUS_TESTING_DISCIPLINE` env if set (session-cached via
+   parent skill Step 0 / R4 performance mitigation). Falls back to reading
+   `.aihaus/project.md` `testing_discipline:` field on first invocation per session.
+   If `testing_discipline != tdd` → exit 0 silently (no-op for `none` / `test-after`).
+
+3. **Test-file allowlist (R5 mitigation):** if `file_path` matches the allowlist regex,
+   always allow (exit 0) AND record a session marker (so future non-test edits are unblocked):
+   - `tests/`, `__tests__/`, `test/`, `spec/`, `e2e/`, `cypress/integration/`, `__specs__/`
+   - `*_test.*` (Go/Python), `*.test.*` (JS/TS), `*.spec.*` (JS/TS)
+   Allowlist is extensible — future language patterns added per user issue reports.
+
+4. **Session marker check:** marker file at `.claude/audit/tdd-guard.session.{session_id}.json`
+   (keyed to `CLAUDE_SESSION_ID` or `$$`). If marker exists AND is within TTL (default 120
+   minutes) AND has a non-empty `test_files` array → allow (exit 0).
+
+5. **Block:** if none of the above applies → exit 2 with stderr message:
+   `tdd-guard: Write|Edit on <file> blocked. testing_discipline=tdd requires a test file
+   edit/create in the same session before implementation. Allowlist regex matched paths
+   bypass this check. Set AIHAUS_TDD_GUARD=0 to opt out.`
+
+**aih-quick lifecycle (Decision B — resolves BLOCKER #1):**
+
+- `aih-quick/SKILL.md` Protocol Step 0 (NEW): `export AIHAUS_TDD_GUARD=0` — explicitly
+  disables tdd-guard for the duration of the aih-quick session.
+- `aih-quick/SKILL.md` Protocol Step 6 (amended): ends with `unset AIHAUS_TDD_GUARD` —
+  bounds the env to the aih-quick invocation, prevents leakage to subsequent commands.
+
+Trade-off vs original MANIFEST_PATH approach: env-var can theoretically leak across nested
+invocations within the same shell session (e.g., user runs aih-quick then immediately
+aih-feature without exiting). Mitigation: Step 6 explicit `unset`; Smoke Check 79
+fixture-fail #3 verifies the bypass fires correctly when `AIHAUS_TDD_GUARD=0`.
+
+**Audit log:** all decisions (allow/block/bypass) written to `.claude/audit/hook.jsonl` with
+fields: `ts`, `hook`, `event`, `decision`, `reason`, `file_path`, `testing_discipline`.
+Enables future numeric trigger queries per PLAN §OQ-3.
+
+**Performance (R4):** session-marker file is the primary cache. Project.md is read only on
+first invocation per session (when `AIHAUS_TESTING_DISCIPLINE` env is not set). Parent
+skills that call `export AIHAUS_TESTING_DISCIPLINE=$(...)` at Step 0 avoid the file read
+entirely.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** env-var bypass `AIHAUS_TDD_GUARD=0` with explicit aih-quick lifecycle | Clean; testable; matches `AIHAUS_GIT_ADD_GUARD` precedent | Env can leak if Step 6 `unset` skipped by crash | Step 6 unset + smoke fixture-fail #3 mitigates; simpler than all alternatives |
+| 2 | MANIFEST_PATH active-skill marker | Original plan | Broken — aih-quick creates no manifest (BLOCKER #1) | Mechanically unsound per ASSUMPTIONS A7 |
+| 3 | `--no-tdd` per-tool flag | Per-invocation precision | High blast radius (every Edit|Write call needs the flag) | Impractical; surface is too granular |
+| 4 | Process-tree heuristic (`pgrep -f aih-quick`) | No env pollution | Fragile; OS-dependent; breaks in nested invocations | Non-deterministic — rejected |
+| 5 | Wrap upstream `nizos/tdd-guard` | Code reuse | No runtime config handoff (RESEARCH F1 — verified) | In-house hook with project.md gating is the only viable path |
+
+### Rationale
+
+Hook-level enforcement is empirically stronger than prose-level prescription (RESEARCH F5).
+The env-var bypass pattern matches the established `AIHAUS_GIT_ADD_GUARD=0` precedent
+(git-add-guard.sh L29-38) — both use `${VAR:-default}` defaulting to active. The aih-quick
+lifecycle (Step 0 export / Step 6 unset) is the minimal-blast-radius solution to BLOCKER #1.
+Session-marker for test-file pairing tracks the TDD "write test first" intent across
+tool invocations without requiring cross-tool shared state.
+
+### Consequences
+
+- `pkg/.aihaus/hooks/tdd-guard.sh` (NEW) — ~165 LOC.
+- `pkg/.aihaus/skills/aih-quick/SKILL.md` — +2 lines (Step 0 + Step 6 amendment).
+- `tools/smoke-test.sh` — Check 79 added (3 fixture-fail tests; total 78 → 79).
+- `tools/fixtures/check-79/` — 3 JSON fixture files.
+- `.claude/audit/hook.jsonl` — shared audit log (existing path per git-add-guard.sh pattern).
+- `.claude/audit/tdd-guard.session.{id}.json` — session-scoped marker (gitignored path).
+
+### Rollback
+
+- Delete `pkg/.aihaus/hooks/tdd-guard.sh`.
+- Revert `aih-quick/SKILL.md` Step 0 + Step 6 amendment.
+- Remove Check 79 from `tools/smoke-test.sh` and `tools/fixtures/check-79/`.
+- Session markers are ephemeral runtime artifacts — no migration concerns.
+
+### References
+
+- ADR-260510-A — `testing_discipline` schema (the field this hook reads)
+- ADR-260510-B — project.md structured-keys governance (S6)
+- ADR-260510-D — TDD scope-fence / Surface 4 permanent rejection (S6)
+- ADR-M017-A — `git-add-guard.sh` env opt-out pattern (structural analog)
+- ADR-260509-X — M027/S7 two-tier autonomy-guard (hook precedent)
+- M028 PLAN Decision B (aih-quick bypass mechanism — resolves BLOCKER #1)
+- M028 PLAN Decision C2 (ADR split — resolves BLOCKER #2)
+- RESEARCH F5 (20%→84% hook-enforcement claim; Spence measurement + Seleznov replication)
+
+## ADR-260510-B — Project.md structured-keys governance + sunset clause (M028/S6)
+
+**Status:** Accepted
+**Date:** 2026-05-09
+**Milestone:** M028-260509-tdd-aihaus-clients
+
+### Context
+ADR-260510-A introduced `testing_discipline` as a structured machine-readable key in project.md `## Practices` section. Without governance, future milestones may add ad-hoc keys (`commit_convention`, `style_discipline`, `ci_gates`, etc.) until project.md becomes a 200-line policy file. CHALLENGES MED #8 + ASSUMPTIONS S2 flagged the schema-creep risk.
+
+### Decision
+This ADR governs **structured machine-readable keys within MANUAL-block sections of project.md** — NOT new H2 sections themselves (5 already exist: Glossary, Active Milestones, Decisions, Knowledge, Milestone History — `## Practices` is the 10th total H2, 6th MANUAL section, per ASSUMPTIONS S2 verification). Discipline rule:
+
+1. **Each new structured key requires a milestone-tagged ADR** (e.g., ADR-260510-A landed `testing_discipline`).
+2. **Sunset clause**: 2 milestones post-introduction with zero downstream consumers → key removed via amendment ADR.
+3. **Flat namespace**: keys are top-level (`testing_discipline`), no nesting (`practices.testing.discipline`).
+4. **aih-init auto-detection takes precedence** over explicit user-set value at install time. User can override post-install by editing project.md directly.
+5. **Reserved key namespace** (claimed by aihaus, do NOT use for app-specific config): `testing_discipline`, `commit_convention`, `style_discipline`, `ci_gates`, `code_review_discipline`. Future milestones may extend.
+
+### Rationale
+The 5-already-exist clarification (per ASSUMPTIONS S2) means the `## Practices` section ISN'T precedent-setting structurally — what's precedent-setting is the structured-key-in-markdown pattern. Governance scoping must match: governs keys, not sections.
+
+### Consequences
+- Future structured-key proposals require ADR + sunset commitment.
+- Smoke check (deferred to M029+) MAY enforce the reserved-namespace claim if needed.
+- aih-init auto-detection logic is canonical; user override via direct edit is allowed.
+
+### References
+- ADR-260510-A (testing_discipline schema — first user of this governance)
+- ASSUMPTIONS S2 (project.md has 9 H2 sections, not 5; `## Practices` is 10th)
+- CHALLENGES MED #8 (schema-creep risk)
+
+## ADR-260510-D — TDD discipline scope-fence — user code only, NOT aihaus internals (M028/S6)
+
+**Status:** Accepted
+**Date:** 2026-05-09
+**Milestone:** M028-260509-tdd-aihaus-clients
+
+### Context
+M028 ships TDD discipline as opt-in user preference. The brainstorm contrarian (CHALLENGES MED #7) flagged a self-eating-cake observation: aihaus's own M027/S7 added 864 LOC of bash to autonomy-guard.sh with **zero unit tests**. The aihaus team's own primary stack (bash) is integration-tested via `tools/smoke-test.sh` + fixture-fail patterns, NOT unit-tested via bats or shunit2.
+
+### Decision
+TDD discipline is **offered to aihaus users for application code**; it does **NOT apply to aihaus's own bash hooks/scripts**. Specifically:
+1. Surface 4 (test-first baseline in implementer/frontend-dev/code-fixer) is **permanently rejected** — not "deferred pending evidence."
+2. aihaus internals (pkg/.aihaus/hooks/*.sh, tools/*.sh, pkg/scripts/*.sh) continue to use smoke-test integration + fixture-fail patterns (M026 Check 77, M027 Check 78, M028 Check 79).
+3. The `testing_discipline` field in project.md applies ONLY to the user's project context — the field is read by implementer/frontend-dev when they work on USER code, not aihaus's own substrate.
+
+### Rationale
+This is honest scoping, not a deferred decision. The maintainer's behavior IS the data: M027/S7 added non-trivial bash logic without unit tests because integration-via-smoke-test is the appropriate test discipline for shell hooks. Prescribing TDD to users while ignoring it internally would be paternalistic. Documenting the asymmetry explicitly preempts the "self-contradiction" critique that an external auditor would otherwise make.
+
+### Consequences
+- Surface 4 carries forward as PERMANENTLY REJECTED in any future TDD-related milestone.
+- aihaus's smoke-test layer (`tools/smoke-test.sh`) remains the canonical test substrate for the package itself.
+- User-facing skills (aih-feature, aih-plan, aih-milestone) honor `testing_discipline=tdd` for user code paths; aihaus's own validation runs unchanged.
+
+### References
+- ADR-260510-A (schema — testing_discipline applies to user project context)
+- ADR-260510-C (hook contract — tdd-guard.sh fires on user code Edits, not aihaus's own substrate)
+- CHALLENGES MED #7 (self-eating-cake observation)
+- M027/S7 ADR-260509-X autonomy-guard.sh expansion precedent (LOC = 864 at draft time)
+
+---
+
+## ADR-M028-CURATE-A — Hook bypass for skill-specific lifecycles uses explicit env-var, not implicit marker file
+
+**Status:** Accepted
+**Date:** 2026-05-10
+**Milestone:** M028 (curator pass)
+
+### Context
+
+When `aih-quick` needed to bypass `tdd-guard.sh` (M028/S2 PreToolUse hook), two designs surfaced during PLAN remediation: implicit detection (hook scans for active-skill marker) vs explicit env-var lifecycle (skill Step 0 sets `AIHAUS_TDD_GUARD=0`, Step 6 unsets). Plan-checker BLOCKER #1 surfaced that implicit detection was broken — `/aih-quick` writes no manifest, has no marker. Decision B replaced it with the env-var lifecycle (ADR-260510-C).
+
+### Decision
+
+For any future PreToolUse hook needing context-aware bypass for one specific skill, **prefer explicit env-var lifecycle owned by the skill** (set in entry, unset in exit) over implicit marker-file or manifest-existence detection. Skill declares; hook honors. No reverse-direction discovery.
+
+### Consequences
+
+- Bypass is auditable via `grep AIHAUS_<HOOK>_GUARD pkg/.aihaus/skills/`.
+- Lifecycle symmetric and self-cleaning.
+- Cost: one env-var name per bypass surface.
+- Pattern established for M029+.
+
+---
+
+## ADR-M028-CURATE-B — Honest-scope-fence for self-modifying tooling — disciplines apply to user code only
+
+**Status:** Accepted
+**Date:** 2026-05-10
+**Milestone:** M028 (curator pass)
+
+### Context
+
+M028 brainstorm raised Surface 4 (apply TDD baseline stance to implementer/frontend-dev/code-fixer so aihaus's own bash hooks would also be test-first). Decision G rejected on two grounds: (a) stack-agnosticism — agents can't assume specific test framework exists in user repo; (b) maintainer behavior across M001-M027 is empirical evidence — 864 LOC autonomy-guard.sh shipped without co-evolving test suite. ADR-260510-D captured the specific scope-fence; this curator-rule generalizes.
+
+### Decision
+
+When designing any discipline (TDD, contract-tests, fuzz harnesses, etc.) shipped to user repos, **explicitly fence scope to user code at ADR-write time**. Document that aihaus's own bash hooks, skill markdown, shell scripts are out of scope — and cite maintainer's commit history as evidence rather than aspirational adoption.
+
+### Consequences
+
+- Future discipline ADRs must include Scope section naming what is in/out. Vague "applies to all aihaus-touched code" claims rejected.
+- Stack-agnosticism + honest-scoping compose: a discipline cannot baseline-apply to agents that read user-stack at runtime.
+- Honest-scoping ADRs ship verification commands (e.g., `wc -l autonomy-guard.sh = 864` for ADR-260510-D).
+- Pattern reusable for M029+ governance ADRs (per ADR-260510-B sunset clause).

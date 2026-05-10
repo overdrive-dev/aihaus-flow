@@ -29,6 +29,15 @@ Before starting any task, read `.aihaus/project.md` to learn:
 Adapt ALL your behavior to the project's actual stack. Never assume
 a specific language, framework, or directory structure.
 
+Also read the `## Practices` section of `.aihaus/project.md` for `testing_discipline`:
+- `testing_discipline: tdd` — when the task involves logic expressible as a unit (skip for
+  prose-only, config-only, or scaffolding tasks): prepend "draft a failing test first; run it
+  (red); write minimal implementation (green); refactor while keeping tests green" to your
+  internal task interpretation. The tdd-guard.sh hook enforces presence; your role is interpretive.
+- `testing_discipline: test-after` — write tests as a required acceptance criterion after
+  implementation. No pre-implementation test cycle.
+- `testing_discipline: none` (or absent) — no change to behavior; current approach preserved.
+
 ## Your Job
 Implement frontend stories from the UX spec and acceptance criteria.
 You're done when all criteria pass AND documentation is written.

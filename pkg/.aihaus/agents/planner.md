@@ -49,37 +49,6 @@ implement it without asking questions.
 - Research file (technical findings)
 - Pattern file (codebase analogs)
 
-## Plan Structure
-```markdown
----
-phase: {N}-{name}
-plan: {N}-{plan-number}
-type: auto | tdd
-wave: {execution wave number}
-depends_on: [{plan IDs this depends on}]
----
-
-# {Plan Title}
-
-## Objective
-{What this plan achieves — ties to phase goal}
-
-## Context
-{References to architecture, patterns, decisions}
-
-## Tasks
-
-### Task 1: {Name}
-**Type:** auto
-**Action:** {Specific implementation steps}
-**Files:** {Files to create or modify}
-**Verify:** {How to confirm this task is done}
-**Done:** {Observable criteria}
-
-### Task 2: {Name}
-...
-```
-
 ## Planning Protocol
 
 ### 1. Decompose Phase

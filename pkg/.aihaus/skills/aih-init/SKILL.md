@@ -149,12 +149,13 @@ scratch-file value (use `unknown` if the field is missing):
 | `[TEST]`         | `test_framework`                   |
 | `[BUILD]`        | `build_tool`                       |
 
-Populate the Inventory table with one row per discovered layer, using
-`models_count`, `endpoints_count`, `frontend_components_count`, and
-`frontend_screens_count`. Populate the Architecture section from
-`architecture_summary` if present, otherwise leave the template paragraph
-as-is. Populate the Conventions section from `naming_style`, `linter`,
-`formatter`, `commit_style`, `package_manager`.
+Populate Inventory (one row per layer: `models_count`, `endpoints_count`, `frontend_components_count`,
+`frontend_screens_count`), Architecture (`architecture_summary` or template default),
+and Conventions (`naming_style`, `linter`, `formatter`, `commit_style`, `package_manager`).
+
+### 9.5. Detect `testing_discipline` — seed `## Practices`
+Auto-detect test infra and TDD signals; write the `testing_discipline` value
+into `## Practices` in `project.md`. See `annexes/testing-discipline-detection.md`.
 
 ### 10a. First-run write
 If Phase 1 selected first-run mode, write the substituted template verbatim
