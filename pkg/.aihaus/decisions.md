@@ -3194,3 +3194,103 @@ Adopt a binary >70% / PARK rule for any future agent-consolidation spike: cross-
 - Researcher cohort frozen at 7 agents; codebase-mapper remains separate (different cohort/model/tools).
 - M028+ partial-merge work is a deliberate, scoped story — not a side-effect of researcher tuning.
 - The 70% threshold is REVISABLE — if a future milestone produces evidence that lower-overlap merges are viable (e.g., kind-dispatch refactor), the threshold can be amended via a successor ADR.
+
+---
+
+## ADR-260510-A — `testing_discipline` schema for `project.md` (M028/S1)
+
+**Status:** Accepted
+**Date:** 2026-05-09
+**Milestone:** M028
+
+### Context
+
+M028 introduces TDD discipline as an opt-in user preference for aihaus clients.
+The brainstorm `260509-tdd-aihaus-clients` + plan-checker surfaced that aihaus
+currently has no mechanism for users to declare a testing methodology preference —
+the `project.md` template captures stack details (language, framework, test
+framework) but not process discipline (TDD, test-after, or none). Without a
+machine-readable field, downstream enforcement (the `tdd-guard.sh` PreToolUse
+hook — ADR-260510-C) and skill-level dispatch (Step 7.6 in aih-feature —
+S3) have no authoritative source to gate on.
+
+The PLAN (Decision D) established the enum shape after ruling out alternatives:
+a Stack-table row was rejected because the Stack table is AUTO-GENERATED and
+testing discipline is a process choice, not a file-system fingerprint that
+aih-init can reliably detect. A new `## Practices` MANUAL section preserves
+"user owns the choice" semantics (ASSUMPTIONS S2 + Alternatives §5).
+
+### Decision
+
+Introduce a `testing_discipline` field in `pkg/.aihaus/templates/project.md`
+as the 10th H2 section (`## Practices`), within its own MANUAL block.
+
+**Enum:** `tdd | test-after | none`
+
+- `tdd` — implementer/frontend-dev prepend "draft a failing test before writing
+  implementation" to their internal briefing; `tdd-guard.sh` PreToolUse hook
+  active.
+- `test-after` — implementer treats tests as required acceptance criteria but not
+  pre-implementation; `tdd-guard.sh` inactive.
+- `none` (default) — no test discipline change; `tdd-guard.sh` inactive; current
+  behavior preserved for all existing installs.
+
+**Template default:** `testing_discipline: none`
+
+This preserves current behavior for all existing installs. No breaking change.
+
+**Auto-detection at install time:** `aih-init` Step 9.5 runs heuristic detection
+and seeds the value before writing `project.md`. Detection logic (full spec in
+`aih-init/annexes/testing-discipline-detection.md`):
+
+1. If `.tdd-discipline` marker file exists OR `tdd:` commit-message prefix
+   found in last 30 commits → seed `tdd`.
+2. If test directory (`tests/`, `__tests__/`, `test/`, `spec/`) AND framework
+   declared in manifest (`package.json`, `pyproject.toml`, `Cargo.toml`,
+   `go.mod`) → seed `test-after`.
+3. Otherwise → seed `none`.
+
+Auto-detection applies on FIRST RUN only. Re-run mode (Step 10b) skips
+Step 9.5 entirely — the user's current value in `## Practices` is preserved.
+
+### Rationale
+
+- **Stack-agnostic:** `testing_discipline` is a process choice, not a
+  file-system fingerprint. Keeping it in the MANUAL section and seeding via
+  heuristics (not enforcing via AUTO-GENERATED) respects the user's authority
+  over methodology decisions.
+- **Opt-in preserves current behavior:** default `none` means zero behavior
+  change for the ~100% of current aihaus users who have not declared a
+  testing discipline.
+- **Pairs field with consumer:** shipping the schema in S1 alongside the
+  enforcement hook (S2) and skill dispatch (S3) avoids the "vestigial-by-design"
+  anti-pattern the contrarian flagged in the brainstorm (CHALLENGES HIGH #4).
+- **Self-eating-cake scope-fence (Decision G):** `testing_discipline` is offered
+  to aihaus USERS working on application code. It does NOT apply to aihaus's own
+  bash hooks/scripts, which are integration-tested via smoke-test, not unit-tested
+  via bats. This honest scoping is explicit here to avoid user confusion (see
+  ADR-260510-D for full scope-fence).
+
+### Consequences
+
+- `pkg/.aihaus/templates/project.md` gains a 10th H2 (`## Practices`) after the
+  existing 9 sections.
+- `aih-init` Step 9.5 (new) runs heuristic detection at install time; annex
+  `aih-init/annexes/testing-discipline-detection.md` holds the full spec.
+- Downstream consumers read `testing_discipline` at runtime from `project.md`
+  (existing Stack-read pattern at `implementer.md:39-46`).
+- Performance: `tdd-guard.sh` caches the value in env at session start
+  (R4 mitigation from PLAN Risk Assessment — full spec in ADR-260510-C).
+- `tdd | test-after | none` is the COMPLETE enum. Adding a new value requires
+  a new ADR amendment to this ADR.
+- Governance: each new structured key added to a MANUAL-block section of
+  `project.md` requires a milestone-tagged ADR — see ADR-260510-B for the
+  full governance rule.
+
+### References
+
+- M028 BRIEF/PLAN (`260509-tdd-aihaus-clients`) — Decision D (enum shape),
+  Alternatives §5 (Practices vs Stack-table)
+- ADR-260510-B — project.md structured-keys governance + sunset clause (S6)
+- ADR-260510-C — `tdd-guard.sh` PreToolUse hook contract (S2)
+- ADR-260510-D — TDD scope-fence / Surface 4 permanent rejection (S6)

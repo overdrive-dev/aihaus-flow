@@ -93,3 +93,9 @@ Short pointers to the most important knowledge entries can live here.
 -->
 
 <!-- AIHAUS:MANUAL-END -->
+
+## Practices
+
+<!-- AIHAUS:MANUAL-START -->
+testing_discipline: none
+<!-- AIHAUS:MANUAL-END -->
