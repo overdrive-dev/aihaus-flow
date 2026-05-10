@@ -3415,3 +3415,63 @@ tool invocations without requiring cross-tool shared state.
 - M028 PLAN Decision B (aih-quick bypass mechanism — resolves BLOCKER #1)
 - M028 PLAN Decision C2 (ADR split — resolves BLOCKER #2)
 - RESEARCH F5 (20%→84% hook-enforcement claim; Spence measurement + Seleznov replication)
+
+## ADR-260510-B — Project.md structured-keys governance + sunset clause (M028/S6)
+
+**Status:** Accepted
+**Date:** 2026-05-09
+**Milestone:** M028-260509-tdd-aihaus-clients
+
+### Context
+ADR-260510-A introduced `testing_discipline` as a structured machine-readable key in project.md `## Practices` section. Without governance, future milestones may add ad-hoc keys (`commit_convention`, `style_discipline`, `ci_gates`, etc.) until project.md becomes a 200-line policy file. CHALLENGES MED #8 + ASSUMPTIONS S2 flagged the schema-creep risk.
+
+### Decision
+This ADR governs **structured machine-readable keys within MANUAL-block sections of project.md** — NOT new H2 sections themselves (5 already exist: Glossary, Active Milestones, Decisions, Knowledge, Milestone History — `## Practices` is the 10th total H2, 6th MANUAL section, per ASSUMPTIONS S2 verification). Discipline rule:
+
+1. **Each new structured key requires a milestone-tagged ADR** (e.g., ADR-260510-A landed `testing_discipline`).
+2. **Sunset clause**: 2 milestones post-introduction with zero downstream consumers → key removed via amendment ADR.
+3. **Flat namespace**: keys are top-level (`testing_discipline`), no nesting (`practices.testing.discipline`).
+4. **aih-init auto-detection takes precedence** over explicit user-set value at install time. User can override post-install by editing project.md directly.
+5. **Reserved key namespace** (claimed by aihaus, do NOT use for app-specific config): `testing_discipline`, `commit_convention`, `style_discipline`, `ci_gates`, `code_review_discipline`. Future milestones may extend.
+
+### Rationale
+The 5-already-exist clarification (per ASSUMPTIONS S2) means the `## Practices` section ISN'T precedent-setting structurally — what's precedent-setting is the structured-key-in-markdown pattern. Governance scoping must match: governs keys, not sections.
+
+### Consequences
+- Future structured-key proposals require ADR + sunset commitment.
+- Smoke check (deferred to M029+) MAY enforce the reserved-namespace claim if needed.
+- aih-init auto-detection logic is canonical; user override via direct edit is allowed.
+
+### References
+- ADR-260510-A (testing_discipline schema — first user of this governance)
+- ASSUMPTIONS S2 (project.md has 9 H2 sections, not 5; `## Practices` is 10th)
+- CHALLENGES MED #8 (schema-creep risk)
+
+## ADR-260510-D — TDD discipline scope-fence — user code only, NOT aihaus internals (M028/S6)
+
+**Status:** Accepted
+**Date:** 2026-05-09
+**Milestone:** M028-260509-tdd-aihaus-clients
+
+### Context
+M028 ships TDD discipline as opt-in user preference. The brainstorm contrarian (CHALLENGES MED #7) flagged a self-eating-cake observation: aihaus's own M027/S7 added 864 LOC of bash to autonomy-guard.sh with **zero unit tests**. The aihaus team's own primary stack (bash) is integration-tested via `tools/smoke-test.sh` + fixture-fail patterns, NOT unit-tested via bats or shunit2.
+
+### Decision
+TDD discipline is **offered to aihaus users for application code**; it does **NOT apply to aihaus's own bash hooks/scripts**. Specifically:
+1. Surface 4 (test-first baseline in implementer/frontend-dev/code-fixer) is **permanently rejected** — not "deferred pending evidence."
+2. aihaus internals (pkg/.aihaus/hooks/*.sh, tools/*.sh, pkg/scripts/*.sh) continue to use smoke-test integration + fixture-fail patterns (M026 Check 77, M027 Check 78, M028 Check 79).
+3. The `testing_discipline` field in project.md applies ONLY to the user's project context — the field is read by implementer/frontend-dev when they work on USER code, not aihaus's own substrate.
+
+### Rationale
+This is honest scoping, not a deferred decision. The maintainer's behavior IS the data: M027/S7 added non-trivial bash logic without unit tests because integration-via-smoke-test is the appropriate test discipline for shell hooks. Prescribing TDD to users while ignoring it internally would be paternalistic. Documenting the asymmetry explicitly preempts the "self-contradiction" critique that an external auditor would otherwise make.
+
+### Consequences
+- Surface 4 carries forward as PERMANENTLY REJECTED in any future TDD-related milestone.
+- aihaus's smoke-test layer (`tools/smoke-test.sh`) remains the canonical test substrate for the package itself.
+- User-facing skills (aih-feature, aih-plan, aih-milestone) honor `testing_discipline=tdd` for user code paths; aihaus's own validation runs unchanged.
+
+### References
+- ADR-260510-A (schema — testing_discipline applies to user project context)
+- ADR-260510-C (hook contract — tdd-guard.sh fires on user code Edits, not aihaus's own substrate)
+- CHALLENGES MED #7 (self-eating-cake observation)
+- M027/S7 ADR-260509-X autonomy-guard.sh expansion precedent (LOC = 864 at draft time)
