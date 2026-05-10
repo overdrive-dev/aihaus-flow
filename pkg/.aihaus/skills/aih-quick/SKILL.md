@@ -33,12 +33,13 @@ If `$ARGUMENTS` begins with `draft-adr ` AND active phase ∈ {planning, ready, 
 If phase ∈ {gathering, complete} → refuse: `aih-quick draft-adr: refused — phase '<phase>' not eligible (need planning|ready|running)`.
 
 ## Protocol
+0. **TDD-guard bypass**: `export AIHAUS_TDD_GUARD=0` — M028/S2: aih-quick is exploratory; bypass tdd-guard for this session.
 1. **Understand**: Read relevant code, understand the change needed
 2. **Check decisions**: Read `.aihaus/decisions.md` (if present) — don't contradict ADRs. Also read `.aihaus/project.md` (if present) for project context.
 3. **Implement**: Make the change
 4. **Verify**: Run relevant tests and type checks
 5. **Adversarial sanity check**: Spawn `code-reviewer` with `subagent_type: "code-reviewer"` for a single pass on the staged diff. No fix loop — reviewer reports findings inline, user decides whether to address before commit. Keeps `/aih-quick` fast while preventing trivial bugs from slipping through.
-6. **Commit**: Atomic commit with descriptive message
+6. **Commit**: Atomic commit with descriptive message. Then: `unset AIHAUS_TDD_GUARD` — M028/S2: bound to aih-quick session, prevent leakage.
 
 ## Attachment Handling
 If the user pastes an image/file, copy **immediately on first mention** to a temp-slug dir `.aihaus/features/YYMMDD-wip-HHMMSS-<rand4>/attachments/` via `cp` from `~/.claude/image-cache/` (M004 story H — prevents loss if conversation drops before slug is finalized). On final slug determination, `mv` the temp dir to the final slug. Pass the path to `code-reviewer` in Step 5. Reject > 20 MB. See `pkg/.aihaus/skills/aih-plan/annexes/attachments.md` for the canonical temp-slug + crash-recovery protocol.

@@ -3294,3 +3294,124 @@ Step 9.5 entirely — the user's current value in `## Practices` is preserved.
 - ADR-260510-B — project.md structured-keys governance + sunset clause (S6)
 - ADR-260510-C — `tdd-guard.sh` PreToolUse hook contract (S2)
 - ADR-260510-D — TDD scope-fence / Surface 4 permanent rejection (S6)
+
+## ADR-260510-C — `tdd-guard.sh` PreToolUse hook contract (M028/S2)
+
+**Status:** Accepted
+**Date:** 2026-05-09
+**Milestone:** M028-260509-tdd-aihaus-clients
+
+### Context
+
+M028 ships TDD enforcement as a first-class aihaus primitive. The PLAN Decision A table
+identified aihaus's hook architecture as the correct enforcement surface (CHALLENGES HIGH #6):
+30 hooks already ship; the hook-level enforcement pattern is empirically stronger than
+prose-level prescription per RESEARCH F5 (alexop.dev measured 20%→84% compliance jump with
+hook-based enforcement vs documentation alone).
+
+Two blockers required pre-commit resolution:
+
+**BLOCKER #1 (aih-quick bypass):** The original design used a `MANIFEST_PATH` active-skill
+marker to detect when `aih-quick` was the active skill. However, `aih-quick` by design
+creates no manifest — it skips planning per ASSUMPTIONS A7, sets no `MANIFEST_PATH`, and has
+no `## Invoke stack`. The hook cannot detect "active skill = aih-quick" via this mechanism.
+
+**BLOCKER #2 (ADR overscoping):** The original single ADR-260510-A was flagged by plan-checker
+for covering 4 distinct decisions. Per Decision C2, split into 4 ADRs (A/B/C/D) for
+traceability and rollback granularity, mirroring M027's V/W/X/Y/Z 5-ADR split precedent.
+
+### Decision
+
+**`tdd-guard.sh`** is a PreToolUse hook that fires on `Write` and `Edit` tool events.
+
+**Lifecycle contract:**
+
+1. **Env bypass first:** `[ "${AIHAUS_TDD_GUARD:-1}" = "0" ] && exit 0` — silent bypass when
+   `AIHAUS_TDD_GUARD=0`. Audit row written to `.claude/audit/hook.jsonl` even on bypass.
+
+2. **Discipline check:** reads `AIHAUS_TESTING_DISCIPLINE` env if set (session-cached via
+   parent skill Step 0 / R4 performance mitigation). Falls back to reading
+   `.aihaus/project.md` `testing_discipline:` field on first invocation per session.
+   If `testing_discipline != tdd` → exit 0 silently (no-op for `none` / `test-after`).
+
+3. **Test-file allowlist (R5 mitigation):** if `file_path` matches the allowlist regex,
+   always allow (exit 0) AND record a session marker (so future non-test edits are unblocked):
+   - `tests/`, `__tests__/`, `test/`, `spec/`, `e2e/`, `cypress/integration/`, `__specs__/`
+   - `*_test.*` (Go/Python), `*.test.*` (JS/TS), `*.spec.*` (JS/TS)
+   Allowlist is extensible — future language patterns added per user issue reports.
+
+4. **Session marker check:** marker file at `.claude/audit/tdd-guard.session.{session_id}.json`
+   (keyed to `CLAUDE_SESSION_ID` or `$$`). If marker exists AND is within TTL (default 120
+   minutes) AND has a non-empty `test_files` array → allow (exit 0).
+
+5. **Block:** if none of the above applies → exit 2 with stderr message:
+   `tdd-guard: Write|Edit on <file> blocked. testing_discipline=tdd requires a test file
+   edit/create in the same session before implementation. Allowlist regex matched paths
+   bypass this check. Set AIHAUS_TDD_GUARD=0 to opt out.`
+
+**aih-quick lifecycle (Decision B — resolves BLOCKER #1):**
+
+- `aih-quick/SKILL.md` Protocol Step 0 (NEW): `export AIHAUS_TDD_GUARD=0` — explicitly
+  disables tdd-guard for the duration of the aih-quick session.
+- `aih-quick/SKILL.md` Protocol Step 6 (amended): ends with `unset AIHAUS_TDD_GUARD` —
+  bounds the env to the aih-quick invocation, prevents leakage to subsequent commands.
+
+Trade-off vs original MANIFEST_PATH approach: env-var can theoretically leak across nested
+invocations within the same shell session (e.g., user runs aih-quick then immediately
+aih-feature without exiting). Mitigation: Step 6 explicit `unset`; Smoke Check 79
+fixture-fail #3 verifies the bypass fires correctly when `AIHAUS_TDD_GUARD=0`.
+
+**Audit log:** all decisions (allow/block/bypass) written to `.claude/audit/hook.jsonl` with
+fields: `ts`, `hook`, `event`, `decision`, `reason`, `file_path`, `testing_discipline`.
+Enables future numeric trigger queries per PLAN §OQ-3.
+
+**Performance (R4):** session-marker file is the primary cache. Project.md is read only on
+first invocation per session (when `AIHAUS_TESTING_DISCIPLINE` env is not set). Parent
+skills that call `export AIHAUS_TESTING_DISCIPLINE=$(...)` at Step 0 avoid the file read
+entirely.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** env-var bypass `AIHAUS_TDD_GUARD=0` with explicit aih-quick lifecycle | Clean; testable; matches `AIHAUS_GIT_ADD_GUARD` precedent | Env can leak if Step 6 `unset` skipped by crash | Step 6 unset + smoke fixture-fail #3 mitigates; simpler than all alternatives |
+| 2 | MANIFEST_PATH active-skill marker | Original plan | Broken — aih-quick creates no manifest (BLOCKER #1) | Mechanically unsound per ASSUMPTIONS A7 |
+| 3 | `--no-tdd` per-tool flag | Per-invocation precision | High blast radius (every Edit|Write call needs the flag) | Impractical; surface is too granular |
+| 4 | Process-tree heuristic (`pgrep -f aih-quick`) | No env pollution | Fragile; OS-dependent; breaks in nested invocations | Non-deterministic — rejected |
+| 5 | Wrap upstream `nizos/tdd-guard` | Code reuse | No runtime config handoff (RESEARCH F1 — verified) | In-house hook with project.md gating is the only viable path |
+
+### Rationale
+
+Hook-level enforcement is empirically stronger than prose-level prescription (RESEARCH F5).
+The env-var bypass pattern matches the established `AIHAUS_GIT_ADD_GUARD=0` precedent
+(git-add-guard.sh L29-38) — both use `${VAR:-default}` defaulting to active. The aih-quick
+lifecycle (Step 0 export / Step 6 unset) is the minimal-blast-radius solution to BLOCKER #1.
+Session-marker for test-file pairing tracks the TDD "write test first" intent across
+tool invocations without requiring cross-tool shared state.
+
+### Consequences
+
+- `pkg/.aihaus/hooks/tdd-guard.sh` (NEW) — ~165 LOC.
+- `pkg/.aihaus/skills/aih-quick/SKILL.md` — +2 lines (Step 0 + Step 6 amendment).
+- `tools/smoke-test.sh` — Check 79 added (3 fixture-fail tests; total 78 → 79).
+- `tools/fixtures/check-79/` — 3 JSON fixture files.
+- `.claude/audit/hook.jsonl` — shared audit log (existing path per git-add-guard.sh pattern).
+- `.claude/audit/tdd-guard.session.{id}.json` — session-scoped marker (gitignored path).
+
+### Rollback
+
+- Delete `pkg/.aihaus/hooks/tdd-guard.sh`.
+- Revert `aih-quick/SKILL.md` Step 0 + Step 6 amendment.
+- Remove Check 79 from `tools/smoke-test.sh` and `tools/fixtures/check-79/`.
+- Session markers are ephemeral runtime artifacts — no migration concerns.
+
+### References
+
+- ADR-260510-A — `testing_discipline` schema (the field this hook reads)
+- ADR-260510-B — project.md structured-keys governance (S6)
+- ADR-260510-D — TDD scope-fence / Surface 4 permanent rejection (S6)
+- ADR-M017-A — `git-add-guard.sh` env opt-out pattern (structural analog)
+- ADR-260509-X — M027/S7 two-tier autonomy-guard (hook precedent)
+- M028 PLAN Decision B (aih-quick bypass mechanism — resolves BLOCKER #1)
+- M028 PLAN Decision C2 (ADR split — resolves BLOCKER #2)
+- RESEARCH F5 (20%→84% hook-enforcement claim; Spence measurement + Seleznov replication)
