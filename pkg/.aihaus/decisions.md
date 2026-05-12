@@ -2138,6 +2138,12 @@ The framework codifies the classification, scoring, move rule, step-counting rub
 - Outcome gates satisfied: SC-1 through SC-12
 - Post-mortem evidence: `.aihaus/brainstorm/260503-skill-enforcement-audit/CONVERSATION.md` + 260502-stale-manifest + 260503-step7 + 260503-getShift-completion
 
+### Amendment (M029, 2026-05-12)
+
+**Amended by:** ADR-260511-B
+
+Move-rule extended with trigger pattern (c) anticipatory-protection-on-new-flow. See ADR-260511-B for full criteria.
+
 ---
 
 ## ADR-260504-A — V5 global-skill-bootstrap protocol
@@ -3626,3 +3632,64 @@ The `mtime`-as-ctime proxy is portable (`stat -c%Y` on Linux, `stat -f%m` on mac
 - PLAN.md Decision D (Smoke Check 81 design) + Decision E (ctime exemption policy)
 - tools/fixtures/check-79/ (fixture-fail reference pattern — Check 81 mirrors shape)
 - tools/fixtures/check-78/ (ambiguity-detection regex reference — Check 81 reuses same regex)
+
+---
+
+## ADR-260511-B — ADR-260503-A move-rule amendment: anticipatory-promotion trigger (M029/S4)
+
+**Status:** Accepted
+**Date:** 2026-05-12
+**Milestone:** M029/S4
+**Amends:** ADR-260503-A (SKILL enforcement-layer audit framework + move rule)
+
+### Context
+
+ADR-260503-A's move rule reads: "Promote A → B/C iff `leverage=high AND (reversibility=irrev OR drift-detectability=hard) AND eligibility=deterministic`." The rule captures when to act, but not WHAT TRIGGERS the decision to evaluate promotion for a specific row. Historically, triggers were either:
+
+- **Visible-escape recurrence** — model-driven gate fires incorrectly ≥1 time in production, post-mortem surfaces the row.
+- **Single-incident-with-irreversible-blast-radius** — one incident is enough when the cost of a second is catastrophic (M017 merge-back race precedent).
+
+M029 introduced a third pattern: `calibrate-guard.sh` was promoted to Layer C before any incident, based on (a) 100% on-disk skip rate (23 CHECK.md / 0 BUSINESS-RULES.md) and (b) RESEARCH F3 field-precedent verification (Gitleaks/ggshield/Helmet/rate-limiters all deploy anticipatory). The original ADR-260503-A did not codify this as a legitimate trigger, creating a gap: the calibrate-guard.sh promotion was sound but lacked explicit ADR authority.
+
+### Decision
+
+Amend ADR-260503-A move-rule to accept **3 legitimate trigger patterns** for initiating a Layer A → C promotion evaluation:
+
+**(a) Visible-escape recurrence (original — M005, M023, M025 precedent):** model-driven gate fires incorrectly ≥1 time in production; post-mortem nominates the row for promotion.
+
+**(b) Single-incident-with-irreversible-blast-radius (original — M017 precedent):** one confirmed incident where the blast radius is irreversible (e.g., cross-story file ownership violation, merge-back race) constitutes sufficient trigger regardless of recurrence.
+
+**(c) NEW — Anticipatory-protection-on-new-flow:** promotion is legitimate BEFORE any incident when ANY of the following holds:
+  - (i) **On-disk artifact-presence ratio shows ≥50% skip rate** — empirical evidence that the Layer A gate is being bypassed in practice (M029 example: 23 CHECK.md / 0 BUSINESS-RULES.md = 100% skip rate).
+  - (ii) **≥1 published field precedent** — documented deployment of an analogous gate in a shipped open-source tool or security library without incident-driven motivation (M029 example: Gitleaks/ggshield pre-commit, Helmet default-on, express-rate-limit default-install per RESEARCH F3).
+  - (iii) **Explicit threat-model documentation citing model-judgment-vulnerability** — the promoting ADR names the specific model-judgment failure mode (e.g., skill-cache staleness, executor-context ambiguity) AND the field precedent demonstrates the same vulnerability class was pre-empted anticipatorily.
+
+Trigger (c) is SUFFICIENT for beginning a promotion evaluation. The move rule's existing `leverage=high AND (reversibility=irrev OR drift-detectability=hard) AND eligibility=deterministic` conditions must STILL ALL PASS — trigger (c) only unlocks the evaluation; it does not override the eligibility gate.
+
+**DOES NOT FIT clarification (additive to ADR-260503-A §Decision "Worked example #2" and §Applicability Examples):** Rows with `eligibility=model-judgment` REMAIN ineligible for Layer C promotion regardless of which trigger pattern fires. Trigger (c) does NOT create a path for promoting model-judgment rows — the ADR-260502-A determinism gate is inherited verbatim and overrides anticipatory motivation. When a threat-model documents a model-judgment-vulnerability, the correct response is SKILL prose hardening (Layer A improvement), not hook promotion.
+
+### Rationale
+
+RESEARCH F3 (Phase 6 of M029 brainstorm) verified that anticipatory hook deployment is the field-default in security tooling: Gitleaks and ggshield deploy pre-commit hooks that block before any leak incident; Helmet sets secure-header defaults before any XSS incident; express-rate-limit is installed before any DoS incident. aihaus's prior stance — requiring incident evidence before promotion — was unusual relative to the field. The amendment closes the gap.
+
+The ≥50% skip-rate threshold (condition (i)) is intentionally high: it requires empirical evidence that more than half of all artifact instances are missing their companion gate output. A 5% or 20% skip rate could reflect intentional `--no-calibrate` usage; 50%+ signals structural bypass rather than intentional opt-out. M029's 100% rate (23/23) is the canonical example.
+
+The field-precedent condition (ii) creates a documented peer-review path: the promoting ADR must cite a specific tool, not "general practice." This keeps the bar verifiable.
+
+Conditions (i)+(ii)+(iii) are OR-conditions — any single one is sufficient to trigger evaluation. All three together constitute strong evidence for promotion.
+
+### Consequences
+
+- Future Layer A high-leverage rows can be promoted pre-incident when trigger (c) criteria are documented in the promoting ADR.
+- The ≥50% skip-rate threshold is a high bar — prevents floodgate of speculative promotions.
+- `eligibility=model-judgment` rows remain permanently ineligible for Layer C promotion (ADR-260503-A DOES NOT FIT examples + ADR-260502-A authority preserved).
+- ADR authors must cite ONE of (a)/(b)/(c) explicitly in the "Rationale" section of any future Layer A → C promoting ADR — absence of trigger citation is a plan-checker BLOCKER.
+- Promotion backlog (`pkg/.aihaus/skills/_shared/enforcement-audit-backlog.md`) rows may now be re-evaluated against trigger (c) retroactively; rows passing (c)(i) or (c)(ii) move from "await-incident" to "promotable-now" status.
+
+### References
+
+- ADR-260503-A (parent — amended by this ADR; move rule lives at `pkg/.aihaus/decisions.md:2026`)
+- ADR-260511-A (calibrate-guard.sh contract — first consumer of trigger (c); documents the 23/0 ratio + RESEARCH F3 citations)
+- ADR-260511-C (Smoke Check 81 — defense-in-depth complement; cites RESEARCH F3 Gitleaks/Helmet field pattern)
+- CHALLENGES Finding #2 (anticipatory-deployment is field-default — from M029 brainstorm `260510-hook-promote-gates/CHALLENGES.md`)
+- RESEARCH §3 (field-precedent verification — Gitleaks, ggshield, Helmet, express-rate-limit)
