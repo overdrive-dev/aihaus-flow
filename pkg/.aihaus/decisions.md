@@ -3520,4 +3520,51 @@ When designing any discipline (TDD, contract-tests, fuzz harnesses, etc.) shippe
 - Future discipline ADRs must include Scope section naming what is in/out. Vague "applies to all aihaus-touched code" claims rejected.
 - Stack-agnosticism + honest-scoping compose: a discipline cannot baseline-apply to agents that read user-stack at runtime.
 - Honest-scoping ADRs ship verification commands (e.g., `wc -l autonomy-guard.sh = 864` for ADR-260510-D).
+
+---
+
+## ADR-260511-A — calibrate-guard.sh UserPromptExpansion hook contract (M029/S1)
+
+**Status:** Accepted
+**Date:** 2026-05-12
+**Milestone:** M029/S1
+
+### Context
+
+M027/S5 shipped a calibration-gate in `aih-plan/SKILL.md` Phase 3.5 (Layer A prose). Empirical observation post-M027: globbing `.aihaus/plans/*/CHECK.md` returns 23 files, zero companion `BUSINESS-RULES.md` files — 100% skip rate. Root cause: the gate called `manifest-append.sh --audit calibration-skip` which is structurally dead-code (manifest-append.sh has no `--audit` mode). Additionally, Layer A enforcement is vulnerable to (a) model-judgment-skip and (b) skill-cache staleness (PRE-M027 skill body can load in a live session even after `git pull`). The `UserPromptExpansion` hook event fires from Claude Code runtime regardless of orchestrator skill cache — immune to both failure modes.
+
+### Decision
+
+Ship `calibrate-guard.sh` as a `UserPromptExpansion` hook (Layer C enforcement):
+
+- **Single-channel:** `UserPromptExpansion` only — dropping the defensive PreToolUse:Bash 2nd channel per BLOCKER F4 (merge-settings.sh uses replacement semantics for arrays; adding a 5th PreToolUse entry via update.sh would replace user's custom entries on next refresh).
+- **Matcher:** `"aih-feature|aih-milestone"` in settings.local.json. Hook internally narrows `aih-milestone` to `--plan` invocations via `command_args` grep.
+- **Active-slug sentinel:** `aih-plan` Phase 1 writes `.claude/calibrate-guard.active-slug` after slug finalization; clears at Phase 4 completion. Hook reads sentinel to resolve active plan dir; absent sentinel → exit 0 (gate not in scope).
+- **Ambiguity detection:** Check 78 regex (`TBD|assumed|TODO|pending confirmation`) applied to `.aihaus/plans/<slug>/ASSUMPTIONS.md`. Count = 0 → exit 0 (legitimate zero-ambiguity skip).
+- **Ctime exemption (Decision E):** CHECK.md mtime predates M029 first-commit timestamp (epoch `1747008000` / 2026-05-12T00:00:00Z) → exit 0 (legacy artifact grandfathered).
+- **Direct JSONL emit:** hook writes `{"event":"calibrate-guard",...}` rows directly to `.claude/audit/hook.jsonl` (mirrors tdd-guard.sh + git-add-guard.sh). Replaces the dead-code `manifest-append.sh --audit calibration-skip` path.
+- **Bypass mechanisms:** `AIHAUS_CALIBRATE_GUARD=0` env (aih-quick/bugfix Step 0/6 lifecycle) + `--no-calibrate` flag (per-invocation; prior `calibration-skip` row in audit log within 24h → exit 0).
+- **Block output:** stderr message + exit 2 (consistent with tdd-guard.sh pattern; no JSON stdout needed).
+
+### Rationale
+
+Layer A → C promotion per ADR-260503-A move-rule: `leverage=high` (gate prevents unresolved ambiguity from reaching implementation) AND `reversibility=irrev` (implementation built on ambiguous spec is costly to unwind) AND `eligibility=deterministic` (BUSINESS-RULES.md file-existence check is deterministic). Anticipatory-promotion trigger (c) also applies: 100% on-disk skip rate (23/23 CHECK.md without companion BUSINESS-RULES.md) constitutes empirical-failure signal.
+
+`UserPromptExpansion` is confirmed immune to Issue #21614 (skill-hook surface instability) per RESEARCH F4. Single-channel design is sufficient: all `/aih-*` invocations route through UserPromptExpansion when user types them; orchestrator-dispatched slash commands also fire it.
+
+### Consequences
+
+- Hook count: 31 → 32 (smoke-test Check 3 allowlist updated in S1).
+- Existing 5 in-flight CHECK.md artifacts grandfathered via ctime exemption — no retroactive blocking.
+- `aih-quick` and `aih-bugfix` Step 0/6 env-var lifecycle (`AIHAUS_CALIBRATE_GUARD=0` set at entry, unset at exit) — adds 2 lines each (S2).
+- M027/S5 dead-code `manifest-append.sh --audit calibration-skip` references cleaned in S5.
+- settings.local.json gains new top-level `UserPromptExpansion` key (NOT appended to existing `PreToolUse` array — avoids replacement-semantics break per BLOCKER F4).
+
+### References
+
+- ADR-260503-A (Layer A → C move-rule)
+- ADR-260509-W (plan-calibrator agent)
+- PLAN.md Decision B+C+D+E (single-channel, sentinel, JSONL emit, ctime exemption)
+- STDIN-SCHEMA.md (UserPromptExpansion field shape verification 2026-05-12)
+- PATTERNS.md Pattern 1+4+8 (tdd-guard shape, analyst-brief read, stdin parse)
 - Pattern reusable for M029+ governance ADRs (per ADR-260510-B sunset clause).
