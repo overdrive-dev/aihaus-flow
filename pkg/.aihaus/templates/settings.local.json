@@ -36,6 +36,19 @@
         ]
       }
     ],
+    "UserPromptExpansion": [
+      {
+        "matcher": "aih-feature|aih-milestone",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/calibrate-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking calibration gate..."
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",

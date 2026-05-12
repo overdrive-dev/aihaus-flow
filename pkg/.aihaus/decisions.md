@@ -2138,6 +2138,12 @@ The framework codifies the classification, scoring, move rule, step-counting rub
 - Outcome gates satisfied: SC-1 through SC-12
 - Post-mortem evidence: `.aihaus/brainstorm/260503-skill-enforcement-audit/CONVERSATION.md` + 260502-stale-manifest + 260503-step7 + 260503-getShift-completion
 
+### Amendment (M029, 2026-05-12)
+
+**Amended by:** ADR-260511-B
+
+Move-rule extended with trigger pattern (c) anticipatory-protection-on-new-flow. See ADR-260511-B for full criteria.
+
 ---
 
 ## ADR-260504-A — V5 global-skill-bootstrap protocol
@@ -3520,4 +3526,203 @@ When designing any discipline (TDD, contract-tests, fuzz harnesses, etc.) shippe
 - Future discipline ADRs must include Scope section naming what is in/out. Vague "applies to all aihaus-touched code" claims rejected.
 - Stack-agnosticism + honest-scoping compose: a discipline cannot baseline-apply to agents that read user-stack at runtime.
 - Honest-scoping ADRs ship verification commands (e.g., `wc -l autonomy-guard.sh = 864` for ADR-260510-D).
+
+---
+
+## ADR-260511-A — calibrate-guard.sh UserPromptExpansion hook contract (M029/S1)
+
+**Status:** Accepted
+**Date:** 2026-05-12
+**Milestone:** M029/S1
+
+### Context
+
+M027/S5 shipped a calibration-gate in `aih-plan/SKILL.md` Phase 3.5 (Layer A prose). Empirical observation post-M027: globbing `.aihaus/plans/*/CHECK.md` returns 23 files, zero companion `BUSINESS-RULES.md` files — 100% skip rate. Root cause: the gate called `manifest-append.sh --audit calibration-skip` which is structurally dead-code (manifest-append.sh has no `--audit` mode). Additionally, Layer A enforcement is vulnerable to (a) model-judgment-skip and (b) skill-cache staleness (PRE-M027 skill body can load in a live session even after `git pull`). The `UserPromptExpansion` hook event fires from Claude Code runtime regardless of orchestrator skill cache — immune to both failure modes.
+
+### Decision
+
+Ship `calibrate-guard.sh` as a `UserPromptExpansion` hook (Layer C enforcement):
+
+- **Single-channel:** `UserPromptExpansion` only — dropping the defensive PreToolUse:Bash 2nd channel per BLOCKER F4 (merge-settings.sh uses replacement semantics for arrays; adding a 5th PreToolUse entry via update.sh would replace user's custom entries on next refresh).
+- **Matcher:** `"aih-feature|aih-milestone"` in settings.local.json. Hook internally narrows `aih-milestone` to `--plan` invocations via `command_args` grep.
+- **Active-slug sentinel:** `aih-plan` Phase 1 writes `.claude/calibrate-guard.active-slug` after slug finalization; clears at Phase 4 completion. Hook reads sentinel to resolve active plan dir; absent sentinel → exit 0 (gate not in scope).
+- **Ambiguity detection:** Check 78 regex (`TBD|assumed|TODO|pending confirmation`) applied to `.aihaus/plans/<slug>/ASSUMPTIONS.md`. Count = 0 → exit 0 (legitimate zero-ambiguity skip).
+- **Ctime exemption (Decision E):** CHECK.md mtime predates M029 first-commit timestamp (epoch `1747008000` / 2026-05-12T00:00:00Z) → exit 0 (legacy artifact grandfathered).
+- **Direct JSONL emit:** hook writes `{"event":"calibrate-guard",...}` rows directly to `.claude/audit/hook.jsonl` (mirrors tdd-guard.sh + git-add-guard.sh). Replaces the dead-code `manifest-append.sh --audit calibration-skip` path.
+- **Bypass mechanisms:** `AIHAUS_CALIBRATE_GUARD=0` env (aih-quick/bugfix Step 0/6 lifecycle) + `--no-calibrate` flag (per-invocation; prior `calibration-skip` row in audit log within 24h → exit 0).
+- **Block output:** stderr message + exit 2 (consistent with tdd-guard.sh pattern; no JSON stdout needed).
+
+### Rationale
+
+Layer A → C promotion per ADR-260503-A move-rule: `leverage=high` (gate prevents unresolved ambiguity from reaching implementation) AND `reversibility=irrev` (implementation built on ambiguous spec is costly to unwind) AND `eligibility=deterministic` (BUSINESS-RULES.md file-existence check is deterministic). Anticipatory-promotion trigger (c) also applies: 100% on-disk skip rate (23/23 CHECK.md without companion BUSINESS-RULES.md) constitutes empirical-failure signal.
+
+`UserPromptExpansion` is confirmed immune to Issue #21614 (skill-hook surface instability) per RESEARCH F4. Single-channel design is sufficient: all `/aih-*` invocations route through UserPromptExpansion when user types them; orchestrator-dispatched slash commands also fire it.
+
+### Consequences
+
+- Hook count: 31 → 32 (smoke-test Check 3 allowlist updated in S1).
+- Existing 5 in-flight CHECK.md artifacts grandfathered via ctime exemption — no retroactive blocking.
+- `aih-quick` and `aih-bugfix` Step 0/6 env-var lifecycle (`AIHAUS_CALIBRATE_GUARD=0` set at entry, unset at exit) — adds 2 lines each (S2).
+- M027/S5 dead-code `manifest-append.sh --audit calibration-skip` references cleaned in S5.
+- settings.local.json gains new top-level `UserPromptExpansion` key (NOT appended to existing `PreToolUse` array — avoids replacement-semantics break per BLOCKER F4).
+
+### References
+
+- ADR-260503-A (Layer A → C move-rule)
+- ADR-260509-W (plan-calibrator agent)
+- PLAN.md Decision B+C+D+E (single-channel, sentinel, JSONL emit, ctime exemption)
+- STDIN-SCHEMA.md (UserPromptExpansion field shape verification 2026-05-12)
+- PATTERNS.md Pattern 1+4+8 (tdd-guard shape, analyst-brief read, stdin parse)
 - Pattern reusable for M029+ governance ADRs (per ADR-260510-B sunset clause).
+
+---
+
+## ADR-260511-C — Smoke Check 81 drift detection + legacy ctime-exemption (M029/S3)
+
+**Status:** Accepted
+**Date:** 2026-05-12
+**Milestone:** M029/S3
+
+### Context
+
+Smoke Check 81 catches post-merge drift: a `PLAN.md` plan that went through plan-checker (CHECK.md present) but whose ASSUMPTIONS.md ambiguity surface was never resolved via BUSINESS-RULES.md calibration. This complements `calibrate-guard.sh` (M029/S1 / ADR-260511-A): the hook prevents forward-creation; the smoke check catches existing drift at the CI gate. Defense-in-depth per RESEARCH F3 (Gitleaks/Helmet/rate-limiters field pattern).
+
+**Legacy context:** At M029 first-commit timestamp (epoch `1747008000` / 2026-05-12T00:00:00Z), 5 in-flight CHECK.md artifacts exist with no companion BUSINESS-RULES.md (empirical baseline: 23 CHECK.md / 0 BUSINESS-RULES.md). These predating artifacts must be grandfathered to avoid immediate CI failure on the milestone branch.
+
+### Decision
+
+Ship Smoke Check 81 (`check_calibrate_drift`) in `tools/smoke-test.sh`:
+
+- **4-axis allow logic:** for each `.aihaus/plans/*/CHECK.md`, allow if ANY condition holds:
+  (a) companion `BUSINESS-RULES.md` exists,
+  (b) `ASSUMPTIONS.md` ambiguity count = 0 (Check 78 regex: `TBD|assumed|TODO|pending confirmation`),
+  (c) `.claude/audit/hook.jsonl` has `"event":"calibration-skip"` row matching the plan slug,
+  (d) CHECK.md mtime predates `M029_EPOCH=1747008000` (legacy artifact exemption).
+  Else: emit per-slug drift error string and fail.
+
+- **ctime exemption constant:** `M029_EPOCH=1747008000` — same value as `calibrate-guard.sh` L41. Codified in 2 places (hook + smoke); changes to the epoch require coordinated update of both files.
+
+- **Fixture-based validation (non-vacuous gate):** 3 fixture dirs under `tools/fixtures/check-81/`:
+  - `drift-detected/` — ASSUMPTIONS with ≥1 ambiguity, no BUSINESS-RULES.md, no audit row → MUST fail (block).
+  - `drift-bypassed-by-no-calibrate/` — same ambiguities but companion `hook.jsonl` has valid `calibration-skip` row → MUST pass (allow).
+  - `no-ambiguity-skip/` — ASSUMPTIONS with zero ambiguity markers → MUST pass (allow).
+
+- **Real-plan scan** runs at CI only if `.aihaus/plans/` exists on disk (gitignored; empty in fresh CI clone).
+
+- **Check numbering:** smoke total 80 → 81.
+
+### Rationale
+
+Hook prevents forward-creation of new ambiguous plans; smoke catches accumulated drift in repo state. Both layers needed: `calibrate-guard.sh` fires at skill-invocation time (real-time), while smoke-test runs at commit/CI gate (batch audit). Mirrors the Check 79 fixture-fail pattern verbatim (PATTERNS verbatim-copy principle per PLAN Decision D).
+
+The `mtime`-as-ctime proxy is portable (`stat -c%Y` on Linux, `stat -f%m` on macOS) and fail-safe (if stat is unavailable, treats file as non-exempt — proceeds to drift check, never silently allows).
+
+### Consequences
+
+- Smoke total: 80 → 81.
+- 3 new fixture dirs under `tools/fixtures/check-81/`.
+- `M029_EPOCH=1747008000` constant now lives in 2 files: `pkg/.aihaus/hooks/calibrate-guard.sh` L41 and `tools/smoke-test.sh` (Check 81 function).
+- Real `.aihaus/plans/` drift check runs in dogfood sessions (non-empty plans dir); CI runs fixture-only assertions.
+- Future plan drift: any new CHECK.md without BUSINESS-RULES.md and with ambiguity markers will fail smoke (forcing explicit `--no-calibrate` opt-out or plan calibration before merge).
+
+### References
+
+- ADR-260511-A (calibrate-guard.sh hook contract — hook is the forward-creation gate)
+- ADR-260503-A (Layer A → C move-rule; anticipatory-promotion trigger)
+- PLAN.md Decision D (Smoke Check 81 design) + Decision E (ctime exemption policy)
+- tools/fixtures/check-79/ (fixture-fail reference pattern — Check 81 mirrors shape)
+- tools/fixtures/check-78/ (ambiguity-detection regex reference — Check 81 reuses same regex)
+
+---
+
+## ADR-260511-B — ADR-260503-A move-rule amendment: anticipatory-promotion trigger (M029/S4)
+
+**Status:** Accepted
+**Date:** 2026-05-12
+**Milestone:** M029/S4
+**Amends:** ADR-260503-A (SKILL enforcement-layer audit framework + move rule)
+
+### Context
+
+ADR-260503-A's move rule reads: "Promote A → B/C iff `leverage=high AND (reversibility=irrev OR drift-detectability=hard) AND eligibility=deterministic`." The rule captures when to act, but not WHAT TRIGGERS the decision to evaluate promotion for a specific row. Historically, triggers were either:
+
+- **Visible-escape recurrence** — model-driven gate fires incorrectly ≥1 time in production, post-mortem surfaces the row.
+- **Single-incident-with-irreversible-blast-radius** — one incident is enough when the cost of a second is catastrophic (M017 merge-back race precedent).
+
+M029 introduced a third pattern: `calibrate-guard.sh` was promoted to Layer C before any incident, based on (a) 100% on-disk skip rate (23 CHECK.md / 0 BUSINESS-RULES.md) and (b) RESEARCH F3 field-precedent verification (Gitleaks/ggshield/Helmet/rate-limiters all deploy anticipatory). The original ADR-260503-A did not codify this as a legitimate trigger, creating a gap: the calibrate-guard.sh promotion was sound but lacked explicit ADR authority.
+
+### Decision
+
+Amend ADR-260503-A move-rule to accept **3 legitimate trigger patterns** for initiating a Layer A → C promotion evaluation:
+
+**(a) Visible-escape recurrence (original — M005, M023, M025 precedent):** model-driven gate fires incorrectly ≥1 time in production; post-mortem nominates the row for promotion.
+
+**(b) Single-incident-with-irreversible-blast-radius (original — M017 precedent):** one confirmed incident where the blast radius is irreversible (e.g., cross-story file ownership violation, merge-back race) constitutes sufficient trigger regardless of recurrence.
+
+**(c) NEW — Anticipatory-protection-on-new-flow:** promotion is legitimate BEFORE any incident when ANY of the following holds:
+  - (i) **On-disk artifact-presence ratio shows ≥50% skip rate** — empirical evidence that the Layer A gate is being bypassed in practice (M029 example: 23 CHECK.md / 0 BUSINESS-RULES.md = 100% skip rate).
+  - (ii) **≥1 published field precedent** — documented deployment of an analogous gate in a shipped open-source tool or security library without incident-driven motivation (M029 example: Gitleaks/ggshield pre-commit, Helmet default-on, express-rate-limit default-install per RESEARCH F3).
+  - (iii) **Explicit threat-model documentation citing model-judgment-vulnerability** — the promoting ADR names the specific model-judgment failure mode (e.g., skill-cache staleness, executor-context ambiguity) AND the field precedent demonstrates the same vulnerability class was pre-empted anticipatorily.
+
+Trigger (c) is SUFFICIENT for beginning a promotion evaluation. The move rule's existing `leverage=high AND (reversibility=irrev OR drift-detectability=hard) AND eligibility=deterministic` conditions must STILL ALL PASS — trigger (c) only unlocks the evaluation; it does not override the eligibility gate.
+
+**DOES NOT FIT clarification (additive to ADR-260503-A §Decision "Worked example #2" and §Applicability Examples):** Rows with `eligibility=model-judgment` REMAIN ineligible for Layer C promotion regardless of which trigger pattern fires. Trigger (c) does NOT create a path for promoting model-judgment rows — the ADR-260502-A determinism gate is inherited verbatim and overrides anticipatory motivation. When a threat-model documents a model-judgment-vulnerability, the correct response is SKILL prose hardening (Layer A improvement), not hook promotion.
+
+### Rationale
+
+RESEARCH F3 (Phase 6 of M029 brainstorm) verified that anticipatory hook deployment is the field-default in security tooling: Gitleaks and ggshield deploy pre-commit hooks that block before any leak incident; Helmet sets secure-header defaults before any XSS incident; express-rate-limit is installed before any DoS incident. aihaus's prior stance — requiring incident evidence before promotion — was unusual relative to the field. The amendment closes the gap.
+
+The ≥50% skip-rate threshold (condition (i)) is intentionally high: it requires empirical evidence that more than half of all artifact instances are missing their companion gate output. A 5% or 20% skip rate could reflect intentional `--no-calibrate` usage; 50%+ signals structural bypass rather than intentional opt-out. M029's 100% rate (23/23) is the canonical example.
+
+The field-precedent condition (ii) creates a documented peer-review path: the promoting ADR must cite a specific tool, not "general practice." This keeps the bar verifiable.
+
+Conditions (i)+(ii)+(iii) are OR-conditions — any single one is sufficient to trigger evaluation. All three together constitute strong evidence for promotion.
+
+### Consequences
+
+- Future Layer A high-leverage rows can be promoted pre-incident when trigger (c) criteria are documented in the promoting ADR.
+- The ≥50% skip-rate threshold is a high bar — prevents floodgate of speculative promotions.
+- `eligibility=model-judgment` rows remain permanently ineligible for Layer C promotion (ADR-260503-A DOES NOT FIT examples + ADR-260502-A authority preserved).
+- ADR authors must cite ONE of (a)/(b)/(c) explicitly in the "Rationale" section of any future Layer A → C promoting ADR — absence of trigger citation is a plan-checker BLOCKER.
+- Promotion backlog (`pkg/.aihaus/skills/_shared/enforcement-audit-backlog.md`) rows may now be re-evaluated against trigger (c) retroactively; rows passing (c)(i) or (c)(ii) move from "await-incident" to "promotable-now" status.
+
+### References
+
+- ADR-260503-A (parent — amended by this ADR; move rule lives at `pkg/.aihaus/decisions.md:2026`)
+- ADR-260511-A (calibrate-guard.sh contract — first consumer of trigger (c); documents the 23/0 ratio + RESEARCH F3 citations)
+- ADR-260511-C (Smoke Check 81 — defense-in-depth complement; cites RESEARCH F3 Gitleaks/Helmet field pattern)
+- CHALLENGES Finding #2 (anticipatory-deployment is field-default — from M029 brainstorm `260510-hook-promote-gates/CHALLENGES.md`)
+- RESEARCH §3 (field-precedent verification — Gitleaks, ggshield, Helmet, express-rate-limit)
+
+---
+
+## ADR-M029-CURATE-A — Hook-level enforcement primary when Layer A prose failure-prone; env-var lifecycle canonical bypass (3rd-instance generalization)
+
+**Status:** Accepted
+**Date:** 2026-05-12
+**Milestone:** M029 (curator pass)
+
+### Context
+
+Third milestone promoting model-driven Layer A prose to Layer C hook (M027/S5 calibration, M028/S2 tdd-guard, M029/S1 calibrate-guard). Empirical motivation identical: Layer A fails for 2 compounding reasons — (1) model judgment-skip; (2) skill-cache staleness (orchestrator's loaded skill body lags on-disk after `/aih-update`). M027/S5's 100% calibration-skip rate (23 CHECK.md / 0 BUSINESS-RULES.md) observed **during M029-planning session itself** — `/aih-plan` loaded pre-M027 SKILL.md body. UserPromptExpansion fires BEFORE skill body loads (K-260512-003) — only primitive immune to both.
+
+### Decision
+
+For aih-* enforcement where (a) leverage=high AND (b) consequence-of-skip=hard-to-reverse-drift AND (c) eligibility=deterministic: **prefer Layer C hook from first design pass**. Do not wait for empirical skip-rate evidence. ADR-260511-B trigger is formal authority; this rule generalizes the meta-pattern. Bypass: env-var lifecycle (Step 0 set / Step 6 unset). Reject marker-files, manifest-presence inference, command-args parsing, audit-row precedence detection — all chicken-and-egg (M029/F-O5). Audit-emit: direct `.claude/audit/<hook>.jsonl` write (K-260512-004), NEVER `manifest-append.sh --audit` (dead-code since v0.31.0).
+
+### Consequences
+
+- 3 instances compose: M028-CURATE-A + M029/S1 + this rule.
+- Cache-staleness is NEW Layer A failure class beyond model-judgment-skip.
+- Cost auditable via grep at design time.
+- Anti-pattern reject: tightening writer-schema when failure is model NOT INVOKING writer.
+- Caveat M029/F-O1: hook only effective same-session as sentinel writer; cold-start = fail-open.
+
+### References
+
+- ADR-M028-CURATE-A (first instance — single-skill env-var bypass)
+- ADR-260511-A (second instance + cache-staleness root cause documented)
+- ADR-260511-B (anticipatory-promotion trigger)
+- ADR-260503-A (move-rule)
+- K-260512-003 (UserPromptExpansion cache-staleness immunity)
+- K-260512-004 (hook audit-emit direct-JSONL convention)

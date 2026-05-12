@@ -30,11 +30,7 @@ short-circuited the analysis pipeline), calibration follows the same skip rule.
 
 If `$ARGUMENTS` contains `--no-calibrate`:
 
-```bash
-bash .aihaus/hooks/manifest-append.sh \
-  --audit calibration-skip \
-  --reason "user-override --no-calibrate flag"
-```
+`calibrate-guard.sh` detects the prior `calibration-skip` audit row (written directly to `.claude/audit/hook.jsonl` via the hook's direct JSONL emit — M029/ADR-260511-A) and exits 0 on subsequent invocations. No `manifest-append.sh --audit` call is needed (that path is dead-code since v0.31.0).
 
 Skip calibration entirely. Proceed to Step 8.
 
