@@ -4294,6 +4294,167 @@ check_tdd_discipline_annex() {
   fi
 }
 
+# ---- Check 81: calibrate-guard drift detection (M029/S3) ----------------------
+# Post-merge assertion: every CHECK.md in .aihaus/plans/ must satisfy at least one
+# of 4 allow conditions, or the plan is in drift (calibration gate was skipped):
+#
+#   (a) Companion BUSINESS-RULES.md exists                        → allow
+#   (b) ASSUMPTIONS.md ambiguity count = 0 (Check 78 regex)      → allow
+#   (c) hook.jsonl has calibration-skip row for this slug         → allow
+#   (d) CHECK.md ctime predates M029_EPOCH (1747008000) — legacy → allow
+#
+# Uses fixture-based test (not real plans/) to prove gate is non-vacuous:
+#   drift-detected/       — ASSUMPTIONS ambiguity ≥1, no BUSINESS-RULES.md,
+#                           no audit row, not legacy → MUST fail (block)
+#   drift-bypassed-by-no-calibrate/  — same as above BUT audit row present → MUST pass
+#   no-ambiguity-skip/    — ASSUMPTIONS ambiguity = 0, no BUSINESS-RULES.md → MUST pass
+#
+# ADR-260511-C: drift detection + legacy ctime-exemption.
+check_calibrate_drift() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: calibrate-guard drift detection + 3 fixtures (M029/S3)"
+  local issues=()
+  local repo_root="${PACKAGE_ROOT}/.."
+  local fixture_base="${repo_root}/tools/fixtures/check-81"
+
+  # M029 first-commit epoch (matches calibrate-guard.sh L41)
+  local M029_EPOCH=1747008000
+
+  # Helper: count ambiguity markers in ASSUMPTIONS.md (mirrors Check 78 / calibrate-guard.sh L137)
+  _count_plan_ambiguities() {
+    local file="$1"
+    grep -ciE '\bTBD\b|[[:space:]]assumed[[:space:]]|[[:space:]]assumed$|\bTODO\b|pending confirmation' "$file" 2>/dev/null || echo 0
+  }
+
+  # Helper: evaluate 4-axis allow condition for a given plan dir + optional audit jsonl path
+  # Returns 0 (allow) or 1 (drift)
+  # Usage: _evaluate_drift <plan_dir> [<audit_jsonl>]
+  _evaluate_drift() {
+    local plan_dir="$1"
+    local audit_jsonl="${2:-}"
+    local slug
+    slug="$(basename "${plan_dir}")"
+    local check_md="${plan_dir}/CHECK.md"
+    local business_rules="${plan_dir}/BUSINESS-RULES.md"
+    local assumptions_md="${plan_dir}/ASSUMPTIONS.md"
+
+    # (a) BUSINESS-RULES.md present → allow
+    if [[ -f "${business_rules}" ]]; then
+      return 0
+    fi
+
+    # (b) ASSUMPTIONS.md ambiguity count = 0 → allow
+    local amb=0
+    if [[ -f "${assumptions_md}" ]]; then
+      amb="$(_count_plan_ambiguities "${assumptions_md}")"
+      case "${amb}" in ''|*[!0-9]*) amb=0 ;; esac
+    fi
+    if [[ "${amb}" -eq 0 ]]; then
+      return 0
+    fi
+
+    # (c) hook.jsonl shows calibration-skip row for this slug → allow
+    if [[ -n "${audit_jsonl}" ]] && [[ -f "${audit_jsonl}" ]]; then
+      if grep -qE '"event":"calibration-skip"' "${audit_jsonl}" 2>/dev/null; then
+        if grep -E '"event":"calibration-skip"' "${audit_jsonl}" 2>/dev/null \
+            | grep -qE "\"slug\":\"${slug}\"" 2>/dev/null; then
+          return 0
+        fi
+      fi
+    fi
+
+    # (d) CHECK.md ctime predates M029_EPOCH → allow (legacy artifact)
+    # Primary: filesystem mtime (portable; may reflect git-checkout time on Windows)
+    local _mtime
+    _mtime="$(stat -c%Y "${check_md}" 2>/dev/null || stat -f%m "${check_md}" 2>/dev/null || echo "")"
+    if [[ -n "${_mtime}" ]] && [[ "${_mtime}" =~ ^[0-9]+$ ]]; then
+      if [[ "${_mtime}" -lt "${M029_EPOCH}" ]]; then
+        return 0
+      fi
+    fi
+    # Fallback: slug-date prefix (YYMMDD-*) — reliable on Windows where git-checkout
+    # updates mtime. Slugs starting with 6-digit date < 260512 are pre-M029 artifacts.
+    # Only applies when slug matches YYMMDD- prefix pattern.
+    if [[ "${slug}" =~ ^([0-9]{6})- ]]; then
+      local _slug_date="${BASH_REMATCH[1]}"
+      if [[ "${_slug_date}" < "260512" ]]; then
+        return 0
+      fi
+    fi
+
+    # No allow condition satisfied → drift
+    return 1
+  }
+
+  # ---- fixture sub-assert 1: drift-detected/ MUST fail (block) ----------------
+  local fix1_dir="${fixture_base}/drift-detected"
+  local fix1_audit="${fix1_dir}/hook.jsonl"  # does not exist in this fixture
+  if [[ ! -d "${fix1_dir}" ]]; then
+    issues+=("fixture directory missing: tools/fixtures/check-81/drift-detected/")
+  elif [[ ! -f "${fix1_dir}/CHECK.md" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-81/drift-detected/CHECK.md")
+  elif [[ ! -f "${fix1_dir}/ASSUMPTIONS.md" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-81/drift-detected/ASSUMPTIONS.md")
+  else
+    if _evaluate_drift "${fix1_dir}" "${fix1_audit}"; then
+      issues+=("fixture-fail #1: drift-detected/ evaluated as ALLOW (should detect drift — ASSUMPTIONS has ambiguities, no BUSINESS-RULES.md, no audit row)")
+    fi
+  fi
+
+  # ---- fixture sub-assert 2: drift-bypassed-by-no-calibrate/ MUST pass (allow) --
+  local fix2_dir="${fixture_base}/drift-bypassed-by-no-calibrate"
+  local fix2_audit="${fix2_dir}/hook.jsonl"
+  if [[ ! -d "${fix2_dir}" ]]; then
+    issues+=("fixture directory missing: tools/fixtures/check-81/drift-bypassed-by-no-calibrate/")
+  elif [[ ! -f "${fix2_dir}/CHECK.md" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-81/drift-bypassed-by-no-calibrate/CHECK.md")
+  elif [[ ! -f "${fix2_dir}/ASSUMPTIONS.md" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-81/drift-bypassed-by-no-calibrate/ASSUMPTIONS.md")
+  elif [[ ! -f "${fix2_audit}" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-81/drift-bypassed-by-no-calibrate/hook.jsonl (needed for calibration-skip row)")
+  else
+    if ! _evaluate_drift "${fix2_dir}" "${fix2_audit}"; then
+      issues+=("fixture-fail #2: drift-bypassed-by-no-calibrate/ evaluated as DRIFT (should allow — calibration-skip audit row present)")
+    fi
+  fi
+
+  # ---- fixture sub-assert 3: no-ambiguity-skip/ MUST pass (allow) -------------
+  local fix3_dir="${fixture_base}/no-ambiguity-skip"
+  if [[ ! -d "${fix3_dir}" ]]; then
+    issues+=("fixture directory missing: tools/fixtures/check-81/no-ambiguity-skip/")
+  elif [[ ! -f "${fix3_dir}/CHECK.md" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-81/no-ambiguity-skip/CHECK.md")
+  elif [[ ! -f "${fix3_dir}/ASSUMPTIONS.md" ]]; then
+    issues+=("fixture missing: tools/fixtures/check-81/no-ambiguity-skip/ASSUMPTIONS.md")
+  else
+    if ! _evaluate_drift "${fix3_dir}" ""; then
+      issues+=("fixture-fail #3: no-ambiguity-skip/ evaluated as DRIFT (should allow — ASSUMPTIONS.md has zero ambiguity markers)")
+    fi
+  fi
+
+  # ---- real plan scan (may be empty in CI — that is OK) -----------------------
+  # Scan actual .aihaus/plans/*/CHECK.md if present; emit per-slug failure strings.
+  local real_plans_dir="${repo_root}/.aihaus/plans"
+  if [[ -d "${real_plans_dir}" ]]; then
+    local real_audit="${repo_root}/.claude/audit/hook.jsonl"
+    while IFS= read -r -d '' check_md_path; do
+      local plan_dir
+      plan_dir="$(dirname "${check_md_path}")"
+      if ! _evaluate_drift "${plan_dir}" "${real_audit}"; then
+        local slug
+        slug="$(basename "${plan_dir}")"
+        issues+=("drift detected: .aihaus/plans/${slug}/CHECK.md has no BUSINESS-RULES.md, ambiguities present, no calibration-skip audit row, and not a legacy artifact — run plan-calibrator or add BUSINESS-RULES.md")
+      fi
+    done < <(find "${real_plans_dir}" -maxdepth 2 -name "CHECK.md" -print0 2>/dev/null)
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 # Parse --check / --skill flags before the full-suite run
 _CHECK_NAME=""
 _CHECK_SKILL=""
@@ -4400,15 +4561,14 @@ check_brief_subfield_schema
 check_calibration_trigger
 check_tdd_guard_hook
 check_tdd_discipline_annex
+check_calibrate_drift
 
 printf "
 "
 if [[ "$FAILURES" -eq 0 ]]; then
-  printf "aihaus package smoke test PASSED [OK] (80/80)
-"
+  printf "aihaus package smoke test PASSED [OK] (%d/%d)\n" "$CHECK_NUMBER" "$CHECK_NUMBER"
   exit 0
 else
-  printf "FAILED - %d of 79 checks failed
-" "$FAILURES"
+  printf "FAILED - %d of %d checks failed\n" "$FAILURES" "$CHECK_NUMBER"
   exit 1
 fi

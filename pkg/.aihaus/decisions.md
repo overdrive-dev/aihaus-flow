@@ -3568,3 +3568,61 @@ Layer A → C promotion per ADR-260503-A move-rule: `leverage=high` (gate preven
 - STDIN-SCHEMA.md (UserPromptExpansion field shape verification 2026-05-12)
 - PATTERNS.md Pattern 1+4+8 (tdd-guard shape, analyst-brief read, stdin parse)
 - Pattern reusable for M029+ governance ADRs (per ADR-260510-B sunset clause).
+
+---
+
+## ADR-260511-C — Smoke Check 81 drift detection + legacy ctime-exemption (M029/S3)
+
+**Status:** Accepted
+**Date:** 2026-05-12
+**Milestone:** M029/S3
+
+### Context
+
+Smoke Check 81 catches post-merge drift: a `PLAN.md` plan that went through plan-checker (CHECK.md present) but whose ASSUMPTIONS.md ambiguity surface was never resolved via BUSINESS-RULES.md calibration. This complements `calibrate-guard.sh` (M029/S1 / ADR-260511-A): the hook prevents forward-creation; the smoke check catches existing drift at the CI gate. Defense-in-depth per RESEARCH F3 (Gitleaks/Helmet/rate-limiters field pattern).
+
+**Legacy context:** At M029 first-commit timestamp (epoch `1747008000` / 2026-05-12T00:00:00Z), 5 in-flight CHECK.md artifacts exist with no companion BUSINESS-RULES.md (empirical baseline: 23 CHECK.md / 0 BUSINESS-RULES.md). These predating artifacts must be grandfathered to avoid immediate CI failure on the milestone branch.
+
+### Decision
+
+Ship Smoke Check 81 (`check_calibrate_drift`) in `tools/smoke-test.sh`:
+
+- **4-axis allow logic:** for each `.aihaus/plans/*/CHECK.md`, allow if ANY condition holds:
+  (a) companion `BUSINESS-RULES.md` exists,
+  (b) `ASSUMPTIONS.md` ambiguity count = 0 (Check 78 regex: `TBD|assumed|TODO|pending confirmation`),
+  (c) `.claude/audit/hook.jsonl` has `"event":"calibration-skip"` row matching the plan slug,
+  (d) CHECK.md mtime predates `M029_EPOCH=1747008000` (legacy artifact exemption).
+  Else: emit per-slug drift error string and fail.
+
+- **ctime exemption constant:** `M029_EPOCH=1747008000` — same value as `calibrate-guard.sh` L41. Codified in 2 places (hook + smoke); changes to the epoch require coordinated update of both files.
+
+- **Fixture-based validation (non-vacuous gate):** 3 fixture dirs under `tools/fixtures/check-81/`:
+  - `drift-detected/` — ASSUMPTIONS with ≥1 ambiguity, no BUSINESS-RULES.md, no audit row → MUST fail (block).
+  - `drift-bypassed-by-no-calibrate/` — same ambiguities but companion `hook.jsonl` has valid `calibration-skip` row → MUST pass (allow).
+  - `no-ambiguity-skip/` — ASSUMPTIONS with zero ambiguity markers → MUST pass (allow).
+
+- **Real-plan scan** runs at CI only if `.aihaus/plans/` exists on disk (gitignored; empty in fresh CI clone).
+
+- **Check numbering:** smoke total 80 → 81.
+
+### Rationale
+
+Hook prevents forward-creation of new ambiguous plans; smoke catches accumulated drift in repo state. Both layers needed: `calibrate-guard.sh` fires at skill-invocation time (real-time), while smoke-test runs at commit/CI gate (batch audit). Mirrors the Check 79 fixture-fail pattern verbatim (PATTERNS verbatim-copy principle per PLAN Decision D).
+
+The `mtime`-as-ctime proxy is portable (`stat -c%Y` on Linux, `stat -f%m` on macOS) and fail-safe (if stat is unavailable, treats file as non-exempt — proceeds to drift check, never silently allows).
+
+### Consequences
+
+- Smoke total: 80 → 81.
+- 3 new fixture dirs under `tools/fixtures/check-81/`.
+- `M029_EPOCH=1747008000` constant now lives in 2 files: `pkg/.aihaus/hooks/calibrate-guard.sh` L41 and `tools/smoke-test.sh` (Check 81 function).
+- Real `.aihaus/plans/` drift check runs in dogfood sessions (non-empty plans dir); CI runs fixture-only assertions.
+- Future plan drift: any new CHECK.md without BUSINESS-RULES.md and with ambiguity markers will fail smoke (forcing explicit `--no-calibrate` opt-out or plan calibration before merge).
+
+### References
+
+- ADR-260511-A (calibrate-guard.sh hook contract — hook is the forward-creation gate)
+- ADR-260503-A (Layer A → C move-rule; anticipatory-promotion trigger)
+- PLAN.md Decision D (Smoke Check 81 design) + Decision E (ctime exemption policy)
+- tools/fixtures/check-79/ (fixture-fail reference pattern — Check 81 mirrors shape)
+- tools/fixtures/check-78/ (ambiguity-detection regex reference — Check 81 reuses same regex)
