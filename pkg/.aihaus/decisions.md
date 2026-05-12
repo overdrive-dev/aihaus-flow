@@ -3693,3 +3693,36 @@ Conditions (i)+(ii)+(iii) are OR-conditions — any single one is sufficient to 
 - ADR-260511-C (Smoke Check 81 — defense-in-depth complement; cites RESEARCH F3 Gitleaks/Helmet field pattern)
 - CHALLENGES Finding #2 (anticipatory-deployment is field-default — from M029 brainstorm `260510-hook-promote-gates/CHALLENGES.md`)
 - RESEARCH §3 (field-precedent verification — Gitleaks, ggshield, Helmet, express-rate-limit)
+
+---
+
+## ADR-M029-CURATE-A — Hook-level enforcement primary when Layer A prose failure-prone; env-var lifecycle canonical bypass (3rd-instance generalization)
+
+**Status:** Accepted
+**Date:** 2026-05-12
+**Milestone:** M029 (curator pass)
+
+### Context
+
+Third milestone promoting model-driven Layer A prose to Layer C hook (M027/S5 calibration, M028/S2 tdd-guard, M029/S1 calibrate-guard). Empirical motivation identical: Layer A fails for 2 compounding reasons — (1) model judgment-skip; (2) skill-cache staleness (orchestrator's loaded skill body lags on-disk after `/aih-update`). M027/S5's 100% calibration-skip rate (23 CHECK.md / 0 BUSINESS-RULES.md) observed **during M029-planning session itself** — `/aih-plan` loaded pre-M027 SKILL.md body. UserPromptExpansion fires BEFORE skill body loads (K-260512-003) — only primitive immune to both.
+
+### Decision
+
+For aih-* enforcement where (a) leverage=high AND (b) consequence-of-skip=hard-to-reverse-drift AND (c) eligibility=deterministic: **prefer Layer C hook from first design pass**. Do not wait for empirical skip-rate evidence. ADR-260511-B trigger is formal authority; this rule generalizes the meta-pattern. Bypass: env-var lifecycle (Step 0 set / Step 6 unset). Reject marker-files, manifest-presence inference, command-args parsing, audit-row precedence detection — all chicken-and-egg (M029/F-O5). Audit-emit: direct `.claude/audit/<hook>.jsonl` write (K-260512-004), NEVER `manifest-append.sh --audit` (dead-code since v0.31.0).
+
+### Consequences
+
+- 3 instances compose: M028-CURATE-A + M029/S1 + this rule.
+- Cache-staleness is NEW Layer A failure class beyond model-judgment-skip.
+- Cost auditable via grep at design time.
+- Anti-pattern reject: tightening writer-schema when failure is model NOT INVOKING writer.
+- Caveat M029/F-O1: hook only effective same-session as sentinel writer; cold-start = fail-open.
+
+### References
+
+- ADR-M028-CURATE-A (first instance — single-skill env-var bypass)
+- ADR-260511-A (second instance + cache-staleness root cause documented)
+- ADR-260511-B (anticipatory-promotion trigger)
+- ADR-260503-A (move-rule)
+- K-260512-003 (UserPromptExpansion cache-staleness immunity)
+- K-260512-004 (hook audit-emit direct-JSONL convention)
