@@ -85,6 +85,8 @@ Present the triage summary. Ask:
 
 After the user approves:
 
+**Guard bypasses**: `export AIHAUS_TDD_GUARD=0` — M029/S2: aih-bugfix fix execution is targeted; bypass tdd-guard for this session. `export AIHAUS_CALIBRATE_GUARD=0` — M029/S2: aih-bugfix fix execution is targeted; bypass calibrate-guard for this session.
+
 ### Phase 2 Task Tracking
 Create all tasks as `pending` at the start of Phase 2 using TaskCreate:
 | Subject | activeForm |
@@ -135,6 +137,7 @@ Stage only the files you changed. Write a descriptive commit message:
 git add [specific files]
 git commit -m "fix: [concise description of the bug fix]"
 ```
+Then: `unset AIHAUS_TDD_GUARD` — M029/S2: bound to aih-bugfix session, prevent leakage. `unset AIHAUS_CALIBRATE_GUARD` — M029/S2: bound to aih-bugfix session, prevent leakage.
 
 ### 13. Write Artifacts
 Create `.aihaus/bugfixes/[YYMMDD]-[slug]/` with two files:
