@@ -685,65 +685,292 @@ check_autonomy_guard_detects_violations() {
   fi
 }
 
-# ---- merge-settings.sh produces replacement semantics for arrays ------------
-# Verifies that the shared merge helper, regardless of jq vs python path,
-# REPLACES the permissions.allow array (overlay wins). Catches silent
-# cross-platform divergence (jq's * operator on arrays may concatenate;
-# Python's deep_merge replaces). Uses fixture pair under tools/fixtures/.
+# ---- merge-settings.sh produces replacement semantics for permissions arrays ----
+# (Check 23 amended M030/S05 per ADR-260514-B)
+# Verifies that the shared merge helper REPLACES permissions.allow (overlay wins)
+# per the per-array-path semantics matrix. This is the M014 migration-hint contract
+# regression assertion: .hooks.<Event>[] now union-merges but permissions.allow
+# still replaces. Runs under default path AND forced Python path.
 check_merge_semantics_convergence() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: merge-settings.sh produces replacement semantics for arrays"
+  local label="Check ${CHECK_NUMBER}: merge-settings.sh produces replacement semantics for permissions.allow (ADR-260514-B M014 contract)"
   local helper="${PACKAGE_ROOT}/scripts/lib/merge-settings.sh"
   local base="${PACKAGE_ROOT}/../tools/fixtures/settings-merge/base.json"
   local overlay="${PACKAGE_ROOT}/../tools/fixtures/settings-merge/overlay.json"
-  # If invoked from repo root, PACKAGE_ROOT may already include tools/.
   [[ -f "$base" ]] || base="tools/fixtures/settings-merge/base.json"
   [[ -f "$overlay" ]] || overlay="tools/fixtures/settings-merge/overlay.json"
   [[ -f "$helper" && -f "$base" && -f "$overlay" ]] || { _fail "$label" "missing helper or fixtures"; return; }
 
-  # Stage fixtures into a temp dir under PACKAGE_ROOT/../tools/.out/ so the
-  # path is readable by both bash (Git Bash) and Python (Windows-native) —
-  # system /tmp doesn't resolve for Windows Python interpreters.
+  local py_bin
+  py_bin="$(command -v python3 || command -v python || command -v py)"
+  if [[ -z "$py_bin" ]]; then
+    _fail "$label" "python required to parse merge result"
+    return
+  fi
+
   local repo_root="${PACKAGE_ROOT}/.."
   local tmpdir="${repo_root}/tools/.out/merge-test-$$"
   mkdir -p "$tmpdir"
   local tmpdst="${tmpdir}/dst.json"
   local tmpsrc="${tmpdir}/src.json"
-  cp "$base" "$tmpdst"
-  cp "$overlay" "$tmpsrc"
+  local issues=()
 
+  # Sub-assert A: default path (jq if available, else python)
+  cp "$base" "$tmpdst"; cp "$overlay" "$tmpsrc"
   # shellcheck disable=SC1090
   ( source "$helper" && merge_settings "$tmpdst" "$tmpsrc" ) >/dev/null 2>&1
-
-  # Inspect result: permissions.allow length must equal overlay's length (3),
-  # not the union (5). Use python (always required per README) for parsing.
-  local py_bin
-  py_bin="$(command -v python3 || command -v python || command -v py)"
-  if [[ -z "$py_bin" ]]; then
-    _fail "$label" "python required to parse merge result"
-    rm -rf "$tmpdir"
-    return
-  fi
-
-  # Convert path for Windows Python if cygpath is available (Git Bash).
   local py_path="$tmpdst"
   if command -v cygpath >/dev/null 2>&1; then
     py_path="$(cygpath -w "$tmpdst" 2>/dev/null || echo "$tmpdst")"
   fi
-
   local result_len
   result_len=$("$py_bin" -c "
 import json, sys
 with open(sys.argv[1]) as f: data = json.load(f)
 print(len(data.get('permissions', {}).get('allow', [])))
 " "$py_path" 2>/dev/null || echo "0")
+  if [[ "$result_len" != "3" ]]; then
+    issues+=("default path: expected replacement (3 entries from overlay), got $result_len entries")
+  fi
+
+  # Sub-assert B: forced Python path
+  cp "$base" "$tmpdst"; cp "$overlay" "$tmpsrc"
+  # shellcheck disable=SC1090
+  ( AIHAUS_FORCE_PYTHON_MERGE=1 source "$helper" && AIHAUS_FORCE_PYTHON_MERGE=1 merge_settings "$tmpdst" "$tmpsrc" ) >/dev/null 2>&1
+  if command -v cygpath >/dev/null 2>&1; then
+    py_path="$(cygpath -w "$tmpdst" 2>/dev/null || echo "$tmpdst")"
+  else
+    py_path="$tmpdst"
+  fi
+  result_len=$("$py_bin" -c "
+import json, sys
+with open(sys.argv[1]) as f: data = json.load(f)
+print(len(data.get('permissions', {}).get('allow', [])))
+" "$py_path" 2>/dev/null || echo "0")
+  if [[ "$result_len" != "3" ]]; then
+    issues+=("python path: expected replacement (3 entries from overlay), got $result_len entries")
+  fi
 
   rm -rf "$tmpdir"
 
-  if [[ "$result_len" = "3" ]]; then
+  if [[ ${#issues[@]} -eq 0 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected replacement (3 entries from overlay), got $result_len entries (likely concatenation/union)"
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 82: merge-settings.sh union semantics for .hooks arrays (M030/S05) ----
+# ADR-260514-B: .hooks.<Event>[N].hooks[] union by .command;
+# .hooks.<Event>[] outer arrays position-paired-merge.
+# Runs under default path AND AIHAUS_FORCE_PYTHON_MERGE=1 for each of 4 fixtures.
+_check_merge_hooks_fixture() {
+  local fixdir="$1" label_prefix="$2" helper="$3" py_bin="$4"
+  local force_python="${5:-0}" issues_ref="$6"
+
+  local base_file="${fixdir}.base.json"
+  local overlay_file="${fixdir}.overlay.json"
+  local expected_file="${fixdir}.expected.json"
+
+  if [[ ! -f "$base_file" || ! -f "$overlay_file" || ! -f "$expected_file" ]]; then
+    eval "${issues_ref}+=(\"${label_prefix}: missing fixture files\")"
+    return
+  fi
+
+  local repo_root
+  repo_root="$(cd "$(dirname "$helper")/../.." && pwd)"
+  local tmpdir="${repo_root}/tools/.out/merge-hooks-$$"
+  mkdir -p "$tmpdir"
+  local tmpdst="${tmpdir}/dst.json"
+  local tmpsrc="${tmpdir}/src.json"
+  cp "$base_file" "$tmpdst"
+  cp "$overlay_file" "$tmpsrc"
+
+  if [[ "$force_python" = "1" ]]; then
+    # shellcheck disable=SC1090
+    ( AIHAUS_FORCE_PYTHON_MERGE=1 source "$helper" && AIHAUS_FORCE_PYTHON_MERGE=1 merge_settings "$tmpdst" "$tmpsrc" ) >/dev/null 2>&1
+    local path_label="python"
+  else
+    # shellcheck disable=SC1090
+    ( source "$helper" && merge_settings "$tmpdst" "$tmpsrc" ) >/dev/null 2>&1
+    local path_label="default"
+  fi
+
+  local py_path="$tmpdst"
+  if command -v cygpath >/dev/null 2>&1; then
+    py_path="$(cygpath -w "$tmpdst" 2>/dev/null || echo "$tmpdst")"
+  fi
+  local expected_path="$expected_file"
+  if command -v cygpath >/dev/null 2>&1; then
+    expected_path="$(cygpath -w "$expected_file" 2>/dev/null || echo "$expected_file")"
+  fi
+
+  local match
+  match=$("$py_bin" -c "
+import json, sys
+with open(sys.argv[1]) as f: actual = json.load(f)
+with open(sys.argv[2]) as f: expected = json.load(f)
+if actual == expected:
+    print('match')
+else:
+    import json as j
+    print('mismatch: actual=' + j.dumps(actual, separators=(',',':')) + ' expected=' + j.dumps(expected, separators=(',',':')))
+" "$py_path" "$expected_path" 2>/dev/null || echo "error")
+
+  rm -rf "$tmpdir"
+
+  if [[ "$match" != "match" ]]; then
+    eval "${issues_ref}+=(\"${label_prefix} [${path_label}]: ${match}\")"
+  fi
+}
+
+check_merge_hooks_union() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: merge-settings.sh union semantics for .hooks arrays (ADR-260514-B)"
+  local helper="${PACKAGE_ROOT}/scripts/lib/merge-settings.sh"
+  local fixtures_base="${PACKAGE_ROOT}/../tools/fixtures/settings-merge-hooks"
+  [[ -f "$helper" ]] || { _fail "$label" "missing helper: $helper"; return; }
+  [[ -d "$fixtures_base" ]] || { _fail "$label" "missing fixture dir: tools/fixtures/settings-merge-hooks/"; return; }
+
+  local py_bin
+  py_bin="$(command -v python3 || command -v python || command -v py)"
+  if [[ -z "$py_bin" ]]; then
+    _fail "$label" "python required"
+    return
+  fi
+
+  local issues=()
+
+  for n in 01-empty-base 02-pre-m017-shape 03-two-bash-matchers 04-user-custom-non-colliding; do
+    local fixdir="${fixtures_base}/${n}"
+    _check_merge_hooks_fixture "$fixdir" "fixture-${n}" "$helper" "$py_bin" "0" "issues"
+    _check_merge_hooks_fixture "$fixdir" "fixture-${n}" "$helper" "$py_bin" "1" "issues"
+  done
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 83: update.sh drift-detect heuristic (M030/S05 Half B) ----
+# Validates the drift-detect heuristic logic:
+#   01-no-drift: delta=0 -> heuristic returns no-drift
+#   02-two-missing: delta>=2 -> heuristic returns drift
+#   03-sentinel-skip: sentinel present -> before==after (no recompute)
+check_update_drift_recompute() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: update.sh drift-detect recompute heuristic (ADR-260514-B Half B)"
+  local fixtures_base="${PACKAGE_ROOT}/../tools/fixtures/update-drift"
+  [[ -d "$fixtures_base" ]] || { _fail "$label" "missing fixture dir: tools/fixtures/update-drift/"; return; }
+
+  local py_bin
+  py_bin="$(command -v python3 || command -v python || command -v py)"
+  if [[ -z "$py_bin" ]]; then
+    _fail "$label" "python required"
+    return
+  fi
+
+  local issues=()
+
+  _drift_heuristic_check() {
+    local template_file="$1" user_file="$2" threshold="${3:-2}"
+    local _tp="$template_file" _up="$user_file"
+    if command -v cygpath >/dev/null 2>&1; then
+      _tp="$(cygpath -w "$template_file" 2>/dev/null || echo "$template_file")"
+      _up="$(cygpath -w "$user_file" 2>/dev/null || echo "$user_file")"
+    fi
+    "$py_bin" -c "
+import json, sys
+threshold = int(sys.argv[3])
+with open(sys.argv[1]) as f: tmpl = json.load(f)
+with open(sys.argv[2]) as f: user = json.load(f)
+tmpl_hooks = tmpl.get('hooks', {})
+user_hooks = user.get('hooks', {})
+max_delta = 0
+max_event = ''
+for event, entries in tmpl_hooks.items():
+    tc = sum(len(e.get('hooks', [])) for e in entries)
+    uc = sum(len(e.get('hooks', [])) for e in user_hooks.get(event, []))
+    d = tc - uc
+    if d > max_delta:
+        max_delta = d
+        max_event = event
+if max_delta >= threshold:
+    print('drift:' + str(max_delta) + ':' + max_event)
+else:
+    print('no-drift')
+" "$_tp" "$_up" "$threshold" 2>/dev/null || echo "error"
+  }
+
+  # Fixture 01: no-drift
+  local f01_b="${fixtures_base}/01-no-drift.before.json"
+  local f01_a="${fixtures_base}/01-no-drift.after.json"
+  if [[ ! -f "$f01_b" || ! -f "$f01_a" ]]; then
+    issues+=("fixture 01: missing before/after files")
+  else
+    local r01
+    r01=$(_drift_heuristic_check "$f01_a" "$f01_b" "2")
+    if [[ "$r01" != "no-drift" ]]; then
+      issues+=("fixture 01 (no-drift): heuristic returned '$r01', expected 'no-drift'")
+    fi
+  fi
+
+  # Fixture 02: two-missing
+  local f02_b="${fixtures_base}/02-two-missing.before.json"
+  local f02_a="${fixtures_base}/02-two-missing.after.json"
+  if [[ ! -f "$f02_b" || ! -f "$f02_a" ]]; then
+    issues+=("fixture 02: missing before/after files")
+  else
+    local r02
+    r02=$(_drift_heuristic_check "$f02_a" "$f02_b" "2")
+    if [[ "$r02" != drift* ]]; then
+      issues+=("fixture 02 (two-missing): heuristic returned '$r02', expected 'drift:...'")
+    fi
+  fi
+
+  # Fixture 03: sentinel-skip
+  local f03_s="${fixtures_base}/03-sentinel-skip.sentinel.json"
+  local f03_b="${fixtures_base}/03-sentinel-skip.before.json"
+  local f03_a="${fixtures_base}/03-sentinel-skip.after.json"
+  if [[ ! -f "$f03_s" || ! -f "$f03_b" || ! -f "$f03_a" ]]; then
+    issues+=("fixture 03: missing sentinel/before/after files")
+  else
+    local _sp="$f03_s"
+    if command -v cygpath >/dev/null 2>&1; then
+      _sp="$(cygpath -w "$f03_s" 2>/dev/null || echo "$f03_s")"
+    fi
+    local sv
+    sv=$("$py_bin" -c "
+import json, sys
+with open(sys.argv[1]) as f: d = json.load(f)
+print(d.get('sentinel', ''))
+" "$_sp" 2>/dev/null || echo "")
+    if [[ "$sv" != ".recompute-skipped-260514" ]]; then
+      issues+=("fixture 03: sentinel JSON missing '.recompute-skipped-260514' value")
+    fi
+    local _bp="$f03_b" _ap="$f03_a"
+    if command -v cygpath >/dev/null 2>&1; then
+      _bp="$(cygpath -w "$f03_b" 2>/dev/null || echo "$f03_b")"
+      _ap="$(cygpath -w "$f03_a" 2>/dev/null || echo "$f03_a")"
+    fi
+    local fm
+    fm=$("$py_bin" -c "
+import json, sys
+with open(sys.argv[1]) as f: a = json.load(f)
+with open(sys.argv[2]) as f: b = json.load(f)
+print('match' if a == b else 'mismatch')
+" "$_bp" "$_ap" 2>/dev/null || echo "error")
+    if [[ "$fm" != "match" ]]; then
+      issues+=("fixture 03 (sentinel-skip): before/after should be identical; got mismatch")
+    fi
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
   fi
 }
 
@@ -4562,6 +4789,8 @@ check_calibration_trigger
 check_tdd_guard_hook
 check_tdd_discipline_annex
 check_calibrate_drift
+check_merge_hooks_union
+check_update_drift_recompute
 
 printf "
 "

@@ -3726,3 +3726,122 @@ For aih-* enforcement where (a) leverage=high AND (b) consequence-of-skip=hard-t
 - ADR-260503-A (move-rule)
 - K-260512-003 (UserPromptExpansion cache-staleness immunity)
 - K-260512-004 (hook audit-emit direct-JSONL convention)
+
+---
+
+## ADR-260514-B — Array-aware settings merge: dual by-shape union semantics (M030/S05)
+
+**Status:** Accepted
+**Date:** 2026-05-14
+**Milestone:** M030/S05
+
+### Context
+
+During a forensic audit of the maintainer's dogfood specimen (`the maintainer's dogfood install/.claude/settings.local.json`), 7 canonical hook entries were found missing from the user's settings file — entries that had been added to the template in M017+ but were silently overwritten on every `update.sh` run. The `merge-settings.sh` jq merge used `.[0] * .[1]` semantics; the Python fallback used simple `deep_merge` with `return overlay` on array collision. Both implementations replace arrays wholesale — a bidirectional-lossy merge that drops template additions silently.
+
+**7-hook delta table (field evidence from maintainer's maintainer's dogfood specimen, 2026-05-14):**
+
+| Hook | Event | Template since | Missing in specimen |
+|------|-------|---------------|---------------------|
+| `calibrate-guard.sh` | UserPromptExpansion | M029/S1 | yes |
+| `context-inject.sh` | SubagentStart | M022 | yes |
+| `git-add-guard.sh` | PreToolUse (2nd Bash entry) | M017 | yes |
+| `read-guard.sh` | PreToolUse (empty matcher) | M014 | yes |
+| `warning-recurrence.sh` | SubagentStop | M022 | yes |
+| `worktree-release.sh` | SubagentStop | M017 | yes |
+| `worktree-release-all.sh` | SessionEnd | M017 | yes |
+
+Root cause at code level: `merge-settings.sh:53` (jq) and the Python fallback `deep_merge` both replace `.hooks.<Event>[]` arrays wholesale. User's pre-M017 `settings.local.json` snapshot was never updated because the fix was a simple array-overlay.
+
+ASSUMPTIONS A4/A15 reframe: the brainstorm hypothesis was that 9 user-custom hooks were at risk from the merge. Verification refuted this — all 9 are CANON. The real defect is the inverse: the user's file is frozen at pre-M017 shape, missing 7 newer canon hook entries. The fix is therefore prophylactic per ADR-260511-B trigger (c)(i).
+
+### Options Considered
+
+| # | Option | Why Not |
+|---|--------|---------|
+| 1 | **(Chosen)** Path-scoped union per per-array-path matrix; dual by-shape scoping (no path-state); jq + Python + PowerShell symmetric. jq snippet: `def merge_hooks_arrays(base_arr; overlay_arr): if has_matcher_hooks then position-paired-merge elif has_command then union-by-command else overlay end`. | None — closes gap, zero regression, reversible. |
+| 2 | `.hooks._preserve_commands` user-override list in settings | Forces users to track package additions manually; high cognitive cost; fragile on aihaus upgrades. |
+| 3 | `--preserve-user-arrays` flag on `update.sh` | Silent-default-lossy still exists until users discover and set the flag; the trap remains. |
+| 4 | Document-only (no code change) | This is the C8 framing the brainstorm contrarian called out — insufficient when field evidence shows active drift. |
+
+### Decision
+
+Ship **dual by-shape union semantics** in `merge-settings.sh` (jq path + Python fallback symmetric) and `install.ps1` `Merge-Object` (PowerShell), governed by the per-array-path matrix:
+
+**Per-array-path semantics matrix:**
+
+| JSON path | Semantics | Rationale |
+|-----------|-----------|-----------|
+| `.hooks.<Event>[]` (outer; objects with `matcher` + `hooks` siblings) | **POSITION-PAIRED MERGE WITH RECURSION** — paired by ordinal index; for each pair, recurse into inner `hooks[]` and apply inner-union; surplus template entries appended; surplus user entries appended last | Outer is shape-tested by `{matcher, hooks}` presence; preserves multi-`Bash`-matcher template entries without duplicating bash-guard between paired user[0] and template[0] |
+| `.hooks.<Event>[N].hooks[]` (inner; objects with `command` field) | **UNION BY `.command`** (template wins on collision) | Closes the canonical drift gap; future user-custom hooks at this layer survive `update.sh` |
+| `permissions.allow` | **REPLACEMENT** (template wins) | Existing M014 contract per `merge-settings.sh` migration-hint logic. Not changed. |
+| `permissions.deny` | **REPLACEMENT** | Same as above. |
+| `additionalDirectories` | **REPLACEMENT** | Same as above. |
+| All other arrays | **REPLACEMENT** (current semantics) | Default; opt-in to union/merge only for `.hooks.<Event>[]`. |
+
+**Worked example (canonical 2-`Bash`-matcher case):**
+
+Template `PreToolUse`:
+```json
+[
+  {"matcher":"Bash","hooks":[{"command":"bash-guard.sh"}]},
+  {"matcher":"Bash","hooks":[{"command":"git-add-guard.sh"}]}
+]
+```
+User (pre-update):
+```json
+[
+  {"matcher":"Bash","hooks":[{"command":"bash-guard.sh"},{"command":"my-custom-bash-audit.sh"}]}
+]
+```
+Expected merged output:
+```json
+[
+  {"matcher":"Bash","hooks":[{"command":"bash-guard.sh"},{"command":"my-custom-bash-audit.sh"}]},
+  {"matcher":"Bash","hooks":[{"command":"git-add-guard.sh"}]}
+]
+```
+Trace:
+- Outer position-paired: user[0] pairs with template[0]; user has no [1] -> template[1] appended as surplus.
+- Inner union (user[0] vs template[0]): template's `bash-guard` collides with user's `bash-guard` (template wins; same string); user's `my-custom-bash-audit` is novel -> unioned in.
+- Template[1] (`git-add-guard`) appended as-is (no pair to merge with).
+
+**Dual by-shape test (applied symmetrically across jq + Python + PowerShell — CHECK F4):**
+
+Test outer first, then inner:
+- If both arrays are non-empty list-of-dicts AND every element on both sides has BOTH `matcher` AND `hooks` keys -> outer shape: position-paired merge with recursion into inner; surplus appended.
+- If both arrays are non-empty list-of-dicts AND every element on both sides has `.command` key -> inner shape: union by `.command` (template wins on collision).
+- Otherwise: replacement (current behavior).
+
+No path-state threading; pure by-shape (BR-005 verified zero current-state regression).
+
+### Rationale
+
+ADR-260511-B move-rule trigger (c)(i) applies: the 7-hook delta table constitutes empirical field evidence from the maintainer's own dogfood specimen that the prior array-replacement merge was producing a 100% silent-drift scenario on every `update.sh` run. Trigger (c)(i) requires an on-disk artifact-presence ratio showing structural bypass — here the equivalent is a single-user canonical specimen with 7 of 7 newer hook entries silently absent.
+
+ADR-260511-B trigger (c)(i) was unlocked to enable exactly this class of anticipatory protection: prophylactic code change before a second user is affected, based on empirical single-specimen evidence from the maintainer's own install.
+
+The dual by-shape scoping rule (no path-state threading) is the symmetry lever across jq + Python + PowerShell. BR-005 verifies zero current-state regression: current canonical schema has zero `{matcher, hooks}` list-of-dicts outside `.hooks.<Event>[]` and zero `{command}` list-of-dicts outside `.hooks.<Event>[N].hooks[]`.
+
+### Consequences
+
+- **(a) M014 migration-hint contract preserved.** `permissions.allow` replacement semantics unchanged. Regression assertion: smoke-test Check 23 still PASSES for `permissions.allow` replacement.
+- **(b) Already-installed user rollout via Half B drift-detect** (per BR-002). Users who installed pre-M030 benefit from the fix automatically on next `bash update.sh` when the heuristic threshold fires. `update.sh` and `install.ps1` ship a drift-detect block: `template_hook_count - user_hook_count >= AIHAUS_DRIFT_THRESHOLD (default 2)` for any Event triggers interactive prompt `"Detected N missing canonical hook entries from <Event>. Recompute merged settings now? [Y/n]"`. Y -> re-invoke merge with `AIHAUS_RECOMPUTE_MERGE=1`. N -> sentinel `.aihaus/.recompute-skipped-260514`.
+- **(c) Dual by-shape forward-compat constraint.** Any future settings array whose elements all carry a `.command` key will also union-merge. Currently zero such schema per BR-005; documented for future schema authors.
+- **(d) Sibling defense-in-depth reference.** S07's `pkg/.aihaus/hooks/worktree-reconcile.sh` `[DETACHED-HEAD-MAIN]` warn is a parallel field-evidence-driven fix from the same dogfood install audit; documented here as defense-in-depth coordination, not a separate ADR.
+
+### Rollback
+
+`git revert` the commit containing this ADR + `merge-settings.sh` + `install.ps1` `Merge-Object` changes. Restore prior `merge-settings.sh` jq `.[0] * .[1]` path + Python `deep_merge` return-overlay path. Revert smoke-test Check 23 label + delete Check 82 + delete Check 83 + delete 19 fixture files under `tools/fixtures/settings-merge-hooks/` and `tools/fixtures/update-drift/`. Re-run install/update restores prior replacement behavior.
+
+### References
+
+- ADR-260511-B (move-rule trigger c(i) authority — anticipatory-protection-on-new-flow)
+- ADR-260511-A (heading shape template — this ADR follows same shape)
+- ADR-260510-C (Options Considered table shape)
+- ADR-260509-X (autonomy-guard 40-pattern freeze — out-of-scope; M030 adds zero new patterns)
+- ADR-260503-A (enforcement-audit move-rule parent)
+- BR-002 (rollout rule — drives Half B drift-detect in `update.sh` + `install.ps1`)
+- BR-005 (Python by-shape scoping zero current-state regression verified)
+- INVESTIGATE-settings-drift.md (S03 forensic report on maintainer dogfood pre-M017-shape specimen — gitignored in user installs; 7-hook delta table inlined above per CHECK F5)
+- M014 migration-hint contract (`merge-settings.sh` `_autonomy_post_merge_hint` function, L200+)

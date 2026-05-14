@@ -921,17 +921,103 @@ if (-not (Test-Path $SettingsSrc)) {
     $srcJson = Get-Content $SettingsSrc -Raw | ConvertFrom-Json
     $dstJson = Get-Content $SettingsOut -Raw | ConvertFrom-Json
 
+    # Merge-Object: deep-merge $Overlay over $Base (ADR-260514-B array-aware semantics).
+    # Dual by-shape rule for arrays:
+    #   Outer shape ({matcher,hooks} elements): position-paired merge with recursion.
+    #   Inner shape ({command} elements): union by .command (template/overlay wins).
+    #   All other arrays: replacement (overlay wins) -- preserves M014 permissions contract.
+    function Merge-HooksByCommand {
+        param($BaseArr, $OverlayArr)
+        # Union by .command -- overlay (template) wins on collision
+        $result = [System.Collections.Generic.List[object]]::new()
+        foreach ($item in $BaseArr) { $result.Add($item) | Out-Null }
+        foreach ($entry in $OverlayArr) {
+            $cmd = if ($entry.PSObject.Properties.Name -contains 'command') { $entry.command } else { $null }
+            $exists = $result | Where-Object { $_.PSObject.Properties.Name -contains 'command' -and $_.command -eq $cmd }
+            if (-not $exists) { $result.Add($entry) | Out-Null }
+        }
+        return $result.ToArray()
+    }
+
+    function Test-HasMatcherHooks($Arr) {
+        if (-not $Arr -or $Arr.Count -eq 0) { return $false }
+        foreach ($item in $Arr) {
+            if (-not ($item -is [psobject])) { return $false }
+            if (-not ($item.PSObject.Properties.Name -contains 'matcher')) { return $false }
+            if (-not ($item.PSObject.Properties.Name -contains 'hooks')) { return $false }
+        }
+        return $true
+    }
+
+    function Test-HasCommand($Arr) {
+        if (-not $Arr -or $Arr.Count -eq 0) { return $false }
+        foreach ($item in $Arr) {
+            if (-not ($item -is [psobject])) { return $false }
+            if (-not ($item.PSObject.Properties.Name -contains 'command')) { return $false }
+        }
+        return $true
+    }
+
+    function Merge-HooksArrays {
+        param($BaseArr, $OverlayArr)
+        if (-not $BaseArr -or $BaseArr.Count -eq 0) { return $OverlayArr }
+        if (-not $OverlayArr -or $OverlayArr.Count -eq 0) { return $BaseArr }
+        if ((Test-HasMatcherHooks $BaseArr) -and (Test-HasMatcherHooks $OverlayArr)) {
+            # outer shape: position-paired merge
+            $minLen = [Math]::Min($BaseArr.Count, $OverlayArr.Count)
+            $result = [System.Collections.Generic.List[object]]::new()
+            for ($i = 0; $i -lt $minLen; $i++) {
+                $bh = if ($BaseArr[$i].PSObject.Properties.Name -contains 'hooks') { $BaseArr[$i].hooks } else { @() }
+                $oh = if ($OverlayArr[$i].PSObject.Properties.Name -contains 'hooks') { $OverlayArr[$i].hooks } else { @() }
+                $mergedInner = Merge-HooksArrays $bh $oh
+                $entry = $OverlayArr[$i].PSObject.Copy()
+                $entry.hooks = $mergedInner
+                $result.Add($entry) | Out-Null
+            }
+            # surplus template entries first, then surplus user entries
+            for ($i = $minLen; $i -lt $OverlayArr.Count; $i++) { $result.Add($OverlayArr[$i]) | Out-Null }
+            for ($i = $minLen; $i -lt $BaseArr.Count; $i++) { $result.Add($BaseArr[$i]) | Out-Null }
+            return $result.ToArray()
+        }
+        if ((Test-HasCommand $BaseArr) -and (Test-HasCommand $OverlayArr)) {
+            return Merge-HooksByCommand $BaseArr $OverlayArr
+        }
+        # default: replacement
+        return $OverlayArr
+    }
+
     function Merge-Object {
         param($Base, $Overlay)
         if ($Overlay -is [psobject] -and $Base -is [psobject]) {
             foreach ($prop in $Overlay.PSObject.Properties) {
                 if ($Base.PSObject.Properties.Name -contains $prop.Name) {
-                    $Base.$($prop.Name) = Merge-Object $Base.$($prop.Name) $prop.Value
+                    if ($prop.Name -eq 'hooks' -and
+                        $Base.hooks -is [psobject] -and $Overlay.hooks -is [psobject]) {
+                        # hooks key: event-level array merge
+                        $mergedHooks = $Base.hooks.PSObject.Copy()
+                        foreach ($eventProp in $Overlay.hooks.PSObject.Properties) {
+                            $eventName = $eventProp.Name
+                            $ovArr = $eventProp.Value
+                            if ($mergedHooks.PSObject.Properties.Name -contains $eventName) {
+                                $baseArr = $mergedHooks.$eventName
+                                $mergedHooks.$eventName = Merge-HooksArrays $baseArr $ovArr
+                            } else {
+                                Add-Member -InputObject $mergedHooks -NotePropertyName $eventName -NotePropertyValue $ovArr -Force
+                            }
+                        }
+                        $Base.hooks = $mergedHooks
+                    } else {
+                        $Base.$($prop.Name) = Merge-Object $Base.$($prop.Name) $prop.Value
+                    }
                 } else {
                     Add-Member -InputObject $Base -NotePropertyName $prop.Name -NotePropertyValue $prop.Value -Force
                 }
             }
             return $Base
+        }
+        # Arrays: check by-shape rules
+        if ($Overlay -is [array] -and $Base -is [array]) {
+            return Merge-HooksArrays $Base $Overlay
         }
         return $Overlay
     }
@@ -990,6 +1076,55 @@ if (-not (Test-Path $SettingsSrc)) {
                 Write-Host "  !!    Permission auto-mode was removed in v0.18.0/M014. Use bash .aihaus/auto.sh for DSP launch." -ForegroundColor Yellow
                 Write-Host "" -ForegroundColor Yellow
                 $script:AutoModeSafeWarningEmitted = $true
+            }
+        }
+    }
+
+    # ---- Drift-detect: prompt recompute if hook count fell behind template ----
+    # ADR-260514-B Half B rollout closure (PowerShell port of update.sh drift-detect).
+    # Compares template hook count vs merged settings hook count for each .hooks.<Event>[].
+    # If any Event has template_count - user_count >= AIHAUS_DRIFT_THRESHOLD (default 2),
+    # prompts user to recompute with AIHAUS_RECOMPUTE_MERGE=1.
+    $DriftPromptEnv = $env:AIHAUS_DRIFT_PROMPT
+    $DriftThreshold = if ($env:AIHAUS_DRIFT_THRESHOLD) { [int]$env:AIHAUS_DRIFT_THRESHOLD } else { 2 }
+    $SentinelPath = Join-Path $TargetAihaus '.recompute-skipped-260514'
+    if ($DriftPromptEnv -ne '0' -and (Test-Path $SettingsOut) -and (Test-Path $SettingsSrc)) {
+        if (Test-Path $SentinelPath) {
+            Write-Host "  drift-detect: recompute skipped (sentinel present)" -ForegroundColor DarkGray
+        } else {
+            try {
+                $tmplHooks = ($srcJson.PSObject.Properties.Name -contains 'hooks') ? $srcJson.hooks : $null
+                $userHooks = ($merged.PSObject.Properties.Name -contains 'hooks') ? $merged.hooks : $null
+                $maxDelta = 0; $maxEvent = ''
+                if ($tmplHooks -is [psobject]) {
+                    foreach ($evProp in $tmplHooks.PSObject.Properties) {
+                        $evName = $evProp.Name
+                        $tmplEntries = $evProp.Value
+                        $tmplCount = ($tmplEntries | ForEach-Object { if ($_.PSObject.Properties.Name -contains 'hooks') { $_.hooks.Count } else { 0 } } | Measure-Object -Sum).Sum
+                        $userEntries = if ($userHooks -is [psobject] -and $userHooks.PSObject.Properties.Name -contains $evName) { $userHooks.$evName } else { @() }
+                        $userCount = ($userEntries | ForEach-Object { if ($_.PSObject.Properties.Name -contains 'hooks') { $_.hooks.Count } else { 0 } } | Measure-Object -Sum).Sum
+                        $delta = $tmplCount - $userCount
+                        if ($delta -gt $maxDelta) { $maxDelta = $delta; $maxEvent = $evName }
+                    }
+                }
+                if ($maxDelta -ge $DriftThreshold) {
+                    $driftAnswer = Read-Host "  Detected $maxDelta missing canonical hook entries from $maxEvent. Recompute merged settings now? [Y/n]"
+                    if ([string]::IsNullOrWhiteSpace($driftAnswer) -or $driftAnswer -match '^[Yy]$') {
+                        Write-Host "  drift-detect: recomputing merged settings..."
+                        $env:AIHAUS_RECOMPUTE_MERGE = '1'
+                        $srcJsonFresh = Get-Content $SettingsSrc -Raw | ConvertFrom-Json
+                        $dstJsonFresh = Get-Content $SettingsOut -Raw | ConvertFrom-Json
+                        $remerged = Merge-Object $dstJsonFresh $srcJsonFresh
+                        $remerged | ConvertTo-Json -Depth 20 | Set-Content -Path $SettingsOut -Encoding UTF8
+                        $env:AIHAUS_RECOMPUTE_MERGE = $null
+                        Write-Host "  settings: recomputed (drift-corrected)"
+                    } else {
+                        Set-Content -Path $SentinelPath -Value '' -NoNewline
+                        Write-Host "  drift-detect: skipped; sentinel written to suppress future prompts" -ForegroundColor DarkGray
+                    }
+                }
+            } catch {
+                # drift-detect is best-effort; never fail install
             }
         }
     }
