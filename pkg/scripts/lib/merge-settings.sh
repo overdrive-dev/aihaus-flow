@@ -42,6 +42,19 @@ merge_settings() {
     HAS_JQ=1
   fi
 
+  # AIHAUS_RECOMPUTE_MERGE consumer (M030/S05 integration fix per INTEGRATION W4).
+  # When set, indicates a deliberate user-triggered recompute on already-installed
+  # state (e.g., from update.sh drift-detect "Y" prompt or install.ps1 equivalent),
+  # NOT a first-time merge. Behavior delta: emit a tracing line and suppress the
+  # legacy granular-Bash migration hint (user has already passed that gate). The
+  # core dual by-shape merge below is template-wins on collision regardless, so
+  # the recompute correctly closes hook-wiring drift without behavioral surprise.
+  local RECOMPUTE_MODE=0
+  if [ "${AIHAUS_RECOMPUTE_MERGE:-}" = "1" ]; then
+    RECOMPUTE_MODE=1
+    echo "  settings: recompute mode (AIHAUS_RECOMPUTE_MERGE=1) --- closing drift"
+  fi
+
   if [[ ! -f "$src" ]]; then
     echo "  warn: settings template missing at $src, skipping merge"
     return 0
@@ -306,7 +319,11 @@ PY
 
   # Post-merge migration hint (Story 3 logic, gated on jq availability for
   # the regex queries; silent if jq missing).
-  _autonomy_post_merge_hint "$bak"
+  # Skip on RECOMPUTE_MODE: user has already passed the migration gate; the hint
+  # would emit a stale "migrate to granular Bash" message that doesn't apply.
+  if [ "${RECOMPUTE_MODE:-0}" = "0" ]; then
+    _autonomy_post_merge_hint "$bak"
+  fi
 }
 
 # Internal: emit the migration hint if pre-merge backup had granular
