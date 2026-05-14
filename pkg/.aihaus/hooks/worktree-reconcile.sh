@@ -310,6 +310,18 @@ fi
 # ---- resolve main worktree path (first entry in list) -----------------------
 MAIN_WORKTREE_PATH="$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10); exit}')"
 
+# M030/S07 + ADR-260514-B sibling (defense-in-depth) — warn on detached HEAD on main worktree
+if [ "${AIHAUS_RECONCILE_DETACHED_WARN:-1}" != "0" ]; then
+  MAIN_BRANCH_FIELD=$(git -C "$MAIN_WORKTREE_PATH" symbolic-ref -q HEAD 2>/dev/null || echo "")
+  if [ -z "$MAIN_BRANCH_FIELD" ]; then
+    MAIN_DETACHED_SHA=$(git -C "$MAIN_WORKTREE_PATH" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    # Suggest a reachable branch for git switch
+    MAIN_SUGGESTED_BRANCH=$(git -C "$MAIN_WORKTREE_PATH" branch --contains "$MAIN_DETACHED_SHA" 2>/dev/null | grep -v '^\*' | head -1 | sed 's/^ *//' | head -c 64)
+    MAIN_SUGGESTED_BRANCH=${MAIN_SUGGESTED_BRANCH:-${MAIN_BRANCH:-main}}
+    echo "[DETACHED-HEAD-MAIN] sha=$MAIN_DETACHED_SHA recipe=git -C $MAIN_WORKTREE_PATH switch $MAIN_SUGGESTED_BRANCH" >&2
+  fi
+fi
+
 # ---- main reconcile loop ----------------------------------------------------
 found_non_main=0
 
