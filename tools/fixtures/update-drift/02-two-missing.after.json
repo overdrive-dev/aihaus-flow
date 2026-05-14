@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "bash-guard.sh"},
+          {"type": "command", "command": "git-add-guard.sh"},
+          {"type": "command", "command": "tdd-guard.sh"}
+        ]
+      }
+    ]
+  }
+}

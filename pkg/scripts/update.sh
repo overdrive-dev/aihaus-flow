@@ -259,6 +259,73 @@ SETTINGS_DST="${CLAUDE}/settings.local.json"
 source "$(dirname "$0")/lib/merge-settings.sh"
 merge_settings "${SETTINGS_DST}" "${SETTINGS_SRC}"
 
+# ---- Drift-detect: prompt recompute if hook count fell behind template ------
+# ADR-260514-B Half B rollout closure. Compares template hook count vs user's
+# merged settings hook count for each .hooks.<Event>[]. If any Event has
+# template_count - user_count >= AIHAUS_DRIFT_THRESHOLD (default 2), prompt user
+# to recompute with AIHAUS_RECOMPUTE_MERGE=1 (which re-merges with template-wins
+# at outer level, preserving user-customs at inner .command level).
+# Non-interactive opt-out: AIHAUS_DRIFT_PROMPT=0 (CI-safe).
+# Sentinel: .aihaus/.recompute-skipped-260514 (written on N answer; suppresses
+# future prompts until user deletes the sentinel).
+if [[ "${AIHAUS_DRIFT_PROMPT:-}" != "0" ]] && [[ -f "${SETTINGS_DST}" ]] && [[ -f "${SETTINGS_SRC}" ]]; then
+  _sentinel_path="${AIHAUS}/.recompute-skipped-260514"
+  if [[ -f "${_sentinel_path}" ]]; then
+    echo "  drift-detect: recompute skipped (sentinel present)" >&2
+  else
+    _py_bin_drift="$(command -v python3 || command -v python || command -v py || true)"
+    if [[ -n "${_py_bin_drift}" ]]; then
+      _drift_settings_src="${SETTINGS_SRC}"
+      _drift_settings_dst="${SETTINGS_DST}"
+      if command -v cygpath >/dev/null 2>&1; then
+        _drift_settings_src="$(cygpath -w "${SETTINGS_SRC}" 2>/dev/null || echo "${SETTINGS_SRC}")"
+        _drift_settings_dst="$(cygpath -w "${SETTINGS_DST}" 2>/dev/null || echo "${SETTINGS_DST}")"
+      fi
+      _drift_result=$("${_py_bin_drift}" -c "
+import json, sys
+threshold = int(sys.argv[3])
+with open(sys.argv[1]) as f: tmpl = json.load(f)
+with open(sys.argv[2]) as f: user = json.load(f)
+tmpl_hooks = tmpl.get('hooks', {})
+user_hooks = user.get('hooks', {})
+max_delta = 0
+max_event = ''
+for event, entries in tmpl_hooks.items():
+    tmpl_count = sum(len(e.get('hooks', [])) for e in entries)
+    user_count = sum(len(e.get('hooks', [])) for e in user_hooks.get(event, []))
+    delta = tmpl_count - user_count
+    if delta > max_delta:
+        max_delta = delta
+        max_event = event
+if max_delta >= threshold:
+    print('drift:' + str(max_delta) + ':' + max_event)
+else:
+    print('no-drift')
+" "${_drift_settings_src}" "${_drift_settings_dst}" "${AIHAUS_DRIFT_THRESHOLD:-2}" 2>/dev/null || echo "no-drift")
+
+      if [[ "${_drift_result}" == drift:* ]]; then
+        _drift_n="${_drift_result#drift:}"
+        _drift_event="${_drift_n#*:}"
+        _drift_n="${_drift_n%%:*}"
+        if [[ -t 0 ]]; then
+          printf "  Detected %s missing canonical hook entries from %s. Recompute merged settings now? [Y/n] " \
+            "${_drift_n}" "${_drift_event}"
+          read -r _drift_answer </dev/tty 2>/dev/null || _drift_answer="n"
+        else
+          _drift_answer="n"
+        fi
+        if [[ "${_drift_answer}" =~ ^[Yy]$ ]] || [[ -z "${_drift_answer}" ]]; then
+          echo "  drift-detect: recomputing merged settings..."
+          AIHAUS_RECOMPUTE_MERGE=1 merge_settings "${SETTINGS_DST}" "${SETTINGS_SRC}"
+        else
+          touch "${_sentinel_path}"
+          echo "  drift-detect: skipped; sentinel written to suppress future prompts" >&2
+        fi
+      fi
+    fi
+  fi
+fi
+
 # ---- Update install mode marker ----------------------------------------------
 echo "${MODE}" > "${AIHAUS}/.install-mode"
 

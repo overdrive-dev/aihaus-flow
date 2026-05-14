@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# merge-settings.sh — shared settings.local.json merge logic with
+# merge-settings.sh --- shared settings.local.json merge logic with
 # pre-merge backup. Sourced by install.sh and update.sh.
 #
 # Exports (set as side effect of merge_settings):
-#   AIHAUS_SETTINGS_BACKUP_PATH  — absolute path of created .bak file,
+#   AIHAUS_SETTINGS_BACKUP_PATH  --- absolute path of created .bak file,
 #                                   or empty if no prior settings file existed
 #                                   (first-install case = nothing to back up)
 #
@@ -12,21 +12,48 @@
 #   merge_settings "${SETTINGS_DST}" "${SETTINGS_SRC}"
 #
 # Behavior:
-#   - If SETTINGS_DST does not exist: cp SETTINGS_SRC → SETTINGS_DST.
+#   - If SETTINGS_DST does not exist: cp SETTINGS_SRC -> SETTINGS_DST.
 #     No backup (nothing to preserve). Stdout: "settings: copied template".
 #   - If SETTINGS_DST exists:
 #     1. Create timestamped backup at SETTINGS_DST.bak.<epoch>
 #     2. Deep-merge SETTINGS_SRC over SETTINGS_DST via jq (preferred)
-#        or python (fallback). Replacement semantics for arrays
-#        (template wins on permissions.allow); object keys deep-merge.
+#        or python (fallback). Object keys deep-merge.
+#        v0.34.0+ behavior: .hooks.<Event>[N].hooks[] arrays union-merge by .command;
+#        .hooks.<Event>[] arrays position-paired-merge by .matcher+.hooks shape;
+#        all other arrays retain replacement semantics. See ADR-260514-B.
 #     3. If pre-merge backup had granular Bash entries but no Bash(*),
 #        emit a one-line migration hint to stdout.
 #
 # Exit codes: 0 (success or skipped), 1 (merge failed).
+#
+# Env-var hooks:
+#   AIHAUS_FORCE_PYTHON_MERGE=1  --- skip jq even if available; use Python path
+#   AIHAUS_RECOMPUTE_MERGE=1     --- re-merge with template-wins semantics (used by
+#                                   update.sh drift-detect recompute prompt)
 
 merge_settings() {
   local dst="$1" src="$2"
   AIHAUS_SETTINGS_BACKUP_PATH=""
+
+  # Single HAS_JQ detection at function-head (CHECK F3 anchor correction).
+  # Skip jq when AIHAUS_FORCE_PYTHON_MERGE is set (test path + parity gate).
+  local HAS_JQ=0
+  if [ -z "${AIHAUS_FORCE_PYTHON_MERGE:-}" ] && command -v jq >/dev/null 2>&1; then
+    HAS_JQ=1
+  fi
+
+  # AIHAUS_RECOMPUTE_MERGE consumer (M030/S05 integration fix per INTEGRATION W4).
+  # When set, indicates a deliberate user-triggered recompute on already-installed
+  # state (e.g., from update.sh drift-detect "Y" prompt or install.ps1 equivalent),
+  # NOT a first-time merge. Behavior delta: emit a tracing line and suppress the
+  # legacy granular-Bash migration hint (user has already passed that gate). The
+  # core dual by-shape merge below is template-wins on collision regardless, so
+  # the recompute correctly closes hook-wiring drift without behavioral surprise.
+  local RECOMPUTE_MODE=0
+  if [ "${AIHAUS_RECOMPUTE_MERGE:-}" = "1" ]; then
+    RECOMPUTE_MODE=1
+    echo "  settings: recompute mode (AIHAUS_RECOMPUTE_MERGE=1) --- closing drift"
+  fi
 
   if [[ ! -f "$src" ]]; then
     echo "  warn: settings template missing at $src, skipping merge"
@@ -46,11 +73,75 @@ merge_settings() {
   cp "$dst" "$bak"
   AIHAUS_SETTINGS_BACKUP_PATH="$bak"
 
-  # Merge.
-  if command -v jq >/dev/null 2>&1; then
+  # Merge --- dual by-shape array semantics per ADR-260514-B.
+  # .hooks.<Event>[] (outer, matcher+hooks shape): position-paired merge.
+  # .hooks.<Event>[N].hooks[] (inner, command shape): union by .command.
+  # All other arrays: replacement semantics (template wins).
+  if [ "$HAS_JQ" = "1" ]; then
     local tmp
     tmp="$(mktemp)"
-    if ! jq -s '.[0] * .[1]' "$dst" "$src" > "$tmp"; then
+    if ! jq -s '
+def has_matcher_hooks(arr):
+  (arr | length) > 0 and
+  (arr | all(type == "object" and (.matcher? != null) and (.hooks? != null)));
+
+def has_command(arr):
+  (arr | length) > 0 and
+  (arr | all(type == "object" and (.command? != null)));
+
+def merge_inner_by_command(base; overlay):
+  overlay + (base | map(select(.command as $c | overlay | any(.command == $c) | not)));
+
+def merge_hooks_arrays(base_arr; overlay_arr):
+  if ((base_arr | length) == 0) then overlay_arr
+  elif ((overlay_arr | length) == 0) then base_arr
+  elif (has_matcher_hooks(base_arr) and has_matcher_hooks(overlay_arr)) then
+    ([ range([base_arr|length, overlay_arr|length] | min) ] |
+      map(. as $i |
+        {
+          "matcher": (overlay_arr[$i].matcher // base_arr[$i].matcher),
+          "hooks": merge_inner_by_command(base_arr[$i].hooks; overlay_arr[$i].hooks)
+        }
+        + (overlay_arr[$i] | to_entries | map(select(.key != "matcher" and .key != "hooks")) | from_entries)
+      )) +
+    (overlay_arr[([base_arr|length, overlay_arr|length] | min):]) +
+    (base_arr[([base_arr|length, overlay_arr|length] | min):])
+  elif (has_command(base_arr) and has_command(overlay_arr)) then
+    merge_inner_by_command(base_arr; overlay_arr)
+  else
+    overlay_arr
+  end;
+
+def deep_merge_with_hooks(base; overlay):
+  if (base | type) == "object" and (overlay | type) == "object" then
+    base + (overlay | to_entries | map(
+      if .key == "hooks" then
+        {key: "hooks", value: (
+          base.hooks as $bh |
+          overlay.hooks as $oh |
+          if ($bh | type) == "object" and ($oh | type) == "object" then
+            $bh + ($oh | to_entries | map(
+              .key as $event |
+              if ($bh | has($event)) then
+                {key: $event, value: merge_hooks_arrays($bh[$event]; .value)}
+              else
+                {key: $event, value: .value}
+              end
+            ) | from_entries)
+          else
+            $oh
+          end
+        )}
+      else
+        {key: .key, value: deep_merge_with_hooks(base[.key]; .value)}
+      end
+    ) | from_entries)
+  else
+    overlay
+  end;
+
+deep_merge_with_hooks(.[0]; .[1])
+' "$dst" "$src" > "$tmp"; then
       echo "  error: jq merge failed; restoring from backup"
       cp "$bak" "$dst"
       rm -f "$tmp"
@@ -70,11 +161,82 @@ with open(dst_path, "r", encoding="utf-8") as fh:
 with open(src_path, "r", encoding="utf-8") as fh:
     src = json.load(fh)
 
+def has_matcher_hooks(lst):
+    return bool(lst and all(
+        isinstance(e, dict) and "matcher" in e and "hooks" in e
+        for e in lst
+    ))
+
+def has_command(lst):
+    return bool(lst and all(
+        isinstance(e, dict) and "command" in e
+        for e in lst
+    ))
+
+def merge_inner_by_command(base, overlay):
+    # union by .command -- template (overlay) wins on collision
+    result = list(base)
+    for entry in overlay:
+        if not any(
+            isinstance(b, dict) and b.get("command") == entry.get("command")
+            for b in result
+        ):
+            result.append(entry)
+    return result
+
+def merge_hooks_arrays(base_arr, overlay_arr):
+    """Dual by-shape merge for .hooks.<Event>[] arrays.
+    Outer: {matcher, hooks} shape -> position-paired merge with recursion.
+    Inner: {command} shape -> union by .command (template wins on collision).
+    Other: replacement semantics.
+    """
+    if not base_arr:
+        return overlay_arr
+    if not overlay_arr:
+        return base_arr
+    if has_matcher_hooks(base_arr) and has_matcher_hooks(overlay_arr):
+        # outer shape: position-paired merge
+        min_len = min(len(base_arr), len(overlay_arr))
+        result = []
+        for i in range(min_len):
+            bh = base_arr[i].get("hooks", [])
+            oh = overlay_arr[i].get("hooks", [])
+            merged_inner = merge_hooks_arrays(bh, oh)
+            # template wins on matcher, preserve extra overlay keys
+            entry = dict(base_arr[i])
+            entry.update(overlay_arr[i])
+            entry["hooks"] = merged_inner
+            result.append(entry)
+        # surplus template entries appended first, then surplus user entries
+        result.extend(overlay_arr[min_len:])
+        result.extend(base_arr[min_len:])
+        return result
+    if has_command(base_arr) and has_command(overlay_arr):
+        return merge_inner_by_command(base_arr, overlay_arr)
+    # default: replacement
+    return overlay_arr
+
 def deep_merge(base, overlay):
     if isinstance(base, dict) and isinstance(overlay, dict):
         out = dict(base)
         for k, v in overlay.items():
-            out[k] = deep_merge(base.get(k), v) if k in base else v
+            if k == "hooks" and k in base:
+                # hooks key: apply event-level merge with by-shape array semantics
+                b_hooks = base[k]
+                if isinstance(b_hooks, dict) and isinstance(v, dict):
+                    merged_hooks = dict(b_hooks)
+                    for event, event_arr in v.items():
+                        if event in b_hooks and isinstance(b_hooks[event], list) and isinstance(event_arr, list):
+                            merged_hooks[event] = merge_hooks_arrays(b_hooks[event], event_arr)
+                        else:
+                            merged_hooks[event] = event_arr
+                    out[k] = merged_hooks
+                else:
+                    out[k] = v
+            elif k in base:
+                out[k] = deep_merge(base.get(k), v)
+            else:
+                out[k] = v
         return out
     return overlay if overlay is not None else base
 
@@ -99,7 +261,7 @@ PY
     return 0
   fi
 
-  # Post-merge defaultMode preserve — user intent wins on this single scalar.
+  # Post-merge defaultMode preserve --- user intent wins on this single scalar.
   # Reads .aihaus/.calibration's permission_mode field and overwrites
   # .permissions.defaultMode in $dst so /aih-effort choices survive
   # /aih-update (which otherwise lets the template's defaultMode win via
@@ -117,7 +279,7 @@ PY
       local pm_tmp
       pm_tmp="$(mktemp)"
       local preserved=0
-      if command -v jq >/dev/null 2>&1; then
+      if [ "$HAS_JQ" = "1" ]; then
         if jq --arg mode "$user_mode" '.permissions.defaultMode = $mode' "$dst" > "$pm_tmp"; then
           mv "$pm_tmp" "$dst"
           preserved=1
@@ -133,7 +295,7 @@ dst_path, mode, tmp_path = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(dst_path, "r", encoding="utf-8") as fh:
     data = json.load(fh)
 data.setdefault("permissions", {})["defaultMode"] = mode
-# jq-compatible byte layout — see M009 QA-REVIEW M-001.
+# jq-compatible byte layout --- see M009 QA-REVIEW M-001.
 with open(tmp_path, "w", encoding="utf-8") as fh:
     json.dump(data, fh, indent=2, separators=(",", ": "))
     fh.write("\n")
@@ -157,7 +319,11 @@ PY
 
   # Post-merge migration hint (Story 3 logic, gated on jq availability for
   # the regex queries; silent if jq missing).
-  _autonomy_post_merge_hint "$bak"
+  # Skip on RECOMPUTE_MODE: user has already passed the migration gate; the hint
+  # would emit a stale "migrate to granular Bash" message that doesn't apply.
+  if [ "${RECOMPUTE_MODE:-0}" = "0" ]; then
+    _autonomy_post_merge_hint "$bak"
+  fi
 }
 
 # Internal: emit the migration hint if pre-merge backup had granular
@@ -169,7 +335,7 @@ _autonomy_post_merge_hint() {
   local had_wildcard="" had_granular=""
 
   # Prefer jq; fall back to python so the hint works on jq-less machines.
-  if command -v jq >/dev/null 2>&1; then
+  if [ "${HAS_JQ:-0}" = "1" ]; then
     had_wildcard=$(jq -r '.permissions.allow // [] | any(. == "Bash(*)")' "$bak" 2>/dev/null || echo "")
     had_granular=$(jq -r '.permissions.allow // [] | any(. ; test("^Bash\\([^)]+\\*\\)$"))' "$bak" 2>/dev/null || echo "")
   elif command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || command -v py >/dev/null 2>&1; then
@@ -196,16 +362,16 @@ print('granular:' + ('true' if has_granular else 'false'))
     return 0
   fi
 
-  # Detect legacy permissions.allow → post-M014 strip transition.
+  # Detect legacy permissions.allow -> post-M014 strip transition.
   # The template since v0.18.0 ships with NO permissions.{defaultMode,allow,deny}
-  # — autonomy comes from launching via `bash .aihaus/auto.sh` (DSP wrapper)
+  # --- autonomy comes from launching via `bash .aihaus/auto.sh` (DSP wrapper)
   # and PreToolUse hooks (bash-guard, file-guard, read-guard) provide safety.
   # If the user's prior settings had any permissions.allow entries, jq's deep
-  # merge keeps them (granular OR wildcard) — the merged result still works,
+  # merge keeps them (granular OR wildcard) --- the merged result still works,
   # just carries vestigial keys. Surface the situation so the user knows.
   if [[ "$had_wildcard" = "true" || "$had_granular" = "true" ]]; then
     echo ""
-    echo "  ℹ Legacy permissions.allow detected in your settings — preserved as-is."
+    echo "  Legacy permissions.allow detected in your settings --- preserved as-is."
     echo "    Since v0.18.0 (M014), the template ships with no permissions.{allow,deny,defaultMode}."
     echo "    Autonomy comes from launching via 'bash .aihaus/auto.sh' (DSP wrapper);"
     echo "    safety lives in PreToolUse hooks (bash-guard, file-guard, read-guard)."
