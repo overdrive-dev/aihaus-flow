@@ -4962,3 +4962,84 @@ Forever-scope discipline (Contrarian C9 original principle: "intentionally narro
 - ADR-260515-B-amend-02 (paired: pure-Go substrate)
 - ADR-260515-C-amend-02 (paired: tree-sitter retirement)
 - User exchange 2026-05-15 ("faz purego entao")
+
+---
+
+## ADR-260516-A — Demote Voyage AI to undocumented escape hatch; BM25/FTS5 is the sole advertised embedding surface
+
+**Status:** Accepted (amends ADR-260515-E-amend-02)
+**Date:** 2026-05-15
+**Milestone:** M042
+
+### Context
+
+M041 (v0.36.0) flipped the aih-graph default `--embed-provider` from `voyage` to `bm25` — pure-Go FTS5 lexical search, no API key, no model download, no external network call. That change closed the install ergonomics gap that ADR-260515-E-amend-02 had documented as a follow-on concern.
+
+However, **the user-facing prompts and docs were not updated in lockstep with M041**. Specifically:
+
+1. `pkg/.aihaus/skills/aih-init/annexes/aih-graph-bootstrap.md` Step 16 still printed a `VOYAGE_API_KEY` upgrade tip after every clean install — surfacing an external-dependency prompt on what is otherwise a zero-credential bootstrap.
+2. `aih-graph/README.md` bullet still advertised "Vector embeddings tier-1 with Voyage AI default + local ONNX fallback" — language from before the M041 pivot.
+3. `pkg/.aihaus/hooks/aih-graph-refresh.sh` docstring enumerated `voyage` as a first-class `AIH_GRAPH_PROVIDER` value.
+4. `pkg/.aihaus/skills/_shared/enforcement-audit.md` carried a `voyage-upgrade-suggest` row classifying the hint as an A-tier model-enforced affordance.
+
+User direction (dogfood report after running `/aih-init`, 2026-05-15): "tá pedindo voyage_api_key sendo que conversamos anteriormente sobre nao pedir isso e usarmos opcoes locais sem dependencias externas o que precisamos fazer pra ajustar?"
+
+Local-ONNX provider (the historical "offline alternative to Voyage" per ADR-260515-E-amend-02) remains deferred. Pure-Go transformer inference is not production-grade today, and `onnxruntime_go` requires CGO — directly contradicting the pure-Go substrate locked in ADR-260515-B-amend-02 and re-validating the M033 CGO toolchain finding (`memory/project_m033_cgo_prereq.md`).
+
+### Decision
+
+Voyage AI is **demoted from advertised default to undocumented escape hatch**:
+
+1. No aihaus skill, hook, or annex prompts for `VOYAGE_API_KEY` or suggests `--embed-provider voyage`.
+2. `aih-graph/README.md` documents **BM25/FTS5 as the sole embedding surface**. The phrase "Voyage AI" appears only in historical milestone notes and ADR cross-references.
+3. The `VoyageProvider` class in `aih-graph/internal/embed/embed.go` is **preserved as-is**. Users who explicitly set `VOYAGE_API_KEY` and pass `--embed-provider voyage` keep their existing behavior (backward-compat for early adopters).
+4. The `--embed-provider voyage` flag value remains accepted by the CLI; only the **advertising surfaces** change.
+5. Local-ONNX provider is **formally deferred indefinitely**. Re-evaluation requires (a) production-grade pure-Go transformer inference or (b) a binding decision to re-introduce CGO (which would supersede ADR-260515-B-amend-02). Neither is in flight.
+
+### Affected surfaces (M042 implementation scope)
+
+- DELETE `## Step 16. Voyage upgrade hint` from `pkg/.aihaus/skills/aih-init/annexes/aih-graph-bootstrap.md`; renumber old Step 17 → Step 16.
+- DELETE `voyage-upgrade-suggest` row from `pkg/.aihaus/skills/_shared/enforcement-audit.md`; update next row's H2 reference (Step 17 → Step 16).
+- REWRITE `AIH_GRAPH_PROVIDER` docstring in `pkg/.aihaus/hooks/aih-graph-refresh.sh` to drop `voyage` from the enumerated default-value list.
+- REWRITE the "Vector embeddings tier-1" bullet in `aih-graph/README.md` to describe BM25/FTS5 as the documented surface and external providers as opt-in unadvertised.
+- KEEP `VoyageProvider` Go class intact (escape hatch).
+
+### Consequences
+
+**Positive:**
+- Clean install flow (`bash install.sh --target . && /aih-init`) emits zero references to external credentials, API keys, signup URLs, or paid services. Matches user mental model "no external dependencies."
+- ONNX deferral made explicit — future maintainers won't be surprised by its absence from the v0.1 surface.
+- Voyage power-users (anyone with `VOYAGE_API_KEY` already configured) experience zero behavioral change.
+
+**Negative:**
+- Semantic (paraphrase-tolerant) query quality is bounded by what BM25 lexical can deliver. Synonym queries that Voyage would catch may miss. Acceptable tradeoff per M041 dogfood: BM25 ranked ADR-260514-B #1 by 2× margin on the test query "merge-settings lida com hooks arrays".
+- The undocumented escape hatch means `--embed-provider voyage` users have no path to discover that flag from the README. This is **intentional** — they already know about it (set `VOYAGE_API_KEY`); newcomers should not.
+
+**Neutral:**
+- `VoyageProvider` class adds ~100 LOC of unreferenced-from-docs code. Acceptable maintenance cost; deletion would break existing users with no warning.
+
+### Forcing function
+
+Smoke Check 62 (`bash tools/audit-skill-enforcement.sh --compute-expected`) enforces row-count parity between `enforcement-audit.md` and the annex H2 step count. M042 row count: 342 (was 343 pre-M042). Reverting this ADR without reverting the annex change fails the check.
+
+### Alternatives Considered
+
+| Alternative | Verdict | Reason |
+|-------------|---------|--------|
+| Delete `VoyageProvider` Go class entirely | Rejected | Silently breaks existing users with `VOYAGE_API_KEY` set — high blast radius for low cleanup gain |
+| Implement local-ONNX provider now | Rejected | Re-introduces CGO (contradicts B-amend-02); no production-grade pure-Go inference today; high scope, low payoff vs BM25 |
+| Keep Voyage tip, gate behind `AIHAUS_VOYAGE_HINT=1` env var | Rejected | Adds env-var surface area; users still see the variable referenced somewhere; doesn't fix the user's "no external deps" intent |
+| Implement a third pure-Go BGE-small variant | Out of scope | Multi-week scope; revisit if BM25 quality complaints surface in dogfood |
+
+### Rollback
+
+`git revert` of the M042 commit restores Voyage advertising. Acceptable rollback; no schema/data migration required.
+
+### References
+
+- ADR-260515-E-amend-02 (parent: vector tier promoted; this ADR demotes the Voyage half)
+- ADR-260515-B-amend-02 (paired: pure-Go substrate — gates ONNX re-introduction)
+- ADR-260515-C-amend-02 (paired: tree-sitter retirement — sibling pure-Go discipline)
+- M041 ADR-260515-B-amend-04 (BM25/FTS5 default flip)
+- `memory/project_m033_cgo_prereq.md` (CGO toolchain finding)
+- User exchange 2026-05-15 ("tá pedindo voyage_api_key... usarmos opcoes locais sem dependencias externas")

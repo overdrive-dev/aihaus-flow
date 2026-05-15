@@ -4,15 +4,13 @@
 // queries a knowledge graph of aihaus-managed repositories with first-class
 // ontological types (Decision, Milestone, Story, Agent, Hook, Skill).
 //
-// v0.1 forever-scope (per ADR-260515-B-amend-02 + C-amend-02 + E-amend-03):
+// v0.1 forever-scope (per ADR-260515-B-amend-02 + C-amend-02 + E-amend-03,
+// embedding surface narrowed per ADR-260516-A):
 // Pure-Go (zero CGO) + markdown-only extraction for 6 aihaus typed nodes +
-// modernc.org/sqlite storage + vector embeddings (Voyage / local ONNX) +
-// Go-native KNN + 3-mode query (BFS / semantic / hybrid) + 6 typed accessor
-// structs. See PRD.md for full spec.
-//
-// M033 in progress: ADR extraction implemented; remaining 5 type parsers
-// (Milestone, Story, Agent, Hook, Skill) + modernc/sqlite storage land in
-// follow-on commits within M033-M034.
+// modernc.org/sqlite storage + BM25/FTS5 lexical search (default; pure-Go,
+// no API key) + optional opt-in external embedding providers + Go-native
+// KNN + 3-mode query (BFS / semantic / hybrid) + 6 typed accessor structs.
+// See PRD.md for full spec.
 package main
 
 import (
@@ -36,38 +34,32 @@ import (
 //   go build -ldflags="-X main.version=v0.1.X"
 // (Go's -X only works on string vars, not consts — keeping this as var is
 // load-bearing for release pipeline correctness.)
-var version = "0.1.0-dev"
+var version = "0.1.1"
 
 // usage prints the top-level CLI help.
 func usage() {
-	fmt.Fprintf(os.Stderr, `aih-graph %s — aihaus standalone memory engine (M033 in progress)
+	fmt.Fprintf(os.Stderr, `aih-graph %s — aihaus standalone memory engine
 
 Usage:
   aih-graph <command> [flags]
 
 Commands:
-  build <repo-path>       Extract aihaus graph from repo                  (M033 partial: ADRs only)
+  build <repo-path>       Extract aihaus graph from repo
     --dry-run             Print extraction summary without persisting
-  query "<question>"      Hybrid SQL+vec query over graph                 (impl: M035)
+    --embed-provider P    bm25 (default) | fake | none
+    --accept-all-repos    Bypass consent gate (auto-creates marker)
+  query "<question>"      Query the graph (default: hybrid)
     --bfs                 Structural BFS only (no embeddings needed)
     --semantic            Vector similarity (cosine) ranking
     --budget N            Token cap on returned context
-  save-result             Persist Q&A to per-repo graph memory            (impl: M035)
-  uninstall [--purge]     Remove aih-graph state (single .db file delete) (impl: M036)
+  uninstall [--purge]     Remove aih-graph state (single .db file delete)
   version                 Print version
   help                    Show this help
 
 Specs:
-  pkg/.aihaus/decisions.md  — ADR-260515-A through -E (+ amendments)
+  pkg/.aihaus/decisions.md  — ADR-260515-A through -E (+ amendments), ADR-260516-A
   aih-graph/PRD.md          — v0.1 forever-scope
 `, version)
-}
-
-// runStub is the not-yet-implemented placeholder for unimplemented commands.
-func runStub(cmd string) int {
-	fmt.Fprintf(os.Stderr, "aih-graph %s: not implemented yet.\n", cmd)
-	fmt.Fprintf(os.Stderr, "See pkg/.aihaus/decisions.md ADR-260515-* for milestone-by-feature breakdown.\n")
-	return 1
 }
 
 // runBuild implements the M033 build subcommand. Extracts Decision / Agent /
@@ -76,7 +68,7 @@ func runBuild(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
 	dbPath := fs.String("db", "", "path to SQLite database file (default: XDG state dir, per-repo isolated)")
-	embedProvider := fs.String("embed-provider", "bm25", "search provider: bm25|voyage|fake|none (default bm25 — pure-Go offline lexical via FTS5)")
+	embedProvider := fs.String("embed-provider", "bm25", "search provider: bm25|fake|none (default bm25 — pure-Go offline lexical via FTS5)")
 	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate (auto-creates .aih-graph-consent marker)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -1048,8 +1040,6 @@ func main() {
 		os.Exit(runQuery(args))
 	case "uninstall":
 		os.Exit(runUninstall(args))
-	case "save-result":
-		os.Exit(runStub(cmd))
 	default:
 		fmt.Fprintf(os.Stderr, "aih-graph: unknown command %q\n\n", cmd)
 		usage()

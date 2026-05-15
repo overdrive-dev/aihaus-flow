@@ -59,7 +59,7 @@ Per BRIEF.md CHALLENGES C2 surfacing — honest trade-off.
 | **HTML visualization** | graph.html | NO (CLI + JSONL only) |
 | **Cross-repo global graph** | `graphify global add` (v0.7.x) | NO (v0.2+ candidate; gated on isolation invariant evolution) |
 | **Watch mode** | `graphify watch <path>` | NO (v0.2+ candidate) |
-| **Write-back / save-result** | `graphify save-result` | YES (aih-graph save-result equivalent in v0.1; structured Q&A persisted to per-repo storage) |
+| **Write-back / save-result** | `graphify save-result` | NO (originally planned; dropped in M042 as unused dead surface — no aihaus skill consumed it; see ADR-260516-A scope) |
 | **Privacy contract (per-repo isolation + consent gate + NDA opt-out)** | NO — graphify v0.7.x has no privacy contract surface | **YES — 5 binding contracts** ← aih-graph's distinguishing value |
 | **Mandatory addon to aihaus** | Currently NO (user installs separately) | YES (M039 install.sh auto-builds; M040 smoke checks enforce) |
 | **Bus factor** | 1 maintainer (safishamsi); 6 weeks old (created 2026-04-03); 47k stars in viral spike | aihaus's existing maintainer (Victor); monorepo means same maintenance discipline |
@@ -105,13 +105,10 @@ aih-graph build <path>                  Build/refresh graph for repository at <p
   --force                                 Overwrite existing graph
 
 aih-graph query "<question>" [--budget N=2000]
-                                        BFS over graph, return up to N tokens of matched nodes + edges
-  --graph <path>                          Override graph.jsonl path (default XDG)
-  --dfs                                   Use depth-first instead of breadth-first
+                                        Query the graph (default: hybrid)
+  --bfs                                   Structural BFS only (no embeddings needed)
+  --semantic                              Vector similarity (cosine) ranking
   --type <Type>                           Filter by first-class type (e.g., --type Decision)
-
-aih-graph save-result --question Q --answer A --type query|path_query|explain [--nodes N1 N2 ...]
-                                        Persist Q&A to per-repo memory (graph-augmented retrieval feedback)
 
 aih-graph uninstall [--purge]           Remove aih-graph state
   --purge                                 Remove ALL per-repo graphs + global state + sentinels (hard contract)
@@ -128,8 +125,8 @@ Per architecture.md §4 module-by-module + ADR-260515-E forever-scope discipline
 - **M032 — foundation:** `go.mod`, `cmd/aih-graph/main.go` scaffold, LICENSE, basic README. (DONE — see m032-foundation tag.)
 - **M033 — Markdown extraction for 6 aihaus types:** `internal/extract/` with 6 parsers (~50 LOC each, ~300 LOC total): `adr.go` (parse `pkg/.aihaus/decisions.md` splitting on `## ADR-`), `milestone.go` (walk `.aihaus/milestones/M*/RUN-MANIFEST.md` parsing Metadata + Story Records + Progress Log), `story.go` (extract from RUN-MANIFEST Story Records table), `agent.go` (walk `pkg/.aihaus/agents/*.md` parsing YAML frontmatter), `hook.go` (walk `pkg/.aihaus/hooks/*.sh` extracting header comment + bash functions), `skill.go` (walk `pkg/.aihaus/skills/aih-*/SKILL.md` YAML frontmatter). Emits in-memory Node objects with typed fields. **No CGO. No tree-sitter. No toolchain pre-flight.** Starts immediately on any machine with Go 1.22+.
 - **M034 — modernc/sqlite storage:** `internal/storage/` with schema migrations (nodes + edges + embedding BLOB column per ADR-260515-B-amend-02); `database/sql` wrappers using `modernc.org/sqlite` driver. Idempotent `aih-graph build` writes/updates nodes + edges; `UNIQUE(type, identifier)` upserts.
-- **M035 — Query + typed accessors + embedding pipeline:** `internal/query/` (recursive CTE BFS for structural; Go-side KNN for semantic; hybrid composition) + `internal/types/` (6 typed accessor structs: `Decision`, `Milestone`, `Story`, `Agent`, `Hook`, `Skill` — each with Get/Find/List methods over SQL) + `internal/embed/knn.go` (~100 LOC pure-Go brute-force cosine; goroutine fan-out optional for >50k vectors) + `internal/embed/voyage.go` + `internal/embed/local.go` (pluggable providers, SHA-based change detection) + `pkg/aihgraph/` public API.
-- **M036 — Privacy gates:** `internal/privacy/` (XDG resolution: `$XDG_STATE_HOME/aih-graph/<repo-hash>/graph.db` or platform equivalent + per-repo file isolation + consent gate via `.aih-graph-consent` marker file + `--purge` = single file delete + NDA opt-out via `--embed-provider local` or `--no-embed`).
+- **M035 — Query + typed accessors + embedding pipeline:** `internal/query/` (recursive CTE BFS for structural; Go-side KNN for semantic; hybrid composition) + `internal/types/` (6 typed accessor structs: `Decision`, `Milestone`, `Story`, `Agent`, `Hook`, `Skill` — each with Get/Find/List methods over SQL) + `internal/embed/knn.go` (~100 LOC pure-Go brute-force cosine; goroutine fan-out optional for >50k vectors) + `internal/embed/embed.go` (provider interface + Fake provider; Voyage provider preserved as undocumented opt-in per ADR-260516-A; local-ONNX deferred indefinitely) + `pkg/aihgraph/` public API.
+- **M036 — Privacy gates:** `internal/privacy/` (XDG resolution: `$XDG_STATE_HOME/aih-graph/<repo-hash>/graph.db` or platform equivalent + per-repo file isolation + consent gate via `.aih-graph-consent` marker file + `--purge` = single file delete + NDA opt-out via `--embed-provider bm25` (default, zero external calls) or `--embed-provider none`).
 - **M037 — CI cross-compile:** `.github/workflows/aih-graph-ci.yml` — 4-platform matrix (linux-amd64, darwin-amd64, darwin-arm64, windows-amd64). **Trivial post-pivot:** `GOOS=X GOARCH=Y go build`. Single binary per platform. No extension bundling. No CGO toolchain setup in CI.
 - **M038 — v0.1.0 ship:** README, version-tagging, binary release to GitHub Releases. 4 artifacts (one per platform).
 - **M039 — aihaus integration:** `pkg/scripts/install.sh` downloads aih-graph binary from GitHub Releases (primary path); source-build via `go install` remains contributor-only option. ADR-260515-D-amend-01 3-way prompt preserved but option [2] (binary) becomes default-recommended. `pkg/.aihaus/hooks/aih-graph-refresh.sh` new hook; ~15 agent prompt addenda with `aih-graph query --semantic` examples.
@@ -147,12 +144,11 @@ Test at M038 closeout:
 - [ ] `aih-graph query "..."` (default hybrid mode) returns nodes ranked by combined SQL match + vector distance.
 - [ ] `aih-graph build` on a new repo without `.aih-graph-consent` exits with code 2 + error message.
 - [ ] `aih-graph build /tmp/test --accept-all-repos` works.
-- [ ] `aih-graph build --embed-provider local` runs without external API calls (NDA opt-out path).
+- [ ] `aih-graph build --embed-provider bm25` runs without external API calls (zero-credential path; default since M041).
 - [ ] `aih-graph uninstall --purge` removes all data (single .db file delete); verifier confirms path absent.
-- [ ] CI cross-compile produces binaries for linux-amd64, darwin-amd64, darwin-arm64, windows-amd64; each bundles matching sqlite-vec extension.
-- [ ] `sqlite_version()` and `vec_version()` both return at install-time smoke check.
+- [ ] CI cross-compile produces binaries for linux-amd64, darwin-amd64, darwin-arm64, windows-amd64 (pure-Go, no extension bundling).
+- [ ] `sqlite_version()` returns at install-time smoke check.
 - [ ] Smoke Check 84 (build smoke), 85 (privacy ADR enforcement), 86 (integration round-trip + semantic query) all PASS.
-- [ ] M033/S1 pre-flight verification gate executed; CGO toolchain confirmed compatible with both tree-sitter AND sqlite-vec.
 
 ## Estimated v0.1 Timeline
 
