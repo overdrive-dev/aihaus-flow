@@ -147,6 +147,16 @@ func runBuild(args []string) int {
 	}
 	fmt.Printf("  Hooks:     %d (%d declared functions)\n", len(hooks), totalFns)
 
+	// Milestone + Story extraction. .aihaus/milestones/ may not exist (fresh
+	// install or runtime artifacts purged); parsers return empty slices.
+	milestones, stories, err := extract.ParseMilestonesDir(repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: parse milestones: %v\n", err)
+		return 1
+	}
+	fmt.Printf("  Milestones: %d\n", len(milestones))
+	fmt.Printf("  Stories:    %d\n", len(stories))
+
 	// Status breakdown for Decisions (most informative type-level summary).
 	fmt.Println()
 	fmt.Println("  Decisions by status:")
@@ -169,6 +179,8 @@ func runBuild(args []string) int {
 	_ = agents
 	_ = skills
 	_ = hooks
+	_ = milestones
+	_ = stories
 
 	return 0
 }
