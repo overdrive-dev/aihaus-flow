@@ -2,7 +2,7 @@
 
 Standalone Go binary memory engine for [aihaus](https://github.com/overdrive-dev/aihaus-flow).
 
-**Status:** v0.1.1 (shipped M033–M041; markdown extraction + modernc/sqlite storage + 3 query modes + BM25/FTS5 lexical search + 4-platform binary release).
+**Status:** v0.1.3 (shipped M033–M042; markdown extraction + modernc/sqlite storage + 3 query modes + BM25/FTS5 lexical search + 4-platform binary release).
 
 ## What this is
 
@@ -38,7 +38,8 @@ Shipped milestone chain:
 - M039: aihaus integration (install.sh, hooks, agent prompts)
 - M040: Smoke checks + aihaus v0.35.0 release
 - M041: BM25/FTS5 lexical search default; one-shot install; tag v0.1.1
-- M042: Voyage demotion from advertised surfaces; CLI/PRD/README reconciliation
+- M041 dogfood: query --db default + hybrid BM25 routing + var-version ldflag fix; tag v0.1.2
+- M042: Voyage demotion from advertised surfaces; CLI/PRD/README reconciliation; tag v0.1.3
 
 ## Specs
 

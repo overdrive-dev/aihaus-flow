@@ -34,7 +34,7 @@ import (
 //   go build -ldflags="-X main.version=v0.1.X"
 // (Go's -X only works on string vars, not consts — keeping this as var is
 // load-bearing for release pipeline correctness.)
-var version = "0.1.1"
+var version = "0.1.3-dev"
 
 // usage prints the top-level CLI help.
 func usage() {

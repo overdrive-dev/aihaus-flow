@@ -82,7 +82,7 @@ claude
 
 `aihaus install` (machine-once CLI) bootstraps the global skill set and links it to the current repo. `/aih-init` is a separate slash command — run inside Claude Code — that bootstraps `project.md`. They are different steps.
 
-To stay current: `/aih-update` (pull latest + re-link) or `/aih-update --check` (dry run).
+To stay current: `/aih-update` (pull latest + re-link) or `/aih-update --check` (dry run). For an LLM-driven install path, see [`INSTALL-VIA-LLM.md`](./INSTALL-VIA-LLM.md).
 
 ### Migrating from `~/tools/aihaus/`
 
