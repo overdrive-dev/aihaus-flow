@@ -3845,3 +3845,351 @@ The dual by-shape scoping rule (no path-state threading) is the symmetry lever a
 - BR-005 (Python by-shape scoping zero current-state regression verified)
 - INVESTIGATE-settings-drift.md (S03 forensic report on maintainer dogfood pre-M017-shape specimen — gitignored in user installs; 7-hook delta table inlined above per CHECK F5)
 - M014 migration-hint contract (`merge-settings.sh` `_autonomy_post_merge_hint` function, L200+)
+
+---
+
+## ADR-260515-A — aih-graph privacy contract (M031/S01)
+
+**Status:** Accepted
+**Date:** 2026-05-15
+**Milestone:** M031/S01
+
+### Context
+
+aih-graph (specified in M031, built in M032-M040) is a Go binary that ingests source code + markdown + structured data from arbitrary repositories into a queryable knowledge graph. The maintainer (per BRIEF.md Turn 12 Q6) works regularly with NDA-protected client code. Without a binding privacy contract, the moment aih-graph touches a client repo, the graph ingests potentially-NDA-protected content into per-user-global storage — an NDA violation vector any aihaus user who consults professionally faces.
+
+Per BRIEF.md Turn 13 user correction, machine-config concerns (OneDrive sync, OS-level encryption, backup policy) are OUT OF SCOPE for this ADR — they're the user's machine ownership. This ADR commits ONLY to pkg-level invariants aihaus controls.
+
+### Decision
+
+aih-graph v0.1 ships **5 binding privacy contracts**:
+
+1. **XDG-compliant default storage path.** `${XDG_DATA_HOME:-$HOME/.local/share}/aih-graph/<repo-hash>/` on Linux/macOS; `%LOCALAPPDATA%\aih-graph\<repo-hash>\` on Windows. NEVER `~/Documents/...` or user-Documents-rooted paths that conventionally land in cloud-sync trees. `<repo-hash>` is a stable SHA256 prefix of canonical absolute repo path.
+
+2. **Per-repo isolation invariant.** Graph nodes from repo A cannot leak into repo B's query results — even with future v0.2 global query features. Enforced via per-repo subdirectory + repo-hash namespacing on every record. Test: `aih-graph query --repo <repo-b-path> "..."` MUST NOT surface any node sourced from repo A.
+
+3. **Ingestion consent gate.** aih-graph aborts on first encounter with previously-unseen repo unless: `.aih-graph-consent` marker file exists at repo root, OR `--accept-all-repos` CLI flag set, OR `AIHGRAPH_AUTO_CONSENT=1` env. On abort: exit code 2, human-readable error, no storage writes. CI/integration uses env or flag.
+
+4. **`--purge` uninstall = full delete.** `aih-graph uninstall --purge` removes all per-repo graphs + global state + sentinels under XDG path. Hard contract: no orphan data. Verification at uninstall: `ls "${XDG_DATA_HOME:-$HOME/.local/share}/aih-graph/"` returns empty or directory absent.
+
+5. **`.aih-graph-isolated` NDA opt-out.** Marker file at repo root forces local-only mode: aih-graph indexes the repo but it never participates in cross-repo aggregation regardless of future global features. Stronger than `.aih-graph-consent`; both coexist.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** 5-contract pkg-level privacy (XDG + isolation + consent + purge + NDA opt-out) | Concrete + testable + binding; aligns with ADR-260504-A V5 XDG precedent; covers CHALLENGES C8 | More install-time complexity vs no-contract default | None — chosen |
+| 2 | Single global "do not run on client repos" warning | Trivial | No enforcement; NDA = legal cost, not inconvenience | Insufficient |
+| 3 | Mandatory encryption-at-rest | Defense-in-depth | Key management; OS-level full-disk-encryption is right layer | Out-of-scope per Turn 13 |
+| 4 | Privacy deferred to v0.2+ | Faster v0.1 | NDA risk HIGH per Q6 — deferral = exposure window | Rejected — binding pre-condition |
+
+### Rationale
+
+ADR-260511-B trigger c(i) — anticipatory-protection-on-new-flow — applies directly. Per BRIEF Q6 "Sim, regularmente — NDA risk é real", per-repo isolation + ingestion consent are blocking-pre-condition for the maintainer's working context. Privacy ADR landing FIRST in M031 signals aih-graph's design begins from contractual reality, not technical capability. Substrate §4.5 (OneDrive in Victor's path as ingestion vector when combined with naive default storage) reinforces explicit pkg-level safe defaults.
+
+### Consequences
+
+1. aih-graph install (M039) verifies XDG path resolves correctly per-platform; install fails if `${XDG_DATA_HOME}` points at known-synced path (OneDrive substring detection, attested only).
+2. `aih-graph build` rejects new repos without `.aih-graph-consent` marker (or env/flag override). aihaus's `aih-graph-refresh.sh` (M039) writes marker programmatically for aihaus-managed repos.
+3. `aih-graph uninstall --purge` is binding contract; verifier regression-tests path absent on completion.
+4. M037 CI workflow includes `--purge` round-trip test (build → uninstall --purge → verify empty).
+5. Future v0.2+ global features inherit `.aih-graph-isolated` opt-out; cannot bypass.
+6. Sync-root detection list LOCKED to OneDrive only (substrate-attested per §4.5); extended detection deferred to `AIHGRAPH_SYNC_DENYLIST=<csv>` env (per F8 NIT).
+
+### Rollback
+
+`git revert` removes this ADR. aih-graph v0.1+ commits depending on `internal/privacy/` would need separate rollback; not blocking since no code exists yet.
+
+### References
+
+- ADR-260511-B (trigger c(i) authority)
+- ADR-260511-A (heading shape template)
+- ADR-260510-C (Options Considered shape)
+- ADR-260504-A (V5 XDG precedent)
+- BRIEF.md Turn 12 Q6 + Turn 13 (NDA scope confirmation + pkg-level correction)
+- SUBSTRATE-FINDINGS.md §4.5 (OneDrive empirical signal)
+- CHALLENGES.md C8 (privacy/NDA flagged by contrarian)
+
+---
+
+## ADR-260515-B — aih-graph Node/Edge data model: hybrid generic+type-tag storage with typed accessor API (M031/S03)
+
+**Status:** Accepted
+**Date:** 2026-05-15
+**Milestone:** M031/S03
+
+### Context
+
+aih-graph v0.1's distinguishing capability over graphify-as-shipped is **first-class ontology for aihaus concepts**: graphify treats all markdown as generic headers; aih-graph natively understands `Decision`, `Milestone`, `Story`, `Agent`, `Hook`, `Skill` as distinct node types with type-specific fields. Two storage-API patterns were debated (F5): (a) first-class typed structs end-to-end vs (b) generic Node + type-tag. R2 converged on hybrid (c).
+
+### Decision
+
+aih-graph v0.1 ships **hybrid F5(c) generic+type-tag storage with typed accessor API**:
+
+1. **Storage layer (JSONL).** Each record is generic JSON: `{"type": "Decision", "id": "ADR-260514-B", "data": {...}, "edges": [...], "_v": 1}`. `type` is the type-tag; `data` is free-form; `_v` is schema version (currently 1). Append-friendly, jq-inspectable, evolves without struct migrations, tolerates unknown types (skip-with-warning).
+
+2. **API layer (Go).** Each first-class type ships typed accessor struct + constructor:
+   ```go
+   type Decision struct { ID, Status string; Date time.Time; /* ... */ }
+   func DecisionFrom(n Node) (Decision, error) { /* parses Props into Decision; error on missing required */ }
+   ```
+   Callers get compile-time type safety at API boundary; storage stays flexible.
+
+3. **6 first-class types in v0.1 (forever-scope per Q4):** Decision (ADRs), Milestone (RUN-MANIFEST entries), Story (S0X-*.md files), Agent (pkg/.aihaus/agents/*.md), Hook (pkg/.aihaus/hooks/*.sh), Skill (pkg/.aihaus/skills/aih-*/SKILL.md).
+
+4. **Worked example (binding):** ADR-260514-B (M030's array-aware merge) maps to:
+   ```json
+   {
+     "type": "Decision", "id": "ADR-260514-B",
+     "data": { "title": "Array-aware settings merge", "status": "Accepted", "date": "2026-05-14",
+               "milestone": "M030/S05", "supersedes": [], "amends": [], "references": ["ADR-260511-B"] },
+     "edges": [ {"to": "ADR-260511-B", "type": "references"},
+                {"to": "M030-260514-merge-settings-array-aware", "type": "decided-in-milestone"} ],
+     "_v": 1
+   }
+   ```
+   `DecisionFrom(node)` returns Go `Decision` struct with typed fields.
+
+5. **Generic Node remains accessible** for cross-type queries (BFS), debugging, future-type ingestion before typed-accessor structs land.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** F5(c) hybrid storage+API | Schema evolution cheap + compile-time API safety + JSONL inspectable + 7th type is Props key | Accessor functions per-type | None — R2 convergence |
+| 2 | F5(a) first-class typed structs end-to-end | Strong compile-time guarantees | 7th type = struct + migration + tests; brittle | R2 falsified |
+| 3 | F5(b) pure generic Node | Maximum flexibility | Runtime-only type safety; bug-prone | R2 conceded API layer safety worth maintenance |
+| 4 | SQLite typed schema | Indexed queries; mature tooling | Heavy dep; not "aihaus aesthetic"; defer to v0.2 if perf demands | Out-of-scope v0.1 |
+
+### Rationale
+
+Hybrid F5(c) is the unique sweet-spot: storage stays append-friendly (matching aihaus's audit-jsonl + manifest-append per ADR-001), while API layer recovers compile-time safety where it matters. Adding 7th type is `<10 LOC` (new accessor struct + constructor); F5(a) would be `>100 LOC` (struct + migration + 6 switch sites).
+
+### Consequences
+
+1. Storage format MUST include `_v` on every record. v0.1 = `_v=1`. v0.2+ readers detect-and-skip unknown versions.
+2. API surface adds 6 accessor types: `DecisionFrom`, `MilestoneFrom`, `StoryFrom`, `AgentFrom`, `HookFrom`, `SkillFrom` in `pkg/aihgraph/` public Go package.
+3. Future type additions follow pattern: add type-tag, add JSONL records, add accessor + constructor. No migration.
+4. Aihaus skills invoking `aih-graph query` get human-readable JSON with `type` tag; consuming pipelines branch on type without parsing.
+5. schemagen (advisor-R2 amendment proposal) deferred to v0.2 per phase-researcher-R2 YAGNI argument — fixed 6 types in v0.1 don't need generator overhead.
+
+### Rollback
+
+`git revert` removes this ADR. Storage format change in M033 needs separate revert.
+
+### References
+
+- ADR-260515-A (privacy — storage path is per-repo XDG-namespaced)
+- ADR-260511-A (heading shape template)
+- ADR-260510-C (Options Considered shape)
+- BRIEF.md Turn 12 Q4 (custom aihaus node types as build justification)
+- BRIEF.md Turn 14 (monorepo F6 — node types accessible via Go API)
+- PERSPECTIVE-architect-r2.md (hybrid F5(c) R2 pivot)
+- PERSPECTIVE-phase-researcher-r2.md (schemagen YAGNI for v0.1)
+
+---
+
+## ADR-260515-C — aih-graph tree-sitter Go binding: provisional official binding lock with M032 pre-flight verification gate (M031/S04)
+
+**Status:** Accepted (provisional pending M032 pre-flight verification)
+**Date:** 2026-05-15
+**Milestone:** M031/S04
+
+### Context
+
+aih-graph v0.1's AST extraction depends on a Go binding for tree-sitter. Two candidates: `smacker/go-tree-sitter` (community, MIT, SHA-pin culture per RESEARCH.md:138) vs `tree-sitter/go-tree-sitter` (official, newer, explicit release tagging). R2 converged on official based on "zero release tags" claim. However, per VERIFICATIONS.md (S02), this claim was NOT verified via live gh-api in either brainstorm (network blocked 3x) or M031/S02 (network blocked 4th time).
+
+### Decision
+
+aih-graph v0.1 **provisionally locks `tree-sitter/go-tree-sitter` (official)** with a binding M032 pre-flight verification gate:
+
+1. **Provisional default:** official `tree-sitter/go-tree-sitter`, MIT.
+2. **M032 pre-flight gate (BINDING):** M032's first agent dispatch MUST re-run the 8 verification commands from VERIFICATIONS.md §G on live-network BEFORE writing any Go code that imports tree-sitter. If verifications:
+   - **PASS** → proceed with official binding lock.
+   - **CONTRADICT** (e.g., smacker has 2+ tags AND covers more langs AND maintained) → M032 commits ADR-260515-C-amend-01 BEFORE Go code commit. Amendment may flip choice to smacker, document hybrid, or maintain official with new rationale.
+   - **STILL BLOCKED** → M032 issues `phase-advance --to paused --class external-dep-down --reason "tree-sitter binding verification still blocked"`. Resume via `/aih-resume`.
+3. **5 required grammars for v0.1 (per Q4):** tree-sitter-bash, -python, -javascript (covers JS+JSX), -typescript (covers TS+TSX), -go, -markdown (5 conceptual langs; 6 grammar modules per RESEARCH OQ-5).
+4. **Path-C cascade rule (per F9 NIT):** if M032 verification reveals a grammar that's GPL/archived/unavailable, v0.1 scope shrinks. Cascade-update applies to: S06 PRD `## Language Coverage`, S09 CI workflow language matrix, this ADR section 3. M032 architect issues same-PR amendments to all three.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** Provisional official + M032 pre-flight gate | Verifiable downstream; no flow-state lock on unverified data; explicit cascade rule | Provisional, not yet truly locked | None — provisional is honest |
+| 2 | Lock official NOW from R2 web-search citations | Faster; matches panel consensus | RESEARCH.md:138 not verified live; substrate §1.2 flagged | M026 "we'll verify later" anti-pattern; CHALLENGES.md C3 |
+| 3 | Lock smacker as default | Larger ecosystem per snippets; 30+ langs | "Zero tags" suggests less version discipline; less aihaus tag-discipline alignment | Provisional favors official; C amendment can flip |
+| 4 | Shell out to `ast-grep` CLI | Avoids binding choice | Wrong abstraction — typed AST nodes vs pattern matches; subprocess cost | Phase-researcher-R2 rejected |
+
+### Rationale
+
+The verification gate at M032 pre-flight is the load-bearing discipline. M031's spec-only nature means binding choice doesn't yet block code commit. Provisional lock + downstream gate gives aihaus freedom to ship M031 design package without flow-state pretending to verify what cannot be verified in this session. CHALLENGES.md C3 explicitly named "we'll verify later" as the M026 anti-pattern; this ADR institutionalizes verification at the actual decision-load-bearing point.
+
+### Consequences
+
+1. M032's first agent dispatch MUST execute verification commands as story-block-1 deliverable. NO Go code lands before verification PASS or BLOCKED-honest-pause.
+2. If verifications contradict default, M032 also commits ADR-260515-C-amend-01 before any Go code commit. Original remains in `decisions.md` for audit trail.
+3. v0.1's grammar list may shrink if Path-C fires. Cascade applies to PRD + CI spec.
+4. Aih-graph build uses `go.mod` with specific commit SHAs (not loose `latest`) — enforced in M032 regardless of binding choice.
+
+### Rollback
+
+`git revert` removes this ADR. If smacker preferred post-verification, ADR-amendment is the canonical fix, not revert.
+
+### References
+
+- ADR-260515-A (privacy)
+- ADR-260515-B (data model)
+- ADR-260511-A (heading shape template)
+- ADR-260510-C (Options Considered shape)
+- VERIFICATIONS.md §G (M032 pre-flight contract — this ADR's load-bearing gate)
+- RESEARCH.md:138 (provisional "zero tags" claim; superseded by M032 verification)
+- CHALLENGES.md C3 (gh-api unverified — directly addressed)
+- BRIEF.md Turn 14 (monorepo — binding lives in `aihaus-flow/aih-graph/go.mod`)
+
+---
+
+## ADR-260515-D — aih-graph integration model: monorepo with direct binary invocation, no loose adapter, MCP deferred to v0.2 (M031/S05)
+
+**Status:** Accepted
+**Date:** 2026-05-15
+**Milestone:** M031/S05
+
+### Context
+
+aih-graph is being built (M032-M040) as a Go binary inside aihaus-flow monorepo (per BRIEF.md Turn 14 user lock — no sibling repo). aihaus agents need to invoke aih-graph at runtime. Two F6 patterns debated: (a) tight direct binary invocation vs (b) loose adapter skills. R2 converged on (b) — but phase-researcher-R2 argued against in final round: "direct Bash in v0.1; MCP search-and-replace at v0.2."
+
+### Decision
+
+aih-graph v0.1 ships **tight integration via direct binary invocation**:
+
+1. **Binary location (canonical):** `${CLAUDE_PROJECT_DIR}/aih-graph/bin/aih-graph` after M032's `go build`. Pre-build dev invocation: `go run ./aih-graph` from repo root.
+
+2. **Aihaus skill invocation pattern.** Skills + agent prompts invoke via Bash:
+   ```bash
+   bash $CLAUDE_PROJECT_DIR/aih-graph/bin/aih-graph query "<question>" --budget 2000
+   ```
+   Or via thin wrapper `pkg/scripts/aih-graph-wrapper.sh` (M039) for stable invocation surface.
+
+3. **NO loose-adapter skill in v0.1.** No `aih-graph-query`/`aih-graph-refresh` skills ship. Adapter pattern rejected:
+   - Skills are markdown wrappers; add indirection without computational value.
+   - Bash is already first-class in aihaus.
+   - Agent prompts include Bash command directly without skill registration overhead.
+
+4. **MCP server deferred to v0.2.** Native MCP integration (typed tool surface) explicitly out of v0.1. v0.2 ships `aih-graph mcp` subcommand exposing query/save-result via stdio MCP transport.
+
+5. **Aihaus integration touchpoints (M039):**
+   - `pkg/scripts/install.sh` builds aih-graph during install: `(cd "${REPO}/aih-graph" && go build -o bin/aih-graph ./cmd/aih-graph)`.
+   - `pkg/.aihaus/hooks/aih-graph-refresh.sh` (NEW M039) invokes `aih-graph build` on milestone-close / per-commit / on-demand. Lifecycle TBD M039.
+   - Agent prompts (M039 architecture handoff; PM estimate ~15 advisory per F5 NIT) gain 1-2 line addendum suggesting `aih-graph query` for structural lookup.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** F6 tight — direct binary invocation, no adapter, MCP v0.2 | Minimum indirection; aihaus skills + agents call binary directly | Skill prompts hardcode binary path | None — phase-researcher-R2 argue-against |
+| 2 | F6(b) loose adapter — new query+refresh skills | Insulates skill prompts from binary location | Indirection without compute; 2 skill defs to maintain | Rejected per phase-researcher-R2 |
+| 3 | MCP server in v0.1 | Typed tool surface; first-class Claude tool | aih-graph v0.1 has no MCP code; stdio MCP transport needed | Out-of-scope; v0.2 |
+| 4 | HTTP daemon (localhost) + CLI client | Persistent index; lower invocation latency | Daemon lifecycle complexity; port allocation; security surface | Out-of-scope |
+
+### Rationale
+
+Simplest path is right for v0.1. Aihaus's agents already use Bash for tool invocations; one more `bash aih-graph query ...` is zero new conceptual surface. Loose-adapter would add 2 markdown files + 2 agent dispatch round-trips per invocation without changing what aih-graph actually does. MCP in v0.1 would force premature stdio-transport implementation before core graph engine stabilizes. Phase-researcher-R2's argue-against landed: "direct Bash + MCP search-and-replace at v0.2" is honest minimal-scope path.
+
+### Consequences
+
+1. Binary path change between v0.1 and v0.2+ is breaking integration change (search-and-replace across aihaus skill prompts). Mitigated by `pkg/scripts/aih-graph-wrapper.sh` in M039 as stable invocation surface.
+2. Agent prompts (advisory ~15 per M039 PRD estimate) gain `aih-graph query` mention. Implementer agents at M039 handle bulk edit.
+3. v0.2 MCP migration is structured refactor: implement `aih-graph mcp` subcommand + register MCP server in aihaus `settings.local.json` template + edit agent prompts to use new tool name. Anticipated M041+ work.
+4. Build dependency: `aih-graph/bin/aih-graph` MUST exist post-install. Smoke check 84 (S08 spec) asserts.
+
+### Rollback
+
+`git revert` removes this ADR. M039 integration commits need separate revert.
+
+### References
+
+- ADR-260515-A (privacy)
+- ADR-260515-B (data model)
+- ADR-260515-C (binding)
+- ADR-260511-A (heading shape template)
+- ADR-260510-C (Options Considered shape)
+- BRIEF.md Turn 14 (monorepo F6 lock)
+- PERSPECTIVE-phase-researcher-r2.md (direct Bash + MCP search-and-replace at v0.2 argue-against)
+- PERSPECTIVE-advisor-researcher-r2.md (loose-adapter proposal — REJECTED)
+
+---
+
+## ADR-260515-E — aih-graph v0.1 forever-scope: 5 langs + AST + JSONL + BFS + 6 custom types (M031/S10)
+
+**Status:** Accepted
+**Date:** 2026-05-15
+**Milestone:** M031/S10
+
+### Context
+
+Per BRIEF.md Turn 12 Q4, user's build justification is **custom aihaus node types** (Decision/Milestone/Story/Agent/Hook/Skill as first-class). NOT graphify-parity. Contrarian C9 named this pattern "intentionally narrower forever" — v1.0 is the forever-scope, not stepping-stone to broader feature parity. This ADR commits aihaus to that narrowed scope and signals to future contributors that scope-expansion requires explicit ADR amendment.
+
+### Decision
+
+aih-graph v0.1 ships **5 langs + AST + JSONL + BFS + 6 custom aihaus node types** as **forever-scope**:
+
+**IN v0.1:**
+- 5 langs: bash, python, JavaScript/TypeScript (via tree-sitter-javascript + -typescript = 6 grammar modules per ADR-260515-C §3), Go, Markdown.
+- AST extraction via tree-sitter (per ADR-260515-C provisional).
+- JSONL storage (per ADR-260515-B).
+- BFS query with `--budget N` token cap.
+- 6 first-class aihaus node types (per ADR-260515-B).
+- Privacy contracts (per ADR-260515-A).
+- Tight monorepo integration (per ADR-260515-D).
+- `--include-gitignored <glob>` flag OR `.aihignore` config (so `.aihaus/memory/*.md` can be ingested despite gitignore). Default `.aihignore` ships at aih-graph root with sensible aihaus defaults.
+
+**OUT v0.1 (deferred or never):**
+- Embeddings / vector retrieval (semantic similarity) — v0.2 ONNX-local candidate; not committed.
+- Clustering (Leiden community detection) — v0.2+ candidate; not committed.
+- HTML visualization (graph.html) — possibly never; CLI + JSONL output is enough.
+- Cross-repo global graph — v0.2+ candidate gated on per-repo isolation invariant evolution.
+- LLM-semantic extract (paid API backend) — never in v0.1; user installs graphify in parallel if they want it.
+- Watch mode auto-rebuild — v0.2+ candidate.
+- Git merge driver for graph.json files — never.
+- 24+ other tree-sitter grammars (Rust, Java, Ruby, etc.) — never expected in v0.1; might land in v0.3+ if aihaus user-base broadens beyond polyglot-shell+Go.
+
+### Path α vs Path β (per CHECK F6 NIT clarification)
+
+This ADR ships in M031/S10 closeout as the 5th committed ADR (**Path α default**). Alternative Path β would defer this ADR to a follow-up milestone, leaving M031 with 4 ADRs committed. **Path α chosen** — v0.1 scope is load-bearing for M032-M040 story chain; deferring leaves the future milestones unanchored.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** 5 langs + AST + JSONL + BFS + 6 types as forever-scope | Honest narrow scope; aligns with Q4 justification; ~3-4 month build estimate; no graphify-chase | Some users will request more langs / semantic features; deferral required | None — Q4 + C9 framing |
+| 2 | v0.1 scope + explicit v0.2/v0.3 feature roadmap | Sets user expectations | Implies trajectory aih-graph might not honor; scope creep | Rejected — v1.0 IS forever-scope; v0.2+ are optional, not promised |
+| 3 | Graphify-parity v1.0 trajectory | Feature-rich; competitive with graphify | 9-12 month commitment; competes on substrate aihaus doesn't own | Rejected per Q4 and C9 |
+| 4 | Tiny MVP (1 lang only — Go) | Faster v0.1 | Doesn't cover aihaus's actual codebase (heavy bash + markdown) | Insufficient |
+
+### Rationale
+
+Q4 narrowed the build justification to "custom aihaus node types". Those 6 types fit cleanly in 5-lang AST + JSONL + BFS architecture. Anything beyond (embeddings, clustering, semantic) belongs to graphify's existing surface — installing graphify in parallel is the right answer for users who want those features. aih-graph stays focused on what graphify can't do (typed ontological retrieval over aihaus concepts). Forever-scope discipline keeps M032-M040 timeline bounded at ~3-4 months instead of 9-12.
+
+### Consequences
+
+1. M032-M040 story budget is fixed against v0.1 forever-scope. Any feature beyond requires explicit ADR amendment.
+2. Aihaus's M041+ feature delivery resumes after M040; aih-graph remains in maintenance mode (bug fixes, grammar updates) rather than feature expansion.
+3. Users who need semantic LLM extract, embeddings, clustering, or 24+ other langs install graphify in parallel. aih-graph + graphify coexist without conflict (different output paths).
+4. `.aihignore` config ships at aih-graph repo root with sensible aihaus defaults (e.g., `node_modules/`, `.git/`, `.claude/audit/` excluded; `.aihaus/memory/*.md` INCLUDED despite gitignore via explicit allow). M035 architect locks final config schema.
+5. v0.2+ features are OPTIONAL — proposed via ADR amendment with user-confirmation gate. No automatic trajectory.
+
+### Rollback
+
+`git revert` removes this ADR. M032-M040 milestones inherit unanchored scope and would re-derive expectations — costly.
+
+### References
+
+- ADR-260515-A (privacy)
+- ADR-260515-B (data model — 6 types named here)
+- ADR-260515-C (binding — provisional + 5-lang scope)
+- ADR-260515-D (integration model)
+- ADR-260511-A (heading shape template)
+- ADR-260510-C (Options Considered shape)
+- BRIEF.md Turn 12 Q4 (custom node types build justification)
+- CHALLENGES.md C9 ("intentionally narrower forever" naming)
+- CHALLENGES.md C2 (graphify-as-shipped vs aih-graph v1 honest comparison — surfaced in S06 aih-graph PRD)
