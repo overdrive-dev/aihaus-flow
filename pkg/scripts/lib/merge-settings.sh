@@ -81,6 +81,34 @@ merge_settings() {
     local tmp
     tmp="$(mktemp)"
     if ! jq -s '
+# Schema migration (M041/S5): older Claude Code versions accepted hook events
+# as a single object {matcher, hooks}; newer versions require an array
+# [{matcher, hooks}]. Pre-existing settings.local.json files frozen at the
+# older schema get silently ignored by Claude Code today — startup warning
+# observed in field installs: "Hook event must be an array; received
+# object. Entry ignored.". Normalize-on-merge auto-heals these on next
+# install.sh / update.sh pass.
+def normalize_event_value(v):
+  if (v | type) == "object" and ((v | has("matcher")) or (v | has("hooks"))) then
+    [v]
+  else
+    v
+  end;
+
+def normalize_hooks_block(h):
+  if (h | type) == "object" then
+    (h | to_entries | map({key, value: normalize_event_value(.value)}) | from_entries)
+  else
+    h
+  end;
+
+def normalize_root(root):
+  if (root | type) == "object" and (root | has("hooks")) then
+    root + {hooks: normalize_hooks_block(root.hooks)}
+  else
+    root
+  end;
+
 def has_matcher_hooks(arr):
   (arr | length) > 0 and
   (arr | all(type == "object" and (.matcher? != null) and (.hooks? != null)));
@@ -140,7 +168,7 @@ def deep_merge_with_hooks(base; overlay):
     overlay
   end;
 
-deep_merge_with_hooks(.[0]; .[1])
+deep_merge_with_hooks(normalize_root(.[0]); normalize_root(.[1]))
 ' "$dst" "$src" > "$tmp"; then
       echo "  error: jq merge failed; restoring from backup"
       cp "$bak" "$dst"
