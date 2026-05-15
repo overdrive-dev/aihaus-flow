@@ -262,10 +262,21 @@ install_user_global_skills() {
 
     # Drop .aihaus-managed marker inside the skill directory (R1 defense, I-02).
     # Content: two lines — managed_by + source path (ADR-260504-A §6.3).
+    # Best-effort write via temp-file + cp: Windows junctions have a brief
+    # FS-cache delay where direct bash `> path` redirects fail with bash
+    # error noise; cp on the same path fails silently and is catchable via
+    # `||`. Retry once after 0.5s; next install/update re-attempts on miss.
+    _aihaus_marker_tmp="$(mktemp 2>/dev/null)" || _aihaus_marker_tmp="/tmp/.aihaus-marker.$$"
     {
       printf 'managed_by=aihaus\n'
       printf 'source=%s\n' "${skill_dir}"
-    } > "${target}/.aihaus-managed"
+    } > "${_aihaus_marker_tmp}"
+    cp "${_aihaus_marker_tmp}" "${target}/.aihaus-managed" 2>/dev/null || {
+      sleep 0.5 || true
+      cp "${_aihaus_marker_tmp}" "${target}/.aihaus-managed" 2>/dev/null || \
+        echo "  warn: marker write skipped (junction FS-cache; non-fatal)" >&2
+    }
+    rm -f "${_aihaus_marker_tmp}"
 
     echo "  user-global: ${target}"
     installed_count=$((installed_count + 1))

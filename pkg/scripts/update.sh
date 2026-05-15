@@ -425,11 +425,22 @@ _refresh_user_global_skills() {
           cp -R "${pkg_skill_dir}" "${target_dir}"
         fi
       fi
-      # Re-drop .aihaus-managed marker (symlink target may have moved; always write).
+      # Re-drop .aihaus-managed marker via temp-file + cp (avoids bash
+      # redirect error noise when Windows junction FS-cache hasn't synced
+      # yet; cp failure is silent and catchable; retry once after 0.5s;
+      # next update re-attempts if both retries fail). See M041/dogfood.
+      local _marker_tmp
+      _marker_tmp="$(mktemp 2>/dev/null)" || _marker_tmp="/tmp/.aihaus-marker.$$"
       {
         printf 'managed_by=aihaus\n'
         printf 'source=%s\n' "${pkg_skill_dir}"
-      } > "${target_dir}/.aihaus-managed"
+      } > "${_marker_tmp}"
+      cp "${_marker_tmp}" "${target_dir}/.aihaus-managed" 2>/dev/null || {
+        sleep 0.5 || true
+        cp "${_marker_tmp}" "${target_dir}/.aihaus-managed" 2>/dev/null || \
+          echo "  warn: marker write skipped for ${skill_name} (junction FS-cache; non-fatal)" >&2
+      }
+      rm -f "${_marker_tmp}"
       echo "  user-global refreshed (link): ${skill_name}"
     fi
     refreshed_count=$((refreshed_count + 1))
@@ -463,10 +474,19 @@ _refresh_user_global_skills() {
       fi
     fi
 
+    # Best-effort marker write via temp-file + cp (see Pass 1 above).
+    local _marker_tmp
+    _marker_tmp="$(mktemp 2>/dev/null)" || _marker_tmp="/tmp/.aihaus-marker.$$"
     {
       printf 'managed_by=aihaus\n'
       printf 'source=%s\n' "${pkg_skill_dir}"
-    } > "${target_dir}/.aihaus-managed"
+    } > "${_marker_tmp}"
+    cp "${_marker_tmp}" "${target_dir}/.aihaus-managed" 2>/dev/null || {
+      sleep 0.5 || true
+      cp "${_marker_tmp}" "${target_dir}/.aihaus-managed" 2>/dev/null || \
+        echo "  warn: marker write skipped for ${skill_name} (junction FS-cache; non-fatal)" >&2
+    }
+    rm -f "${_marker_tmp}"
 
     echo "  user-global new: ${skill_name}"
     refreshed_count=$((refreshed_count + 1))
