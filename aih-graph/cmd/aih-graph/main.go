@@ -493,22 +493,23 @@ func runEmbedPipeline(
 func runQuery(args []string) int {
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
 	dbPath := fs.String("db", "aih-graph.db", "path to SQLite database")
-	bfs := fs.Bool("bfs", false, "structural BFS query")
-	semantic := fs.Bool("semantic", false, "vector similarity (cosine) ranking")
+	bfs := fs.Bool("bfs", false, "structural BFS query (default if no other mode set)")
+	semantic := fs.Bool("semantic", false, "vector similarity (cosine) ranking — pure KNN")
+	hybrid := fs.Bool("hybrid", false, "hybrid mode: KNN top-K + 1-hop edge expansion per match")
 	depth := fs.Int("depth", 1, "BFS depth (hops outward from root)")
-	typ := fs.String("type", "", "restrict root match (BFS) or candidate type (semantic) to one of: Decision|Milestone|Story|Agent|Hook|Skill")
-	topK := fs.Int("top", 10, "semantic: number of top matches to return")
-	provider := fs.String("embed-provider", "", "semantic: embedding provider (voyage|fake; default: derive from stored embedding_model)")
+	typ := fs.String("type", "", "restrict root match (BFS) or candidate type (semantic/hybrid) to one of: Decision|Milestone|Story|Agent|Hook|Skill")
+	topK := fs.Int("top", 10, "semantic/hybrid: number of top matches to return")
+	provider := fs.String("embed-provider", "", "semantic/hybrid: embedding provider (voyage|fake; default: derive from stored embedding_model)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "query: <identifier-or-text> required")
-		fmt.Fprintln(os.Stderr, "usage: aih-graph query [--bfs|--semantic] [--type T] [--depth N] [--top K] [--db PATH] <identifier-or-text>")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph query [--bfs|--semantic|--hybrid] [--type T] [--depth N] [--top K] [--db PATH] <identifier-or-text>")
 		return 2
 	}
-	// Default mode: bfs unless --semantic explicitly set.
-	if !*semantic && !*bfs {
+	// Default mode: bfs unless --semantic or --hybrid explicitly set.
+	if !*semantic && !*bfs && !*hybrid {
 		*bfs = true
 	}
 
@@ -519,6 +520,9 @@ func runQuery(args []string) int {
 	}
 	defer db.Close()
 
+	if *hybrid {
+		return runHybrid(db, fs.Arg(0), *typ, *topK, *provider)
+	}
 	if *semantic {
 		return runSemantic(db, fs.Arg(0), *typ, *topK, *provider)
 	}
@@ -678,6 +682,94 @@ func runUninstall(args []string) int {
 	fmt.Println("  aih-graph uninstall --purge          # delete ALL state")
 	fmt.Println("  aih-graph uninstall <repo-path>      # delete one repo's .db")
 	return 0
+}
+
+// runHybrid executes a --hybrid query: KNN ranking followed by 1-hop edge
+// expansion per top match. Output groups top matches with their immediate
+// neighbors, giving callers structural context around each semantic hit.
+func runHybrid(db *storage.DB, queryText, typeFilter string, topK int, providerName string) int {
+	provider, err := resolveProvider(db, providerName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: %v\n", err)
+		return 1
+	}
+	queryVec, err := provider.Embed(queryText)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: embed: %v\n", err)
+		return 1
+	}
+	rows, err := db.IterateEmbeddings(typeFilter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
+		return 1
+	}
+	if len(rows) == 0 {
+		fmt.Fprintln(os.Stderr, "query: no embeddings stored (run `aih-graph build --embed-provider P` first)")
+		return 1
+	}
+	candidates := make([]embed.Candidate, 0, len(rows))
+	idMap := map[int64]struct{ typ, identifier string }{}
+	for _, r := range rows {
+		candidates = append(candidates, embed.Candidate{
+			NodeID:    r.NodeID,
+			Embedding: embed.DecodeVector(r.Embedding),
+		})
+		idMap[r.NodeID] = struct{ typ, identifier string }{r.Type, r.Identifier}
+	}
+	matches := embed.TopK(queryVec, candidates, topK)
+	if len(matches) == 0 {
+		fmt.Fprintln(os.Stderr, "query: no matches")
+		return 1
+	}
+	eng := query.New(db.SQL())
+	for _, m := range matches {
+		meta := idMap[m.NodeID]
+		node, err := eng.GetByIdentifier(meta.typ, meta.identifier)
+		title := ""
+		if err == nil {
+			title = titleFromProperties(node.Properties)
+		}
+		if len(title) > 70 {
+			title = title[:67] + "..."
+		}
+		fmt.Printf("[s=%.3f] %-10s %-40s %s\n", m.Score, meta.typ, meta.identifier, title)
+		neighbors, err := eng.LoadNeighbors(m.NodeID, 5)
+		if err != nil {
+			continue
+		}
+		for _, n := range neighbors {
+			nTitle := titleFromProperties(n.Properties)
+			if len(nTitle) > 60 {
+				nTitle = nTitle[:57] + "..."
+			}
+			fmt.Printf("         → %-10s %-40s %s\n", n.Type, n.Identifier, nTitle)
+		}
+	}
+	return 0
+}
+
+// resolveProvider picks an embed.Provider: explicit name wins; else detect
+// from stored embedding_model (first non-empty row); else default to fake.
+func resolveProvider(db *storage.DB, providerName string) (embed.Provider, error) {
+	if providerName == "" {
+		rows, err := db.IterateEmbeddings("")
+		if err == nil && len(rows) > 0 {
+			var model sql.NullString
+			_ = db.SQL().QueryRow(
+				"SELECT embedding_model FROM nodes WHERE id = ?", rows[0].NodeID,
+			).Scan(&model)
+			if model.String == "fake-sha256" {
+				providerName = "fake"
+			} else if model.String != "" {
+				providerName = "voyage"
+			} else {
+				providerName = "fake"
+			}
+		} else {
+			providerName = "fake"
+		}
+	}
+	return buildEmbedProvider(providerName)
 }
 
 func titleFromProperties(p map[string]any) string {

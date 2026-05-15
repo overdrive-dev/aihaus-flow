@@ -106,6 +106,52 @@ type BFSResult struct {
 	Path     []string // identifiers traversed from root (inclusive)
 }
 
+// HybridResult is one result from the hybrid mode: a top-K vector match plus
+// its 1-hop edge expansion. Score is the cosine similarity that earned the
+// node entry; Neighbors are the directly-connected nodes via edges.
+type HybridResult struct {
+	Node      Node
+	Score     float32 // cosine similarity to the query embedding
+	Neighbors []Node  // 1-hop neighbors via edges (both directions)
+}
+
+// LoadNeighbors returns nodes directly connected to nodeID by an edge in either
+// direction. Limit caps the result; pass 0 for no cap.
+func (e *Engine) LoadNeighbors(nodeID int64, limit int) ([]Node, error) {
+	q := `
+		SELECT DISTINCT n.id, n.type, n.identifier, n.properties
+		FROM edges e
+		JOIN nodes n ON (
+			(e.from_id = ? AND n.id = e.to_id) OR
+			(e.to_id   = ? AND n.id = e.from_id)
+		)
+		WHERE n.id != ?`
+	if limit > 0 {
+		q += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := e.sql.Query(q, nodeID, nodeID, nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("load neighbors of %d: %w", nodeID, err)
+	}
+	defer rows.Close()
+
+	var out []Node
+	for rows.Next() {
+		var (
+			n          Node
+			propsBytes []byte
+		)
+		if err := rows.Scan(&n.ID, &n.Type, &n.Identifier, &propsBytes); err != nil {
+			return nil, err
+		}
+		if len(propsBytes) > 0 {
+			_ = json.Unmarshal(propsBytes, &n.Properties)
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
 // BFS expands from root identifier outward up to maxDepth hops, following
 // edges in either direction. Returns nodes ordered by (distance, type,
 // identifier).
