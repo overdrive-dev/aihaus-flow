@@ -115,6 +115,15 @@ When the user's request mentions visible UI text (buttons, labels, messages, toa
 
 Only mark "not found" when all 3 passes return zero. Example: `'Exibindo N profissionais'` → grep 'profissional' (pass 1, zero) AND template-literal grep for 'profission' (pass 3 → finds ProfessionalsTable.tsx:676 template expression).
 
+## Memory Lookup (M039+, optional)
+
+If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
+or at `~/.aihaus/bin/`, surface relevant aihaus memory before analyzing assumptions:
+- `aih-graph query --semantic "<your question>"` — top-K Decisions/Milestones/Skills/Hooks/Agents by cosine similarity
+- `aih-graph query --hybrid "<your question>"` — same + 1-hop edge expansion (parent ADRs, related Stories)
+- `aih-graph query --bfs ADR-XXX` — structural traversal from a known node
+
+Skip silently when binary absent — aih-graph is supplemental, never blocking.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

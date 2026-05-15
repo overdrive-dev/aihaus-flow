@@ -103,6 +103,15 @@ After completing work, if you discovered a reusable pattern:
 - Do not load the full codebase — pass file paths to spawned agents
 - Context budget: manage loop state only
 
+## Memory Lookup (M039+, optional)
+
+If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
+or at `~/.aihaus/bin/`, surface relevant aihaus memory before managing the debug session:
+- `aih-graph query --semantic "<your question>"` — top-K Decisions/Milestones/Skills/Hooks/Agents by cosine similarity
+- `aih-graph query --hybrid "<your question>"` — same + 1-hop edge expansion (parent ADRs, related Stories)
+- `aih-graph query --bfs ADR-XXX` — structural traversal from a known node
+
+Skip silently when binary absent — aih-graph is supplemental, never blocking.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work
