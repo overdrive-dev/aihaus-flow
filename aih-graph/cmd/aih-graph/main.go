@@ -23,6 +23,8 @@ import (
 	"sort"
 
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/extract"
+	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/storage"
+	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/types"
 )
 
 const version = "0.1.0-dev"
@@ -64,6 +66,7 @@ func runStub(cmd string) int {
 func runBuild(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
+	dbPath := fs.String("db", "aih-graph.db", "path to SQLite database file (created if missing)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -170,19 +173,125 @@ func runBuild(args []string) int {
 
 	fmt.Println()
 	if *dryRun {
-		fmt.Println("(dry-run: nothing persisted; M034 wires modernc/sqlite storage)")
-	} else {
-		fmt.Println("note: M034 not yet implemented — persistence skipped. Pass --dry-run to suppress this warning.")
+		fmt.Println("(dry-run: nothing persisted)")
+		return 0
 	}
 
-	_ = decisions
-	_ = agents
-	_ = skills
-	_ = hooks
-	_ = milestones
-	_ = stories
+	// M034: persist via modernc/sqlite.
+	db, err := storage.Open(*dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: open db %s: %v\n", *dbPath, err)
+		return 1
+	}
+	defer db.Close()
 
+	persisted := 0
+	for _, d := range decisions {
+		props := map[string]any{
+			"title":     d.Title,
+			"status":    d.Status,
+			"date":      d.Date,
+			"milestone": d.Milestone,
+			"amends":    d.Amends,
+			"body":      d.Body,
+		}
+		if _, err := db.UpsertNode("Decision", d.Identifier, props); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert decision %s: %v\n", d.Identifier, err)
+			return 1
+		}
+		persisted++
+	}
+	for _, a := range agents {
+		if _, err := db.UpsertNode("Agent", a.Name, agentProps(a)); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert agent %s: %v\n", a.Name, err)
+			return 1
+		}
+		persisted++
+	}
+	for _, s := range skills {
+		props := map[string]any{
+			"description":              s.Description,
+			"disable_model_invocation": s.DisableModelInvocation,
+			"allowed_tools":            s.AllowedTools,
+			"argument_hint":            s.ArgumentHint,
+		}
+		if _, err := db.UpsertNode("Skill", s.Name, props); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert skill %s: %v\n", s.Name, err)
+			return 1
+		}
+		persisted++
+	}
+	for _, h := range hooks {
+		props := map[string]any{
+			"path":       h.Path,
+			"purpose":    h.Purpose,
+			"functions":  h.Functions,
+			"size_bytes": h.SizeBytes,
+		}
+		if _, err := db.UpsertNode("Hook", h.Name, props); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert hook %s: %v\n", h.Name, err)
+			return 1
+		}
+		persisted++
+	}
+	for _, m := range milestones {
+		props := map[string]any{
+			"slug":         m.Slug,
+			"status":       m.Status,
+			"phase":        m.Phase,
+			"pause_class":  m.PauseClass,
+			"last_updated": m.LastUpdated,
+		}
+		identifier := m.ID
+		if identifier == "" {
+			identifier = m.Slug
+		}
+		if _, err := db.UpsertNode("Milestone", identifier, props); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert milestone %s: %v\n", identifier, err)
+			return 1
+		}
+		persisted++
+	}
+	for _, s := range stories {
+		props := map[string]any{
+			"milestone_id": s.MilestoneID,
+			"summary":      s.Summary,
+			"status":       s.Status,
+			"owned_files":  s.OwnedFiles,
+		}
+		identifier := s.MilestoneID + "/" + s.ID
+		if _, err := db.UpsertNode("Story", identifier, props); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert story %s: %v\n", identifier, err)
+			return 1
+		}
+		persisted++
+	}
+
+	// Persistence summary.
+	counts, err := db.CountByType()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: count: %v\n", err)
+		return 1
+	}
+	fmt.Printf("Persisted %d nodes to %s\n", persisted, *dbPath)
+	for _, t := range keysSorted(counts) {
+		fmt.Printf("  %s: %d\n", t, counts[t])
+	}
 	return 0
+}
+
+// agentProps reshapes a types.Agent into a properties map for storage.
+func agentProps(a types.Agent) map[string]any {
+	return map[string]any{
+		"tools":                  a.Tools,
+		"model":                  a.Model,
+		"effort":                 a.Effort,
+		"color":                  a.Color,
+		"memory":                 a.Memory,
+		"resumable":              a.Resumable,
+		"checkpoint_granularity": a.CheckpointGranularity,
+		"description":            a.Description,
+	}
 }
 
 func keysSorted(m map[string]int) []string {

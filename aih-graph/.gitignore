@@ -19,3 +19,9 @@ bin/
 *.out
 coverage.out
 coverage.html
+
+# SQLite databases produced by aih-graph build
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
