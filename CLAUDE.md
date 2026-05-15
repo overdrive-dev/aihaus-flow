@@ -324,6 +324,28 @@ lives in ADR-M017-B. Both guards opt-out via `AIHAUS_MERGE_BACK_GUARD=0` /
 `AIHAUS_GIT_ADD_GUARD=0`; L1-L4 opt-out via `AIHAUS_RELEASE_L1=0` / `_L2=0` /
 `AIHAUS_L3_DISABLED=1` / `AIHAUS_REAP_DISABLED=1`.
 
+## Native CC features in use (M043)
+
+Since v0.37.0 / M043, the following native Claude Code primitives are leveraged directly by the aihaus harness — documented here so maintainers don't reinvent what the platform already provides.
+
+**Native features actively in use:**
+- `memory: project` frontmatter on 46 of 48 agents → native subagent persistent memory at `.claude/agent-memory/<name>/MEMORY.md` (auto-injected first 200 lines / 25KB into system prompt). Two agents (`context-curator`, `learning-advisor`) declare `memory: none` by design. Accumulating today for at least `code-reviewer`, `project-analyst`, `verifier`, `assumptions-analyzer`, `brainstorm-synthesizer`, `pattern-mapper` (verified via `ls .claude/agent-memory/`).
+- `isolation: worktree` frontmatter on 5 agents (`implementer`, `frontend-dev`, `code-fixer`, `executor`, `nyquist-auditor`) → native worktree isolation; each subagent gets a temp worktree under `.claude/worktrees/`, auto-cleaned if no changes.
+- `effort: <tier>` frontmatter on all 48 agents → native CC field; the M008 cohort taxonomy (`:planner-binding`, `:planner`, `:doer`, `:verifier`, `:adversarial`) composes byte-identically with native semantics. Smoke Check 6 enforces.
+- `.worktreeinclude` at repo root (M043/S1) → native gitignore-syntax file that copies untracked sidecars (`.aihaus/.effort`, `.aihaus/.install-source`, `.aihaus/.calibration`, `.aihaus/auto.sh`, `.aihaus/auto.ps1`) into every worktree, so isolated agents resolve relative sidecar paths correctly.
+
+**Enabled but NOT yet in use (reserved for forward-compat):**
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` ships in `pkg/.aihaus/templates/settings.local.json:env` but **zero skills currently invoke Agent Teams primitives** (`SendMessage`, `teammate_name`, `task_subject`). The env flag is reserved for M044+ candidates: `/aih-brainstorm --team` panel rounds (BRIEF B3) is the most likely first consumer. Honest framing: this is **enabled, not active**.
+
+**Safety overlays that extend (not replace) native primitives:**
+- `pkg/.aihaus/hooks/merge-back.sh` (M017 / ADR-M017-A) — extends native worktree cleanup with per-file Owned-Files refuse-on-spill semantics that native cleanup lacks.
+- `pkg/.aihaus/hooks/autonomy-guard.sh` — extends native subagent permission inheritance with policy enforcement (M005 + M011 + M023 + M025 + M027 composition; 40 active patterns). Native permission inheritance is capability-level; our guard is policy-level.
+- `pkg/.aihaus/hooks/context-inject.sh` (M013/S05, v0.16.0) — runs on `SubagentStart` (wired at `settings.local.json:158-169`) and injects `decisions.md` + `knowledge.md` + `project.md` + `MEMORY.md` as HIGH-tier required pre-read into the subagent's `additionalContext`. Per-cohort token budgets at `pkg/.aihaus/hooks/context-budget.conf` (verified values: `planner-binding=4000`, `adversarial-scout=3000`, `adversarial-review=3000` — note the latter two predate the M027 cohort fork and still need migration to the merged `:adversarial` entry; tracked as M044+ defect). 5-minute memoization cache at `.claude/audit/context-inject.cache`.
+
+**Deferred to M044+ (research-gated):**
+- Native `skills:` frontmatter field for skill-content preload — relationship with `context-inject.sh` is unresolved (both inject content at startup; budget/cache semantics may conflict). Pre-flight: WebFetch sub-agents doc, write evidence to RESEARCH.md, canary-nonce test before any bulk-migration of agent frontmatter.
+- aih-graph indexing of `.claude/agent-memory/*/MEMORY.md` as a new node type for cross-agent semantic query (BRIEF Turn 3 future scope).
+
 ## Installer Behavior
 
 The install scripts create symlinks (Unix) or directory junctions (Windows) from `.claude/{skills,agents,hooks}` to `.aihaus/{skills,agents,hooks}` in the target repo. The `--copy` flag forces file copies instead. Settings are merged (not overwritten) using `jq` or Python as a fallback.
