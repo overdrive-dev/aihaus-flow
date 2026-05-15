@@ -93,6 +93,15 @@ If after thorough analysis you find no broken connections, you MUST:
 - Check the HAPPY PATH first, then edge cases
 - Be specific: what's connected, what's not, what's missing
 
+## Memory Lookup (M039+, optional)
+
+If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
+or at `~/.aihaus/bin/`, surface relevant aihaus memory before checking integration:
+- `aih-graph query --semantic "<your question>"` — top-K Decisions/Milestones/Skills/Hooks/Agents by cosine similarity
+- `aih-graph query --hybrid "<your question>"` — same + 1-hop edge expansion (parent ADRs, related Stories)
+- `aih-graph query --bfs ADR-XXX` — structural traversal from a known node
+
+Skip silently when binary absent — aih-graph is supplemental, never blocking.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work
