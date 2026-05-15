@@ -15,8 +15,10 @@
 #
 # Env vars:
 #   AIH_GRAPH_BIN       Explicit binary path (skip discovery)
-#   AIH_GRAPH_PROVIDER  Embedding provider (voyage|fake|none; default: none —
-#                       structural only)
+#   AIH_GRAPH_PROVIDER  Search/embedding provider. Default unset → uses
+#                       binary default (bm25 — pure-Go offline FTS5). Pass
+#                       fake|none for tests; opt-in external providers are
+#                       binary-supported but not advertised (ADR-260516-A).
 #   AIH_GRAPH_DB        Override .db path (default: aih-graph manages via XDG)
 #   AIH_GRAPH_QUIET     If set non-empty, suppress per-line output.
 

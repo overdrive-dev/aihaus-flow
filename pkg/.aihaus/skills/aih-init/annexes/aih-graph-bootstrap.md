@@ -23,7 +23,7 @@ bash "$AIHAUS_HOME/pkg/scripts/install-aih-graph-binary.sh"
 ```
 Where `$AIHAUS_HOME` is read from `~/.aihaus/.install-source`. Non-fatal
 (soft-fail) on network error, platform-not-supported, or missing source
-script. On failure, print one informational line and proceed to Step 17:
+script. On failure, print one informational line and proceed to Step 16:
 > `aih-graph: binary not found and download failed — memory engine
 > disabled (structural BFS will still work post-install)`
 
@@ -49,21 +49,16 @@ Capture stdout. Print a single-line outcome on success:
 On non-zero exit, print warning and continue (non-fatal):
 > `aih-graph: build failed (exit C) — memory engine partially disabled`
 
-## Step 16. (Optional) Voyage upgrade hint
-
-If `VOYAGE_API_KEY` is NOT set in the environment, print one informational
-line (NOT a prompt, NOT a blocker):
-> `Tip: set VOYAGE_API_KEY env var for semantic (paraphrase-tolerant)
-> queries. Sign up at https://www.voyageai.com (~$0.01/month for typical
-> use). Re-run: aih-graph build --embed-provider voyage --accept-all-repos .`
-
-Skip silently if `VOYAGE_API_KEY` IS set.
-
-## Step 17. Phase 3 completion summary
+## Step 16. Phase 3 completion summary
 
 Print one final summary line that combines Phase 2 + Phase 3 outcomes:
 > `/aih-init complete — project.md ready + aih-graph memory engine
 > indexed (or skipped per binary availability).`
+
+No external embedding provider is suggested. BM25/FTS5 is pure-Go offline
+and is the only documented surface (per ADR-260516-A). Optional external
+providers remain available as opt-in via `--embed-provider <name>` flags
+on the binary, but `/aih-init` does not advertise them.
 
 ## Soft-skip envelope
 

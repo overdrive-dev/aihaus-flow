@@ -2,7 +2,7 @@
 
 Standalone Go binary memory engine for [aihaus](https://github.com/overdrive-dev/aihaus-flow).
 
-**Status:** v0.1.0-dev (foundation scaffold; M032 of aihaus). Build implementation lands across M033–M038.
+**Status:** v0.1.3 (shipped M033–M042; markdown extraction + modernc/sqlite storage + 3 query modes + BM25/FTS5 lexical search + 4-platform binary release).
 
 ## What this is
 
@@ -11,8 +11,8 @@ aih-graph is the **memory + structural retrieval engine** aihaus uses as a manda
 This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
 - **Markdown-only extraction** for 6 aihaus typed nodes (Decision/Milestone/Story/Agent/Hook/Skill) — per ADR-260515-C-amend-02
 - **modernc.org/sqlite storage** (pure-Go, no CGO) — per ADR-260515-B-amend-02
-- **Vector embeddings tier-1** with Voyage AI default + local ONNX fallback — per ADR-260515-E-amend-02
-- **Three query modes:** structural BFS, vector similarity (`--semantic`), hybrid SQL+vec
+- **Lexical search via BM25/FTS5** (pure-Go offline, zero API keys, zero model downloads) — default per ADR-260515-B-amend-02 + ADR-260516-A. Optional external embedding providers are wired but **not advertised** by aihaus skills.
+- **Three query modes:** structural BFS, vector similarity (`--semantic`), hybrid
 - **Pure-Go single binary** — zero CGO requirement, works on any platform Go supports
 
 Out of scope for v0.1 (use graphify in parallel if needed):
@@ -22,20 +22,24 @@ Out of scope for v0.1 (use graphify in parallel if needed):
 - Clustering (Leiden community detection)
 - HNSW/IVF vector indexes (brute-force only; sufficient for target repos up to ~500k nodes)
 - LLM re-ranking (`--rerank` deferred to v0.2+)
+- Local-ONNX embedding provider — deferred indefinitely (would re-introduce CGO; pure-Go transformer inference not production-grade today)
 
 ## Status
 
-**M032 — foundation scaffold (current).** Module init + CLI skeleton + LICENSE + README. Zero functional implementation yet.
+**v0.1.1 — shipped.** Markdown extraction across 6 aihaus types + modernc/sqlite storage + 3 query modes + BM25/FTS5 lexical search + 4-platform binary release.
 
-Subsequent milestones build the v0.1 capability:
-- M033: AST extraction across 5 langs
-- M034: Node/Edge data model + JSONL storage
-- M035: BFS query + typed accessor structs
+Shipped milestone chain:
+- M033: Markdown extraction (6 type parsers)
+- M034: modernc/sqlite storage
+- M035: Query (BFS/semantic/hybrid) + typed accessors + embedding pipeline
 - M036: Privacy gates (XDG storage, isolation, consent, purge, NDA opt-out)
 - M037: CI cross-compile (4 platforms)
 - M038: v0.1.0 release
-- M039: Aihaus integration (install.sh, hooks, agent prompts)
+- M039: aihaus integration (install.sh, hooks, agent prompts)
 - M040: Smoke checks + aihaus v0.35.0 release
+- M041: BM25/FTS5 lexical search default; one-shot install; tag v0.1.1
+- M041 dogfood: query --db default + hybrid BM25 routing + var-version ldflag fix; tag v0.1.2
+- M042: Voyage demotion from advertised surfaces; CLI/PRD/README reconciliation; tag v0.1.3
 
 ## Specs
 
