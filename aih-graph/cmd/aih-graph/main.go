@@ -26,6 +26,7 @@ import (
 
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/embed"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/extract"
+	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/privacy"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/query"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/storage"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/types"
@@ -70,14 +71,15 @@ func runStub(cmd string) int {
 func runBuild(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
-	dbPath := fs.String("db", "aih-graph.db", "path to SQLite database file (created if missing)")
+	dbPath := fs.String("db", "", "path to SQLite database file (default: XDG state dir, per-repo isolated)")
 	embedProvider := fs.String("embed-provider", "", "embedding provider: voyage|fake|none (default none — skip embeddings)")
+	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate (auto-creates .aih-graph-consent marker)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "build: <repo-path> required")
-		fmt.Fprintln(os.Stderr, "usage: aih-graph build <repo-path> [--dry-run]")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph build [--db PATH] [--embed-provider P] [--accept-all-repos] [--dry-run] <repo-path>")
 		return 2
 	}
 
@@ -88,7 +90,38 @@ func runBuild(args []string) int {
 		return 1
 	}
 
+	// Consent gate (ADR-260515-A privacy contract).
+	consented, err := privacy.HasConsent(repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: consent check: %v\n", err)
+		return 1
+	}
+	if !consented {
+		if !*acceptAll {
+			markerPath, _ := privacy.ConsentMarkerPath(repoPath)
+			fmt.Fprintf(os.Stderr, "build: refusing — no consent marker at %s\n", markerPath)
+			fmt.Fprintln(os.Stderr, "       create the marker (`touch .aih-graph-consent` at repo root) OR pass --accept-all-repos")
+			return 2
+		}
+		if err := privacy.CreateConsent(repoPath); err != nil {
+			fmt.Fprintf(os.Stderr, "build: create consent marker: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "build: created consent marker (--accept-all-repos)\n")
+	}
+
+	// Resolve DB path (XDG isolation if not explicitly set).
+	if *dbPath == "" {
+		p, err := privacy.DefaultDBPath(repoPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "build: resolve db path: %v\n", err)
+			return 1
+		}
+		*dbPath = p
+	}
+
 	fmt.Printf("aih-graph build %s\n", repoPath)
+	fmt.Printf("  db: %s\n", *dbPath)
 
 	// Decision (ADR) extraction.
 	decisions, err := extract.ParseDecisionsFile(decisionsPath)
@@ -593,6 +626,60 @@ func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, provide
 	return 0
 }
 
+// runUninstall implements the M036 uninstall subcommand. Modes:
+//
+//	--purge        delete ALL aih-graph state (entire XDG state root)
+//	<repo-path>    delete the .db for that specific repo only
+//	(no args)      print where state lives + exit 0
+func runUninstall(args []string) int {
+	fs := flag.NewFlagSet("uninstall", flag.ExitOnError)
+	purgeAll := fs.Bool("purge", false, "delete ALL aih-graph state (every repo)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	if *purgeAll {
+		removed, err := privacy.PurgeAll()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "uninstall: %v\n", err)
+			return 1
+		}
+		if removed == "" {
+			fmt.Println("uninstall: no aih-graph state to remove")
+		} else {
+			fmt.Printf("uninstall: removed all state at %s\n", removed)
+		}
+		return 0
+	}
+
+	if fs.NArg() >= 1 {
+		repoPath := fs.Arg(0)
+		removed, err := privacy.PurgeRepo(repoPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "uninstall: %v\n", err)
+			return 1
+		}
+		if removed == "" {
+			fmt.Printf("uninstall: no .db found for %s (nothing to remove)\n", repoPath)
+		} else {
+			fmt.Printf("uninstall: removed %s\n", removed)
+		}
+		return 0
+	}
+
+	// No args: print state location.
+	root, err := privacy.XDGStateRoot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "uninstall: %v\n", err)
+		return 1
+	}
+	fmt.Printf("aih-graph state root: %s\n", root)
+	fmt.Println("usage:")
+	fmt.Println("  aih-graph uninstall --purge          # delete ALL state")
+	fmt.Println("  aih-graph uninstall <repo-path>      # delete one repo's .db")
+	return 0
+}
+
 func titleFromProperties(p map[string]any) string {
 	if t, ok := p["title"].(string); ok && t != "" {
 		return t
@@ -652,7 +739,9 @@ func main() {
 		os.Exit(runBuild(args))
 	case "query":
 		os.Exit(runQuery(args))
-	case "save-result", "uninstall":
+	case "uninstall":
+		os.Exit(runUninstall(args))
+	case "save-result":
 		os.Exit(runStub(cmd))
 	default:
 		fmt.Fprintf(os.Stderr, "aih-graph: unknown command %q\n\n", cmd)
