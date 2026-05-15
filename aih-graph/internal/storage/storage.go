@@ -91,6 +91,13 @@ func (d *DB) Close() error {
 	return d.sql.Close()
 }
 
+// SQL exposes the underlying *sql.DB for read-side packages (internal/query/)
+// that need to issue arbitrary read queries without re-establishing a
+// connection. Avoids import cycle between storage and query packages.
+func (d *DB) SQL() *sql.DB {
+	return d.sql
+}
+
 func (d *DB) applySchema() error {
 	if _, err := d.sql.Exec(schemaSQL); err != nil {
 		return fmt.Errorf("apply schema: %w", err)

@@ -91,6 +91,11 @@ func ParseDecisionsFile(path string) ([]types.Decision, error) {
 	return decisions, nil
 }
 
+// adrIdentRe matches the canonical ADR identifier shape at the start of a
+// string, used to strip trailing prose from `**Amends:**` values like
+// `ADR-260515-B (parent: ...)` → `ADR-260515-B`.
+var adrIdentRe = regexp.MustCompile(`^(ADR-[A-Za-z0-9\-]+)`)
+
 // extractFields populates Status / Date / Milestone / Amends on d by scanning
 // its Body for the canonical bold-field lines.
 func extractFields(d *types.Decision) {
@@ -104,6 +109,12 @@ func extractFields(d *types.Decision) {
 		d.Milestone = strings.TrimSpace(m[1])
 	}
 	if m := amendsFieldRe.FindStringSubmatch(d.Body); m != nil {
-		d.Amends = strings.TrimSpace(m[1])
+		raw := strings.TrimSpace(m[1])
+		// Strip trailing prose: "ADR-X (parent: ...)" → "ADR-X"
+		if ident := adrIdentRe.FindString(raw); ident != "" {
+			d.Amends = ident
+		} else {
+			d.Amends = raw
+		}
 	}
 }

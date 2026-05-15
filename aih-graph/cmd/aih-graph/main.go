@@ -16,6 +16,8 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -23,6 +25,7 @@ import (
 	"sort"
 
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/extract"
+	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/query"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/storage"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/types"
 )
@@ -267,6 +270,44 @@ func runBuild(args []string) int {
 		persisted++
 	}
 
+	// Edge derivation: Decision.Amends → Decision-[amends]→Decision;
+	// Story.MilestoneID → Story-[in_milestone]→Milestone. More edge types
+	// (Hook-[invoked_by]→Skill, Agent-[spawned_by]→Skill, ...) land in M035.
+	edgesAdded := 0
+	for _, d := range decisions {
+		if d.Amends == "" {
+			continue
+		}
+		fromID, err := db.LookupNodeID("Decision", d.Identifier)
+		if err != nil {
+			continue
+		}
+		// Amends value may be "ADR-260515-C" or longer prose; try direct lookup.
+		toID, err := db.LookupNodeID("Decision", d.Amends)
+		if err != nil {
+			continue
+		}
+		if err := db.UpsertEdge(fromID, toID, "amends", nil); err == nil {
+			edgesAdded++
+		}
+	}
+	for _, s := range stories {
+		if s.MilestoneID == "" || s.ID == "" {
+			continue
+		}
+		fromID, err := db.LookupNodeID("Story", s.MilestoneID+"/"+s.ID)
+		if err != nil {
+			continue
+		}
+		toID, err := db.LookupNodeID("Milestone", s.MilestoneID)
+		if err != nil {
+			continue
+		}
+		if err := db.UpsertEdge(fromID, toID, "in_milestone", nil); err == nil {
+			edgesAdded++
+		}
+	}
+
 	// Persistence summary.
 	counts, err := db.CountByType()
 	if err != nil {
@@ -276,6 +317,71 @@ func runBuild(args []string) int {
 	fmt.Printf("Persisted %d nodes to %s\n", persisted, *dbPath)
 	for _, t := range keysSorted(counts) {
 		fmt.Printf("  %s: %d\n", t, counts[t])
+	}
+	if edgesAdded > 0 {
+		edgeCounts, _ := db.CountEdges()
+		fmt.Printf("Edges: %d new this run\n", edgesAdded)
+		for _, t := range keysSorted(edgeCounts) {
+			fmt.Printf("  %s: %d\n", t, edgeCounts[t])
+		}
+	}
+	return 0
+}
+
+// runQuery implements the M035 query subcommand. Initial release supports
+// BFS (structural) mode only; --semantic / hybrid require embedding pipeline
+// (deferred to subsequent M035 commit).
+func runQuery(args []string) int {
+	fs := flag.NewFlagSet("query", flag.ExitOnError)
+	dbPath := fs.String("db", "aih-graph.db", "path to SQLite database")
+	bfs := fs.Bool("bfs", true, "structural BFS query (default; only mode implemented)")
+	semantic := fs.Bool("semantic", false, "vector similarity (NOT YET IMPLEMENTED)")
+	depth := fs.Int("depth", 1, "BFS depth (hops outward from root)")
+	typ := fs.String("type", "", "restrict root match to a node type (Decision|Milestone|Story|Agent|Hook|Skill)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *semantic {
+		fmt.Fprintln(os.Stderr, "query: --semantic not yet implemented (M035 embedding pipeline pending)")
+		return 1
+	}
+	_ = bfs
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "query: <identifier> required")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph query [--type T] [--depth N] [--db PATH] <identifier>")
+		return 2
+	}
+	identifier := fs.Arg(0)
+
+	db, err := storage.Open(*dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+
+	eng := query.New(db.SQL())
+	results, err := eng.BFS(*typ, identifier, *depth)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			fmt.Fprintf(os.Stderr, "query: no node matches identifier %q (type filter=%q)\n", identifier, *typ)
+			return 1
+		}
+		fmt.Fprintf(os.Stderr, "query: %v\n", err)
+		return 1
+	}
+
+	for _, r := range results {
+		title := ""
+		if t, ok := r.Node.Properties["title"].(string); ok {
+			title = t
+		} else if d, ok := r.Node.Properties["description"].(string); ok {
+			title = d
+		}
+		if len(title) > 80 {
+			title = title[:77] + "..."
+		}
+		fmt.Printf("[d=%d] %-10s %-40s %s\n", r.Distance, r.Node.Type, r.Node.Identifier, title)
 	}
 	return 0
 }
@@ -321,7 +427,9 @@ func main() {
 		usage()
 	case "build":
 		os.Exit(runBuild(args))
-	case "query", "save-result", "uninstall":
+	case "query":
+		os.Exit(runQuery(args))
+	case "save-result", "uninstall":
 		os.Exit(runStub(cmd))
 	default:
 		fmt.Fprintf(os.Stderr, "aih-graph: unknown command %q\n\n", cmd)
