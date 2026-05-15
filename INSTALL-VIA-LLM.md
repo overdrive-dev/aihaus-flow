@@ -67,7 +67,13 @@ Run each and report the output:
 3. Settings template merged:
    - Both platforms: confirm `~/.aihaus/.install-source` contains `https://github.com/overdrive-dev/aihaus-flow`.
 
-If ANY checkpoint fails, do NOT proceed — report which one and stop.
+4. Memory engine queryable (run AFTER the user has executed `/aih-init` inside Claude Code on at least one project — skip this checkpoint until then):
+   - Both platforms: `~/.aihaus/bin/aih-graph query --hybrid "decision"` (Windows: `& "$HOME/.aihaus/bin/aih-graph.exe" query --hybrid "decision"`)
+   - Expected: at least one line prefixed with `[s=N.NN]` showing scored result (e.g., `[s=5.42] Decision   ADR-260515-E-amend-02   ...`).
+   - If the output is `no node matches identifier` you used the wrong mode — only `--hybrid`, `--semantic`, or `--bfs` with an exact identifier return results.
+   - If the output is `consent gate: missing .aih-graph-consent` the user hasn't run `/aih-init` yet — that's expected at install time; tell the user to run `/aih-init` and skip this checkpoint.
+
+If ANY checkpoint (1-3) fails, do NOT proceed — report which one and stop. Checkpoint 4 is post-install validation; skip it cleanly if the user hasn't run `/aih-init` yet.
 
 ### Step 4 — Tell the human user what to do next
 

@@ -41,6 +41,48 @@ Shipped milestone chain:
 - M041 dogfood: query --db default + hybrid BM25 routing + var-version ldflag fix; tag v0.1.2
 - M042: Voyage demotion from advertised surfaces; CLI/PRD/README reconciliation; tag v0.1.3
 
+## Verifying the memory engine
+
+After `/aih-init` has built the index for at least one project, you can verify the binary, the DB file, and the query pipeline in three steps.
+
+**1. Binary present and reports version:**
+```
+aih-graph version
+```
+Should print `v0.1.3` (or higher). If the binary is absent: `bash pkg/scripts/install-aih-graph-binary.sh` re-downloads it from GitHub Releases.
+
+**2. DB file exists on disk** (per-repo isolated, XDG-scoped):
+
+| Platform | Path |
+|----------|------|
+| Linux | `$XDG_STATE_HOME/aih-graph/<sha256-hex-16>/graph.db` (default: `~/.local/state/aih-graph/...`) |
+| macOS | `~/Library/Application Support/aih-graph/<sha256-hex-16>/graph.db` |
+| Windows | `%LOCALAPPDATA%\aih-graph\<sha256-hex-16>\graph.db` |
+
+The 16-hex subfolder is the SHA-256 prefix of the absolute repo path — one subfolder per repo. Override the location with the `AIH_GRAPH_HOME` env var.
+
+**3. Query returns scored results:**
+```
+aih-graph query --hybrid "decision"
+```
+A healthy index returns at least one `[s=N.NN]` line, for example:
+```
+[s=5.42] Decision   ADR-260515-E-amend-02   v0.1 forever-scope: vector promoted...
+[s=4.72] Hook       aih-graph-refresh.sh    aih-graph-refresh.sh — refresh...
+```
+
+Use `--semantic` (vector-only, when an embedding provider is configured) or `--bfs <exact-identifier>` (structural lookup) instead of `--hybrid` for narrower queries.
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `no node matches identifier "..."` | Used the default mode (identifier exact-match) on free-text input | Pass `--hybrid` or `--semantic` |
+| `consent gate: missing .aih-graph-consent` | Repo not opted-in to indexing | `aih-graph build --accept-all-repos .` or run `/aih-init` |
+| `database is locked` | Another process writing to the DB | Wait a few seconds and retry |
+| Build prints `0 nodes` | `pkg/.aihaus/decisions.md` empty or repo has no aihaus typed nodes | Verify the repo is an aihaus-managed project (has `pkg/.aihaus/` or `.aihaus/`) |
+| `aih-graph: command not found` | Binary not on PATH and discovery chain failed | Re-run install: `bash pkg/scripts/install-aih-graph-binary.sh` |
+
 ## Specs
 
 Authoritative design package in `pkg/.aihaus/decisions.md`:
