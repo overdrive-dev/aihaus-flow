@@ -61,6 +61,11 @@ CREATE TABLE IF NOT EXISTS schema_meta (
     version     INTEGER PRIMARY KEY,
     applied_at  INTEGER NOT NULL
 );
+
+-- FTS5 contentless virtual table for BM25 lexical search (M041 / ADR-260515-E-amend-04).
+-- rowid is the same int as nodes.id; SaveFTS keeps them in sync explicitly.
+-- BM25 ranking comes free via SQLite's built-in bm25() function.
+CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(text);
 `
 
 const currentSchemaVersion = 1

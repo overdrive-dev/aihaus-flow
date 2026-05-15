@@ -72,7 +72,7 @@ func runBuild(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
 	dbPath := fs.String("db", "", "path to SQLite database file (default: XDG state dir, per-repo isolated)")
-	embedProvider := fs.String("embed-provider", "", "embedding provider: voyage|fake|none (default none — skip embeddings)")
+	embedProvider := fs.String("embed-provider", "bm25", "search provider: bm25|voyage|fake|none (default bm25 — pure-Go offline lexical via FTS5)")
 	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate (auto-creates .aih-graph-consent marker)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -361,8 +361,16 @@ func runBuild(args []string) int {
 		}
 	}
 
-	// Embedding pipeline (opt-in via --embed-provider).
-	if *embedProvider != "" && *embedProvider != "none" {
+	// Search pipeline.
+	switch *embedProvider {
+	case "", "none":
+		// Skip — structural BFS still works without any search index.
+	case "bm25":
+		if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories); err != nil {
+			fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
+			return 1
+		}
+	case "voyage", "fake":
 		provider, err := buildEmbedProvider(*embedProvider)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "build: embed provider: %v\n", err)
@@ -372,8 +380,67 @@ func runBuild(args []string) int {
 			fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
 			return 1
 		}
+	default:
+		fmt.Fprintf(os.Stderr, "build: unknown --embed-provider %q (want bm25|voyage|fake|none)\n", *embedProvider)
+		return 2
 	}
 	return 0
+}
+
+// runBM25Pipeline writes one FTS5 row per node. Per-node text is the same
+// text used for vector embedding providers (same embedTextFor* helpers), so
+// the lexical search is over the same canonical content. SaveFTS is idempotent
+// (delete-then-insert by rowid) so re-runs are safe.
+func runBM25Pipeline(
+	db *storage.DB,
+	decisions []types.Decision,
+	agents []types.Agent,
+	skills []types.Skill,
+	hooks []types.Hook,
+	milestones []types.Milestone,
+	stories []types.Story,
+) error {
+	type unit struct{ typ, identifier, text string }
+	var units []unit
+	for _, d := range decisions {
+		units = append(units, unit{"Decision", d.Identifier, embedTextForDecision(d)})
+	}
+	for _, a := range agents {
+		units = append(units, unit{"Agent", a.Name, embedTextForAgent(a)})
+	}
+	for _, s := range skills {
+		units = append(units, unit{"Skill", s.Name, embedTextForSkill(s)})
+	}
+	for _, h := range hooks {
+		units = append(units, unit{"Hook", h.Name, embedTextForHook(h)})
+	}
+	for _, m := range milestones {
+		id := m.ID
+		if id == "" {
+			id = m.Slug
+		}
+		units = append(units, unit{"Milestone", id, embedTextForMilestone(m)})
+	}
+	for _, s := range stories {
+		units = append(units, unit{"Story", s.MilestoneID + "/" + s.ID, embedTextForStory(s)})
+	}
+
+	indexed, errs := 0, 0
+	for _, u := range units {
+		nodeID, err := db.LookupNodeID(u.typ, u.identifier)
+		if err != nil {
+			errs++
+			continue
+		}
+		if err := db.SaveFTS(nodeID, u.text); err != nil {
+			errs++
+			continue
+		}
+		indexed++
+	}
+	total, _ := db.CountFTS()
+	fmt.Printf("Indexed %d nodes via BM25/FTS5 (%d total rows; %d errors)\n", indexed, total, errs)
+	return nil
 }
 
 // buildEmbedProvider returns a configured embed.Provider by name.
@@ -550,9 +617,19 @@ func runQuery(args []string) int {
 	return 0
 }
 
-// runSemantic executes a --semantic query: embed the query text via the
-// matching provider and KNN-rank stored embeddings by cosine similarity.
+// runSemantic executes a --semantic query: routes to BM25/FTS5 lexical
+// search when provider=bm25 (or auto-detected as default); otherwise embeds
+// the query and KNN-ranks stored vector embeddings by cosine similarity.
 func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, providerName string) int {
+	// Auto-detect: prefer BM25 if FTS5 has rows; else fall back to vector providers.
+	if providerName == "" {
+		if n, _ := db.CountFTS(); n > 0 {
+			providerName = "bm25"
+		}
+	}
+	if providerName == "bm25" {
+		return runSemanticBM25(db, queryText, typeFilter, topK)
+	}
 	// Determine provider. If --embed-provider not passed, detect from stored
 	// rows (first row's embedding_model). Falls back to "fake" if nothing stored.
 	if providerName == "" {
@@ -682,6 +759,80 @@ func runUninstall(args []string) int {
 	fmt.Println("  aih-graph uninstall --purge          # delete ALL state")
 	fmt.Println("  aih-graph uninstall <repo-path>      # delete one repo's .db")
 	return 0
+}
+
+// runSemanticBM25 executes --semantic via FTS5 BM25 lexical ranking.
+// Query syntax follows SQLite FTS5: phrases, OR/AND, prefix*. We pre-process
+// the user query to make it FTS5-safe (escape stray quotes, OR-join terms).
+func runSemanticBM25(db *storage.DB, queryText, typeFilter string, topK int) int {
+	fts5Query := buildFTS5Query(queryText)
+	matches, err := db.QueryFTS5(fts5Query, topK, typeFilter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: bm25: %v\n", err)
+		return 1
+	}
+	if len(matches) == 0 {
+		fmt.Fprintln(os.Stderr, "query: no BM25 matches (try less specific terms or --bfs/--semantic with vector provider)")
+		return 1
+	}
+	eng := query.New(db.SQL())
+	for _, m := range matches {
+		node, err := eng.GetByIdentifier(m.Type, m.Identifier)
+		title := ""
+		if err == nil {
+			title = titleFromProperties(node.Properties)
+		}
+		if len(title) > 80 {
+			title = title[:77] + "..."
+		}
+		// SQLite returns negative BM25; flip sign for human-readable "higher = better".
+		fmt.Printf("[s=%.2f] %-10s %-40s %s\n", -m.Score, m.Type, m.Identifier, title)
+	}
+	return 0
+}
+
+// buildFTS5Query converts free-text user input into a safe FTS5 MATCH expression.
+// Strategy: tokenize on whitespace, drop punctuation-only tokens, join with OR.
+// This is forgiving (no syntax errors) and matches what most search UIs expect.
+func buildFTS5Query(raw string) string {
+	// Strip FTS5 control chars that would cause syntax errors.
+	out := make([]byte, 0, len(raw))
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		switch c {
+		case '"', '\'', '(', ')', ':', '*', '+', '-':
+			out = append(out, ' ')
+		default:
+			out = append(out, c)
+		}
+	}
+	// Split on whitespace, OR-join.
+	var tokens []string
+	current := make([]byte, 0, 32)
+	for _, c := range out {
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			if len(current) > 0 {
+				tokens = append(tokens, string(current))
+				current = current[:0]
+			}
+			continue
+		}
+		current = append(current, c)
+	}
+	if len(current) > 0 {
+		tokens = append(tokens, string(current))
+	}
+	if len(tokens) == 0 {
+		return ""
+	}
+	if len(tokens) == 1 {
+		return tokens[0]
+	}
+	result := tokens[0]
+	for _, t := range tokens[1:] {
+		result += " OR " + t
+	}
+	return result
 }
 
 // runHybrid executes a --hybrid query: KNN ranking followed by 1-hop edge
