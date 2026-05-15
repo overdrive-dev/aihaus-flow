@@ -1,6 +1,9 @@
 # Built binaries
 bin/
 
+# Claude Code hook audit logs (created at runtime; per-machine state)
+.claude/
+
 # Go module cache (not normally committed)
 # vendor/ is intentionally NOT here — if vendoring is adopted, vendor/ stays tracked
 

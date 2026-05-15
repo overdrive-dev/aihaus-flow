@@ -9,18 +9,18 @@ Standalone Go binary memory engine for [aihaus](https://github.com/overdrive-dev
 aih-graph is the **memory + structural retrieval engine** aihaus uses as a mandatory addon. It builds a queryable knowledge graph of aihaus-managed repositories with **first-class ontological types** for aihaus concepts (Decision, Milestone, Story, Agent, Hook, Skill).
 
 This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
-- 6 langs (bash, python, JS/TS, Go, Markdown, PowerShell — per ADR-260515-E-amend-01)
-- AST extraction via tree-sitter
-- **SQLite + sqlite-vec storage** (per ADR-260515-B-amend-01 — single .db file per repo)
-- **Vector embeddings tier-1** (per ADR-260515-E-amend-02 — Voyage AI default + local ONNX fallback)
-- Three query modes: structural BFS, vector similarity (`--semantic`), hybrid SQL+vec
-- 6 first-class typed accessor structs (Decision/Milestone/Story/Agent/Hook/Skill)
+- **Markdown-only extraction** for 6 aihaus typed nodes (Decision/Milestone/Story/Agent/Hook/Skill) — per ADR-260515-C-amend-02
+- **modernc.org/sqlite storage** (pure-Go, no CGO) — per ADR-260515-B-amend-02
+- **Vector embeddings tier-1** with Voyage AI default + local ONNX fallback — per ADR-260515-E-amend-02
+- **Three query modes:** structural BFS, vector similarity (`--semantic`), hybrid SQL+vec
+- **Pure-Go single binary** — zero CGO requirement, works on any platform Go supports
 
-Out of scope (use graphify in parallel if needed):
+Out of scope for v0.1 (use graphify in parallel if needed):
+- AST extraction for code files (Python/JS/Go/bash/PowerShell) — deferred to v0.2+ when CGO ecosystem matures or pure-Go tree-sitter port emerges
+- Symbol/File generic node types for code — paired with above
 - Semantic LLM extraction (paid LLM-driven node/edge extraction — distinct from embeddings)
 - Clustering (Leiden community detection)
-- 24+ additional language grammars
-- HNSW/IVF vector indexes (sqlite-vec brute-force only; sufficient for target repos up to ~1M vectors)
+- HNSW/IVF vector indexes (brute-force only; sufficient for target repos up to ~500k nodes)
 - LLM re-ranking (`--rerank` deferred to v0.2+)
 
 ## Status

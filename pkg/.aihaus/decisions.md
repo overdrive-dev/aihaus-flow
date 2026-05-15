@@ -4651,3 +4651,314 @@ Forever-scope discipline (Contrarian C9 from original brainstorm: "intentionally
 - ADR-260515-A (privacy contract — local-only provider preserves NDA opt-out)
 - User exchange 2026-05-15 (sqlite-vec pivot ratification)
 - Original brainstorm BRIEF.md C9 (contrarian "intentionally narrower forever" — preserved by promoting only vector, not also clustering/re-rank)
+
+---
+
+## ADR-260515-B-amend-02 — Pure-Go substrate: modernc/sqlite + Go-native KNN (M032)
+
+**Status:** Accepted
+**Date:** 2026-05-15
+**Milestone:** M032 (design-audit amendment; implementation M034)
+**Amends:** ADR-260515-B-amend-01 (sqlite-vec pivot from earlier today — C-extension SQLite + sqlite-vec → pure-Go SQLite + roll-own vector KNN)
+
+### Context
+
+ADR-260515-B-amend-01 (4 hours earlier this same date) pivoted from JSONL → SQLite + sqlite-vec. Implementation requires CGO to load `github.com/mattn/go-sqlite3` + sqlite-vec C extension. Empirical session experience proved CGO toolchain on Windows-without-admin is hostile:
+
+- w64devkit gcc 16.1.0 portable: produces `pe-bigobj-x86-64` COFF objects; Go cgo's `debug/pe` parser fails (`optional header has unexpected Magic of 0x20af`). Cannot be disabled (binutils config-time choice).
+- TDM-GCC 10.3.0 NSIS installer: silent install attempts crash with ACCESS_VIOLATION (-1073741819). Likely admin requirement disguised as installer bug.
+- Chocolatey/MSYS2: require admin or interactive elevation.
+- MSVC Build Tools 2022: 1-5GB install, hard admin requirement, hours to install fully.
+
+User stated goal (2026-05-15): "vector memory functioning in agents". Critical insight on re-examination: **100% of aihaus's high-value memory content is markdown** (ADRs, Milestones, Stories, Agents YAML frontmatter, Hook script headers, Skills YAML frontmatter). AST extraction of Python/JS/Go/bash code files is nice-to-have but does NOT serve the stated goal — it's covered for graphify's broader generic use case, not aihaus's specific need.
+
+User decision 2026-05-15 turn ("faz purego entao"): pivot substrate to pure-Go entirely. Drop CGO from v0.1.
+
+### Decision
+
+aih-graph v0.1 ships **pure-Go substrate**:
+
+1. **SQLite driver:** `modernc.org/sqlite` — automated transpilation of SQLite C source to Go, dual-licensed BSD-3-Clause/MIT. Pure-Go, no CGO required. Trade-off: ~2-3x slower than mattn/go-sqlite3 on raw SQLite operations; for aihaus's scale (<500k nodes) imperceptible.
+
+2. **Vector storage:** BLOB column `embedding` in `nodes` table (or separate `node_embeddings` table — schema TBD M034). Encoded as `[]float32` little-endian byte array, optionally int8-quantized. No virtual table, no extension load.
+
+3. **KNN search:** Pure-Go implementation in `internal/embed/knn.go` (~100 LOC). Brute-force cosine/L2 over all embeddings. Optional: parallelize via goroutines for repos >50k vectors. SIMD acceleration via `gonum.org/v1/gonum/blas` if useful at scale (deferred to optimization pass; not v0.1 blocker).
+
+4. **Schema (binding contract — updated from B-amend-01):**
+   ```sql
+   CREATE TABLE nodes (
+     id INTEGER PRIMARY KEY,
+     type TEXT NOT NULL,           -- 'Decision' | 'Milestone' | 'Story' | 'Agent' | 'Hook' | 'Skill'
+     identifier TEXT NOT NULL,     -- 'ADR-260514-B' | 'M030' | ...
+     properties JSON NOT NULL,     -- type-specific fields
+     embedding BLOB,               -- nullable; []float32 LE-encoded; v0.1 dim=1024
+     embedding_model TEXT,         -- 'voyage-3' | 'local-minilm' | NULL
+     content_sha TEXT,             -- SHA-256 for change detection
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL,
+     UNIQUE(type, identifier)
+   );
+
+   CREATE TABLE edges (
+     id INTEGER PRIMARY KEY,
+     from_id INTEGER NOT NULL REFERENCES nodes(id),
+     to_id INTEGER NOT NULL REFERENCES nodes(id),
+     type TEXT NOT NULL,
+     properties JSON,
+     created_at INTEGER NOT NULL
+   );
+
+   CREATE INDEX idx_nodes_type ON nodes(type);
+   CREATE INDEX idx_nodes_identifier ON nodes(identifier);
+   CREATE INDEX idx_nodes_embedding_present ON nodes(id) WHERE embedding IS NOT NULL;
+   CREATE INDEX idx_edges_from ON edges(from_id);
+   CREATE INDEX idx_edges_to ON edges(to_id);
+   ```
+
+   Differences vs B-amend-01 schema: no `vec_nodes` virtual table; `embedding` is a regular BLOB column; partial index speeds "find all nodes with embeddings" KNN scan.
+
+5. **Query model unchanged in shape** (3 modes — BFS / semantic / hybrid), but `semantic` and `hybrid` implementation is Go-side rather than SQL `vec_distance()` function. Hybrid pseudocode:
+   ```go
+   // SQL pre-filter (e.g., type='Decision')
+   rows := db.Query("SELECT id, embedding FROM nodes WHERE type=? AND embedding IS NOT NULL", filter)
+   // Go-side cosine ranking
+   ranked := knn.Rank(queryEmb, rows, topK)
+   // Edge expansion via recursive CTE on ranked IDs
+   ```
+
+6. **Public API in `pkg/aihgraph/`** unchanged from B-amend-01. Typed accessor method signatures preserved.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | mattn/go-sqlite3 + sqlite-vec (B-amend-01) | C-speed; native vec_distance() in SQL | Requires CGO toolchain; Windows-without-admin hostile | Empirical CGO toolchain failure on this machine |
+| 2 | **(Chosen)** modernc/sqlite + Go-native KNN | Zero CGO; single Go binary; works anywhere Go runs | 2-3x slower; ~100 LOC roll-our-own | Selected per user 2026-05-15 |
+| 3 | crawshaw.io/sqlite (still CGO) | Different SQLite binding | Same CGO blocker | Same issue |
+| 4 | bbolt + roll-own everything | Pure-Go embedded KV | Loses SQL — write/maintain custom query language | Excess scope; SQL valuable |
+| 5 | BadgerDB + roll-own | Pure-Go KV with TTL | Same as #4 | Same |
+| 6 | JSON files + grep (revert to ADR-260515-B original) | Simplest | Loses query power; no vector | Reverts user-approved progress |
+
+### Rationale
+
+modernc.org/sqlite is the canonical pure-Go SQLite for Go ecosystem. Used by Caddy, Tailscale's `tsweb`, several Anthropic SDK examples. Maturity: stable since 2020, tracks SQLite upstream. Performance: 2-3x slower than CGO mattn/go-sqlite3 on raw ops, irrelevant at aihaus scale (<500k nodes).
+
+Go-native KNN at ~100 LOC is trivial maintenance burden. Cosine similarity = normalized dot product = float32 SIMD-friendly. Brute force on 100k 1024-dim vectors: ~50-200ms in pure Go (faster with gonum/blas SIMD; that's optimization, not v0.1 scope).
+
+Distribution simplification: single Go binary, no platform-specific extension bundle, no `--bundle-sqlite-vec-extension` CI step. M037 CI cross-compile becomes trivial `GOOS=X GOARCH=Y go build`.
+
+NDA opt-out preserved: same `--embed-provider local` flag; local embedding stays pure-Go (ONNX inference via `github.com/yalue/onnxruntime_go` if needed; or skip embeddings entirely with `--no-embed`).
+
+### Consequences
+
+1. **M034 implementation simpler.** modernc/sqlite imports = `_ "modernc.org/sqlite"`. Driver name = `sqlite`. Standard `database/sql` API. No extension load step.
+
+2. **M035 embedding pipeline unchanged in design.** Provider interface same: Voyage AI (online), local ONNX (offline). Storage: write `embedding` BLOB column instead of `vec_nodes` virtual table row.
+
+3. **M035 KNN implementation:** `internal/embed/knn.go` ~100 LOC. Brute-force cosine over `[]float32`. Goroutine fan-out for >50k vectors optional. No optimization in v0.1.
+
+4. **M037 CI cross-compile drastically simplified.** 4-platform matrix is `GOOS=linux/darwin/windows GOARCH=amd64/arm64 go build`. Single binary output per platform. No sqlite-vec.so/dll/dylib bundling. **Saves 1-2 days of M037 work.**
+
+5. **install.sh path simplification:** binary distribution becomes the default and primary path. Source-build (Go required) becomes contributor-only. ADR-260515-D-amend-01 3-way prompt remains valid (option [1] for contributors, [2] for users); but option [2] becomes the recommended default in install.sh prose.
+
+6. **CGO toolchain dependency dropped entirely from v0.1.** ADR-260515-C M033/S1 pre-flight gate (per C-amend-01) is RETIRED — no toolchain to validate. See paired ADR-260515-C-amend-02.
+
+7. **Performance ceiling:** brute-force KNN at 1M+ vectors becomes >1s. For aihaus's <500k target, fine. If future scale demands HNSW, that's v0.2+ (could swap to chewxy/hnsw or roll-own).
+
+### Rollback
+
+`git revert` removes this amendment. Reverts to ADR-260515-B-amend-01 (sqlite-vec C-extension stack). No implementation rollback risk (no code yet).
+
+### References
+
+- ADR-260515-B-amend-01 (parent: sqlite-vec pivot, partial revert)
+- ADR-260515-C-amend-02 (paired: tree-sitter retirement, fully drops CGO requirement)
+- ADR-260515-E-amend-03 (paired: forever-scope drops AST-for-code-files)
+- `modernc.org/sqlite` (pure-Go SQLite; BSD-3/MIT dual)
+- Session empirical: w64devkit pe-bigobj failure + TDM-GCC NSIS access-violation
+- User exchange 2026-05-15 ("faz purego entao")
+
+---
+
+## ADR-260515-C-amend-02 — Retire tree-sitter from v0.1; markdown-only extraction (M032)
+
+**Status:** Accepted
+**Date:** 2026-05-15
+**Milestone:** M032 (design-audit amendment; implementation M033)
+**Amends:** ADR-260515-C (tree-sitter Go binding provisional lock) + ADR-260515-C-amend-01 (M033/S1 pre-flight gate)
+
+### Context
+
+ADR-260515-C provisionally locked `github.com/tree-sitter/go-tree-sitter` v0.25.0 for AST extraction across 6 langs. ADR-260515-C-amend-01 moved the pre-flight verification gate from M032 to M033/S1 (CGO toolchain validation).
+
+Both tree-sitter binding AND sqlite-vec extension (ADR-260515-B-amend-01) required CGO. Pure-Go pivot (ADR-260515-B-amend-02) removes CGO requirement for SQLite + vector. tree-sitter remains CGO-only — no pure-Go tree-sitter port serves the 6 langs target.
+
+Critical scope re-evaluation (2026-05-15 turn): **aihaus's actual high-value memory content is 100% markdown** (ADRs, Milestone manifests, Story records, Agent YAML frontmatter, Hook script headers, Skill YAML frontmatter). AST extraction for Python/JS/Go/bash code files was originally scoped to provide graphify-parity for code symbol queries — but aihaus agents primarily need structural lookup over aihaus's OWN content (Decisions, Milestones, etc.), not arbitrary code symbols.
+
+User decision 2026-05-15 ("faz purego entao"): drop tree-sitter from v0.1. Markdown-only extraction.
+
+### Decision
+
+aih-graph v0.1 ships **markdown-only structured extraction** for the 6 aihaus typed nodes:
+
+1. **tree-sitter binding retired from v0.1.** No CGO. No tree-sitter dependency. Deferred to v0.2+ (when pure-Go tree-sitter port matures OR when CGO toolchain ecosystem improves on Windows).
+
+2. **Markdown-only extractor (`internal/extract/`):**
+   - `extract/adr.go` — parses `pkg/.aihaus/decisions.md` by splitting on `^## ADR-` headers; extracts ADR ID, status, date, milestone, body. Tested on existing 80+ ADRs in repo.
+   - `extract/milestone.go` — walks `.aihaus/milestones/M*/RUN-MANIFEST.md`; parses Metadata block (status, phase, last_updated, slug), Story Records table, Progress Log entries.
+   - `extract/story.go` — extracts from RUN-MANIFEST.md Story Records table rows; cross-references Milestone parent.
+   - `extract/agent.go` — walks `pkg/.aihaus/agents/*.md`; parses YAML frontmatter (name, tools, model, effort, color, memory, resumable, checkpoint_granularity); extracts body description.
+   - `extract/hook.go` — walks `pkg/.aihaus/hooks/*.sh`; extracts header comment block (purpose), declared bash function names, file metadata (size, mtime).
+   - `extract/skill.go` — walks `pkg/.aihaus/skills/aih-*/SKILL.md`; parses YAML frontmatter (name, description, disable-model-invocation, allowed-tools, argument-hint); extracts annex references.
+
+3. **No code symbol extraction in v0.1.** No `Symbol` or `File` generic node types. The schema (per ADR-260515-B-amend-02) still has `type TEXT` column accepting any value — but v0.1 emits only the 6 aihaus types.
+
+4. **M033 scope (post-amendment):** markdown extraction across 6 aihaus types. No tree-sitter wiring. No CGO. M033/S1 pre-flight gate (per C-amend-01) is RETIRED — no toolchain to validate; pure-Go stack works on any machine with Go 1.22+.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | Keep tree-sitter (CGO) | AST for 6 langs; graphify-parity | CGO toolchain blocker; +1 week M033 toolchain work | User pivot 2026-05-15 |
+| 2 | **(Chosen)** Markdown-only for v0.1 | Zero CGO; aihaus's actual goal covered; -1 week M033 | Drops code symbol extraction (low-value for aihaus) | Selected per user decision |
+| 3 | Pure-Go tree-sitter port (unproven) | Would preserve original scope | No mature pure-Go port exists; high risk | Rejected — no viable port |
+| 4 | Regex-based code AST (rough) | Some code symbol extraction without tree-sitter | Brittle, low-quality, maintenance burden | Excess scope; aihaus goal doesn't need it |
+
+### Rationale
+
+aihaus's actual memory-lookup queries target aihaus content, not arbitrary code. Examples from session experience:
+- "How does merge-settings handle hooks arrays" → Decision (ADR) + Skill (aih-update) + Agent (relevant code-fixer)
+- "What does M030 cover" → Milestone + Stories
+- "Recent CGO findings" → Decision (amendments) + memory entries (NOT direct memory access here, but conceptually aihaus's accumulated wisdom)
+- "Show pause_class options" → Decision (ADR-260506-A)
+
+Zero of those queries fundamentally need Python/JS/Go function AST. The structural-markdown-only approach **covers 100% of aihaus's memory-lookup value** while dropping the CGO dependency that was costing ~1 week of M033 toolchain work + ongoing maintenance burden.
+
+The 6 aihaus types are well-defined markdown structures: ADR sections, RUN-MANIFEST tables, agent/skill YAML frontmatter, hook bash files. Each has a single canonical parser. No grammar ambiguity. No edge cases that need tree-sitter's robustness.
+
+When/if aihaus future scope expands to "let aihaus agents understand user's project code structure" (NOT v0.1 goal), tree-sitter can return via v0.2+ amendment.
+
+### Consequences
+
+1. **M033 scope dramatically simplified.** Was: tree-sitter wiring across 6 langs + per-lang query files + CGO toolchain swap. Now: 6 markdown parsers (~50 LOC each = ~300 LOC total) + no CGO.
+
+2. **M033/S1 pre-flight gate retired.** No environmental pre-check needed. M033 starts immediately on any machine with Go 1.22+.
+
+3. **Memory entry `project_m033_cgo_prereq.md` SUPERSEDED.** CGO blocker no longer applies. Memory entry should be updated to reflect retirement (deferred — file-guard hook blocks update; ADR commits are canonical record).
+
+4. **PRD.md M033-M040 story breakdown rewritten** in this amendment cluster commit. M033 becomes "markdown extraction"; M034-M040 follow as defined in B-amend-02 + this amendment.
+
+5. **Smoke check 86 (integration round-trip)** simplifies: no tree-sitter assertion needed. Verifies `aih-graph build .` parses N ADRs (compare against `grep -c '^## ADR' pkg/.aihaus/decisions.md`) and N agents (compare against `ls pkg/.aihaus/agents/*.md | wc -l`).
+
+6. **CLAUDE.md M033 description (not yet written) will reflect markdown scope.** When M033 closes, the CLAUDE.md update is structural-not-AST.
+
+7. **6-lang list from ADR-260515-E-amend-01 becomes vestigial for v0.1.** ADR-260515-E-amend-03 (paired) formally drops it. Markdown is the only "lang" parsed in v0.1.
+
+### Rollback
+
+`git revert` removes this amendment. tree-sitter binding re-enters v0.1 scope; M033/S1 pre-flight gate re-activates. No implementation rollback risk (no tree-sitter code written yet).
+
+### References
+
+- ADR-260515-C (parent: provisional tree-sitter binding lock — superseded for v0.1)
+- ADR-260515-C-amend-01 (parent: M033/S1 pre-flight gate — retired)
+- ADR-260515-B-amend-02 (paired: pure-Go SQLite — both retirements compose to drop ALL CGO)
+- ADR-260515-E-amend-03 (paired: forever-scope drops 6-lang list for v0.1)
+- Session empirical: 2 CGO toolchain attempts failed (w64devkit, TDM-GCC)
+- User exchange 2026-05-15 ("faz purego entao")
+
+---
+
+## ADR-260515-E-amend-03 — v0.1 forever-scope: drop AST/code symbols; markdown-only for v0.1 (M032)
+
+**Status:** Accepted
+**Date:** 2026-05-15
+**Milestone:** M032 (design-audit amendment)
+**Amends:** ADR-260515-E (forever-scope) + E-amend-01 (lang list 5→6 → moot) + E-amend-02 (vector promoted, unchanged here)
+
+### Context
+
+Companion to ADR-260515-B-amend-02 (pure-Go substrate) + ADR-260515-C-amend-02 (tree-sitter retirement). Updates forever-scope to reflect markdown-only extraction for v0.1; preserves vector embeddings promotion from E-amend-02.
+
+### Decision
+
+aih-graph v0.1 forever-scope updated (consolidated):
+
+**IN v0.1:**
+- Markdown-only structured extraction (per ADR-260515-C-amend-02)
+- 6 aihaus typed nodes: Decision, Milestone, Story, Agent, Hook, Skill
+- modernc.org/sqlite storage (per ADR-260515-B-amend-02)
+- Vector embeddings tier-1 (per E-amend-02 — UNCHANGED by this amendment)
+- 3 query modes: structural BFS, vector similarity, hybrid SQL+vec
+- Pure-Go: zero CGO, single Go binary distribution
+
+**OUT of v0.1 (CHANGES from prior amendments):**
+- ~~AST extraction across 6 langs~~ (was E-amend-01; now deferred to v0.2+)
+- ~~tree-sitter binding~~ (was C; now deferred to v0.2+)
+- ~~Symbol/File generic node types for code~~ (was implied scope; now deferred to v0.2+)
+
+**OUT of v0.1 (UNCHANGED from prior amendments):**
+- Clustering (Leiden community detection)
+- Semantic LLM extraction (paid LLM-driven node/edge extraction)
+- HNSW/IVF vector indexes (sqlite-vec brute-force was sufficient; pure-Go brute-force also sufficient at target scale)
+- LLM re-ranking (`--rerank` deferred to v0.2+)
+
+**E-amend-01 6-lang list becomes vestigial.** Bash/Python/JS/TS/Go/Markdown/PowerShell — only Markdown is parsed in v0.1. The 6-lang list survives in ADR history as record of forever-scope discussion but is **not load-bearing for v0.1 implementation**.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | Keep 6-lang AST + add markdown | Maximum extraction coverage | CGO toolchain blocker; +1 week M033 | User pure-Go pivot 2026-05-15 |
+| 2 | **(Chosen)** Markdown-only v0.1; AST → v0.2+ | Zero CGO; aihaus goal covered; ship faster | Drops code symbol queries (low-value for aihaus) | Selected |
+| 3 | Drop everything but bash + markdown | Maximum simplicity | Drops Python/JS/Go too aggressive; aihaus uses all in scripts | Excess cut |
+
+### Rationale
+
+Three pivots in two sessions (graphify → standalone Go; JSONL → sqlite-vec; sqlite-vec → pure-Go) reflect **honest convergence** toward what aihaus's stated goal actually requires:
+
+- **Stated goal:** vector memory functioning in agents
+- **Critical content:** aihaus's own ADRs/Milestones/Stories/Agents/Hooks/Skills — all markdown
+- **Critical operation:** semantic lookup over aihaus's accumulated wisdom
+- **NOT critical (for stated goal):** AST symbol queries over user's Python/JS/Go code
+
+The 6-lang AST scope was added in the brainstorm cascade because graphify supported it — graphify-parity was treated as scope-forming, but the user's actual use case is narrower. Each pivot has removed unneeded scope:
+
+1. Graphify dep → standalone fork → standalone Go: removed dependency on external project
+2. JSONL → sqlite-vec: collapsed v0.1 + v0.2 vector work into one milestone
+3. sqlite-vec → pure-Go: removed CGO toolchain dependency that was blocking implementation
+
+Net effect: v0.1 ship time collapsed from 5-8 months (original v0.2+ vector deferral) → 3 months (sqlite-vec pivot) → **~6 weeks** (pure-Go pivot). And v0.1 still covers 100% of aihaus's actual stated goal.
+
+Forever-scope discipline (Contrarian C9 original principle: "intentionally narrower forever") preserved: drops further into the actual core, doesn't expand. v0.2+ amendments can re-add AST when CGO ecosystem matures or pure-Go alternatives emerge.
+
+### Consequences
+
+1. **v0.1 timeline collapses further.** Per ADR-260515-B-amend-02 estimate: ~3-4 weeks focused effort, ~6-8 weeks calendar.
+
+2. **PRD.md M033-M040 story breakdown rewritten** in amendment-cluster commit. M033 = markdown extraction; rest unchanged in shape.
+
+3. **6-lang list in CLAUDE.md, README.md, main.go usage text — needs update.** Companion commits in this cluster.
+
+4. **Memory entry `project_m033_cgo_prereq.md` becomes historical.** Cannot be deleted from this session (file-guard hook), but content is superseded. Future sessions reading it should note this amendment.
+
+5. **v0.2+ re-addition path (deferred):** AST extraction returns via:
+   - New ADR-260515-X (AST scope re-expansion)
+   - tree-sitter binding choice (C-amend-NN)
+   - CGO toolchain pre-flight (re-activation of C-amend-01 logic)
+   - Symbol/File node type definitions in PRD update
+
+   When ready (not now), this is a clean re-amendment path.
+
+### Rollback
+
+`git revert` removes this amendment. 6-lang AST scope re-becomes binding for v0.1. ADR-260515-C-amend-02 + B-amend-02 (paired amendments) also need revert for consistent state.
+
+### References
+
+- ADR-260515-E (parent: forever-scope — narrowed further)
+- ADR-260515-E-amend-01 (parent: lang list 5→6 — now vestigial for v0.1)
+- ADR-260515-E-amend-02 (sibling: vector promoted — UNCHANGED by this amendment)
+- ADR-260515-B-amend-02 (paired: pure-Go substrate)
+- ADR-260515-C-amend-02 (paired: tree-sitter retirement)
+- User exchange 2026-05-15 ("faz purego entao")

@@ -123,17 +123,17 @@ aih-graph --help                        CLI help
 ## Implementation Sequence (M032-M040)
 
 Per architecture.md §4 module-by-module + ADR-260515-E forever-scope discipline.
-**Post-pivot (ADR-260515-B-amend-01 + E-amend-02 — 2026-05-15):** substrate is SQLite + sqlite-vec; vector embeddings tier-1 in v0.1.
+**Post-pure-Go pivot (ADR-260515-B-amend-02 + C-amend-02 + E-amend-03 — 2026-05-15):** substrate is modernc.org/sqlite + Go-native KNN; markdown-only extraction for 6 aihaus types; zero CGO requirement.
 
 - **M032 — foundation:** `go.mod`, `cmd/aih-graph/main.go` scaffold, LICENSE, basic README. (DONE — see m032-foundation tag.)
-- **M033 — AST extraction + toolchain validation:** `internal/parser/` with 6 langs (bash, python, JS/TS, Go, Markdown, PowerShell — per ADR-260515-E-amend-01). Per-lang tree-sitter query files. **S1 pre-flight gate (per ADR-260515-C-amend-01):** validate CGO toolchain works with BOTH tree-sitter binding AND `mattn/go-sqlite3` + sqlite-vec extension load. Known blocker: w64devkit gcc 16.1.0 produces `pe-bigobj-x86-64` incompatible with Go cgo (memory: `project_m033_cgo_prereq.md`). S1 must propose alternative (TDM-GCC / MSVC / pure-Go fallback) before AST work begins.
-- **M034 — SQLite schema + sqlite-vec storage:** `internal/storage/` with schema migrations (nodes + edges + vec_nodes virtual table per ADR-260515-B-amend-01); `database/sql` wrappers; sqlite-vec extension loader (per-platform .dll/.so/.dylib resolution). Idempotent `aih-graph build` writes/updates nodes + edges.
-- **M035 — Query + typed accessors + embedding pipeline:** `internal/query/` (recursive CTE BFS + hybrid SQL+vec_distance) + `internal/types/` (6 typed accessor structs over SQL) + `internal/embed/` (pluggable provider: Voyage AI default + local ONNX fallback; SHA-based change detection) + `pkg/aihgraph/` public API. **Heaviest milestone** (~1 week scope per amendment estimate).
-- **M036 — Privacy gates:** `internal/privacy/` (XDG resolution + per-repo .db isolation + consent gate + `--purge` = file delete + NDA opt-out via `--embed-provider local`). Composes naturally with single-file-per-repo design.
-- **M037 — CI cross-compile + sqlite-vec extension bundling:** `.github/workflows/aih-graph-ci.yml` — 4-platform matrix; per-platform sqlite-vec extension download from upstream releases at build time; tree-sitter binding linked statically per Pattern A.
-- **M038 — v0.1.0 ship:** README, version-tagging, binary release to GitHub Releases (per ADR-260515-D-amend-01 option [2] binary fallback path).
-- **M039 — aihaus integration:** `pkg/scripts/install.sh` builds aih-graph; **Go + C-toolchain pre-flight check + interactive 3-way prompt** per ADR-260515-D-amend-01 (now also validates CGO toolchain not just Go presence); `pkg/.aihaus/hooks/aih-graph-refresh.sh` new hook; `.aihaus/.install-mode` sidecar; PowerShell parity (`install.ps1`); ~15 agent prompt addenda with `aih-graph query --semantic` examples.
-- **M040 — smoke checks + release v0.35.0:** Smoke Check 84 (build smoke + DB schema + sqlite-vec extension load), 85 (privacy ADR enforcement), 86 (integration round-trip including semantic query). aihaus v0.35.0 tag includes aih-graph v0.1.0.
+- **M033 — Markdown extraction for 6 aihaus types:** `internal/extract/` with 6 parsers (~50 LOC each, ~300 LOC total): `adr.go` (parse `pkg/.aihaus/decisions.md` splitting on `## ADR-`), `milestone.go` (walk `.aihaus/milestones/M*/RUN-MANIFEST.md` parsing Metadata + Story Records + Progress Log), `story.go` (extract from RUN-MANIFEST Story Records table), `agent.go` (walk `pkg/.aihaus/agents/*.md` parsing YAML frontmatter), `hook.go` (walk `pkg/.aihaus/hooks/*.sh` extracting header comment + bash functions), `skill.go` (walk `pkg/.aihaus/skills/aih-*/SKILL.md` YAML frontmatter). Emits in-memory Node objects with typed fields. **No CGO. No tree-sitter. No toolchain pre-flight.** Starts immediately on any machine with Go 1.22+.
+- **M034 — modernc/sqlite storage:** `internal/storage/` with schema migrations (nodes + edges + embedding BLOB column per ADR-260515-B-amend-02); `database/sql` wrappers using `modernc.org/sqlite` driver. Idempotent `aih-graph build` writes/updates nodes + edges; `UNIQUE(type, identifier)` upserts.
+- **M035 — Query + typed accessors + embedding pipeline:** `internal/query/` (recursive CTE BFS for structural; Go-side KNN for semantic; hybrid composition) + `internal/types/` (6 typed accessor structs: `Decision`, `Milestone`, `Story`, `Agent`, `Hook`, `Skill` — each with Get/Find/List methods over SQL) + `internal/embed/knn.go` (~100 LOC pure-Go brute-force cosine; goroutine fan-out optional for >50k vectors) + `internal/embed/voyage.go` + `internal/embed/local.go` (pluggable providers, SHA-based change detection) + `pkg/aihgraph/` public API.
+- **M036 — Privacy gates:** `internal/privacy/` (XDG resolution: `$XDG_STATE_HOME/aih-graph/<repo-hash>/graph.db` or platform equivalent + per-repo file isolation + consent gate via `.aih-graph-consent` marker file + `--purge` = single file delete + NDA opt-out via `--embed-provider local` or `--no-embed`).
+- **M037 — CI cross-compile:** `.github/workflows/aih-graph-ci.yml` — 4-platform matrix (linux-amd64, darwin-amd64, darwin-arm64, windows-amd64). **Trivial post-pivot:** `GOOS=X GOARCH=Y go build`. Single binary per platform. No extension bundling. No CGO toolchain setup in CI.
+- **M038 — v0.1.0 ship:** README, version-tagging, binary release to GitHub Releases. 4 artifacts (one per platform).
+- **M039 — aihaus integration:** `pkg/scripts/install.sh` downloads aih-graph binary from GitHub Releases (primary path); source-build via `go install` remains contributor-only option. ADR-260515-D-amend-01 3-way prompt preserved but option [2] (binary) becomes default-recommended. `pkg/.aihaus/hooks/aih-graph-refresh.sh` new hook; ~15 agent prompt addenda with `aih-graph query --semantic` examples.
+- **M040 — smoke checks + release v0.35.0:** Smoke Check 84 (build smoke + DB schema applied + N ADRs extracted matching `grep -c '^## ADR' pkg/.aihaus/decisions.md`), 85 (privacy ADR enforcement: consent file, `--purge` effect), 86 (integration round-trip: aihaus agent prompt invocation → aih-graph query → token-bounded context returned, includes semantic query). aihaus v0.35.0 tag includes aih-graph v0.1.0.
 
 ## Acceptance Criteria for v0.1 (cross-milestone)
 
@@ -156,21 +156,29 @@ Test at M038 closeout:
 
 ## Estimated v0.1 Timeline
 
-Per ADR-260515-B-amend-01 + E-amend-02 estimates:
+Per ADR-260515-B-amend-02 + C-amend-02 + E-amend-03 estimates (pure-Go pivot):
 
 | Milestone | Focused effort | Calendar (1-2 sessions/week) |
 |-----------|----------------|-------------------------------|
-| M033 (AST + CGO toolchain swap) | 1-2 weeks | 2-3 weeks |
-| M034 (SQLite + sqlite-vec) | 3-5 days | 1-2 weeks |
-| M035 (query + types + embed pipeline) | ~1 week | 2-3 weeks |
-| M036 (privacy) | 3-5 days | 1 week |
-| M037 (CI cross-compile) | 2-3 days | 1 week |
-| M038 (release) | 1-2 days | 1 week |
+| M033 (markdown extraction, 6 parsers) | 3-5 days | 1-2 weeks |
+| M034 (modernc/sqlite storage) | 3-5 days | 1-2 weeks |
+| M035 (query + types + embed + KNN) | ~1 week | 2 weeks |
+| M036 (privacy) | 2-3 days | 1 week |
+| M037 (CI cross-compile, trivial) | 1 day | < 1 week |
+| M038 (release) | 1 day | < 1 week |
 | M039 (aihaus integration) | 3-5 days | 1-2 weeks |
-| M040 (smoke + aihaus release) | 1-2 days | 1 week |
-| **Total (focused effort)** | **~7-8 weeks** | **~12-14 weeks calendar** |
+| M040 (smoke + aihaus release) | 1-2 days | < 1 week |
+| **Total (focused effort)** | **~3-4 weeks** | **~6-8 weeks calendar** |
 
-**Risk multipliers:** CGO toolchain blocker (currently active), brainstorm-cascade scope shifts, adversarial review iteration (3-4 CRITICAL BLOCKERs per milestone historical baseline). Realistic ship date: **~3 months calendar.**
+**Risk multipliers reduced (post-pure-Go pivot):** CGO toolchain blocker eliminated. Remaining: brainstorm-cascade scope shifts (mitigated by 3 amendments locking direction), adversarial review iteration (historical 3-4 CRITICAL BLOCKERs per milestone). Realistic ship date: **~6-8 weeks calendar (~1.5-2 months).**
+
+**Comparison to prior plan iterations:**
+| Plan iteration | v0.1 calendar |
+|----------------|---------------|
+| Original (M031 spec, JSONL) | 3-4 months |
+| sqlite-vec pivot (B-amend-01) | 3 months |
+| **Pure-Go pivot (current)** | **1.5-2 months** |
+| Add vector retrieval to original plan | 5-8 months total |
 
 ## References
 
