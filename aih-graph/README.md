@@ -11,15 +11,17 @@ aih-graph is the **memory + structural retrieval engine** aihaus uses as a manda
 This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
 - 6 langs (bash, python, JS/TS, Go, Markdown, PowerShell — per ADR-260515-E-amend-01)
 - AST extraction via tree-sitter
-- JSONL storage
-- BFS query with `--budget N` token cap
-- 6 first-class typed accessor structs
+- **SQLite + sqlite-vec storage** (per ADR-260515-B-amend-01 — single .db file per repo)
+- **Vector embeddings tier-1** (per ADR-260515-E-amend-02 — Voyage AI default + local ONNX fallback)
+- Three query modes: structural BFS, vector similarity (`--semantic`), hybrid SQL+vec
+- 6 first-class typed accessor structs (Decision/Milestone/Story/Agent/Hook/Skill)
 
 Out of scope (use graphify in parallel if needed):
-- Semantic LLM extraction (paid API)
-- Vector embeddings / similarity retrieval (v0.2+ candidate)
+- Semantic LLM extraction (paid LLM-driven node/edge extraction — distinct from embeddings)
 - Clustering (Leiden community detection)
 - 24+ additional language grammars
+- HNSW/IVF vector indexes (sqlite-vec brute-force only; sufficient for target repos up to ~1M vectors)
+- LLM re-ranking (`--rerank` deferred to v0.2+)
 
 ## Status
 

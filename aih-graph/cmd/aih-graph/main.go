@@ -4,8 +4,10 @@
 // queries a knowledge graph of aihaus-managed repositories with first-class
 // ontological types (Decision, Milestone, Story, Agent, Hook, Skill).
 //
-// v0.1 forever-scope: 5 langs (bash, python, JS/TS, Go, Markdown) + AST +
-// JSONL + BFS query + 6 typed accessor structs. See PRD.md for full spec.
+// v0.1 forever-scope (per ADR-260515-E-amend-01 + B-amend-01 + E-amend-02):
+// 6 langs (bash, python, JS/TS, Go, Markdown, PowerShell) + AST + SQLite +
+// sqlite-vec + vector embeddings + 3-mode query (BFS / semantic / hybrid) +
+// 6 typed accessor structs. See PRD.md for full spec.
 //
 // M032 status: foundation scaffold only. Subcommand bodies are stubs that
 // return "not implemented in M032 — see ADR-260515-* for milestone-by-feature
@@ -28,12 +30,15 @@ Usage:
   aih-graph <command> [flags]
 
 Commands:
-  build <path>          Build/refresh graph for repository at <path>     (impl: M033–M035)
-  query "<question>"    BFS query over graph                              (impl: M035)
-  save-result           Persist Q&A to per-repo graph memory              (impl: M035)
-  uninstall [--purge]   Remove aih-graph state                            (impl: M036)
-  version               Print version
-  help                  Show this help
+  build <path>            Build/refresh graph (AST + embed)               (impl: M033–M035)
+  query "<question>"      Hybrid SQL+vec query over graph                 (impl: M035)
+    --bfs                 Structural BFS only (no embeddings needed)
+    --semantic            Vector similarity (cosine) ranking
+    --budget N            Token cap on returned context
+  save-result             Persist Q&A to per-repo graph memory            (impl: M035)
+  uninstall [--purge]     Remove aih-graph state (single .db file delete) (impl: M036)
+  version                 Print version
+  help                    Show this help
 
 Flags vary per command — run "aih-graph <command> --help" once implemented.
 
