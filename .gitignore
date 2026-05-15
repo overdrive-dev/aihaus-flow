@@ -50,6 +50,14 @@ coverage/
 .cache/
 tmp/
 
+# Smoke test scratch output (Check 82+83 fixtures stage temp files here)
+pkg/tools/.out/
+tools/.out/
+
+# aih-graph consent marker (created by `aih-graph build --accept-all-repos`
+# during smoke Check 86; never source — repo-root local state)
+/.aih-graph-consent
+
 # AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers
 /.aihaus/audit/
 /.claude/audit/

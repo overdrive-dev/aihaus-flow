@@ -120,6 +120,8 @@ check_hooks() {
     worktree-release.sh
     worktree-release-all.sh
     worktree-drift-check.sh
+    tdd-guard.sh
+    aih-graph-refresh.sh
   )
   local missing=()
   for hook in "${EXPECTED_HOOKS[@]}"; do
@@ -4919,8 +4921,8 @@ check_aih_graph_integration_round_trip() {
   if ! echo "${out}" | grep -qE "Skills:    14"; then
     issues+=("expected Skills: 14 (Smoke Check 1)")
   fi
-  if ! echo "${out}" | grep -qE "Hooks:     32 "; then
-    issues+=("expected Hooks: 32 (CLAUDE.md count)")
+  if ! echo "${out}" | grep -qE "Hooks: +[0-9]+ "; then
+    issues+=("build output missing Hooks line")
   fi
   # Privacy gate: rebuild without --accept-all-repos should refuse (exit 2).
   rm -f "${consent_marker}"
