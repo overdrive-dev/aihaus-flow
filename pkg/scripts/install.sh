@@ -552,7 +552,34 @@ _inject_gitignore() {
 }
 _inject_gitignore "${TARGET}"
 
-# Step 13: success message
+# Step 13: aih-graph memory engine binary bootstrap (M041/S3)
+# Downloads the aih-graph binary to ~/.aihaus/bin/ if not already present.
+# Non-fatal — install completes even if download fails (e.g. offline,
+# rate-limited, platform not in v0.1 matrix). /aih-init Phase 3 retries
+# the same download on its own if the binary is still missing at run time.
+# Opt-out: AIHAUS_SKIP_GRAPH_BINARY=1.
+if [[ -z "${AIHAUS_SKIP_GRAPH_BINARY:-}" ]] && [[ "${UPDATE}" != "1" ]]; then
+  _aih_graph_bin="$HOME/.aihaus/bin/aih-graph"
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) _aih_graph_bin="${_aih_graph_bin}.exe" ;;
+  esac
+  if [[ ! -x "${_aih_graph_bin}" ]]; then
+    _aih_graph_installer="${SCRIPT_DIR}/install-aih-graph-binary.sh"
+    if [[ -f "${_aih_graph_installer}" ]]; then
+      echo ""
+      echo "  installing aih-graph memory engine..."
+      if bash "${_aih_graph_installer}" >/dev/null 2>&1; then
+        echo "  ok: aih-graph at ${_aih_graph_bin}"
+      else
+        echo "  warn: aih-graph download failed (memory engine optional; /aih-init retries)"
+      fi
+    fi
+  else
+    echo "  aih-graph: already installed at ${_aih_graph_bin}"
+  fi
+fi
+
+# Step 14: success message
 echo ""
 if [[ "${UPDATE}" == "1" ]]; then
   echo "aihaus updated (${MODE} mode)."
@@ -560,5 +587,5 @@ if [[ "${UPDATE}" == "1" ]]; then
 else
   echo "aihaus installed (${MODE} mode)."
   echo "Launch with: bash .aihaus/auto.sh"
-  echo "Run /aih-init inside the launched session to bootstrap project.md"
+  echo "Run /aih-init inside the launched session to bootstrap project.md + aih-graph"
 fi
