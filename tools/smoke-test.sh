@@ -4319,10 +4319,14 @@ check_calibration_trigger() {
   local repo_root="${PACKAGE_ROOT}/.."
   local fixture_dir="${repo_root}/tools/fixtures/check-78"
 
-  # Helper: count ambiguity markers in a plan file
+  # Helper: count ambiguity markers in a plan file.
+  # grep -c always prints a single-line count to stdout (0 when no match, N otherwise)
+  # and exits 1 when no match — `|| true` neutralizes the exit code without
+  # double-printing "0\n0" (the prior `|| echo 0` would append a second line on
+  # no-match because grep already printed "0", breaking `[[ -gt ]]` comparisons).
   _count_ambiguities() {
     local file="$1"
-    grep -ciE '\bTBD\b|[[:space:]]assumed[[:space:]]|[[:space:]]assumed$|\bTODO\b|pending confirmation' "$file" 2>/dev/null || echo 0
+    grep -ciE '\bTBD\b|[[:space:]]assumed[[:space:]]|[[:space:]]assumed$|\bTODO\b|pending confirmation' "$file" 2>/dev/null || true
   }
 
   # Sub-assert (a): fixture-fail #1 — trigger-fires.md must have ≥1 ambiguity
