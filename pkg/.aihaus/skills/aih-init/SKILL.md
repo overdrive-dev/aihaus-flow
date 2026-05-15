@@ -8,10 +8,7 @@ argument-hint: "[no arguments needed]"
 
 ## Task
 
-Bootstrap or refresh `.aihaus/project.md` by analyzing the current repository.
-Two phases: pre-flight checks, then discovery + generation. Default behavior
-is fully autonomous with zero clarifying questions. Makes NO commits, NO
-branch changes, and NO writes outside `.aihaus/`.
+Bootstrap or refresh `.aihaus/project.md` by analyzing the current repository, then initialize the aih-graph memory index (Phase 3, M041). Fully autonomous; zero clarifying questions. Makes NO commits, NO branch changes, NO writes outside `.aihaus/` + `.aih-graph-consent`.
 
 ---
 
@@ -184,7 +181,8 @@ Where N is the number of AUTO-GENERATED sections populated and M is the
 count of `[PLACEHOLDER]` tokens still present in the manual block (those are
 expected — they live inside the MANUAL region and are the user's to fill).
 
----
+## Phase 3 — aih-graph memory bootstrap (M041)
+Initializes the aih-graph structural+semantic memory index (BM25/FTS5 default; pure-Go, no API key). Non-fatal — any failure degrades silently. Full 5-step flow: `annexes/aih-graph-bootstrap.md`.
 
 ## Guardrails
 - NO commits, NO `git add`, NO `git checkout`, NO branch creation.
