@@ -581,6 +581,29 @@ _backfill_gitignore() {
 }
 _backfill_gitignore "${TARGET}"
 
+# ---- aih-graph binary refresh (M041/S4) --------------------------------------
+# Mirror of install.sh Step 13: ensure $HOME/.aihaus/bin/aih-graph exists.
+# Non-fatal — update completes even if download fails. Idempotent when binary
+# already present (silent skip). Opt-out: AIHAUS_SKIP_GRAPH_BINARY=1.
+if [[ -z "${AIHAUS_SKIP_GRAPH_BINARY:-}" ]]; then
+  _aih_graph_bin="$HOME/.aihaus/bin/aih-graph"
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) _aih_graph_bin="${_aih_graph_bin}.exe" ;;
+  esac
+  if [[ ! -x "${_aih_graph_bin}" ]]; then
+    _aih_graph_installer="${SCRIPT_DIR}/install-aih-graph-binary.sh"
+    if [[ -f "${_aih_graph_installer}" ]]; then
+      echo ""
+      echo "  installing aih-graph memory engine..."
+      if bash "${_aih_graph_installer}" >/dev/null 2>&1; then
+        echo "  ok: aih-graph at ${_aih_graph_bin}"
+      else
+        echo "  warn: aih-graph download failed (memory engine optional; /aih-init retries)"
+      fi
+    fi
+  fi
+fi
+
 # ---- Summary -----------------------------------------------------------------
 echo ""
 echo "Updated ${count_skills} skills, ${count_agents} agents, ${count_hooks} hooks"

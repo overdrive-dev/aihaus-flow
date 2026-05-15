@@ -234,6 +234,17 @@
             "statusMessage": "Releasing session worktrees (L2)..."
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-refresh.sh",
+            "timeout": 60,
+            "async": true
+          }
+        ]
       }
     ],
     "Stop": [
