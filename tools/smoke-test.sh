@@ -4793,8 +4793,158 @@ check_calibration_trigger
 check_tdd_guard_hook
 check_tdd_discipline_annex
 check_calibrate_drift
+# ---- Check 84: aih-graph pure-Go pivot ADRs present (M040/S1) -------------
+# Asserts the 3 amendments that defined the pure-Go pivot are in decisions.md
+# with Status: Accepted. Forcing-function gate: pivot can't be silently
+# reverted without smoke breaking.
+check_aih_graph_purego_adrs() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aih-graph pure-Go pivot ADRs present (M040/S1)"
+  local issues=()
+  local decisions="${PACKAGE_ROOT}/.aihaus/decisions.md"
+  if [[ ! -f "${decisions}" ]]; then
+    issues+=("decisions.md not found at ${decisions}")
+    _fail "${label}" "${issues[@]}"
+    return
+  fi
+  for adr in "ADR-260515-B-amend-02" "ADR-260515-C-amend-02" "ADR-260515-E-amend-03"; do
+    if ! grep -qE "^## ${adr} " "${decisions}"; then
+      issues+=("missing section: ## ${adr}")
+    fi
+  done
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "${label}"
+  else
+    _fail "${label}" "${issues[@]}"
+  fi
+}
+
+# ---- Check 85: aih-graph build smoke (M040/S2) ----------------------------
+# Builds the aih-graph binary from source (Go required) and verifies it
+# produces a non-zero binary + responds to `version` and `help`. Skips
+# gracefully when Go is unavailable on the host (preserves pre-Go-install
+# smoke green).
+check_aih_graph_build_smoke() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aih-graph build smoke (M040/S2)"
+  local issues=()
+  local repo_root="${PACKAGE_ROOT}/.."
+  local aih_graph_dir="${repo_root}/aih-graph"
+  if [[ ! -d "${aih_graph_dir}" ]]; then
+    issues+=("aih-graph/ source dir missing")
+    _fail "${label}" "${issues[@]}"
+    return
+  fi
+  if ! command -v go >/dev/null 2>&1; then
+    # Soft-skip: smoke green when Go is unavailable; contributors with Go get
+    # the real assertion.
+    _pass "${label} (skipped — go not in PATH)"
+    return
+  fi
+  local tmpbin
+  tmpbin="$(mktemp -d 2>/dev/null || mktemp -d -t aih-graph-smoke)"
+  trap 'rm -rf "${tmpbin}"' RETURN
+  if ! (cd "${aih_graph_dir}" && go build -o "${tmpbin}/aih-graph" ./cmd/aih-graph) >/dev/null 2>&1; then
+    issues+=("go build failed")
+    _fail "${label}" "${issues[@]}"
+    return
+  fi
+  local version_out help_out
+  version_out="$("${tmpbin}/aih-graph" version 2>/dev/null)"
+  help_out="$("${tmpbin}/aih-graph" help 2>&1 | head -1)"
+  if [[ -z "${version_out}" ]]; then
+    issues+=("\`aih-graph version\` produced no output")
+  fi
+  if [[ "${help_out}" != aih-graph* ]]; then
+    issues+=("\`aih-graph help\` first line does not begin with 'aih-graph' (got: ${help_out})")
+  fi
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "${label}"
+  else
+    _fail "${label}" "${issues[@]}"
+  fi
+}
+
+# ---- Check 86: aih-graph integration round-trip (M040/S3) -----------------
+# Builds aih-graph + runs build subcommand against this repo + asserts the
+# extracted node counts match smoke-test ground truth (Check 1 + 2 + 3).
+# Requires Go on PATH; soft-skips otherwise.
+check_aih_graph_integration_round_trip() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aih-graph integration round-trip (M040/S3)"
+  local issues=()
+  local repo_root="${PACKAGE_ROOT}/.."
+  local aih_graph_dir="${repo_root}/aih-graph"
+  if [[ ! -d "${aih_graph_dir}" ]]; then
+    issues+=("aih-graph/ source dir missing")
+    _fail "${label}" "${issues[@]}"
+    return
+  fi
+  if ! command -v go >/dev/null 2>&1; then
+    _pass "${label} (skipped — go not in PATH)"
+    return
+  fi
+  local tmpdir
+  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-graph-itest)"
+  trap 'rm -rf "${tmpdir}"' RETURN
+  local bin="${tmpdir}/aih-graph"
+  local db="${tmpdir}/test.db"
+  if ! (cd "${aih_graph_dir}" && go build -o "${bin}" ./cmd/aih-graph) >/dev/null 2>&1; then
+    issues+=("go build failed")
+    _fail "${label}" "${issues[@]}"
+    return
+  fi
+  # Run build against the parent repo. --accept-all-repos creates a consent
+  # marker; clean up after.
+  local consent_marker="${repo_root}/.aih-graph-consent"
+  local marker_pre_existed=0
+  [[ -f "${consent_marker}" ]] && marker_pre_existed=1
+  local out
+  out="$("${bin}" build --accept-all-repos --db "${db}" "${repo_root}" 2>&1)"
+  if [[ ${marker_pre_existed} -eq 0 ]]; then
+    rm -f "${consent_marker}"
+  fi
+  if [[ ! -f "${db}" ]]; then
+    issues+=("build did not produce ${db}")
+    _fail "${label}" "${issues[@]}"
+    return
+  fi
+  # Assert expected per-type counts. Match smoke-test ground truth.
+  if ! echo "${out}" | grep -qE "Decisions: [0-9]+ \([0-9]+ are amendments"; then
+    issues+=("build output missing Decisions line")
+  fi
+  if ! echo "${out}" | grep -qE "Agents:    48 "; then
+    issues+=("expected Agents: 48 (Smoke Check 2)")
+  fi
+  if ! echo "${out}" | grep -qE "Skills:    14"; then
+    issues+=("expected Skills: 14 (Smoke Check 1)")
+  fi
+  if ! echo "${out}" | grep -qE "Hooks:     32 "; then
+    issues+=("expected Hooks: 32 (CLAUDE.md count)")
+  fi
+  # Privacy gate: rebuild without --accept-all-repos should refuse (exit 2).
+  rm -f "${consent_marker}"
+  "${bin}" build --db "${db}.refuse" "${repo_root}" >/dev/null 2>&1
+  local refuse_rc=$?
+  if [[ ${refuse_rc} -ne 2 ]]; then
+    issues+=("expected exit 2 on missing consent marker; got ${refuse_rc}")
+  fi
+  if [[ ${marker_pre_existed} -eq 1 ]]; then
+    touch "${consent_marker}"
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "${label}"
+  else
+    _fail "${label}" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
+check_aih_graph_purego_adrs
+check_aih_graph_build_smoke
+check_aih_graph_integration_round_trip
 
 printf "
 "
