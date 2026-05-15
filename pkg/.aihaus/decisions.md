@@ -4193,3 +4193,77 @@ Q4 narrowed the build justification to "custom aihaus node types". Those 6 types
 - BRIEF.md Turn 12 Q4 (custom node types build justification)
 - CHALLENGES.md C9 ("intentionally narrower forever" naming)
 - CHALLENGES.md C2 (graphify-as-shipped vs aih-graph v1 honest comparison — surfaced in S06 aih-graph PRD)
+
+---
+
+## ADR-260515-C-amend-01 — M032 pre-flight gate scope correction (M032)
+
+**Status:** Accepted (amends ADR-260515-C)
+**Date:** 2026-05-15
+**Milestone:** M032 (correction surfaced before any Go code commit)
+**Amends:** ADR-260515-C
+
+### Context
+
+The original ADR-260515-C (M031/S04) instituted a pre-flight verification gate before "any Go code commit" — requiring gh-api verification of `smacker/go-tree-sitter` vs `tree-sitter/go-tree-sitter` binding choice BEFORE foundation work begins. That was conservative-correct in spirit (prevent flow-state decisions on unverified data) but **mechanically over-scoped**: the verification is only load-bearing at the point where tree-sitter is actually IMPORTED into the Go code, which is M033 (AST extraction), not M032 (foundation scaffold).
+
+M032 foundation work — `go mod init`, CLI scaffold via stdlib `flag`, LICENSE, README placeholder, package directory structure — is **binding-agnostic**. Whether the eventual binding is smacker or official `tree-sitter/go-tree-sitter` doesn't change a single byte of M032's scaffold output. The pre-flight gate was therefore blocking work that has no dependency on the gate's outcome.
+
+This amendment was surfaced after 8 consecutive blocked attempts of the gh-api verification through a sandbox egress block (consistent `dial tcp 4.228.31.149:443: timeout`). User question "pra que precisa de rede? pro go?" forced the design audit. Answer: Go itself needs zero network for M032 foundation. The gate's network requirement was an artifact of conflating "decision verification" with "code commit blocking."
+
+### Decision
+
+**Move the pre-flight gate from M032 → M033.**
+
+1. **M032 pre-flight gate: NONE.** M032 ships scaffold (go.mod, cmd/aih-graph/main.go with stdlib flag, LICENSE, README.md, package directory structure, .gitignore) with zero network dependency.
+
+2. **M033 pre-flight gate: ADR-260515-C verification (binding choice) + `go mod tidy`** (the first command that actually adds tree-sitter to `go.sum`). M033's first agent dispatch MUST:
+   - Re-run the 8 gh-api verification commands from M031/S02 VERIFICATIONS.md §G.
+   - If verifications PASS → official binding locked → proceed with `go mod tidy` to add tree-sitter dep + AST extraction implementation.
+   - If verifications CONTRADICT → commit `ADR-260515-C-amend-02` (or further amendments) BEFORE adding tree-sitter dep.
+   - If STILL BLOCKED → `phase-advance --to paused --class external-dep-down`.
+
+3. **M032 acceptance criterion 1 (`go build ./aih-graph` succeeds)** is gated on Go toolchain being installed on the build machine — NOT on network. If Go isn't installed when M032 scaffold lands, that acceptance defers until next `/aih-resume` after Go installation (no network dependency).
+
+4. **M032 acceptance criterion 4 (tree-sitter Go binding compiles + at least 1 grammar imports successfully)** is MOVED to M033 acceptance — that's the milestone where tree-sitter actually imports.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** Move pre-flight gate from M032 → M033 | Mechanical correctness: verification gates where decision is load-bearing (at tree-sitter import); unblocks M032 scaffold without network | Slight delay in catching binding-choice errors (one milestone later) — but no Go code with binding dependency exists in M032 to be wrong | None — chosen as the design correction |
+| 2 | Keep M032 pre-flight strict; wait for network indefinitely | Honors original ADR-260515-C literal | Over-conservative; blocks work that has zero dependency on the gate's outcome; wastes session cycles re-attempting verification when no decision was actually being made | Rejected as overcorrection |
+| 3 | Skip the gate entirely; assume official binding without ever verifying | Faster | Re-introduces the M026 "we'll verify later = we won't" anti-pattern that CHALLENGES.md C3 named | Rejected |
+| 4 | Add a Go-toolchain-presence gate to M032 | Catches Go-not-installed early | Cross-cuts with network gate; both are environmental; better to fail at first `go build` invocation than gate the scaffold writing | Not preferred — scaffold writing doesn't need Go installed |
+
+### Rationale
+
+ADR-260511-B trigger c(i) anticipatory-protection-on-new-flow remains the authority for the verification existing AT ALL — that's unchanged. What's amended is **WHERE the verification gate fires**. The gate should fire at the load-bearing decision point (`go mod tidy` adding tree-sitter dep + `import "github.com/.../tree-sitter"` in `internal/parser/`), not before the milestone whose work has zero dependency on the verification outcome.
+
+This correction also surfaces a broader principle worth knowledge-logging: **environmental pre-flight gates should be at the point where the environmental resource is actually used, not as a blanket pre-milestone gate.** If a milestone's work doesn't touch the resource, no gate fires.
+
+### Consequences
+
+1. M032 ships scaffold immediately (no network required). Branch advances from `paused` → `running` → completion as scaffold files commit.
+2. M033 first agent dispatch executes the 8-command gh-api verification BEFORE `go mod tidy` AND BEFORE writing any `internal/parser/*.go` that imports tree-sitter.
+3. M032 acceptance criterion list updated:
+   - Criteria 1 (`go build` succeeds): satisfied when Go toolchain available; until then deferred.
+   - Criteria 4 (tree-sitter compiles): MOVED to M033 acceptance entirely.
+4. ADR-260515-C original text remains in `pkg/.aihaus/decisions.md` for audit trail. This amendment supersedes its M032-specific gating language with M033-specific gating.
+5. PRE-FLIGHT-GATE.md for M032 is renamed conceptually to "M032 scaffold-status" — captures what shipped + what defers.
+
+### Rollback
+
+`git revert` removes this amendment; original ADR-260515-C strict gate re-applies. If user prefers the strict pattern in retrospect, no aih-graph code is lost (only scaffold files exist) — they would need to be unmade in a separate revert.
+
+### References
+
+- ADR-260515-C (original; this amendment narrows its scope)
+- ADR-260511-B trigger c(i) (anticipatory-protection authority — unchanged)
+- M031/S02 VERIFICATIONS.md (the 8 gh-api commands; moved from M032 pre-flight to M033 pre-flight)
+- CHALLENGES.md C3 (M026 "verify later" anti-pattern — addressed by gating at correct point, not by removing gate)
+- User exchange surfacing the design flaw: "pra que precisa de rede? pro go?" (forced the audit that produced this amendment)
+
+### Knowledge log entry (promote at S10 closeout-style update)
+
+**K-M032-A:** Environmental pre-flight gates (network, toolchain, external services) should fire **at the point where the resource is actually used**, NOT as a blanket pre-milestone gate. Over-eager gating blocks work that has zero dependency on the gate's outcome and wastes session cycles. Test: if the milestone's scaffold/foundation work has NO dependency on the gated resource, the gate is misplaced.
