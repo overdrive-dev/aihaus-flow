@@ -32,7 +32,11 @@ import (
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/types"
 )
 
-const version = "0.1.0-dev"
+// version is overridden at release build via:
+//   go build -ldflags="-X main.version=v0.1.X"
+// (Go's -X only works on string vars, not consts — keeping this as var is
+// load-bearing for release pipeline correctness.)
+var version = "0.1.0-dev"
 
 // usage prints the top-level CLI help.
 func usage() {
@@ -559,7 +563,7 @@ func runEmbedPipeline(
 // vector ranking + edge expansion) lands in subsequent M035 commit.
 func runQuery(args []string) int {
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
-	dbPath := fs.String("db", "aih-graph.db", "path to SQLite database")
+	dbPath := fs.String("db", "", "path to SQLite database (default: privacy.DefaultDBPath for cwd, matching `build`)")
 	bfs := fs.Bool("bfs", false, "structural BFS query (default if no other mode set)")
 	semantic := fs.Bool("semantic", false, "vector similarity (cosine) ranking — pure KNN")
 	hybrid := fs.Bool("hybrid", false, "hybrid mode: KNN top-K + 1-hop edge expansion per match")
@@ -578,6 +582,17 @@ func runQuery(args []string) int {
 	// Default mode: bfs unless --semantic or --hybrid explicitly set.
 	if !*semantic && !*bfs && !*hybrid {
 		*bfs = true
+	}
+
+	// Resolve --db default: match build's default (XDG path keyed by cwd hash).
+	// Mirrors install.sh / /aih-init expectation: build and query agree on
+	// where the repo's graph lives without the user passing --db each time.
+	if *dbPath == "" {
+		if resolved, err := privacy.DefaultDBPath("."); err == nil {
+			*dbPath = resolved
+		} else {
+			*dbPath = "aih-graph.db"
+		}
 	}
 
 	db, err := storage.Open(*dbPath)
@@ -761,6 +776,46 @@ func runUninstall(args []string) int {
 	return 0
 }
 
+// runHybridBM25 executes --hybrid via FTS5 BM25 ranking + 1-hop edge
+// expansion per match. Mirrors runHybrid's vector path but sources matches
+// from FTS5 instead of vector KNN. Same edge-expansion logic.
+func runHybridBM25(db *storage.DB, queryText, typeFilter string, topK int) int {
+	matches, err := db.QueryFTS5(buildFTS5Query(queryText), topK, typeFilter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: bm25 hybrid: %v\n", err)
+		return 1
+	}
+	if len(matches) == 0 {
+		fmt.Fprintln(os.Stderr, "query: no BM25 matches (try less specific terms)")
+		return 1
+	}
+	eng := query.New(db.SQL())
+	for _, m := range matches {
+		node, err := eng.GetByIdentifier(m.Type, m.Identifier)
+		title := ""
+		if err == nil {
+			title = titleFromProperties(node.Properties)
+		}
+		if len(title) > 70 {
+			title = title[:67] + "..."
+		}
+		// SQLite returns negative BM25; flip sign for human-readable "higher = better".
+		fmt.Printf("[s=%.2f] %-10s %-40s %s\n", -m.Score, m.Type, m.Identifier, title)
+		neighbors, err := eng.LoadNeighbors(m.NodeID, 5)
+		if err != nil {
+			continue
+		}
+		for _, n := range neighbors {
+			nTitle := titleFromProperties(n.Properties)
+			if len(nTitle) > 60 {
+				nTitle = nTitle[:57] + "..."
+			}
+			fmt.Printf("         → %-10s %-40s %s\n", n.Type, n.Identifier, nTitle)
+		}
+	}
+	return 0
+}
+
 // runSemanticBM25 executes --semantic via FTS5 BM25 lexical ranking.
 // Query syntax follows SQLite FTS5: phrases, OR/AND, prefix*. We pre-process
 // the user query to make it FTS5-safe (escape stray quotes, OR-join terms).
@@ -835,10 +890,19 @@ func buildFTS5Query(raw string) string {
 	return result
 }
 
-// runHybrid executes a --hybrid query: KNN ranking followed by 1-hop edge
-// expansion per top match. Output groups top matches with their immediate
-// neighbors, giving callers structural context around each semantic hit.
+// runHybrid executes a --hybrid query: rank top-K by similarity, then expand
+// 1-hop edges per match. Routes to BM25 (FTS5) when no vector embeddings are
+// stored but FTS5 has rows (default post-M041); otherwise vector KNN path.
 func runHybrid(db *storage.DB, queryText, typeFilter string, topK int, providerName string) int {
+	// Auto-route to BM25 hybrid when FTS5 has rows and (a) no provider
+	// specified, or (b) provider explicitly bm25, or (c) no embeddings stored.
+	if providerName == "" || providerName == "bm25" {
+		ftsRows, _ := db.CountFTS()
+		embRows, _ := db.IterateEmbeddings("")
+		if ftsRows > 0 && (providerName == "bm25" || len(embRows) == 0) {
+			return runHybridBM25(db, queryText, typeFilter, topK)
+		}
+	}
 	provider, err := resolveProvider(db, providerName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: %v\n", err)
