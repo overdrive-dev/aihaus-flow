@@ -9,7 +9,7 @@ Standalone Go binary memory engine for [aihaus](https://github.com/overdrive-dev
 aih-graph is the **memory + structural retrieval engine** aihaus uses as a mandatory addon. It builds a queryable knowledge graph of aihaus-managed repositories with **first-class ontological types** for aihaus concepts (Decision, Milestone, Story, Agent, Hook, Skill).
 
 This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
-- 5 langs (bash, python, JS/TS, Go, Markdown)
+- 6 langs (bash, python, JS/TS, Go, Markdown, PowerShell — per ADR-260515-E-amend-01)
 - AST extraction via tree-sitter
 - JSONL storage
 - BFS query with `--budget N` token cap

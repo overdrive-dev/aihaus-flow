@@ -4267,3 +4267,74 @@ This correction also surfaces a broader principle worth knowledge-logging: **env
 ### Knowledge log entry (promote at S10 closeout-style update)
 
 **K-M032-A:** Environmental pre-flight gates (network, toolchain, external services) should fire **at the point where the resource is actually used**, NOT as a blanket pre-milestone gate. Over-eager gating blocks work that has zero dependency on the gate's outcome and wastes session cycles. Test: if the milestone's scaffold/foundation work has NO dependency on the gated resource, the gate is misplaced.
+
+---
+
+## ADR-260515-E-amend-01 — v0.1 lang list: add PowerShell (M032)
+
+**Status:** Accepted (amends ADR-260515-E)
+**Date:** 2026-05-15
+**Milestone:** M032 (surfaced after foundation commit; before M033 begins)
+**Amends:** ADR-260515-E
+
+### Context
+
+The original ADR-260515-E locked v0.1 forever-scope at "5 langs: bash, python, JS/TS, Go, Markdown". User question — "why across 5 langs?" — surfaced that the choice was under-audited: of the 5 langs picked, only **bash** and **Markdown** are load-bearing for aihaus's own substrate. Python is used minimally (~30 LOC fallback in `merge-settings.sh`); JS/TS and Go are ZERO usage in aihaus-flow itself; **PowerShell** is used (in `install.ps1` for Windows installer) yet **was left OUT of the list**.
+
+The 5-lang list reflects "popular langs that fit on one hand" + assumptions about typical aihaus user codebases (React/Next.js frontend + Python/Go backend + bash devops + markdown docs) — not a survey of aihaus's actual install base, which remains unknown per CHALLENGES.md L1.
+
+This amendment surfaces the most honest minimal correction: **add PowerShell** so the lang list at least honestly covers aihaus's own usage. The deeper question (whether to make grammars pluggable, or to do an actual install-base survey) is deferred to a future amendment if the design needs grow.
+
+### Decision
+
+aih-graph v0.1 forever-scope lang list is **6 langs**, not 5:
+
+1. **bash** — load-bearing for aihaus (32 hooks + 5+ scripts).
+2. **Markdown** — load-bearing for aihaus (skills, agents, ADRs, docs, memory files).
+3. **PowerShell** — load-bearing for aihaus (`install.ps1` Windows installer; tree-sitter-powershell grammar available per smacker README + dep list).
+4. **Python** — typical user assumption (FastAPI backends, ML pipelines, scripts).
+5. **JavaScript / TypeScript** — typical user assumption (React/Next.js frontends; covered by 2 grammar modules: tree-sitter-javascript + tree-sitter-typescript).
+6. **Go** — typical user assumption (CLI tools, microservices, devops).
+
+**Total grammar modules: 7** (the 6 langs above; TS/JS split into 2 grammar modules per RESEARCH OQ-5 convention).
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | **(Chosen)** Add PowerShell → 6 langs / 7 grammar modules | Honest about aihaus's own usage; small incremental scope; tree-sitter-powershell grammar already available | Still "feels right" not "audited"; doesn't address JS/TS/Go assumption gap | Acknowledged as the minimal honest correction the user explicitly authorized |
+| 2 | Plug-in architecture (2 mandatory: bash+Markdown; rest pluggable) | Honors actual aihaus coverage; reduces maintenance; user-extensible | Bigger architectural change; M033 architect rewrites grammar-loader interface | User chose (d) — minimal honest correction over architectural shift |
+| 3 | Survey-driven (ship what install base uses) | Most defensible | Install base unknown per CHALLENGES.md L1; not actionable | Deferred |
+| 4 | Keep at 5 langs, document under-auditedness | Smallest blast radius | Perpetuates the gap; doesn't even include PowerShell which aihaus uses today | Rejected — leaves known issue unaddressed |
+
+### Rationale
+
+Two principles in tension:
+- **Forever-scope discipline** (ADR-260515-E original): don't expand without ADR; v0.1 is the forever scope.
+- **Audit honesty** (K-M032-A surfaced via this same exchange): design choices should be grounded in actual usage, not assumption.
+
+The 5-lang list violated audit-honesty by excluding aihaus's own PowerShell usage. Adding PowerShell brings the list to minimal honest coverage of aihaus-self. The remaining 3 langs (Python, JS/TS, Go) stay in v0.1 as typical-user-codebase assumptions — flagged here as "assumption-based, not surveyed" so future amendments can re-audit if install-base data ever surfaces.
+
+This amendment does NOT switch to plug-in architecture (option 2) — that's a larger design shift the user chose not to pursue at this point. v0.1 stays fixed-list; the list is just 1 lang longer + 1 grammar module longer.
+
+### Consequences
+
+1. **M033 acceptance** updated: 6 langs / 7 grammar modules to integrate (was 5 / 6).
+2. **`aih-graph/PRD.md`** updated: Language Coverage section reflects 6 langs.
+3. **ADR-260515-C "5 required grammars"** language re-aligned: 6 required grammars now (bash + python + javascript + typescript + go + markdown + **powershell**).
+4. **Path-C cascade rule** (per ADR-260515-C §4) extends to PowerShell — if `tree-sitter-powershell` is unavailable/GPL/archived at M033 verification, scope shrinks correspondingly (back to 5, dropping PS).
+5. **CI workflow spec (S09)** Language Matrix: smoke tests must cover PS in addition to other 5.
+6. **Knowledge surfaced (K-M032-B):** "feels right" lang lists deserve an audit pass against actual aihaus usage before locking forever-scope. The PowerShell omission was visible in 60 seconds of `find pkg/scripts/ -name '*.ps1'` — that audit should have been routine in M031 architect's work.
+
+### Rollback
+
+`git revert` removes this amendment; lang list reverts to 5. PowerShell stays out. No code-impact yet since M033 hasn't begun — M033 architect would have caught the omission during AST extraction implementation otherwise.
+
+### References
+
+- ADR-260515-E (original; this amendment extends its lang list)
+- ADR-260515-C (re-aligned: 6 required grammars now, not 5)
+- CHALLENGES.md L1 (install base unknown — survey-driven option (3) is not actionable)
+- User exchange: "why across 5 langs?" — forced the audit surfacing PowerShell omission
+- K-M032-A (env pre-flight gate scoping correction — paired knowledge entry)
+- K-M032-B (lang list audit honesty — knowledge surfaced by this amendment)

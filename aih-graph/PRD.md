@@ -17,7 +17,7 @@ aih-graph is **NOT a graphify replacement** — it has narrower scope (intention
 | # | Goal | Source ADR |
 |---|------|-----------|
 | 1 | Build CLI binary callable from aihaus skills via Bash | ADR-260515-D |
-| 2 | Extract AST from 5 langs (bash, python, JS/TS, Go, Markdown) | ADR-260515-C + -E |
+| 2 | Extract AST from 6 langs (bash, python, JS/TS, Go, Markdown, PowerShell — per ADR-260515-E-amend-01) | ADR-260515-C + -E |
 | 3 | Store as JSONL with per-record `_v` schema version | ADR-260515-B |
 | 4 | 6 first-class typed accessor structs in `pkg/aihgraph/` Go API | ADR-260515-B |
 | 5 | BFS query with `--budget N` token cap | ADR-260515-E |
@@ -46,7 +46,7 @@ Per BRIEF.md CHALLENGES C2 surfacing — honest trade-off.
 
 | Capability | graphify v0.7.19 (today, empirically tested on aihaus-flow) | aih-graph v0.1 (forever-scope) |
 |------------|---------------------------------------------|-------------------------------|
-| **Languages** | 29 (bash, python, JS/TS, Go, Rust, Java, Ruby, C/C++, Swift, Kotlin, Scala, PHP, R, Lua, Zig, PowerShell, Elixir, ObjC, Julia, Vue, Svelte, Astro, Groovy, Dart, V, SystemVerilog, SQL, Fortran, Pascal/Delphi) | 5 (bash, python, JS/TS, Go, Markdown — 6 grammar modules) |
+| **Languages** | 29 (bash, python, JS/TS, Go, Rust, Java, Ruby, C/C++, Swift, Kotlin, Scala, PHP, R, Lua, Zig, PowerShell, Elixir, ObjC, Julia, Vue, Svelte, Astro, Groovy, Dart, V, SystemVerilog, SQL, Fortran, Pascal/Delphi) | 6 (bash, python, JS/TS, Go, Markdown, PowerShell — 7 grammar modules; per ADR-260515-E-amend-01) |
 | **AST extraction** | Tree-sitter; mature; full-feature | Tree-sitter; same library; subset of grammars |
 | **Markdown ingestion** | Yes | Yes |
 | **Storage format** | graph.json (1MB on aihaus-flow) | JSONL (per-record append-friendly; smaller binary footprint) |
@@ -125,7 +125,7 @@ aih-graph --help                        CLI help
 Per architecture.md §4 module-by-module + ADR-260515-E forever-scope discipline:
 
 - **M032 — foundation:** `go.mod`, tree-sitter Go binding integration (post-S02 verification gate), `cmd/aih-graph/main.go` scaffold, LICENSE, basic README.
-- **M033 — AST extraction:** `internal/parser/` with 5 langs (bash, python, JS/TS, Go, Markdown). Per-lang tree-sitter query files.
+- **M033 — AST extraction:** `internal/parser/` with 6 langs (bash, python, JS/TS, Go, Markdown, PowerShell — per ADR-260515-E-amend-01). Per-lang tree-sitter query files.
 - **M034 — graph + storage:** `internal/graph/` + `internal/storage/` (JSONL writer/reader). Generic Node + type-tag per ADR-260515-B.
 - **M035 — query + custom types:** `internal/query/` (BFS + --budget N) + `internal/types/` (6 typed accessor structs) + `pkg/aihgraph/` public API.
 - **M036 — privacy gates:** `internal/privacy/` (XDG resolution + per-repo isolation + consent gate + --purge + NDA opt-out).
