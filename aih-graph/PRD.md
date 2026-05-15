@@ -122,32 +122,55 @@ aih-graph --help                        CLI help
 
 ## Implementation Sequence (M032-M040)
 
-Per architecture.md §4 module-by-module + ADR-260515-E forever-scope discipline:
+Per architecture.md §4 module-by-module + ADR-260515-E forever-scope discipline.
+**Post-pivot (ADR-260515-B-amend-01 + E-amend-02 — 2026-05-15):** substrate is SQLite + sqlite-vec; vector embeddings tier-1 in v0.1.
 
-- **M032 — foundation:** `go.mod`, tree-sitter Go binding integration (post-S02 verification gate), `cmd/aih-graph/main.go` scaffold, LICENSE, basic README.
-- **M033 — AST extraction:** `internal/parser/` with 6 langs (bash, python, JS/TS, Go, Markdown, PowerShell — per ADR-260515-E-amend-01). Per-lang tree-sitter query files.
-- **M034 — graph + storage:** `internal/graph/` + `internal/storage/` (JSONL writer/reader). Generic Node + type-tag per ADR-260515-B.
-- **M035 — query + custom types:** `internal/query/` (BFS + --budget N) + `internal/types/` (6 typed accessor structs) + `pkg/aihgraph/` public API.
-- **M036 — privacy gates:** `internal/privacy/` (XDG resolution + per-repo isolation + consent gate + --purge + NDA opt-out).
-- **M037 — CI cross-compile:** `.github/workflows/aih-graph-ci.yml` — 4-platform matrix per S09 spec; Pattern A native build per RESEARCH.md.
-- **M038 — v0.1.0 ship:** README, version-tagging, binary release to GitHub Releases (or commit `bin/aih-graph` per ADR-260515-D F4 distribution choice).
-- **M039 — aihaus integration:** `pkg/scripts/install.sh` builds aih-graph; **Go pre-flight check + interactive 3-way prompt** per ADR-260515-D-amend-01 (`install-aih-graph-binary.sh` ships as option [2] handler); `pkg/.aihaus/hooks/aih-graph-refresh.sh` new hook; `.aihaus/.install-mode` sidecar records `go|binary` choice for update.sh; PowerShell parity (`install.ps1`); ~15 agent prompt addenda (PM estimate advisory per CHECK F5).
-- **M040 — smoke checks + release v0.35.0:** Smoke Check 84/85/86 implementation per S08 spec; aihaus v0.35.0 tag includes aih-graph v0.1.0.
+- **M032 — foundation:** `go.mod`, `cmd/aih-graph/main.go` scaffold, LICENSE, basic README. (DONE — see m032-foundation tag.)
+- **M033 — AST extraction + toolchain validation:** `internal/parser/` with 6 langs (bash, python, JS/TS, Go, Markdown, PowerShell — per ADR-260515-E-amend-01). Per-lang tree-sitter query files. **S1 pre-flight gate (per ADR-260515-C-amend-01):** validate CGO toolchain works with BOTH tree-sitter binding AND `mattn/go-sqlite3` + sqlite-vec extension load. Known blocker: w64devkit gcc 16.1.0 produces `pe-bigobj-x86-64` incompatible with Go cgo (memory: `project_m033_cgo_prereq.md`). S1 must propose alternative (TDM-GCC / MSVC / pure-Go fallback) before AST work begins.
+- **M034 — SQLite schema + sqlite-vec storage:** `internal/storage/` with schema migrations (nodes + edges + vec_nodes virtual table per ADR-260515-B-amend-01); `database/sql` wrappers; sqlite-vec extension loader (per-platform .dll/.so/.dylib resolution). Idempotent `aih-graph build` writes/updates nodes + edges.
+- **M035 — Query + typed accessors + embedding pipeline:** `internal/query/` (recursive CTE BFS + hybrid SQL+vec_distance) + `internal/types/` (6 typed accessor structs over SQL) + `internal/embed/` (pluggable provider: Voyage AI default + local ONNX fallback; SHA-based change detection) + `pkg/aihgraph/` public API. **Heaviest milestone** (~1 week scope per amendment estimate).
+- **M036 — Privacy gates:** `internal/privacy/` (XDG resolution + per-repo .db isolation + consent gate + `--purge` = file delete + NDA opt-out via `--embed-provider local`). Composes naturally with single-file-per-repo design.
+- **M037 — CI cross-compile + sqlite-vec extension bundling:** `.github/workflows/aih-graph-ci.yml` — 4-platform matrix; per-platform sqlite-vec extension download from upstream releases at build time; tree-sitter binding linked statically per Pattern A.
+- **M038 — v0.1.0 ship:** README, version-tagging, binary release to GitHub Releases (per ADR-260515-D-amend-01 option [2] binary fallback path).
+- **M039 — aihaus integration:** `pkg/scripts/install.sh` builds aih-graph; **Go + C-toolchain pre-flight check + interactive 3-way prompt** per ADR-260515-D-amend-01 (now also validates CGO toolchain not just Go presence); `pkg/.aihaus/hooks/aih-graph-refresh.sh` new hook; `.aihaus/.install-mode` sidecar; PowerShell parity (`install.ps1`); ~15 agent prompt addenda with `aih-graph query --semantic` examples.
+- **M040 — smoke checks + release v0.35.0:** Smoke Check 84 (build smoke + DB schema + sqlite-vec extension load), 85 (privacy ADR enforcement), 86 (integration round-trip including semantic query). aihaus v0.35.0 tag includes aih-graph v0.1.0.
 
 ## Acceptance Criteria for v0.1 (cross-milestone)
 
 Test at M038 closeout:
 
-- [ ] `aih-graph build .` on aihaus-flow root completes in <30s (similar to graphify-as-shipped).
-- [ ] `aih-graph query "ADR-260514-B"` returns `Decision` node within token budget.
-- [ ] `aih-graph query --type Milestone "M030"` returns Milestone node + Story edges.
+- [ ] `aih-graph build .` on aihaus-flow root completes in <60s (includes embedding generation for high-value nodes).
+- [ ] `aih-graph build .` re-run with no source changes completes in <5s (SHA-based skip on unchanged embeddings).
+- [ ] `aih-graph query "ADR-260514-B"` returns `Decision` node within token budget (structural lookup).
+- [ ] `aih-graph query --type Milestone "M030"` returns Milestone node + Story edges (filtered structural).
+- [ ] `aih-graph query --semantic "how does merge-settings handle hooks arrays"` returns top-K relevant Decision/Milestone/Skill nodes by cosine similarity.
+- [ ] `aih-graph query "..."` (default hybrid mode) returns nodes ranked by combined SQL match + vector distance.
 - [ ] `aih-graph build` on a new repo without `.aih-graph-consent` exits with code 2 + error message.
 - [ ] `aih-graph build /tmp/test --accept-all-repos` works.
-- [ ] `aih-graph uninstall --purge` removes all data; verifier confirms path absent.
-- [ ] CI cross-compile produces binaries for linux-amd64, darwin-amd64, darwin-arm64, windows-amd64.
-- [ ] Smoke Check 84 (build smoke), 85 (privacy ADR enforcement), 86 (integration round-trip) all PASS.
-- [ ] M032 pre-flight verification gate executed and ADR-260515-C confirmed (or amended).
-- [ ] `pkg/.aihaus/decisions.md` ADR-260515-A through -E unchanged from M031 (no parallel amendments unless pre-flight contradicted).
+- [ ] `aih-graph build --embed-provider local` runs without external API calls (NDA opt-out path).
+- [ ] `aih-graph uninstall --purge` removes all data (single .db file delete); verifier confirms path absent.
+- [ ] CI cross-compile produces binaries for linux-amd64, darwin-amd64, darwin-arm64, windows-amd64; each bundles matching sqlite-vec extension.
+- [ ] `sqlite_version()` and `vec_version()` both return at install-time smoke check.
+- [ ] Smoke Check 84 (build smoke), 85 (privacy ADR enforcement), 86 (integration round-trip + semantic query) all PASS.
+- [ ] M033/S1 pre-flight verification gate executed; CGO toolchain confirmed compatible with both tree-sitter AND sqlite-vec.
+
+## Estimated v0.1 Timeline
+
+Per ADR-260515-B-amend-01 + E-amend-02 estimates:
+
+| Milestone | Focused effort | Calendar (1-2 sessions/week) |
+|-----------|----------------|-------------------------------|
+| M033 (AST + CGO toolchain swap) | 1-2 weeks | 2-3 weeks |
+| M034 (SQLite + sqlite-vec) | 3-5 days | 1-2 weeks |
+| M035 (query + types + embed pipeline) | ~1 week | 2-3 weeks |
+| M036 (privacy) | 3-5 days | 1 week |
+| M037 (CI cross-compile) | 2-3 days | 1 week |
+| M038 (release) | 1-2 days | 1 week |
+| M039 (aihaus integration) | 3-5 days | 1-2 weeks |
+| M040 (smoke + aihaus release) | 1-2 days | 1 week |
+| **Total (focused effort)** | **~7-8 weeks** | **~12-14 weeks calendar** |
+
+**Risk multipliers:** CGO toolchain blocker (currently active), brainstorm-cascade scope shifts, adversarial review iteration (3-4 CRITICAL BLOCKERs per milestone historical baseline). Realistic ship date: **~3 months calendar.**
 
 ## References
 
