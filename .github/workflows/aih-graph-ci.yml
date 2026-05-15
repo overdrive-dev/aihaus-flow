@@ -1,0 +1,86 @@
+name: aih-graph CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'aih-graph/**'
+      - '.github/workflows/aih-graph-ci.yml'
+  pull_request:
+    paths:
+      - 'aih-graph/**'
+      - '.github/workflows/aih-graph-ci.yml'
+
+jobs:
+  # Lint + test job runs once on linux-amd64 (no platform-specific code in v0.1).
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aih-graph
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: aih-graph/go.sum
+      - name: go mod verify
+        run: go mod verify
+      - name: go vet
+        run: go vet ./...
+      - name: go build
+        run: go build -o bin/aih-graph ./cmd/aih-graph
+      - name: smoke — version + help
+        run: |
+          ./bin/aih-graph version
+          ./bin/aih-graph help
+
+  # Cross-compile matrix per ADR-260515-B-amend-02 + M037 PRD spec.
+  # Pure-Go stack — no CGO toolchain setup needed per platform.
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: ''
+          - goos: darwin
+            goarch: amd64
+            ext: ''
+          - goos: darwin
+            goarch: arm64
+            ext: ''
+          - goos: windows
+            goarch: amd64
+            ext: '.exe'
+    defaults:
+      run:
+        working-directory: aih-graph
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: aih-graph/go.sum
+      - name: build aih-graph-${{ matrix.goos }}-${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w" \
+            -o "dist/aih-graph-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" \
+            ./cmd/aih-graph
+      - name: list output
+        run: ls -la dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aih-graph-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: aih-graph/dist/aih-graph-*
+          retention-days: 14
