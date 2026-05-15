@@ -131,7 +131,7 @@ Per architecture.md §4 module-by-module + ADR-260515-E forever-scope discipline
 - **M036 — privacy gates:** `internal/privacy/` (XDG resolution + per-repo isolation + consent gate + --purge + NDA opt-out).
 - **M037 — CI cross-compile:** `.github/workflows/aih-graph-ci.yml` — 4-platform matrix per S09 spec; Pattern A native build per RESEARCH.md.
 - **M038 — v0.1.0 ship:** README, version-tagging, binary release to GitHub Releases (or commit `bin/aih-graph` per ADR-260515-D F4 distribution choice).
-- **M039 — aihaus integration:** `pkg/scripts/install.sh` builds aih-graph; `pkg/.aihaus/hooks/aih-graph-refresh.sh` new hook; ~15 agent prompt addenda (PM estimate advisory per CHECK F5).
+- **M039 — aihaus integration:** `pkg/scripts/install.sh` builds aih-graph; **Go pre-flight check + interactive 3-way prompt** per ADR-260515-D-amend-01 (`install-aih-graph-binary.sh` ships as option [2] handler); `pkg/.aihaus/hooks/aih-graph-refresh.sh` new hook; `.aihaus/.install-mode` sidecar records `go|binary` choice for update.sh; PowerShell parity (`install.ps1`); ~15 agent prompt addenda (PM estimate advisory per CHECK F5).
 - **M040 — smoke checks + release v0.35.0:** Smoke Check 84/85/86 implementation per S08 spec; aihaus v0.35.0 tag includes aih-graph v0.1.0.
 
 ## Acceptance Criteria for v0.1 (cross-milestone)

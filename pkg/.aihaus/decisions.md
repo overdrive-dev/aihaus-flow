@@ -4338,3 +4338,99 @@ This amendment does NOT switch to plug-in architecture (option 2) — that's a l
 - User exchange: "why across 5 langs?" — forced the audit surfacing PowerShell omission
 - K-M032-A (env pre-flight gate scoping correction — paired knowledge entry)
 - K-M032-B (lang list audit honesty — knowledge surfaced by this amendment)
+
+---
+
+## ADR-260515-D-amend-01 — install.sh Go pre-flight check with interactive 3-way prompt (M032)
+
+**Status:** Accepted
+**Date:** 2026-05-14
+**Milestone:** M032 (design-audit amendment; implementation M039)
+**Amends:** ADR-260515-D §5 (install.sh `go build` step — was implicit, now explicit pre-flight)
+
+### Context
+
+ADR-260515-D §5 specified that `pkg/scripts/install.sh` builds aih-graph during install: `(cd "${REPO}/aih-graph" && go build -o bin/aih-graph ./cmd/aih-graph)`. This implicitly required Go 1.22+ on the user's machine but did NOT specify pre-flight detection or graceful fallback. Post-M032 design audit surfaced the question: what happens when a user runs `install.sh` without Go installed?
+
+User position (verbatim, 2026-05-14 turn): "aihaus é um projeto para desenvolvedores, eles instalam em suas maquinas e trabalham em repositorios diferentes, por isso acho que precisa do go como critério" — Go is a legitimate install criterion for a developer-tools project, NOT user-hostile friction.
+
+Three options surfaced during design audit:
+1. **Hard fail** — `command -v go || exit 1` with install link. Cleanest mental model ("aihaus needs Go, period"). Drops M037 binary distribution scope.
+2. **Soft warn + binary fallback** — try `go build`, fall back to GitHub Releases binary download. Preserves M037 scope; more code; more resilient offline.
+3. **Interactive prompt** — when Go absent, ask user: install Go now / download pre-built binary / abort.
+
+User chose option 3 (interactive prompt).
+
+### Decision
+
+`pkg/scripts/install.sh` and `pkg/scripts/install.ps1` ship a **Go pre-flight check with interactive 3-way prompt** at install time:
+
+1. **Pre-flight detection.** Before invoking `go build` for aih-graph (per ADR-260515-D §5), check `command -v go >/dev/null 2>&1` (bash) / `Get-Command go -ErrorAction SilentlyContinue` (PowerShell). If found AND `go version` reports `go1.22+` → proceed silently. If Go missing OR version < 1.22 → enter interactive prompt.
+
+2. **Interactive prompt shape (binding).** Print:
+   ```
+   aihaus requires Go 1.22+ to build aih-graph (mandatory memory engine).
+   Detected: <none | go1.X.Y (too old)>.
+
+   Options:
+     [1] Pause install — I'll install Go now (https://go.dev/dl/) and re-run install.sh
+     [2] Download pre-built binary from GitHub Releases (skip go build this install)
+     [3] Abort install
+
+   Choice [1/2/3]:
+   ```
+
+3. **Branch behavior:**
+   - **[1] Pause** → print `Re-run install.sh after installing Go. Exiting cleanly (no partial state written).`; exit 0; no `.aihaus/` writes occur after this point.
+   - **[2] Binary fallback** → invoke `pkg/scripts/install-aih-graph-binary.sh` (NEW, M039 spec) which downloads the matching platform binary from GitHub Releases per M037 spec. On failure → fall back to choice [3].
+   - **[3] Abort** → print `aihaus install aborted by user.`; exit 2.
+
+4. **Non-interactive mode.** When `AIHAUS_NONINTERACTIVE=1` (CI, scripted installs) AND Go missing → default to binary fallback (option [2]). When `AIHAUS_NO_GO_CHECK=1` → skip pre-flight entirely (user takes responsibility; advanced opt-out).
+
+5. **M037 scope preserved.** Because option [2] (binary fallback) remains a first-class path, M037 (CI cross-compile + GitHub Releases binary distribution) stays in scope as originally specified in ADR-260515-E §4. NOT dropped.
+
+6. **PowerShell parity.** `install.ps1` ships byte-equivalent prompt UX with `Read-Host` for choice input. Verified via smoke-test (M039 scope).
+
+7. **M033 pre-flight gate composition.** ADR-260515-C-amend-01 moved a different pre-flight gate (tree-sitter binding verification) from M032→M033. That gate fires at M033/S1 dispatch and is orthogonal to this install-time Go check. The two compose: install-time check guarantees Go exists; M033/S1 gate verifies the tree-sitter binding contract works with that Go install.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | Hard fail + Go install link | Cleanest mental model; less code; drops M037 binary scope | Pure-Python devs forced to install Go SDK (~500MB) before aihaus useful | User chose option 3 |
+| 2 | Soft warn + auto-fallback | Silent install; resilient offline | Hides Go install opportunity from devs who would install it; opaque about what happened | User chose option 3 |
+| 3 | **(Chosen)** Interactive prompt 3-way | User controls path; surfaces Go install opportunity; binary fallback preserved | More install.sh code; prompt-UX in install (precedent) | None — selected by user 2026-05-14 |
+| 4 | No check, build-or-fail loud | Zero new install code | Cryptic `go: command not found` error mid-install; leaves partial state | Rejected — bad UX for documented dev audience |
+
+### Rationale
+
+User's framing — "aihaus é projeto para desenvolvedores" — is correct empirically: aihaus's audience builds software for a living. A Go install link is not friction; it's surfacing a legitimate dependency. But forcing Go SDK on a Python-only dev is overreach. The interactive prompt threads the needle: developers who CAN install Go are nudged toward it (path [1]); developers who can't or won't get a binary fallback (path [2]); CI/scripted installs default to binary via env var (`AIHAUS_NONINTERACTIVE=1`).
+
+This amendment also resolves a latent ambiguity in ADR-260515-D §5: the original "install.sh builds aih-graph" prose implied Go was required but never said so. New developers reading ADR-260515-D would not know the install behavior under missing-Go. Explicit pre-flight + 3-way prompt eliminates that ambiguity.
+
+K-M032-C (new knowledge entry, paired with this amendment): **Interactive prompts at install time are acceptable for ENV pre-flight checks when fallback paths exist.** Pattern is: detect missing dep → surface choice → preserve all reasonable paths → fail loud only when user explicitly chooses abort. Contrast with K-M032-A: blanket pre-milestone gates over-correct; resource-use-point gates fire only when needed. install-time Go check is a resource-use-point gate (Go is used immediately at install) — not blanket pre-milestone.
+
+### Consequences
+
+1. **install.sh + install.ps1 gain ~30-40 LOC** for pre-flight + prompt + branch handling. Implementation lands in M039 (Aihaus integration milestone — already planned to modify install.sh per ADR-260515-D §5).
+2. **`pkg/scripts/install-aih-graph-binary.sh` (NEW M039)** ships as the [2] branch handler. Downloads platform-matched binary from GitHub Releases; verifies SHA256 per M037 spec.
+3. **M037 scope preserved** — CI cross-compile matrix + release artifacts remain in scope. Without [2] branch, M037 would have been candidate for descope.
+4. **New env vars (M039 scope):** `AIHAUS_NONINTERACTIVE` (defaults binary fallback when Go missing); `AIHAUS_NO_GO_CHECK` (skip pre-flight entirely — opt-out). Documented in install.sh `--help` and `CLAUDE.md`.
+5. **Update.sh implication:** `pkg/scripts/update.sh` should NOT re-run the prompt — it inherits the Go-or-binary path chosen at install time. If user originally chose [2], update.sh re-downloads binary; if originally chose [1], update.sh runs `go build`. State recorded in `.aihaus/.install-mode` (`go` | `binary`) — NEW sidecar, written by install.sh, read by update.sh.
+6. **M039 story breakdown** in `aih-graph/PRD.md` needs new story slot for "install.sh Go pre-flight + prompt + binary-fallback wiring" — ~1 story addition. Amendment-time PRD.md edit handled in this same commit.
+
+### Rollback
+
+`git revert` removes this amendment + PRD.md edit. Pre-flight check + prompt code can be removed from install.sh/.ps1 separately if user later prefers hard-fail or auto-fallback. Sidecar `.aihaus/.install-mode` becomes orphan but harmless.
+
+### References
+
+- ADR-260515-D (parent: install.sh `go build` step — §5 amended)
+- ADR-260515-C-amend-01 (M033 pre-flight gate move — compositional precedent for env-check timing)
+- ADR-260515-E (v0.1 forever-scope — confirms aih-graph mandatory addon, justifying install-time gate)
+- ADR-M028-CURATE-A (env-var lifecycle pattern — `AIHAUS_NONINTERACTIVE` follows precedent)
+- K-M032-A (resource-use-point env gates — composition rule)
+- K-M032-C (interactive prompt for ENV pre-flight with fallback — NEW, paired)
+- User exchange 2026-05-14 ("aihaus é projeto para desenvolvedores...precisa do go como critério")
+- M037 spec (binary release matrix — preserved by option [2] choice)
+- M039 spec (install.sh integration milestone — implementation lands here)
