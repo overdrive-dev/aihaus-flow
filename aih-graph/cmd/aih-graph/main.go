@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/embed"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/extract"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/query"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/storage"
@@ -70,6 +71,7 @@ func runBuild(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
 	dbPath := fs.String("db", "aih-graph.db", "path to SQLite database file (created if missing)")
+	embedProvider := fs.String("embed-provider", "", "embedding provider: voyage|fake|none (default none — skip embeddings)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -325,33 +327,157 @@ func runBuild(args []string) int {
 			fmt.Printf("  %s: %d\n", t, edgeCounts[t])
 		}
 	}
+
+	// Embedding pipeline (opt-in via --embed-provider).
+	if *embedProvider != "" && *embedProvider != "none" {
+		provider, err := buildEmbedProvider(*embedProvider)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "build: embed provider: %v\n", err)
+			return 1
+		}
+		if err := runEmbedPipeline(db, provider, decisions, agents, skills, hooks, milestones, stories); err != nil {
+			fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
+			return 1
+		}
+	}
 	return 0
 }
 
-// runQuery implements the M035 query subcommand. Initial release supports
-// BFS (structural) mode only; --semantic / hybrid require embedding pipeline
-// (deferred to subsequent M035 commit).
+// buildEmbedProvider returns a configured embed.Provider by name.
+func buildEmbedProvider(name string) (embed.Provider, error) {
+	switch name {
+	case "voyage":
+		return embed.NewVoyageProvider(embed.VoyageOptions{})
+	case "fake":
+		return embed.NewFakeProvider(1024), nil
+	default:
+		return nil, fmt.Errorf("unknown provider %q (want voyage|fake|none)", name)
+	}
+}
+
+// embedTextForDecision returns the text aih-graph embeds for each Decision
+// node. We include the title + status + body so vector queries can match
+// against the actual decision narrative.
+func embedTextForDecision(d types.Decision) string {
+	return d.Identifier + "\n" + d.Title + "\n" + d.Status + "\n" + d.Body
+}
+
+func embedTextForAgent(a types.Agent) string {
+	return a.Name + "\n" + a.Description
+}
+
+func embedTextForSkill(s types.Skill) string {
+	return s.Name + "\n" + s.Description
+}
+
+func embedTextForHook(h types.Hook) string {
+	return h.Name + "\n" + h.Purpose
+}
+
+func embedTextForMilestone(m types.Milestone) string {
+	return m.ID + "\n" + m.Slug + "\n" + m.Status + "\n" + m.Phase
+}
+
+func embedTextForStory(s types.Story) string {
+	return s.MilestoneID + "/" + s.ID + "\n" + s.Status + "\n" + s.Summary
+}
+
+// runEmbedPipeline iterates extracted nodes and writes embeddings + content
+// SHAs onto the persisted rows. SHA-based change detection skips nodes whose
+// stored content_sha already matches the current text.
+func runEmbedPipeline(
+	db *storage.DB,
+	provider embed.Provider,
+	decisions []types.Decision,
+	agents []types.Agent,
+	skills []types.Skill,
+	hooks []types.Hook,
+	milestones []types.Milestone,
+	stories []types.Story,
+) error {
+	type unit struct {
+		typ        string
+		identifier string
+		text       string
+	}
+	var units []unit
+	for _, d := range decisions {
+		units = append(units, unit{"Decision", d.Identifier, embedTextForDecision(d)})
+	}
+	for _, a := range agents {
+		units = append(units, unit{"Agent", a.Name, embedTextForAgent(a)})
+	}
+	for _, s := range skills {
+		units = append(units, unit{"Skill", s.Name, embedTextForSkill(s)})
+	}
+	for _, h := range hooks {
+		units = append(units, unit{"Hook", h.Name, embedTextForHook(h)})
+	}
+	for _, m := range milestones {
+		id := m.ID
+		if id == "" {
+			id = m.Slug
+		}
+		units = append(units, unit{"Milestone", id, embedTextForMilestone(m)})
+	}
+	for _, s := range stories {
+		units = append(units, unit{"Story", s.MilestoneID + "/" + s.ID, embedTextForStory(s)})
+	}
+
+	embedded, skipped, errs := 0, 0, 0
+	for _, u := range units {
+		nodeID, err := db.LookupNodeID(u.typ, u.identifier)
+		if err != nil {
+			errs++
+			continue
+		}
+		sha := embed.SHA256Hex(u.text)
+		// Skip if existing SHA matches (content unchanged).
+		if existing, _ := db.EmbeddingSHA(nodeID); existing == sha {
+			skipped++
+			continue
+		}
+		vec, err := provider.Embed(u.text)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  embed: skip %s %s: %v\n", u.typ, u.identifier, err)
+			errs++
+			continue
+		}
+		if err := db.UpdateEmbedding(nodeID, embed.EncodeVector(vec), provider.Model(), sha); err != nil {
+			errs++
+			continue
+		}
+		embedded++
+	}
+	fmt.Printf("Embedded %d nodes (%s; %d skipped — SHA match; %d errors)\n",
+		embedded, provider.Model(), skipped, errs)
+	return nil
+}
+
+// runQuery implements the M035 query subcommand. BFS (structural) and
+// --semantic (vector similarity) supported. Hybrid query (SQL pre-filter +
+// vector ranking + edge expansion) lands in subsequent M035 commit.
 func runQuery(args []string) int {
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
 	dbPath := fs.String("db", "aih-graph.db", "path to SQLite database")
-	bfs := fs.Bool("bfs", true, "structural BFS query (default; only mode implemented)")
-	semantic := fs.Bool("semantic", false, "vector similarity (NOT YET IMPLEMENTED)")
+	bfs := fs.Bool("bfs", false, "structural BFS query")
+	semantic := fs.Bool("semantic", false, "vector similarity (cosine) ranking")
 	depth := fs.Int("depth", 1, "BFS depth (hops outward from root)")
-	typ := fs.String("type", "", "restrict root match to a node type (Decision|Milestone|Story|Agent|Hook|Skill)")
+	typ := fs.String("type", "", "restrict root match (BFS) or candidate type (semantic) to one of: Decision|Milestone|Story|Agent|Hook|Skill")
+	topK := fs.Int("top", 10, "semantic: number of top matches to return")
+	provider := fs.String("embed-provider", "", "semantic: embedding provider (voyage|fake; default: derive from stored embedding_model)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *semantic {
-		fmt.Fprintln(os.Stderr, "query: --semantic not yet implemented (M035 embedding pipeline pending)")
-		return 1
-	}
-	_ = bfs
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "query: <identifier> required")
-		fmt.Fprintln(os.Stderr, "usage: aih-graph query [--type T] [--depth N] [--db PATH] <identifier>")
+		fmt.Fprintln(os.Stderr, "query: <identifier-or-text> required")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph query [--bfs|--semantic] [--type T] [--depth N] [--top K] [--db PATH] <identifier-or-text>")
 		return 2
 	}
-	identifier := fs.Arg(0)
+	// Default mode: bfs unless --semantic explicitly set.
+	if !*semantic && !*bfs {
+		*bfs = true
+	}
 
 	db, err := storage.Open(*dbPath)
 	if err != nil {
@@ -360,6 +486,12 @@ func runQuery(args []string) int {
 	}
 	defer db.Close()
 
+	if *semantic {
+		return runSemantic(db, fs.Arg(0), *typ, *topK, *provider)
+	}
+
+	// BFS mode.
+	identifier := fs.Arg(0)
 	eng := query.New(db.SQL())
 	results, err := eng.BFS(*typ, identifier, *depth)
 	if err != nil {
@@ -372,18 +504,109 @@ func runQuery(args []string) int {
 	}
 
 	for _, r := range results {
-		title := ""
-		if t, ok := r.Node.Properties["title"].(string); ok {
-			title = t
-		} else if d, ok := r.Node.Properties["description"].(string); ok {
-			title = d
-		}
+		title := titleFromProperties(r.Node.Properties)
 		if len(title) > 80 {
 			title = title[:77] + "..."
 		}
 		fmt.Printf("[d=%d] %-10s %-40s %s\n", r.Distance, r.Node.Type, r.Node.Identifier, title)
 	}
 	return 0
+}
+
+// runSemantic executes a --semantic query: embed the query text via the
+// matching provider and KNN-rank stored embeddings by cosine similarity.
+func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, providerName string) int {
+	// Determine provider. If --embed-provider not passed, detect from stored
+	// rows (first row's embedding_model). Falls back to "fake" if nothing stored.
+	if providerName == "" {
+		rows, err := db.IterateEmbeddings("")
+		if err == nil && len(rows) > 0 {
+			// Re-look up the model name (IterateEmbeddings doesn't return it
+			// in the row struct; query directly).
+			var model sql.NullString
+			_ = db.SQL().QueryRow(
+				"SELECT embedding_model FROM nodes WHERE id = ?", rows[0].NodeID,
+			).Scan(&model)
+			if model.String == "fake-sha256" {
+				providerName = "fake"
+			} else if model.String != "" {
+				providerName = "voyage"
+			} else {
+				providerName = "fake"
+			}
+		} else {
+			providerName = "fake"
+		}
+	}
+	provider, err := buildEmbedProvider(providerName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: %v\n", err)
+		return 1
+	}
+
+	queryVec, err := provider.Embed(queryText)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: embed query: %v\n", err)
+		return 1
+	}
+
+	rows, err := db.IterateEmbeddings(typeFilter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
+		return 1
+	}
+	if len(rows) == 0 {
+		fmt.Fprintln(os.Stderr, "query: no embeddings stored (run `aih-graph build --embed-provider fake|voyage` first)")
+		return 1
+	}
+
+	candidates := make([]embed.Candidate, 0, len(rows))
+	idMap := map[int64]struct {
+		typ, identifier string
+	}{}
+	for _, r := range rows {
+		candidates = append(candidates, embed.Candidate{
+			NodeID:    r.NodeID,
+			Embedding: embed.DecodeVector(r.Embedding),
+		})
+		idMap[r.NodeID] = struct{ typ, identifier string }{r.Type, r.Identifier}
+	}
+	matches := embed.TopK(queryVec, candidates, topK)
+	if len(matches) == 0 {
+		fmt.Fprintln(os.Stderr, "query: no matches")
+		return 1
+	}
+
+	eng := query.New(db.SQL())
+	for _, m := range matches {
+		meta := idMap[m.NodeID]
+		node, err := eng.GetByIdentifier(meta.typ, meta.identifier)
+		title := ""
+		if err == nil {
+			title = titleFromProperties(node.Properties)
+		}
+		if len(title) > 80 {
+			title = title[:77] + "..."
+		}
+		fmt.Printf("[s=%.3f] %-10s %-40s %s\n", m.Score, meta.typ, meta.identifier, title)
+	}
+	return 0
+}
+
+func titleFromProperties(p map[string]any) string {
+	if t, ok := p["title"].(string); ok && t != "" {
+		return t
+	}
+	if d, ok := p["description"].(string); ok && d != "" {
+		return d
+	}
+	if d, ok := p["purpose"].(string); ok && d != "" {
+		return d
+	}
+	if d, ok := p["summary"].(string); ok && d != "" {
+		return d
+	}
+	return ""
 }
 
 // agentProps reshapes a types.Agent into a properties map for storage.
