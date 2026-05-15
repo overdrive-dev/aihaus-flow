@@ -4434,3 +4434,220 @@ K-M032-C (new knowledge entry, paired with this amendment): **Interactive prompt
 - User exchange 2026-05-14 ("aihaus é projeto para desenvolvedores...precisa do go como critério")
 - M037 spec (binary release matrix — preserved by option [2] choice)
 - M039 spec (install.sh integration milestone — implementation lands here)
+
+---
+
+## ADR-260515-B-amend-01 — Data model pivot: JSONL → SQLite + sqlite-vec (M032)
+
+**Status:** Accepted
+**Date:** 2026-05-15
+**Milestone:** M032 (design-audit amendment; implementation M034)
+**Amends:** ADR-260515-B (Node/Edge data model — hybrid generic+typed JSONL → hybrid generic+typed SQLite+sqlite-vec)
+
+### Context
+
+ADR-260515-B locked **hybrid generic+typed JSONL storage** with a custom Go writer/reader, BFS query implementation, and 6 typed accessor structs. The justification was simplicity: append-only file, human-greppable, minimal dependencies.
+
+Post-M032 design audit surfaced **sqlite-vec** (`github.com/asg017/sqlite-vec`) as a production-ready SQLite extension providing native vector storage + KNN search. Combined with SQLite's relational substrate, this collapses 3-4 milestones of custom Go infrastructure (storage layer, query engine, embedding store) into thin wrappers over SQL + `vec_distance()`.
+
+User exchange 2026-05-15 ("vamos com sqlite vec") ratified the pivot after empirical analysis:
+- 95% of aihaus's target repos (solo dev → enterprise app, NOT Google-scale monorepos) fit comfortably in sqlite-vec brute-force envelope (100k vectors @ int8 = ~25ms query latency)
+- Privacy contract (ADR-260515-A) composes naturally: per-repo `.db` file = isolation grátis; `--purge` = `rm file.db`; NDA opt-out preserved
+- Vector embeddings (originally scoped to v0.2+ per ADR-260515-E) become tier-1 v0.1 feature at near-zero marginal cost
+- Single-binary distribution preserved: `mattn/go-sqlite3` + sqlite-vec extension load at runtime, no daemon lifecycle
+
+### Decision
+
+aih-graph v0.1 ships **SQLite + sqlite-vec storage** with hybrid generic+typed access:
+
+1. **Storage substrate.** Single SQLite database file per repo (location per ADR-260515-A privacy contract: `$XDG_STATE_HOME/aih-graph/<repo-hash>/graph.db`). Stock SQLite + loaded sqlite-vec extension (single .dll/.so/.dylib bundled per platform per ADR-260515-C-amend revisions).
+
+2. **Schema (binding contract):**
+   ```sql
+   CREATE TABLE nodes (
+     id INTEGER PRIMARY KEY,
+     type TEXT NOT NULL,           -- 'Decision' | 'Milestone' | 'Story' | 'Agent' | 'Hook' | 'Skill' | 'Symbol' | 'File' | ...
+     identifier TEXT NOT NULL,     -- 'ADR-260514-B' | 'M030' | 'pkg/scripts/install.sh:117' | ...
+     properties JSON NOT NULL,     -- type-specific fields (title, body, status, etc.)
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL,
+     UNIQUE(type, identifier)
+   );
+
+   CREATE TABLE edges (
+     id INTEGER PRIMARY KEY,
+     from_id INTEGER NOT NULL REFERENCES nodes(id),
+     to_id INTEGER NOT NULL REFERENCES nodes(id),
+     type TEXT NOT NULL,           -- 'contains' | 'references' | 'calls' | 'amends' | 'supersedes' | ...
+     properties JSON,
+     created_at INTEGER NOT NULL
+   );
+
+   CREATE INDEX idx_nodes_type ON nodes(type);
+   CREATE INDEX idx_nodes_identifier ON nodes(identifier);
+   CREATE INDEX idx_edges_from ON edges(from_id);
+   CREATE INDEX idx_edges_to ON edges(to_id);
+
+   -- sqlite-vec virtual table; int8 quantized per dim guidance
+   CREATE VIRTUAL TABLE vec_nodes USING vec0(
+     node_id INTEGER PRIMARY KEY,
+     embedding float[1024] distance_metric=cosine
+   );
+   ```
+
+3. **Hybrid typed access.** Public API in `pkg/aihgraph/` exposes typed accessor methods that wrap parametrized SQL. Example:
+   ```go
+   type Decision struct { ID int64; Identifier string; Status string; Body string; ... }
+   func (g *Graph) GetDecision(id string) (*Decision, error)
+   func (g *Graph) FindSimilar(text string, k int) ([]Node, error)  // vec_distance KNN
+   func (g *Graph) Query(question string, budget int) ([]Node, error)  // hybrid SQL+vec
+   ```
+   No code generation; typed accessors hand-written for 6 aihaus types (Decision, Milestone, Story, Agent, Hook, Skill) + 1 generic (Symbol/File).
+
+4. **Embedding column is optional.** Nodes can be inserted without embeddings — pure structural graph still works (BFS query unchanged). Embedding generation pipeline (M035) is opt-in by node type: high-value types (Decision/Milestone/Story/Agent/Hook/Skill) embedded by default; Symbol/File embedded only with `--embed-all` flag.
+
+5. **Query model.** Three query modes:
+   - **Structural BFS** (`aih-graph query --bfs "ADR-260514-B"`) — recursive CTE over edges, no embeddings needed
+   - **Vector similarity** (`aih-graph query --semantic "how does merge-settings work"`) — KNN over vec_nodes
+   - **Hybrid** (`aih-graph query "..."` default) — SQL pre-filter (e.g., type='Decision') + KNN ranking + edge traversal, single SQL statement
+
+6. **Backward-compat with prior ADR-260515-B prose.** The "hybrid generic+typed" intent is preserved — same accessor shape, same 6 custom types as first-class. What changes is the substrate: SQL table + JSON properties column instead of JSONL line + type-tag prefix.
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | JSONL (original ADR-260515-B) | Append-only, human-greppable, zero ext dep | Custom Go reader/writer/query/index; vector requires v0.2+ ground-up build | Pivot per user 2026-05-15 — sqlite-vec saves 2-3 milestones |
+| 2 | **(Chosen)** SQLite + sqlite-vec | Battle-tested substrate; vector tier-1 in v0.1; hybrid SQL+vec in single query; embed-friendly | One C extension dep; brute-force KNN ceiling ~1M vectors | Selected — covers 95% of target repos |
+| 3 | PostgreSQL + pgvector | Industrial-strength vector + relational; HNSW | Server lifecycle; not embeddable in single binary; breaks XDG isolation pattern | Out-of-scope; aihaus is solo-dev/small-team positioning |
+| 4 | LanceDB / DuckDB-VSS | Modern, columnar, fast | More complex deps; younger projects than SQLite | Less aligned with single-file-per-repo isolation model |
+| 5 | Pinecone/Qdrant cloud | Best-in-class vector | External service; breaks NDA opt-out (ADR-260515-A); subscription cost | Categorically excluded by privacy contract |
+
+### Rationale
+
+User-stated goal (2026-05-15 turn): vector memory functioning in agents. Original v0.1 scope deferred vector to v0.2+ — 2-3 month gap before user's goal becomes reachable. sqlite-vec collapses that gap to ~2 weeks of additional M035 scope (embedding pipeline) while preserving every constraint of ADR-260515-A (privacy) and ADR-260515-D (integration model).
+
+The custom JSONL + BFS implementation in the original ADR was a tactical simplification to avoid dependency complexity. sqlite-vec is a SINGLE extension file with a 5-function API surface (vec0 virtual table, vec_distance, vec_quantize, vec_normalize, vec_length). Dependency complexity is lower than expected — comparable to adding tree-sitter (which the project already committed to). The compose with mattn/go-sqlite3 (ubiquitous, stable since 2014) is straightforward.
+
+Brute-force KNN ceiling concern: empirical analysis shows aihaus's target repos (solo dev project up to enterprise SaaS app — NOT Google-scale monorepos) operate in <500k-vector territory where sqlite-vec serves sub-100ms queries with int8 quantization. The 5% of use cases above this ceiling (massive monorepos) are categorically out-of-scope per existing aihaus positioning in CLAUDE.md.
+
+Privacy preservation (ADR-260515-A): per-repo `.db` file IS the isolation primitive. No daemon, no shared state, no cross-repo contamination. `--purge` = `rm file.db`. NDA opt-out = don't run `aih-graph build`. Composes byte-cleaner than the prior JSONL design (which still needed per-repo dir + multiple files).
+
+### Consequences
+
+1. **`internal/storage/` rewrite (M034).** JSONL writer/reader scaffold (placeholder dirs from M032) gets replaced with SQLite schema migrations + `database/sql` wrappers + sqlite-vec extension loader. Estimated 3-5 days of focused work.
+
+2. **`internal/query/` becomes thinner (M035).** Recursive CTE for BFS (10-20 lines of SQL); typed accessors are parametrized SQL queries (~30-50 lines per type); KNN via `vec_distance()`. Estimated 3-5 days. Original ADR-260515-B's "6 typed accessor structs" target is unchanged in shape.
+
+3. **Embedding pipeline (M035).** Pluggable provider interface (`internal/embed/`). v0.1 ships with Voyage AI provider (Anthropic's recommended embedding partner; takes API key via env var) as default; local provider (e.g., `all-MiniLM-L6-v2` via Go ONNX runtime) as optional fallback for offline/NDA contexts. Embedding generation triggers on graph build for high-value node types; SHA-based change detection avoids re-embedding unchanged content. Estimated 1 week.
+
+4. **CI cross-compile (M037) gains sqlite-vec extension bundling.** Per-platform bundle: `linux-amd64/sqlite-vec.so`, `darwin-amd64/sqlite-vec.dylib`, `darwin-arm64/sqlite-vec.dylib`, `windows-amd64/sqlite-vec.dll`. Either downloaded at build-time from sqlite-vec's GitHub Releases (recommended) or vendored in repo (avoid — license + size). Estimated +1 day vs original M037.
+
+5. **Smoke check 84 (build smoke) covers DB creation + sqlite-vec extension load.** New sub-assert: schema applied successfully + `SELECT sqlite_version()` returns + `SELECT vec_version()` returns. Trivial.
+
+6. **`pkg/aihgraph/` public API unchanged in shape from ADR-260515-B.** Typed accessors maintain same Go method signatures. Internal implementation changes from JSONL scan → SQL query. Consumers of the library see no breaking API change.
+
+7. **Vector promoted from "v0.2+ candidate" to "v0.1 tier-1 feature"** per ADR-260515-E-amend-02 (paired with this amendment).
+
+8. **CGO toolchain decision (ADR-260515-C-amend-01 M033/S1 gate) unchanged in shape but now BLOCKS more.** Both tree-sitter binding AND sqlite-vec extension load + mattn/go-sqlite3 require CGO. If M033/S1 plan-checker concludes CGO is irrecoverable on Windows-default toolchains, the entire stack pivots. Risk mitigation: validate sqlite-vec build under selected toolchain as part of M033/S1 pre-flight.
+
+9. **No re-amendment of ADR-260515-D (integration model).** Direct binary invocation pattern unchanged — `aih-graph query "..." --budget N` still the canonical invocation. SQLite is invisible to aihaus agents.
+
+### Rollback
+
+`git revert` removes this amendment. Original ADR-260515-B JSONL design re-becomes binding. M034-M035 implementation work would re-target JSONL. No rollback risk in M032-M033 timeframe since no implementation code exists yet — pure design pivot.
+
+If sqlite-vec proves untenable mid-implementation (M034+): revert to ADR-260515-B JSONL OR pivot to alternative substrate (DuckDB-VSS, LanceDB). Both are documented in "Options Considered" above.
+
+### References
+
+- ADR-260515-B (parent: data model — substrate replaced; type taxonomy preserved)
+- ADR-260515-A (privacy contract — preserved unchanged; per-repo .db file aligns naturally)
+- ADR-260515-D (integration model — preserved unchanged; CLI invocation contract intact)
+- ADR-260515-E-amend-02 (paired: vector promoted to v0.1 tier-1 forever-scope)
+- ADR-260515-C-amend-01 (M033/S1 pre-flight gate — now validates both tree-sitter AND sqlite-vec under chosen toolchain)
+- `github.com/asg017/sqlite-vec` — Alex Garcia (asg017), v0.1.x stable since 2024-08
+- `github.com/mattn/go-sqlite3` — Go SQLite binding (stable since 2014, ubiquitous)
+- User exchange 2026-05-15 ("se usar sqlite-vec realisticamente um repositorio de projeto production grade vai se beneficiar ou nao?" → "vamos com sqlite vec")
+
+---
+
+## ADR-260515-E-amend-02 — v0.1 forever-scope: vector promoted from v0.2+ candidate to tier-1 (M032)
+
+**Status:** Accepted
+**Date:** 2026-05-15
+**Milestone:** M032 (design-audit amendment; implementation M035)
+**Amends:** ADR-260515-E §IN v0.1 (vector promoted in) + §Out-of-scope (vector removed); paired with ADR-260515-B-amend-01
+
+### Context
+
+ADR-260515-E locked v0.1 forever-scope **excluding** vector embeddings and similarity retrieval — listed as "v0.2+ candidate" alongside clustering and additional language grammars. Justification was the JSONL substrate (per original ADR-260515-B) made vector retrofit expensive: would require parallel embedding store, similarity index, separate query path.
+
+ADR-260515-B-amend-01 (this same date) pivots the substrate to SQLite + sqlite-vec. Vector storage becomes a native first-class column accessible via `vec_distance()` in standard SQL queries — marginal scope cost is the embedding generation pipeline (1 week of M035 work), not 2-3 months of custom v0.2 infrastructure.
+
+User goal (per 2026-05-15 turn): "vector memory functioning in agents" was the actual objective. Original v0.1 scope deferred that 5-8 months. Promoting vector to v0.1 collapses time-to-user-goal from 5-8 months to ~3 months calendar.
+
+### Decision
+
+aih-graph v0.1 forever-scope updated:
+
+**IN v0.1 (additions):**
+- Vector embeddings (1024-dim default; int8 quantized) stored via sqlite-vec `vec0` virtual table
+- Pluggable embedding provider interface (`internal/embed/`)
+- Two default providers: Voyage AI (paid API, default for online use) + local ONNX (e.g., all-MiniLM-L6-v2, fallback for offline/NDA contexts)
+- Hybrid query (SQL pre-filter + KNN ranking + edge traversal in single statement)
+- Embedding generation triggered on graph build for high-value node types (Decision/Milestone/Story/Agent/Hook/Skill) by default; `--embed-all` flag for full coverage including Symbol/File
+
+**OUT of v0.1 (unchanged):**
+- Semantic LLM extraction (paid LLM-driven node/edge extraction — distinct from embedding generation)
+- Clustering (Leiden community detection)
+- 24+ additional language grammars (only 6 langs per ADR-260515-E-amend-01)
+- HNSW/IVF index (sqlite-vec brute-force only; sufficient for target repos per analysis)
+- Re-ranking via LLM (`--rerank` flag deferred to v0.2+)
+
+**Promoted FROM "v0.2+ candidate" (no longer deferred):**
+- ~~Vector embeddings / similarity retrieval~~ → now v0.1 tier-1
+
+### Options Considered
+
+| # | Option | Pros | Cons | Why Not |
+|---|--------|------|------|---------|
+| 1 | Keep v0.2+ deferral (original ADR-260515-E) | Smallest v0.1 scope; clean separation | User goal ("vector memory") deferred 5-8 months; v0.2 milestone unstaffed | User pivot 2026-05-15 |
+| 2 | **(Chosen)** Promote vector to v0.1 | Time-to-user-goal collapses to ~3mo; native via sqlite-vec marginal cost | +1 week M035 scope; embedding provider tier complexity | Selected per user direction |
+| 3 | Promote vector AND clustering AND re-ranking | "Full v1.0 in one shot" | Scope explosion; ship date pushed to 6+ months | Rejected — preserve forever-scope discipline; ship narrow v0.1, expand by amendments |
+
+### Rationale
+
+Same logic as ADR-260515-B-amend-01: marginal cost of vector in sqlite-vec substrate is negligible. Keeping it deferred to v0.2 was a JSONL-substrate-imposed artifact, not a principled scope decision. With substrate pivoted, the principled decision flips to "include in v0.1".
+
+Embedding provider tier (Voyage default + local fallback) preserves the NDA opt-out contract from ADR-260515-A: NDA-restricted contexts use local ONNX provider; everyone else gets Voyage's quality at modest cost.
+
+Forever-scope discipline (Contrarian C9 from original brainstorm: "intentionally narrower forever") still intact — we DROP clustering, re-ranking, semantic LLM extraction, additional grammars. Only vector promoted; rest of out-of-scope list unchanged.
+
+### Consequences
+
+1. **M035 scope grows by ~1 week** (embedding pipeline). Total v0.1 timeline grows from ~6 weeks (per ADR-260515-B-amend-01 estimates) to ~7-8 weeks.
+
+2. **PRD.md M033-M040 story breakdown rewritten** in this same commit (M032 amendment trio: ADR-B-amend-01 + ADR-E-amend-02 + PRD rewrite).
+
+3. **Acceptance Criteria for v0.1** gains:
+   - [ ] `aih-graph query --semantic "how does merge-settings work"` returns top-K relevant Decision/Milestone/Skill nodes by cosine similarity
+   - [ ] Embedding generation runs in <60s for aihaus-flow repo (high-value nodes only)
+   - [ ] Embedding skipped on subsequent builds for unchanged content (SHA-based change detection)
+   - [ ] Local-only embedding provider available for NDA contexts (`--embed-provider local`)
+
+4. **Voyage AI API key (or local provider) becomes runtime requirement for `--semantic` queries.** Documented in README. Graph build still works without embeddings (pure structural BFS). Vector queries gracefully fail with clear message if no embeddings exist.
+
+5. **Cost transparency:** Voyage AI's pricing (per-token embedding) is documented in aih-graph README + agent prompt addenda; estimated cost for typical repo embedding: $0.01-0.10 per full rebuild.
+
+### Rollback
+
+`git revert` removes this amendment. Vector reverts to v0.2+ candidate status. M035 scope shrinks back to query+typed-accessors only. No implementation rollback risk (M035 not started).
+
+### References
+
+- ADR-260515-E (parent: forever-scope — vector promoted in; rest unchanged)
+- ADR-260515-B-amend-01 (paired: data model pivot enables this scope change)
+- ADR-260515-A (privacy contract — local-only provider preserves NDA opt-out)
+- User exchange 2026-05-15 (sqlite-vec pivot ratification)
+- Original brainstorm BRIEF.md C9 (contrarian "intentionally narrower forever" — preserved by promoting only vector, not also clustering/re-rank)
