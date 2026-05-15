@@ -342,9 +342,14 @@ Since v0.37.0 / M043, the following native Claude Code primitives are leveraged 
 - `pkg/.aihaus/hooks/autonomy-guard.sh` — extends native subagent permission inheritance with policy enforcement (M005 + M011 + M023 + M025 + M027 composition; 40 active patterns). Native permission inheritance is capability-level; our guard is policy-level.
 - `pkg/.aihaus/hooks/context-inject.sh` (M013/S05, v0.16.0) — runs on `SubagentStart` (wired at `settings.local.json:158-169`) and injects `decisions.md` + `knowledge.md` + `project.md` + `MEMORY.md` as HIGH-tier required pre-read into the subagent's `additionalContext`. Per-cohort token budgets at `pkg/.aihaus/hooks/context-budget.conf` (verified values: `planner-binding=4000`, `adversarial-scout=3000`, `adversarial-review=3000` — note the latter two predate the M027 cohort fork and still need migration to the merged `:adversarial` entry; tracked as M044+ defect). 5-minute memoization cache at `.claude/audit/context-inject.cache`.
 
-**Deferred to M044+ (research-gated):**
-- Native `skills:` frontmatter field for skill-content preload — relationship with `context-inject.sh` is unresolved (both inject content at startup; budget/cache semantics may conflict). Pre-flight: WebFetch sub-agents doc, write evidence to RESEARCH.md, canary-nonce test before any bulk-migration of agent frontmatter.
+**Empirically verified non-functional under Task-tool spawn (ADR-260517-A):**
+- Native `skills:` frontmatter field for skill-content preload — canary test on `analyst` agent confirmed NO preload fires under aihaus's Task/Agent-tool spawn path. Subagent's system prompt did not contain the skill body content. **B1 (bundled `aih-binding-context` + 48-agent migration) formally deferred indefinitely.** `context-inject.sh` (M013/S05) remains canonical context-injection path for subagents. Re-evaluation triggers documented in ADR-260517-A. Full empirical evidence: `.aihaus/research/260515-cc-native-features.md` §1 + `.aihaus/plans/260515-m043-native-cc-leverage/CHECK.md`.
+
+**Deferred to M044+ (genuine milestone scope):**
+- AgentTeams in `/aih-brainstorm --team` panel rounds (BRIEF B3) — first real consumer of `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` env flag.
+- Agent View (`claude agents`, `claude --bg`) leverage — `aih-milestone --bg` wrapper + statusLine cross-ref (BRIEF B4).
 - aih-graph indexing of `.claude/agent-memory/*/MEMORY.md` as a new node type for cross-agent semantic query (BRIEF Turn 3 future scope).
+- `context-budget.conf` M027 cohort fork propagation — `:adversarial` baseline added in M043 follow-up; pre-M027 keys retained for back-compat until M046+ deprecation window.
 
 ## Installer Behavior
 

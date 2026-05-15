@@ -5043,3 +5043,80 @@ Smoke Check 62 (`bash tools/audit-skill-enforcement.sh --compute-expected`) enfo
 - M041 ADR-260515-B-amend-04 (BM25/FTS5 default flip)
 - `memory/project_m033_cgo_prereq.md` (CGO toolchain finding)
 - User exchange 2026-05-15 ("tá pedindo voyage_api_key... usarmos opcoes locais sem dependencias externas")
+
+---
+
+## ADR-260517-A — Defer native `skills:` frontmatter preload for subagents (empirically verified gap under Task-tool spawn)
+
+**Status:** Accepted
+**Date:** 2026-05-15
+**Milestone:** M043 follow-up
+**Supersedes brainstorm BRIEF B1 recommendation** (`260515-leverage-cc-agent-teams`)
+
+### Context
+
+The 2026-05-15 brainstorm `260515-leverage-cc-agent-teams` ratified shipping B1 (skills preload via `aih-binding-context` skill + 48-agent frontmatter migration) to drop ~150 runtime `Read` calls per milestone. M043 PLAN.md v1 proposed shipping this; plan-checker iteration 1 dropped it after finding `pkg/.aihaus/hooks/context-inject.sh` (M013/S05, v0.16.0) already injects `decisions.md` + `knowledge.md` + `project.md` + `MEMORY.md` via SubagentStart hook with per-cohort budget + cache.
+
+The user (Turn 3 brainstorm response) explicitly ratified shipping B1, not dropping. After M043 closed with B1 deferred, the user requested completion of the original ratified scope. This required an empirical pre-flight test before mass-migrating 48 agents.
+
+### The empirical canary test (M043 follow-up branch)
+
+Test design — observable side-effect rather than self-introspection:
+1. Created `pkg/.aihaus/skills/aih-canary-test/SKILL.md` (invocable; native CC docs §407 disallows preload of `disable-model-invocation: true` skills).
+2. Skill body instructed any agent receiving its content at startup to (a) make their FIRST tool call a `Read` of `.aihaus/.canary-nonce-260515.txt`, (b) include `CANARY-RESULT: CANARY-OBSERVED-260515-M043` in their first response.
+3. Wrote sentinel file `.aihaus/.canary-nonce-260515.txt` containing `CANARY-OBSERVED-260515-M043`.
+4. Added `skills: [aih-canary-test]` to `pkg/.aihaus/agents/analyst.md` frontmatter (single-agent injection point).
+5. Ran `bash pkg/scripts/update.sh --target .` — confirmed skill count 14 → 15 (refresh picked up the canary).
+6. Spawned `analyst` via Task tool with an unrelated prompt: "Count Go source files in aih-graph/".
+
+**Result:**
+- Analyst executed 3 tool calls (Glob + Read + Grep).
+- **NONE** read `.aihaus/.canary-nonce-260515.txt`.
+- Response contained **zero** mention of `CANARY-RESULT:` or `CANARY-OBSERVED-260515-M043`.
+- Analyst answered "16" Go files correctly — i.e., its system prompt did NOT contain the skill body content.
+
+**Verdict:** native `skills:` field preload **does NOT operate** when subagents are spawned via Task/Agent tool (aihaus's primary dispatch path). The constraint at docs §423 ("preloading draws from the same set of skills Claude can invoke") may interact with our spawn semantics in ways the docs don't enumerate.
+
+### Decision
+
+**B1 (skills preload migration) is formally deferred indefinitely.** Specific consequences:
+
+1. **No `aih-binding-context` skill will be created.** The proposed bundled-context-injection mechanism would not fire under our spawn path.
+2. **No `skills:` frontmatter migration of 48 agents.** Adding the field is cosmetic in our dispatch model.
+3. **Leverage of context preload continues to flow through `pkg/.aihaus/hooks/context-inject.sh`** (M013/S05). This hook is the canonical aihaus path for injecting `decisions.md` + `knowledge.md` + `project.md` + `MEMORY.md` into spawned subagents — verified working via M013/S05 implementation + smoke-test coverage.
+4. **Future re-evaluation triggers:** if any of (a) Claude Code clarifies `skills:` field semantics under Task-tool spawn in a future docs revision, (b) aihaus pivots to `claude --agent <name>` CLI dispatch (no current plan), or (c) a future CC version emits debug logs visible to us when `skills:` is processed (allowing canary verification without behavioral observation) — then B1 can be re-planned.
+
+### Consequences
+
+**Positive:**
+- M043 follow-up exits cleanly. No 48-agent migration ships against verified non-functional substrate.
+- `context-inject.sh` keeps single-source-of-truth on subagent context injection. No risk of duplicate/conflicting paths.
+- Maintainers have on-disk evidence (this ADR + `.aihaus/research/260515-cc-native-features.md` §1) for why the brainstorm-ratified leverage didn't ship.
+
+**Negative:**
+- The ~150 fewer `Read` calls per milestone latency win does NOT materialize. Current cost is the cached SubagentStart injection plus ~3 Read calls per agent per session — acceptable per M013/S05 design.
+- User (Victor) ratified B1 in brainstorm Turn 3; this ADR formally documents why their consent could not translate to ship. Lesson: future brainstorms should include an empirical pre-flight step before user-ratification for claims that depend on under-documented native CC behavior.
+
+**Neutral:**
+- aih-graph indexing of `.claude/agent-memory/*/MEMORY.md` (the BRIEF Turn 3 future-scope item) is UNAFFECTED by this ADR. Different mechanism; native `memory:` field works fine (46/48 agents accumulating today).
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| Ship 48-agent migration anyway with disable-model-invocation:false skill | Rejected | Empirically verified zero effect; cosmetic frontmatter changes are pure churn |
+| Pivot aihaus from Task-tool dispatch to `claude --agent` CLI | Out of scope | Architectural shift, breaks orchestrator chain, no demonstrated win |
+| Wait for CC docs clarification | Accepted (passive) | Re-evaluation trigger documented above; no proactive timeline |
+| Build a richer canary (e.g., observe debug logs) | Investigated | No on-disk debug log surface for `skills:` field processing in current CC version (verified via grep through `~/.claude/daemon.log` after spawn) |
+
+### Rollback
+
+`git revert` removes ADR-260517-A. Nothing else to revert — no behavioral changes were committed under the canary test (canary skill + sentinel file already removed; analyst frontmatter restored byte-identical pre-test).
+
+### References
+
+- `pkg/.aihaus/hooks/context-inject.sh` (M013/S05, v0.16.0) — canonical subagent context injection path
+- `.aihaus/research/260515-cc-native-features.md` §1 — verbatim native `skills:` doc with verified constraints
+- `.aihaus/plans/260515-m043-native-cc-leverage/CHECK.md` — plan-checker iter-1 F-003 (context-inject conflict) + iter-2 F-V2-001 (unsourced claim about Task-tool semantics)
+- M043 commit `06764b0` — documentation-only ship (`.worktreeinclude` + CLAUDE.md docs)
+- User exchange 2026-05-15 ("quero que implemente tudo o que faltou" — triggered this canary)
