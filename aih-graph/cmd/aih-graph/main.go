@@ -59,8 +59,8 @@ func runStub(cmd string) int {
 	return 1
 }
 
-// runBuild implements the M033 build subcommand. Currently extracts ADRs only;
-// remaining 5 types land in follow-on commits within M033.
+// runBuild implements the M033 build subcommand. Extracts Decision / Agent /
+// Skill / Hook nodes; Milestone + Story parsers land in follow-on commits.
 func runBuild(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
@@ -80,47 +80,95 @@ func runBuild(args []string) int {
 		return 1
 	}
 
+	fmt.Printf("aih-graph build %s\n", repoPath)
+
+	// Decision (ADR) extraction.
 	decisions, err := extract.ParseDecisionsFile(decisionsPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build: parse decisions.md: %v\n", err)
 		return 1
 	}
-
-	// Summary by status + milestone.
 	statusCounts := map[string]int{}
-	milestoneCounts := map[string]int{}
 	amendCount := 0
 	for _, d := range decisions {
 		statusCounts[d.Status]++
-		if d.Milestone != "" {
-			milestoneCounts[d.Milestone]++
-		}
 		if d.Amends != "" {
 			amendCount++
 		}
 	}
+	fmt.Printf("  Decisions: %d (%d are amendments)\n", len(decisions), amendCount)
 
-	fmt.Printf("aih-graph build %s\n", repoPath)
-	fmt.Printf("  decisions.md: %s\n", decisionsPath)
-	fmt.Printf("  ADRs extracted: %d (%d are amendments)\n", len(decisions), amendCount)
+	// Agent extraction.
+	agents, err := extract.ParseAgentsDir(repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: parse agents: %v\n", err)
+		return 1
+	}
+	modelCounts := map[string]int{}
+	for _, a := range agents {
+		modelCounts[a.Model]++
+	}
+	fmt.Printf("  Agents:    %d", len(agents))
+	if len(modelCounts) > 0 {
+		fmt.Print(" (")
+		first := true
+		for _, k := range keysSorted(modelCounts) {
+			if !first {
+				fmt.Print(", ")
+			}
+			label := k
+			if label == "" {
+				label = "(no model)"
+			}
+			fmt.Printf("%s=%d", label, modelCounts[k])
+			first = false
+		}
+		fmt.Print(")")
+	}
+	fmt.Println()
 
-	fmt.Println("  by status:")
-	statuses := keysSorted(statusCounts)
-	for _, s := range statuses {
+	// Skill extraction.
+	skills, err := extract.ParseSkillsDir(repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: parse skills: %v\n", err)
+		return 1
+	}
+	fmt.Printf("  Skills:    %d\n", len(skills))
+
+	// Hook extraction.
+	hooks, err := extract.ParseHooksDir(repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: parse hooks: %v\n", err)
+		return 1
+	}
+	totalFns := 0
+	for _, h := range hooks {
+		totalFns += len(h.Functions)
+	}
+	fmt.Printf("  Hooks:     %d (%d declared functions)\n", len(hooks), totalFns)
+
+	// Status breakdown for Decisions (most informative type-level summary).
+	fmt.Println()
+	fmt.Println("  Decisions by status:")
+	for _, s := range keysSorted(statusCounts) {
 		label := s
 		if label == "" {
 			label = "(no Status field)"
 		}
-		fmt.Printf("    %-30s %d\n", label, statusCounts[s])
+		fmt.Printf("    %-50s %d\n", label, statusCounts[s])
 	}
 
+	fmt.Println()
 	if *dryRun {
-		fmt.Println()
 		fmt.Println("(dry-run: nothing persisted; M034 wires modernc/sqlite storage)")
 	} else {
-		fmt.Println()
-		fmt.Println("note: M034 not yet implemented — persistence skipped. Use --dry-run to suppress this warning.")
+		fmt.Println("note: M034 not yet implemented — persistence skipped. Pass --dry-run to suppress this warning.")
 	}
+
+	_ = decisions
+	_ = agents
+	_ = skills
+	_ = hooks
 
 	return 0
 }
