@@ -116,6 +116,7 @@ For each candidate manifest with unfinished work AND `Metadata.status` ∈ {`run
   1 | milestone | M001-user-auth     | file:src/foo.sh      | enter      | 2026-04-22T15:30Z
   ```
 - **Zero** → "Nothing to resume." Stop.
+> Tip: run `claude agents` from any shell to view sibling Claude Code sessions (`docs/cc-native-features-260515.md` §4:256).
 
 ## Phase 2 — Resumption
 
