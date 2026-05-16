@@ -347,9 +347,16 @@ Since v0.37.0 / M043, the following native Claude Code primitives are leveraged 
 
 **Deferred to M044+ (genuine milestone scope):**
 - AgentTeams in `/aih-brainstorm --team` panel rounds (BRIEF B3) — first real consumer of `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` env flag.
-- Agent View (`claude agents`, `claude --bg`) leverage — `aih-milestone --bg` wrapper + statusLine cross-ref (BRIEF B4).
 - aih-graph indexing of `.claude/agent-memory/*/MEMORY.md` as a new node type for cross-agent semantic query (BRIEF Turn 3 future scope).
 - `context-budget.conf` M027 cohort fork propagation — `:adversarial` baseline added in M043 follow-up; pre-M027 keys retained for back-compat until M046+ deprecation window.
+
+### Backgrounding a long-running milestone (M044 honest scope)
+
+Claude Code ships `/bg` (alias `/background`) as a native slash command that detaches the current session into the background. After `/bg`, the session continues running and `claude agents` from any shell shows its status. Aihaus does NOT add a custom `--bg` flag to `/aih-milestone` because `/bg` already covers this use case at the native layer.
+
+**Honest caveat (M045+ scope):** native `/bg` and `claude --bg` both auto-isolate the session into a worktree under `.claude/worktrees/` before the first file edit (per `docs/cc-native-features-260515.md` §4:250). This means the milestone's RUN-MANIFEST.md ends up in the bg worktree's `.aihaus/`, NOT the main repo's. Three aihaus tools currently break in this state: (a) `merge-back.sh` refuses on file-set mismatch, (b) `statusline-milestone.sh` walks up from the main repo and misses the worktree manifest (unverified empirically; M045+ test fixture pending), (c) `/aih-resume` globs main repo's `.aihaus/milestones/`. Full bg-milestone support requires worktree-aware manifest discovery + cross-session bg-milestone registry + merge-back orchestration across detached processes — multi-day M045+ scope, not landing in M044.
+
+`claude agents` itself shows **sibling Claude Code sessions only** — aihaus subagents spawned via Task/Agent tool (in worktrees with `isolation: worktree`) do NOT appear as separate rows (per `docs/cc-native-features-260515.md` §4:256).
 
 ## Installer Behavior
 
