@@ -2,12 +2,50 @@ package extract
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/types"
 )
+
+// agentMemoryMaxLines + agentMemoryMaxBytes mirror native Claude Code's
+// MEMORY.md injection limits per docs/cc-native-features-260515.md §1:
+// "The subagent's system prompt also includes the first 200 lines or 25KB
+// of MEMORY.md in the memory directory, whichever comes first."
+const (
+	agentMemoryMaxLines = 200
+	agentMemoryMaxBytes = 25 * 1024
+)
+
+// readAgentMemory returns the (path, excerpt) tuple for an agent's
+// .claude/agent-memory/<name>/MEMORY.md if present. Returns empty
+// strings when the file does not exist (agent has memory:none, or memory
+// directory hasn't been written yet). Excerpt is truncated to first 200
+// lines or 25KB whichever comes first, matching native CC semantics.
+func readAgentMemory(repoRoot, agentName string) (string, string) {
+	rel := filepath.Join(".claude", "agent-memory", agentName, "MEMORY.md")
+	abs := filepath.Join(repoRoot, rel)
+	info, err := os.Stat(abs)
+	if err != nil || info.IsDir() {
+		return "", ""
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return "", ""
+	}
+	// Truncate by byte cap first (cheap).
+	if len(data) > agentMemoryMaxBytes {
+		data = data[:agentMemoryMaxBytes]
+	}
+	// Then by line cap.
+	lines := strings.SplitN(string(data), "\n", agentMemoryMaxLines+1)
+	if len(lines) > agentMemoryMaxLines {
+		lines = lines[:agentMemoryMaxLines]
+	}
+	return rel, strings.Join(lines, "\n")
+}
 
 // agentFrontmatter mirrors the YAML frontmatter declared by every agent in
 // pkg/.aihaus/agents/*.md. Smoke Check 6 enforces all 8 fields are present.
@@ -64,6 +102,10 @@ func ParseAgentsDir(repoRoot string) ([]types.Agent, error) {
 		if a.Description == "" {
 			a.Description = firstParagraph(body)
 		}
+		// M046: index .claude/agent-memory/<name>/MEMORY.md if present.
+		// Memory excerpt becomes part of the Agent node's properties → embedded
+		// alongside frontmatter → queryable via BM25/FTS5 + semantic modes.
+		a.MemoryPath, a.MemoryExcerpt = readAgentMemory(repoRoot, fm.Name)
 		agents = append(agents, a)
 	}
 	return agents, nil
