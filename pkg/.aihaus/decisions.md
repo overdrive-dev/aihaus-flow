@@ -5120,3 +5120,100 @@ Test design — observable side-effect rather than self-introspection:
 - `.aihaus/plans/260515-m043-native-cc-leverage/CHECK.md` — plan-checker iter-1 F-003 (context-inject conflict) + iter-2 F-V2-001 (unsourced claim about Task-tool semantics)
 - M043 commit `06764b0` — documentation-only ship (`.worktreeinclude` + CLAUDE.md docs)
 - User exchange 2026-05-15 ("quero que implemente tudo o que faltou" — triggered this canary)
+
+---
+
+## ADR-260518-A — Agent Teams programmatic spawn architecturally unreachable from skill body; defer `--team` flag indefinitely
+
+**Status:** Accepted
+**Date:** 2026-05-16
+**Milestone:** M045
+**Supersedes brainstorm BRIEF B3 recommendation** (`260515-leverage-cc-agent-teams`)
+
+### Context
+
+The 2026-05-15 brainstorm `260515-leverage-cc-agent-teams` ratified shipping a `--team` flag on `/aih-brainstorm` (BRIEF B3) to leverage Claude Code's native Agent Teams API — let panel members message each other directly during Phase 3, the canonical "competing hypotheses" use case documented in `docs/cc-native-features-260515.md` §2.
+
+M045 began with /aih-plan dispatching assumptions-analyzer + pattern-mapper + **ai-researcher** in parallel (the user explicitly requested ai-researcher invocation since this was unfamiliar framework territory).
+
+ai-researcher returned a VERDICT of **HIGH confidence NO** on the central viability question — programmatic team-spawn from inside a skill body is **architecturally impossible** under current Claude Code. The verdict cited three converging verbatim quotes from `https://code.claude.com/docs/en/agent-teams`:
+
+> 1. "In both cases, you stay in control. Claude won't create a team without your approval."
+> 2. "No nested teams: teammates cannot spawn their own teams or teammates."
+> 3. "Lead is fixed: the session that creates the team is the lead for its lifetime."
+
+Quote (1) is the binding gate: team creation requires user natural-language approval. Quote (2) is the secondary gate: aihaus's skill bodies (which execute in the main CC session per assumptions-analyzer Area 2 clarification — NOT in a Task-spawned subagent) ARE the lead candidate, so this doesn't apply directly. Quote (3) reinforces the user-control invariant.
+
+There is no `/team` slash command and no `CreateTeam` tool exposed for programmatic invocation. `SendMessage` and task-management tools exist INSIDE an active team session but are not surfaced as team-creation primitives.
+
+### The two CRITICAL findings that drove M045 to docs-only
+
+PLAN.md v1 proposed shipping `--team` as a "manual-instruction + parallel-Task fallback" flag (ai-researcher's option (a)). Plan-checker iter-1 surfaced:
+
+- **F-01 (CRITICAL):** the proposed `manifest-append.sh --audit team-requested` call is dead-code. The hook arg-parser at `pkg/.aihaus/hooks/manifest-append.sh:71-76` accepts only `--field` / `--payload` / `--checkpoint-enter` / `--checkpoint-exit`; everything else exits 2. ADR-260511-A (M029) explicitly retired the `--audit` mode; calibration-gate annexes literally say *"No `manifest-append.sh --audit` call is needed (that path is dead-code since v0.31.0)"*.
+- **F-02 (CRITICAL):** ai-researcher RESEARCH.md option (a) was **explicitly rejected** as *"worst-of-both-worlds UX"* and *"NOT acceptable as the primary feature behavior."* The researcher's primary recommendation was option (b): *"do NOT ship a `--team` flag in M045. Instead, ship a roadmap-deferred entry"*. PLAN v1 picked (a) without quote evidence overriding the rejection.
+
+PLAN v2 adopts researcher option (b): drop the `--team` flag entirely; ship this ADR + a CLAUDE.md update documenting the architectural finding.
+
+### Decision
+
+**`--team` flag is not added to `/aih-brainstorm`.** Specific consequences:
+
+1. **No flag declaration** in `pkg/.aihaus/skills/aih-brainstorm/SKILL.md` Argument Parsing block.
+2. **No Phase 1.5b advisory** (the v1-proposed manual-instruction print).
+3. **No `AIHAUS_TEAM_INSTRUCTION=0` env var.**
+4. **`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` stays in `pkg/.aihaus/templates/settings.local.json`** — the env flag is the gate for the **user-NL-driven path**. If the user manually types "create an agent team to debate <topic>" at top-level CC, native Agent Teams fires per documented user-NL gate. Aihaus does not wrap this surface; the user accesses it directly.
+5. **Stub hooks (`teammate-idle.sh`, `task-created.sh`, `task-completed.sh`) stay in place** — they remain wirable if a future CC release exposes programmatic team-creation. Premature deletion would prevent fast wiring later.
+
+### Re-evaluation triggers (when this ADR's NO becomes a YES)
+
+ADR-260518-A is amendable if ANY of these conditions land:
+
+1. **CC ships a `/team` slash command** that a skill body can suggest via output (skills can suggest slash commands; cannot type them on the user's behalf — but a suggestion the user accepts is functionally equivalent to dispatch).
+2. **CC exposes a `CreateTeam` tool** in the toolset available to skill-body execution.
+3. **CC docs revision explicitly enables programmatic spawn** (e.g., a new "Programmatic team creation" section with a clear API).
+4. **CC removes the "Claude won't create a team without your approval" gate** for skills + explicit auto-approval contexts (e.g., `--dangerously-skip-permissions` extends to team auto-creation).
+
+When any trigger fires, M046+ can re-plan `--team` flag wiring using the existing 4-step substrate (env flag set, stub hooks present, panel agent definitions already shaped for teammate-mode).
+
+### Consequences
+
+**Positive:**
+- No fake `--team` flag that ships a confusing "print + fallback" UX (researcher's "worst of both worlds" prevented).
+- Architectural finding documented on disk for future maintainers — next session/maintainer doesn't re-litigate the same research.
+- F-01 dead-code path NOT reintroduced into a third skill.
+- Honest precedent for "user-ratified scope becomes architecturally infeasible after research" — same as ADR-260517-A (M043 B1).
+
+**Negative:**
+- BRIEF B3 ratification doesn't translate to ship. Same pattern as B1 from M043. Lesson: future brainstorms should include empirical/research pre-flight BEFORE user ratification for claims that depend on under-documented CC API surface.
+- aihaus's "leverage native features" framing for AgentTeams becomes "reserved enabled, user-driven only, no aihaus skill wraps it" rather than "first-class flag in /aih-brainstorm".
+
+**Neutral:**
+- aih-graph indexing of `.claude/agent-memory/*/MEMORY.md` (BRIEF Turn 3 M046 candidate) is **unaffected** by this ADR. Different mechanism; native `memory:` field works fine (46/48 agents accumulating per M043 docs).
+- The bg-milestone substrate (M045+ candidate from M044) is **unaffected**. Different surface (Agent View / `claude --bg`, not Agent Teams).
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| Ship `--team` as manual-instruction + parallel-Task fallback (RESEARCH option a) | Rejected | F-01 dead-code + F-02 researcher explicit rejection ("worst-of-both-worlds UX") |
+| Continue researching alternative spawn mechanisms | Rejected | 3 verbatim doc citations exhaustively prove impossibility; continued effort = Sunk Cost Fallacy |
+| Wait for CC docs revision; ship nothing | Rejected | User intent is "execute TUDO"; ADR is the maximum honest ship for this scope |
+| Just edit CLAUDE.md, skip the ADR | Rejected | Architectural NOs deserve ADR ceremony for aihaus's decision tracking |
+| Unset `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` from template | Rejected | The env flag enables the user-NL-driven path; aihaus doesn't wrap it but users can still reach it directly |
+| Delete the 3 stub hooks (`teammate-idle.sh` etc.) | Rejected | Premature cleanup; hooks become wirable when re-evaluation triggers fire |
+
+### Rollback
+
+`git revert` removes this ADR. No behavioral changes were made — M045 v2 is docs-only. Settings template, skill files, and hooks all stay byte-identical pre-M045.
+
+### References
+
+- `pkg/.aihaus/skills/aih-brainstorm/SKILL.md` — the skill that was NOT modified (would have housed `--team` flag if v1 had shipped)
+- `docs/cc-native-features-260515.md` §2 — verbatim Agent Teams doc captured in M043 follow-up
+- `.aihaus/plans/260516-m045-brainstorm-team-flag/RESEARCH.md` — ai-researcher VERDICT HIGH confidence NO with 3 verbatim citations
+- `.aihaus/plans/260516-m045-brainstorm-team-flag/CHECK.md` — plan-checker iter-1 F-01 (dead-code) + F-02 (researcher-override)
+- ADR-260517-A (M043) — sibling precedent for "user-ratified scope deferred after empirical/architectural finding"
+- ADR-260511-A (M029) — retirement of `manifest-append.sh --audit` mode (driving F-01)
+- BRIEF Turn 3 (`.aihaus/brainstorm/260515-leverage-cc-agent-teams/`) — original B3 ratification
+- User exchange 2026-05-16 ("quem decide sou eu, execute TUDO o que falta" — triggered M045 attempt)
