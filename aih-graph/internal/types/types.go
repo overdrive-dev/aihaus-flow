@@ -70,6 +70,8 @@ type Story struct {
 
 // Agent represents an aihaus agent definition.
 // Source: pkg/.aihaus/agents/<name>.md YAML frontmatter + body.
+// MemoryPath + MemoryExcerpt populated when .claude/agent-memory/<name>/MEMORY.md
+// exists (native CC memory: project field — first 200 lines or 25KB per docs).
 type Agent struct {
 	Name                  string
 	Tools                 []string
@@ -80,6 +82,8 @@ type Agent struct {
 	Resumable             bool
 	CheckpointGranularity string // "story" | "file" | "step"
 	Description           string // first non-frontmatter paragraph
+	MemoryPath            string // relative path to .claude/agent-memory/<name>/MEMORY.md if present
+	MemoryExcerpt         string // first 200 lines or 25KB of MEMORY.md (matches native CC injection)
 }
 
 // Hook represents an aihaus shell hook script.

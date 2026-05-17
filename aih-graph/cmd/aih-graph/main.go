@@ -34,7 +34,7 @@ import (
 //   go build -ldflags="-X main.version=v0.1.X"
 // (Go's -X only works on string vars, not consts — keeping this as var is
 // load-bearing for release pipeline correctness.)
-var version = "0.1.3-dev"
+var version = "0.1.4-dev"
 
 // usage prints the top-level CLI help.
 func usage() {
@@ -142,8 +142,12 @@ func runBuild(args []string) int {
 		return 1
 	}
 	modelCounts := map[string]int{}
+	memoryCount := 0
 	for _, a := range agents {
 		modelCounts[a.Model]++
+		if a.MemoryPath != "" {
+			memoryCount++
+		}
 	}
 	fmt.Printf("  Agents:    %d", len(agents))
 	if len(modelCounts) > 0 {
@@ -161,6 +165,9 @@ func runBuild(args []string) int {
 			first = false
 		}
 		fmt.Print(")")
+	}
+	if memoryCount > 0 {
+		fmt.Printf(" [%d w/ memory]", memoryCount)
 	}
 	fmt.Println()
 
@@ -996,8 +1003,12 @@ func titleFromProperties(p map[string]any) string {
 }
 
 // agentProps reshapes a types.Agent into a properties map for storage.
+// M046: memory_path + memory_excerpt are populated when .claude/agent-memory/
+// <name>/MEMORY.md exists (native CC memory: project field accumulation). The
+// excerpt becomes part of the Agent node's properties JSON → BM25/FTS5 +
+// semantic queries search across what each agent has learned across sessions.
 func agentProps(a types.Agent) map[string]any {
-	return map[string]any{
+	props := map[string]any{
 		"tools":                  a.Tools,
 		"model":                  a.Model,
 		"effort":                 a.Effort,
@@ -1007,6 +1018,11 @@ func agentProps(a types.Agent) map[string]any {
 		"checkpoint_granularity": a.CheckpointGranularity,
 		"description":            a.Description,
 	}
+	if a.MemoryPath != "" {
+		props["memory_path"] = a.MemoryPath
+		props["memory_excerpt"] = a.MemoryExcerpt
+	}
+	return props
 }
 
 func keysSorted(m map[string]int) []string {
