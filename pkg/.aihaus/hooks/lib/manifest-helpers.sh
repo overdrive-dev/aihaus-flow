@@ -175,6 +175,23 @@ resolve_manifest_path() {
   cwd="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" \
     || cwd="$(dirname "${BASH_SOURCE[0]}")"
 
+  # M047 worktree-aware path resolution: if we're inside .claude/worktrees/<id>/
+  # (native Claude Code bg-session auto-isolation per docs §4:250), the script
+  # lives in the worktree copy and walk-up would find the worktree's `.aihaus/`
+  # (if present) or none at all. The milestone manifest LIVES IN THE MAIN REPO
+  # (created by the parent /aih-milestone before bg-detach). Rewrite the path
+  # to anchor on the main repo before walk-up.
+  # Pattern: <main-repo>/.claude/worktrees/<id>/... → <main-repo>/...
+  # Opt-out: AIHAUS_M047_WORKTREE_AWARE=0 reverts to pre-M047 behavior.
+  if [ "${AIHAUS_M047_WORKTREE_AWARE:-1}" = "1" ]; then
+    case "$cwd" in
+      */.claude/worktrees/*)
+        # Strip everything from /.claude/worktrees/ onward, leaving main repo path.
+        cwd="${cwd%%/.claude/worktrees/*}"
+        ;;
+    esac
+  fi
+
   # Walk up to the .aihaus/ ancestor.
   local i=0
   while [ ! -d "$cwd/.aihaus" ]; do
