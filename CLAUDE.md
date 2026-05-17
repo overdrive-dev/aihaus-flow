@@ -345,10 +345,13 @@ Since v0.37.0 / M043, the following native Claude Code primitives are leveraged 
 **Empirically verified non-functional under Task-tool spawn (ADR-260517-A):**
 - Native `skills:` frontmatter field for skill-content preload — canary test on `analyst` agent confirmed NO preload fires under aihaus's Task/Agent-tool spawn path. Subagent's system prompt did not contain the skill body content. **B1 (bundled `aih-binding-context` + 48-agent migration) formally deferred indefinitely.** `context-inject.sh` (M013/S05) remains canonical context-injection path for subagents. Re-evaluation triggers documented in ADR-260517-A. Full empirical evidence: `.aihaus/research/260515-cc-native-features.md` §1 + `.aihaus/plans/260515-m043-native-cc-leverage/CHECK.md`.
 
-**Deferred to M044+ (genuine milestone scope):**
-- AgentTeams in `/aih-brainstorm --team` panel rounds (BRIEF B3) — first real consumer of `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` env flag.
+**Deferred to M046+ (genuine milestone scope):**
 - aih-graph indexing of `.claude/agent-memory/*/MEMORY.md` as a new node type for cross-agent semantic query (BRIEF Turn 3 future scope).
 - `context-budget.conf` M027 cohort fork propagation — `:adversarial` baseline added in M043 follow-up; pre-M027 keys retained for back-compat until M046+ deprecation window.
+- Full bg-milestone substrate (worktree-aware manifest discovery + cross-session bg-milestone registry + merge-back orchestration across detached processes) per M044 honest caveat below.
+
+**Empirically verified architecturally unreachable (ADR-260518-A, M045):**
+- AgentTeams programmatic spawn from a skill body — ai-researcher VERDICT HIGH confidence NO with 3 verbatim doc citations (`docs/cc-native-features-260515.md` §2). Team creation is user-NL-gated; no `/team` slash command, no `CreateTeam` tool. `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` stays in template enabling the **user-NL-driven path** (user types "create an agent team to debate X" at top-level CC); no aihaus skill wraps this. Re-evaluation triggers in ADR-260518-A.
 
 ### Backgrounding a long-running milestone (M044 honest scope)
 
