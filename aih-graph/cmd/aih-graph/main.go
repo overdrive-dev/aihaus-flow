@@ -70,7 +70,9 @@ Commands:
     --json                Print stable machine-readable output
     --limit N             Maximum JSON neighborhood nodes (default 80; 0 = all)
   gotchas [topic]         Search markdown memory for gotchas/learnings
+    --json                Print stable machine-readable output
   milestone <target>      Search milestone, decision, commit, and memory links
+    --json                Print stable machine-readable output
   status [--repo PATH]    Show memory index freshness and counts
     --json                Print stable machine-readable output
   mark-stale [--reason R] Mark derived memory stale after repo changes
@@ -1342,6 +1344,7 @@ func runGotchas(args []string) int {
 	fs := flag.NewFlagSet("gotchas", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
 	topK := fs.Int("top", 8, "result count")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -1355,6 +1358,9 @@ func runGotchas(args []string) int {
 		return 1
 	}
 	defer db.Close()
+	if *jsonOut {
+		return runBM25SearchJSON(db, "gotchas", queryText, "Memory", *topK)
+	}
 	return runHybrid(db, queryText, "Memory", *topK, "bm25")
 }
 
@@ -1362,11 +1368,12 @@ func runMilestone(args []string) int {
 	fs := flag.NewFlagSet("milestone", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
 	topK := fs.Int("top", 10, "result count")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: aih-graph milestone [--db PATH] <file|symbol|commit|milestone-topic>")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph milestone [--db PATH] [--json] <file|symbol|commit|milestone-topic>")
 		return 2
 	}
 	db, err := openQueryDB(*dbPath)
@@ -1375,7 +1382,11 @@ func runMilestone(args []string) int {
 		return 1
 	}
 	defer db.Close()
-	return runHybrid(db, strings.Join(fs.Args(), " "), "", *topK, "bm25")
+	queryText := strings.Join(fs.Args(), " ")
+	if *jsonOut {
+		return runBM25SearchJSON(db, "milestone", queryText, "", *topK)
+	}
+	return runHybrid(db, queryText, "", *topK, "bm25")
 }
 
 func runStatus(args []string) int {
@@ -1836,6 +1847,14 @@ type callersJSON struct {
 	CallSites []callSiteJSON `json:"call_sites"`
 }
 
+type searchJSON struct {
+	Command     string          `json:"command"`
+	Query       string          `json:"query"`
+	TypeFilter  string          `json:"type_filter,omitempty"`
+	ResultCount int             `json:"result_count"`
+	Matches     []bm25MatchJSON `json:"matches"`
+}
+
 type impactJSON struct {
 	Query                 string          `json:"query"`
 	TypeFilter            string          `json:"type_filter,omitempty"`
@@ -1870,6 +1889,26 @@ func writeJSON(v any) int {
 		return 1
 	}
 	return 0
+}
+
+func runBM25SearchJSON(db *storage.DB, command, queryText, typeFilter string, topK int) int {
+	eng := query.New(db.SQL())
+	matches, err := bm25MatchesForJSON(db, eng, queryText, typeFilter, topK)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: bm25 json: %v\n", command, err)
+		return 1
+	}
+	if len(matches) == 0 {
+		fmt.Fprintf(os.Stderr, "%s: no BM25 matches for %q\n", command, queryText)
+		return 1
+	}
+	return writeJSON(searchJSON{
+		Command:     command,
+		Query:       queryText,
+		TypeFilter:  typeFilter,
+		ResultCount: len(matches),
+		Matches:     matches,
+	})
 }
 
 func nodeForJSON(n query.Node) jsonNode {

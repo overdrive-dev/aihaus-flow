@@ -302,7 +302,7 @@ aihaus ships 11 intent-based skills. Every command follows the same pattern: **a
 
 | Command | What it does |
 |---------|--------------|
-| `aihaus memory <refresh|query|context|callers|impact|gotchas|milestone|status>` | Refresh or query the local repository memory engine (`aih-graph`) from a shell; `context`, `impact`, `callers`, and `status` accept `--json` for agent-readable output |
+| `aihaus memory <refresh|query|context|callers|impact|gotchas|milestone|status>` | Refresh or query the local repository memory engine (`aih-graph`) from a shell; repository-memory query commands accept `--json` for agent-readable output |
 
 ---
 

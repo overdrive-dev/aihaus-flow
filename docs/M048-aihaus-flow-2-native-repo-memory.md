@@ -413,7 +413,7 @@ Implemented in this branch:
 - S03: repository walker and chunk indexing now persist `File` and `Chunk` nodes, with skip rules for generated/vendor/runtime directories and binary/oversized files.
 - S04: code symbol extraction now persists `Symbol` and `Call` nodes for Go functions/methods plus shell and PowerShell functions; Go call sites include file/line evidence and resolved symbol edges where static resolution is unique.
 - S05: `--embed-provider ollama` is wired as a local semantic provider through Ollama's `/api/embed` endpoint; model defaults to `embeddinggemma`, with `AIH_GRAPH_OLLAMA_MODEL`, `AIH_GRAPH_OLLAMA_URL`, and `OLLAMA_HOST` overrides.
-- S06: `context`, `callers`, `impact`, `gotchas`, and `milestone` commands expose repository-brain queries over exact graph nodes and BM25 fallback; `context`, `callers`, `impact`, and `status` also expose stable `--json` payloads for agent consumption.
+- S06: `context`, `callers`, `impact`, `gotchas`, and `milestone` commands expose repository-brain queries over exact graph nodes and BM25 fallback; `context`, `callers`, `impact`, `gotchas`, `milestone`, and `status` also expose stable `--json` payloads for agent consumption.
 - S07: markdown memory sections now persist as `Memory` nodes, tests persist as `Test` nodes, and the latest 200 git commits persist as `Commit` nodes with `touches` edges to indexed files.
 - S08/S09 first slice: `status` and `mark-stale` commands plus hooks mark memory stale after writes/git history changes and refresh after task completion/session end; planner, implementer, code-reviewer, and verifier prompts now require memory consultation when available.
 - CLI ergonomics: `aihaus memory <subcommand>` delegates to the current source `aih-graph` engine, including `refresh`, with Windows `.cmd` preferring Git Bash over the WSL stub.
@@ -430,6 +430,7 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph context --json --type Symbol --depth 1 aih-graph/internal/extract/repository.go:ParseRepositoryText` returned exact symbol context as JSON, including related helper symbols, call nodes, and test evidence.
 - `aih-graph impact --json --type File --depth 1 --limit 80 aih-graph/cmd/aih-graph/main.go` returned bounded JSON impact context with `neighborhood_total`, `neighborhood_returned`, `neighborhood_truncated`, and truncated long string properties.
 - `aih-graph callers --json ParseRepositoryText` returned call-site evidence as structured JSON.
+- `aih-graph gotchas --json git checkout` and `aih-graph milestone --json Ollama` returned BM25 match payloads with node summaries and neighbor context.
 - `aihaus memory version` and `aihaus memory status --repo . --db ...` work through the PowerShell wrapper.
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-memory-alias-refresh.db --accept-all-repos` works through the Windows `.cmd` wrapper and preserves the caller repository path.
 - `go test ./...` passes inside `aih-graph`.
