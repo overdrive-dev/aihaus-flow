@@ -438,6 +438,8 @@ Dogfood evidence from aihaus-flow:
 - `aihaus memory version` and `aihaus memory status --repo . --db ...` work through the PowerShell wrapper.
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-memory-alias-refresh.db --accept-all-repos` works through the Windows `.cmd` wrapper and preserves the caller repository path.
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-wrapper-refresh-json.db --accept-all-repos --json` works through the PowerShell wrapper and returns the same structured refresh payload.
+- `aih-graph-refresh.sh` now delegates to `aih-graph refresh --repo ...`, preserves the default BM25 provider when `AIH_GRAPH_PROVIDER` is unset, honors explicit `AIH_GRAPH_PROVIDER=none`, and reports the real non-zero refresh exit code on failure; hook validation with `AIH_GRAPH_PROVIDER=none` produced a fresh index with `bm25_rows: 0`.
+- `aih-graph-stale.sh --from-hook bash` ignores `aihaus memory refresh ... --json` and does not recreate `.claude/audit/aih-graph.stale` after a refresh command.
 - `tools/smoke-test.sh` now includes an M048 contract check for memory lifecycle hooks in both settings templates and JSON memory commands in the four core agents; targeted `rg`, JSON parsing, and `bash -n` validations passed under Git Bash.
 - `go test ./...` passes inside `aih-graph`.
 - Full `tools/smoke-test.sh` under Windows Git Bash reached Check 65 before timeout; failures before that point were existing fixture portability issues around `mktemp -t` paths resolving to `/repo`, not M048 memory contract failures.

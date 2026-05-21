@@ -68,22 +68,23 @@ fi
 log "binary: $bin"
 log "repo:   $repo_root"
 
-# Build invocation.
-args=(build --accept-all-repos "$repo_root")
+# Refresh invocation.
+args=(refresh --repo "$repo_root" --accept-all-repos)
 if [[ -n "${AIH_GRAPH_DB:-}" ]]; then
-  args=(build --accept-all-repos --db "$AIH_GRAPH_DB" "$repo_root")
+  args+=(--db "$AIH_GRAPH_DB")
 fi
 
-provider="${AIH_GRAPH_PROVIDER:-none}"
-if [[ "$provider" != "none" ]]; then
+provider="${AIH_GRAPH_PROVIDER:-}"
+if [[ -n "$provider" ]]; then
   args+=(--embed-provider "$provider")
 fi
 
 # Run. Failures are non-fatal — aih-graph is supplemental.
-if ! "$bin" "${args[@]}"; then
-  warn "aih-graph build failed (exit $?); continuing"
+if "$bin" "${args[@]}"; then
+  rm -f "$repo_root/.claude/audit/aih-graph.stale" 2>/dev/null || true
+  log "refresh complete"
+else
+  rc=$?
+  warn "aih-graph refresh failed (exit $rc); continuing"
   exit 0
 fi
-
-rm -f "$repo_root/.claude/audit/aih-graph.stale" 2>/dev/null || true
-log "refresh complete"

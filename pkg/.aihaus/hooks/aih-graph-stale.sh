@@ -2,7 +2,7 @@
 # aih-graph-stale.sh - mark derived repository memory stale after changes.
 #
 # This hook is intentionally cheap: it only writes a marker under
-# .claude/audit/. The next successful aih-graph build clears the marker.
+# .claude/audit/. The next successful aih-graph refresh clears the marker.
 
 set -euo pipefail
 
@@ -38,7 +38,7 @@ if [[ "${hook_kind:-}" == "bash" ]]; then
     command_text="$(printf '%s' "$input" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"command"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' || true)"
   fi
   case "$command_text" in
-    *aih-graph-refresh.sh*|*'aih-graph build'*|*'aih-graph status'*|*'aih-graph query'*|*'aih-graph context'*|*'aih-graph callers'*|*'aih-graph impact'*)
+    *aih-graph-refresh.sh*|*'aih-graph build'*|*'aih-graph refresh'*|*'aihaus memory refresh'*|*'aih-graph status'*|*'aih-graph query'*|*'aih-graph context'*|*'aih-graph callers'*|*'aih-graph impact'*)
       exit 0
       ;;
     *'git commit'*|*'git merge'*|*'git cherry-pick'*|*'git rebase'*)
