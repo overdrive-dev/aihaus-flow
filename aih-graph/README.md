@@ -2,7 +2,7 @@
 
 Standalone Go binary memory engine for [aihaus](https://github.com/overdrive-dev/aihaus-flow).
 
-**Status:** v0.1.4 shipped baseline plus M048 in-progress native repository memory (files, chunks, symbols, calls, markdown memory, commits, local Ollama embeddings, context/callers/impact/gotchas/milestone commands).
+**Status:** v0.1.4 shipped baseline plus M048 in-progress native repository memory (files, chunks, symbols, calls, tests, markdown memory, commits, local Ollama embeddings, context/callers/impact/gotchas/milestone commands).
 
 ## What this is
 
@@ -11,6 +11,7 @@ aih-graph is the **memory + structural retrieval engine** aihaus uses as a manda
 M048 adds a local repository-brain slice:
 - `File` and `Chunk` nodes for real repository text
 - `Symbol` and `Call` nodes for Go functions/methods plus shell and PowerShell functions
+- `Test` nodes for Go tests and common script/spec test files
 - `Memory` nodes from markdown memory and `Commit` nodes from recent git history
 - `context`, `callers`, `impact`, `gotchas`, `milestone`, `status`, and `mark-stale` commands
 - `--embed-provider ollama` for local semantic embeddings through Ollama `/api/embed`

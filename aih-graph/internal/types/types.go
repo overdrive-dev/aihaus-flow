@@ -14,7 +14,7 @@ import "time"
 // JSON-serializable map.
 type Node struct {
 	ID             int64
-	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill" | "File" | "Chunk" | "Symbol" | "Call" | "Memory" | "Commit"
+	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill" | "File" | "Chunk" | "Symbol" | "Call" | "Test" | "Memory" | "Commit"
 	Identifier     string // e.g. "ADR-260514-B", "M030", "aih-milestone"
 	Properties     map[string]any
 	Embedding      []float32 // optional; nil if not yet embedded
@@ -117,6 +117,20 @@ type RepoCall struct {
 	FilePath         string
 	Line             int
 	Column           int
+}
+
+// RepoTest represents a test file or test function discovered from repository
+// code. Target fields are best-effort static links used by impact queries.
+type RepoTest struct {
+	Identifier             string
+	Name                   string
+	Kind                   string
+	Language               string
+	FilePath               string
+	StartLine              int
+	EndLine                int
+	TargetFilePath         string
+	TargetSymbolIdentifier string
 }
 
 // MarkdownMemory is a human-curated memory section extracted from aihaus

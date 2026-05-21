@@ -250,6 +250,11 @@ func runBuild(args []string) int {
 	}
 	fmt.Printf("  Symbols:    %d\n", len(repoSymbols))
 	fmt.Printf("  Calls:      %d\n", len(repoCalls))
+	repoTests, err := extract.ParseRepositoryTests(repoPath, repoFiles, repoSymbols)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: parse repository tests: %v\n", err)
+		return 1
+	}
 	memories, err := extract.ParseMarkdownMemory(repoPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build: parse markdown memory: %v\n", err)
@@ -260,6 +265,7 @@ func runBuild(args []string) int {
 		fmt.Fprintf(os.Stderr, "build: parse git commits: %v\n", err)
 		return 1
 	}
+	fmt.Printf("  Tests:      %d\n", len(repoTests))
 	fmt.Printf("  Memories:   %d\n", len(memories))
 	fmt.Printf("  Commits:    %d\n", len(commits))
 
@@ -401,6 +407,13 @@ func runBuild(args []string) int {
 		}
 		persisted++
 	}
+	for _, t := range repoTests {
+		if _, err := db.UpsertNode("Test", t.Identifier, repoTestProps(t)); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert test %s: %v\n", t.Identifier, err)
+			return 1
+		}
+		persisted++
+	}
 	for _, m := range memories {
 		if _, err := db.UpsertNode("Memory", m.Identifier, memoryProps(m)); err != nil {
 			fmt.Fprintf(os.Stderr, "build: upsert memory %s: %v\n", m.Identifier, err)
@@ -503,6 +516,31 @@ func runBuild(args []string) int {
 			}
 		}
 	}
+	for _, t := range repoTests {
+		testID, err := db.LookupNodeID("Test", t.Identifier)
+		if err != nil {
+			continue
+		}
+		if fromID, err := db.LookupNodeID("File", t.FilePath); err == nil {
+			if err := db.UpsertEdge(fromID, testID, "defines", nil); err == nil {
+				edgesAdded++
+			}
+		}
+		if t.TargetFilePath != "" {
+			if targetID, err := db.LookupNodeID("File", t.TargetFilePath); err == nil {
+				if err := db.UpsertEdge(testID, targetID, "tests", nil); err == nil {
+					edgesAdded++
+				}
+			}
+		}
+		if t.TargetSymbolIdentifier != "" {
+			if targetID, err := db.LookupNodeID("Symbol", t.TargetSymbolIdentifier); err == nil {
+				if err := db.UpsertEdge(testID, targetID, "tests", nil); err == nil {
+					edgesAdded++
+				}
+			}
+		}
+	}
 	for _, m := range memories {
 		fromID, err := db.LookupNodeID("File", m.FilePath)
 		if err != nil {
@@ -555,7 +593,7 @@ func runBuild(args []string) int {
 	case "", "none":
 		// Skip — structural BFS still works without any search index.
 	case "bm25":
-		if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, memories, commits); err != nil {
+		if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits); err != nil {
 			fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
 			return 1
 		}
@@ -565,7 +603,7 @@ func runBuild(args []string) int {
 			fmt.Fprintf(os.Stderr, "build: embed provider: %v\n", err)
 			return 1
 		}
-		if err := runEmbedPipeline(db, provider, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, memories, commits); err != nil {
+		if err := runEmbedPipeline(db, provider, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits); err != nil {
 			fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
 			return 1
 		}
@@ -593,6 +631,7 @@ func runBM25Pipeline(
 	repoChunks []types.RepoChunk,
 	repoSymbols []types.RepoSymbol,
 	repoCalls []types.RepoCall,
+	repoTests []types.RepoTest,
 	memories []types.MarkdownMemory,
 	commits []types.RepoCommit,
 ) error {
@@ -631,6 +670,9 @@ func runBM25Pipeline(
 	}
 	for _, c := range repoCalls {
 		units = append(units, unit{"Call", c.Identifier, embedTextForRepoCall(c)})
+	}
+	for _, t := range repoTests {
+		units = append(units, unit{"Test", t.Identifier, embedTextForRepoTest(t)})
 	}
 	for _, m := range memories {
 		units = append(units, unit{"Memory", m.Identifier, embedTextForMemory(m)})
@@ -714,6 +756,10 @@ func embedTextForRepoCall(c types.RepoCall) string {
 	return c.Identifier + "\n" + c.CallerIdentifier + "\n" + c.CalleeName + "\n" + c.CalleeQualifier + "\n" + c.FilePath
 }
 
+func embedTextForRepoTest(t types.RepoTest) string {
+	return t.Identifier + "\n" + t.Name + "\n" + t.Kind + "\n" + t.FilePath + "\n" + t.TargetFilePath + "\n" + t.TargetSymbolIdentifier
+}
+
 func embedTextForMemory(m types.MarkdownMemory) string {
 	return m.Identifier + "\n" + m.Category + "\n" + m.FilePath + "\n" + m.Heading + "\n" + m.Body
 }
@@ -738,6 +784,7 @@ func runEmbedPipeline(
 	repoChunks []types.RepoChunk,
 	repoSymbols []types.RepoSymbol,
 	repoCalls []types.RepoCall,
+	repoTests []types.RepoTest,
 	memories []types.MarkdownMemory,
 	commits []types.RepoCommit,
 ) error {
@@ -780,6 +827,9 @@ func runEmbedPipeline(
 	}
 	for _, c := range repoCalls {
 		units = append(units, unit{"Call", c.Identifier, embedTextForRepoCall(c)})
+	}
+	for _, t := range repoTests {
+		units = append(units, unit{"Test", t.Identifier, embedTextForRepoTest(t)})
 	}
 	for _, m := range memories {
 		units = append(units, unit{"Memory", m.Identifier, embedTextForMemory(m)})
@@ -1106,13 +1156,14 @@ func runImpact(args []string) int {
 		fmt.Fprintf(os.Stderr, "impact: no exact node found for %q; use `query --hybrid` to discover identifiers\n", target)
 		return 1
 	}
-	fmt.Println("Impact neighborhood:")
-	printNodeSummary(*node)
 	results, err := eng.BFS(node.Type, node.Identifier, *depth)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "impact: bfs: %v\n", err)
 		return 1
 	}
+	printImpactSummary(results)
+	fmt.Println("Impact neighborhood:")
+	printNodeSummary(*node)
 	for _, r := range results {
 		if r.Distance == 0 {
 			continue
@@ -1121,6 +1172,40 @@ func runImpact(args []string) int {
 		printNodeSummary(r.Node)
 	}
 	return 0
+}
+
+func printImpactSummary(results []query.BFSResult) {
+	var tests, commits []query.BFSResult
+	for _, r := range results {
+		switch r.Node.Type {
+		case "Test":
+			tests = append(tests, r)
+		case "Commit":
+			commits = append(commits, r)
+		}
+	}
+	if len(tests) > 0 {
+		fmt.Println("Related tests:")
+		for i, r := range tests {
+			if i >= 8 {
+				fmt.Printf("  ... %d more\n", len(tests)-i)
+				break
+			}
+			fmt.Print("  ")
+			printNodeSummary(r.Node)
+		}
+	}
+	if len(commits) > 0 {
+		fmt.Println("Recent commits:")
+		for i, r := range commits {
+			if i >= 5 {
+				fmt.Printf("  ... %d more\n", len(commits)-i)
+				break
+			}
+			fmt.Print("  ")
+			printNodeSummary(r.Node)
+		}
+	}
 }
 
 func runGotchas(args []string) int {
@@ -1569,6 +1654,9 @@ func titleFromProperties(p map[string]any) string {
 	if subject, ok := p["subject"].(string); ok && subject != "" {
 		return subject
 	}
+	if name, ok := p["name"].(string); ok && name != "" {
+		return name
+	}
 	if path, ok := p["path"].(string); ok && path != "" {
 		return path
 	}
@@ -1702,6 +1790,19 @@ func repoCallProps(c types.RepoCall) map[string]any {
 		"file_path":         c.FilePath,
 		"line":              c.Line,
 		"column":            c.Column,
+	}
+}
+
+func repoTestProps(t types.RepoTest) map[string]any {
+	return map[string]any{
+		"name":                     t.Name,
+		"kind":                     t.Kind,
+		"language":                 t.Language,
+		"file_path":                t.FilePath,
+		"start_line":               t.StartLine,
+		"end_line":                 t.EndLine,
+		"target_file_path":         t.TargetFilePath,
+		"target_symbol_identifier": t.TargetSymbolIdentifier,
 	}
 }
 
