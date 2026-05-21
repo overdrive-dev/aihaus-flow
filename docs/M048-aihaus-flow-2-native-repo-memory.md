@@ -441,14 +441,17 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph-refresh.sh` now delegates to `aih-graph refresh --repo ...`, preserves the default BM25 provider when `AIH_GRAPH_PROVIDER` is unset, honors explicit `AIH_GRAPH_PROVIDER=none`, and reports the real non-zero refresh exit code on failure; hook validation with `AIH_GRAPH_PROVIDER=none` produced a fresh index with `bm25_rows: 0`.
 - `aih-graph-stale.sh --from-hook bash` ignores `aihaus memory refresh ... --json` and does not recreate `.claude/audit/aih-graph.stale` after a refresh command.
 - `tools/smoke-test.sh` now includes an M048 contract check for memory lifecycle hooks in both settings templates and JSON memory commands in all packaged agents; targeted `rg`, JSON parsing, and `bash -n` validations passed under Git Bash.
+- `aih-graph query --json "all agents JSON memory"` returned commit `ff48c49`, the updated `tools/smoke-test.sh` contract, and the all-agent memory integration evidence from the fresh index.
+- `rg "query --semantic|query --hybrid|query --bfs|Memory Lookup \(M039\+" pkg/.aihaus/agents` returns no matches after the all-agent prompt migration.
+- `CLAUDE.md`, `INSTALL-VIA-LLM.md`, `aih-graph/README.md`, `aih-graph/PRD.md`, and `impact` fallback guidance now point agents and humans at `query --json` rather than the legacy M039 prompt examples.
 - `go test ./...` passes inside `aih-graph`.
 - Full `tools/smoke-test.sh` under Windows Git Bash reached Check 65 before timeout; failures before that point were existing fixture portability issues around `mktemp -t` paths resolving to `/repo`, not M048 memory contract failures.
 
-## Open Questions
+## Resolved M048 Implementation Decisions
 
-- Should the existing `aih-graph` name remain, or should the 2.0 memory engine be renamed to `aih-memory` while preserving compatibility aliases?
-- Which parser stack should be used for the first implementation: Go-native parsers, Tree-sitter, language-specific lightweight parsers, or a hybrid?
-- What is the first supported language set beyond aihaus-flow's own Go, Bash, PowerShell, and Markdown needs?
-- Should MCP be included in M048 if CLI integration proves sufficient for Codex and Claude workflows?
-- How strict should agent memory consultation be: hard gate for high-risk edits only, or required for every planned code change?
-- What evidence is required before claiming a file or symbol belongs to a milestone when commit and manifest data are incomplete?
+- Keep `aih-graph` as the engine name and expose `aihaus memory <subcommand>` as the human/agent alias.
+- Use Go-native extraction for the first implementation; defer Tree-sitter until a language need justifies the install and maintenance cost.
+- Support aihaus-flow's current practical language set first: Markdown, Go, Bash, and PowerShell, with file/chunk fallback for everything else.
+- Defer MCP for M048; the CLI JSON contract is sufficient for Codex and Claude operation and easier to dogfood.
+- Require JSON memory consultation for all packaged agents when the binary is available, while keeping absence of the binary non-blocking.
+- Treat milestone ownership as evidence-derived: prefer explicit milestone docs, decisions, commits, and touched files; report uncertainty instead of inventing ownership when those signals are missing.
