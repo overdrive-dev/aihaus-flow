@@ -97,14 +97,13 @@ After completing work, if you discovered a reusable pattern:
 
 ## Native Repository Memory (M048+, required when available)
 
-If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, consult repository memory before decomposing into tasks:
-- `aih-graph status --repo . --json` — check whether memory is fresh or stale.
-- `aih-graph query --repo . --json "<phase goal or affected area>"` — retrieve relevant code, decisions, hooks, skills, and agent memory.
-- `aih-graph context --repo . --json "<file|symbol|topic>"` — ground tasks in concrete code context when target areas are known.
-- `aih-graph impact --repo . --json "<file|symbol>"` — identify likely affected files, tests, hooks, skills, and decisions before assigning work.
+If `aihaus memory` is available, consult repository memory before decomposing into tasks:
+- `aihaus memory status --repo . --json` — check whether memory is fresh or stale.
+- `aihaus memory query --repo . --json "<phase goal or affected area>"` — retrieve relevant code, decisions, hooks, skills, and agent memory.
+- `aihaus memory context --repo . --json "<file|symbol|topic>"` — ground tasks in concrete code context when target areas are known.
+- `aihaus memory impact --repo . --json "<file|symbol>"` — identify likely affected files, tests, hooks, skills, and decisions before assigning work.
 
-If memory is stale, include a refresh task or note the stale status in the plan. Skip silently when binary absent.
+If memory is stale, include a refresh task or note the stale status in the plan. Skip silently when `aihaus memory` is absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

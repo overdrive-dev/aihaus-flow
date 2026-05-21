@@ -184,16 +184,15 @@ warning-dismissed: <uuid-3> reason: <1-sentence rationale>
 
 ## Native Repository Memory (M048)
 
-If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, consult repository memory before curating knowledge:
-- `aih-graph status --repo . --json` - record freshness before using memory as evidence.
-- `aih-graph query --repo . --json "<milestone id or theme>"` - retrieve related decisions, knowledge, gotchas, commits, and existing memory.
-- `aih-graph gotchas --repo . --json "<candidate gotcha>"` - avoid duplicate gotcha entries.
-- `aih-graph milestone --repo . --json "<milestone id or changed area>"` - connect candidate learnings to milestone, decision, commit, and memory evidence.
-- `aih-graph impact --repo . --json "<file-or-symbol>"` - verify code, test, and hook impact before promoting reusable learnings tied to code.
+If `aihaus memory` is available, consult repository memory before curating knowledge:
+- `aihaus memory status --repo . --json` - record freshness before using memory as evidence.
+- `aihaus memory query --repo . --json "<milestone id or theme>"` - retrieve related decisions, knowledge, gotchas, commits, and existing memory.
+- `aihaus memory gotchas --repo . --json "<candidate gotcha>"` - avoid duplicate gotcha entries.
+- `aihaus memory milestone --repo . --json "<milestone id or changed area>"` - connect candidate learnings to milestone, decision, commit, and memory evidence.
+- `aihaus memory impact --repo . --json "<file-or-symbol>"` - verify code, test, and hook impact before promoting reusable learnings tied to code.
 
 If memory is stale, include that limitation in curator output and prefer source
-markdown artifacts over derived index claims. Skip silently when binary absent.
+markdown artifacts over derived index claims. Skip silently when `aihaus memory` is absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

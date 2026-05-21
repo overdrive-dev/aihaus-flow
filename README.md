@@ -328,8 +328,8 @@ your-project/
 │   ├── skills/                       # 14 intent-based commands
 │   │   └── _shared/
 │   │       └── autonomy-protocol.md  # Binding execution-autonomy rules (M005)
-│   ├── agents/                       # 46 specialized agent definitions
-│   ├── hooks/                        # 29 lifecycle + protocol-enforcement hooks (incl. manifest-auto-close)
+│   ├── agents/                       # 48 specialized agent definitions
+│   ├── hooks/                        # 34 lifecycle + protocol-enforcement hook scripts
 │   ├── templates/                    # project.md + settings templates
 │   ├── memory/                       # Persistent agent memory (grows over time)
 │   ├── project.md                    # Your codebase context (created by /aih-init)

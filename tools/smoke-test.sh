@@ -5003,14 +5003,14 @@ check_m048_memory_integration_contract() {
 
   for file in "${agent_files[@]}"; do
     agent="$(basename "${file}")"
-    if ! grep -Fq 'aih-graph status --repo . --json' "${file}"; then
+    if ! grep -Fq 'aihaus memory status --repo . --json' "${file}"; then
       issues+=("${agent}: missing JSON status memory command")
     fi
-    if ! grep -Eq 'aih-graph (query|context|impact|callers)( --repo \.)? --json' "${file}"; then
+    if ! grep -Eq 'aihaus memory (query|context|impact|callers)( --repo \.)? --json' "${file}"; then
       issues+=("${agent}: missing role-specific JSON memory command")
     fi
-    if grep -Eq 'aih-graph query --(semantic|hybrid|bfs)' "${file}"; then
-      issues+=("${agent}: uses legacy non-JSON query memory command")
+    if grep -Eq 'aih-graph (status|query|context|impact|callers|gotchas|milestone)' "${file}"; then
+      issues+=("${agent}: bypasses integrated aihaus memory command")
     fi
   done
 

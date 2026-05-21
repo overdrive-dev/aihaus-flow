@@ -206,16 +206,15 @@ Parent skill parses via invoke-guard.sh → dispatches aih-quick draft-adr (arch
 
 ## Native Repository Memory (M048)
 
-If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, consult repository memory before reviewing changes:
-- `aih-graph status --repo . --json` - record freshness before using memory as evidence.
-- `aih-graph impact --repo . --json "<changed-file-or-symbol>"` - inspect likely affected files, tests, hooks, agents, decisions, and gotchas.
-- `aih-graph query --repo . --json "<review focus or risk>"` - surface related decisions, prior findings, gotchas, commits, and memory.
-- `aih-graph callers --repo . --json "<function-or-symbol>"` - verify call-site impact when reviewing function behavior changes.
-- `aih-graph gotchas --repo . --json "<risk or repeated finding>"` - check known reviewer lessons before flagging a recurring issue.
+If `aihaus memory` is available, consult repository memory before reviewing changes:
+- `aihaus memory status --repo . --json` - record freshness before using memory as evidence.
+- `aihaus memory impact --repo . --json "<changed-file-or-symbol>"` - inspect likely affected files, tests, hooks, agents, decisions, and gotchas.
+- `aihaus memory query --repo . --json "<review focus or risk>"` - surface related decisions, prior findings, gotchas, commits, and memory.
+- `aihaus memory callers --repo . --json "<function-or-symbol>"` - verify call-site impact when reviewing function behavior changes.
+- `aihaus memory gotchas --repo . --json "<risk or repeated finding>"` - check known reviewer lessons before flagging a recurring issue.
 
 If memory is stale, say so in the integration report rather than treating memory
-output as current. Skip silently when binary absent.
+output as current. Skip silently when `aihaus memory` is absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

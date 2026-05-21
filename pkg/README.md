@@ -260,7 +260,7 @@ Nothing is fine-tuned and no weights move. What changes is the markdown that gui
 
 ## Commands
 
-aihaus ships 11 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**.
+aihaus ships 14 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**.
 
 ### Core workflow
 
@@ -332,9 +332,9 @@ aihaus ships 11 intent-based skills. Every command follows the same pattern: **a
 ```
 your-project/
 ├── .aihaus/                     # aihaus workspace (git-tracked or gitignored — your call)
-│   ├── skills/                  # 11 intent-based commands
-│   ├── agents/                  # 43 specialized agent definitions
-│   ├── hooks/                   # 12 lifecycle hooks
+│   ├── skills/                  # 14 intent-based commands
+│   ├── agents/                  # 48 specialized agent definitions
+│   ├── hooks/                   # 34 lifecycle hook scripts
 │   ├── templates/               # project.md + settings templates
 │   ├── memory/                  # Persistent agent memory (grows over time)
 │   ├── project.md               # Your codebase context (created by /aih-init)

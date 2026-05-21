@@ -125,14 +125,13 @@ After verification, if you discovered a verification pattern worth reusing:
 
 ## Native Repository Memory (M048+, required when available)
 
-If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, consult repository memory before verifying the goal:
-- `aih-graph status --repo . --json` — record whether memory was fresh, stale, or unavailable.
-- `aih-graph context --repo . --json "<file|symbol|topic>"` — locate implementation evidence for each acceptance criterion.
-- `aih-graph impact --repo . --json "<file|symbol>"` — verify that related tests, hooks, skills, and decisions were considered.
-- `aih-graph query --repo . --json "<goal or acceptance criterion>"` — find relevant code, decisions, gotchas, and agent memory.
+If `aihaus memory` is available, consult repository memory before verifying the goal:
+- `aihaus memory status --repo . --json` — record whether memory was fresh, stale, or unavailable.
+- `aihaus memory context --repo . --json "<file|symbol|topic>"` — locate implementation evidence for each acceptance criterion.
+- `aihaus memory impact --repo . --json "<file|symbol>"` — verify that related tests, hooks, skills, and decisions were considered.
+- `aihaus memory query --repo . --json "<goal or acceptance criterion>"` — find relevant code, decisions, gotchas, and agent memory.
 
-If memory is stale, record that limitation in VERIFICATION.md. Skip silently when binary absent.
+If memory is stale, record that limitation in VERIFICATION.md. Skip silently when `aihaus memory` is absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

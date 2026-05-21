@@ -132,14 +132,13 @@ If the invocation prompt includes an Attachments block, Read the files (UI diffs
 
 ## Native Repository Memory (M048+, required when available)
 
-If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, consult repository memory before reviewing code quality:
-- `aih-graph status --repo . --json` — check whether the index is fresh enough for review evidence.
-- `aih-graph impact --repo . --json "<changed-file-or-symbol>"` — inspect likely affected code, tests, hooks, skills, and decisions.
-- `aih-graph callers --json "<function-or-symbol>"` — verify behavioral changes against call-site evidence.
-- `aih-graph query --repo . --json "<review focus or changed area>"` — surface related decisions, known gotchas, and prior review memory.
+If `aihaus memory` is available, consult repository memory before reviewing code quality:
+- `aihaus memory status --repo . --json` — check whether the index is fresh enough for review evidence.
+- `aihaus memory impact --repo . --json "<changed-file-or-symbol>"` — inspect likely affected code, tests, hooks, skills, and decisions.
+- `aihaus memory callers --repo . --json "<function-or-symbol>"` — verify behavioral changes against call-site evidence.
+- `aihaus memory query --repo . --json "<review focus or changed area>"` — surface related decisions, known gotchas, and prior review memory.
 
-If memory is stale, say so in REVIEW.md rather than treating memory output as current. Skip silently when binary absent.
+If memory is stale, say so in REVIEW.md rather than treating memory output as current. Skip silently when `aihaus memory` is absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

@@ -231,15 +231,14 @@ Use absolute paths for `cp`, `mv`, `mkdir` instead of relying on `cd` first. `gi
 
 ## Native Repository Memory (M048+, required when available)
 
-If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, consult repository memory before writing code:
-- `aih-graph status --repo . --json` — check freshness before relying on memory.
-- `aih-graph context --repo . --json "<file|symbol|topic>"` — load local code context for the story's target area.
-- `aih-graph callers --json "<function-or-symbol>"` — find call-site evidence before changing behavior.
-- `aih-graph impact --repo . --json "<file|symbol>"` — inspect likely affected files, tests, hooks, skills, and decisions before editing.
-- `aih-graph query --repo . --json "<story goal or error>"` — retrieve relevant decisions, gotchas, agent memory, and code chunks.
+If `aihaus memory` is available, consult repository memory before writing code:
+- `aihaus memory status --repo . --json` — check freshness before relying on memory.
+- `aihaus memory context --repo . --json "<file|symbol|topic>"` — load local code context for the story's target area.
+- `aihaus memory callers --repo . --json "<function-or-symbol>"` — find call-site evidence before changing behavior.
+- `aihaus memory impact --repo . --json "<file|symbol>"` — inspect likely affected files, tests, hooks, skills, and decisions before editing.
+- `aihaus memory query --repo . --json "<story goal or error>"` — retrieve relevant decisions, gotchas, agent memory, and code chunks.
 
-If memory is stale, run the refresh hook when cheap or record the stale status in the story summary. Skip silently when binary absent.
+If memory is stale, run the refresh hook when cheap or record the stale status in the story summary. Skip silently when `aihaus memory` is absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work
