@@ -26,7 +26,7 @@ The installed `aihaus` shim exposes these as `aihaus memory <subcommand> ...`.
 The human text output remains the default. Agents should prefer `--json` for stable payloads:
 
 ```bash
-aihaus memory query --semantic --json "Ollama embedding provider"
+aihaus memory query --json "Ollama embedding provider"
 aihaus memory status --json
 aihaus memory context --type Symbol --depth 1 --json aih-graph/internal/extract/repository.go:ParseRepositoryText
 aihaus memory impact --type File --depth 1 --limit 40 --json aih-graph/cmd/aih-graph/main.go

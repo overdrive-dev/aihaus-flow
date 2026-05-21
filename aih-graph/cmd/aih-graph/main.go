@@ -1448,7 +1448,7 @@ func runImpact(args []string) int {
 	target := fs.Arg(0)
 	node, err := resolveNode(eng, target, *typ)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "impact: no exact node found for %q; use `query --hybrid` to discover identifiers\n", target)
+		fmt.Fprintf(os.Stderr, "impact: no exact node found for %q; use `query --json` to discover identifiers\n", target)
 		return 1
 	}
 	results, err := eng.BFS(node.Type, node.Identifier, *depth)

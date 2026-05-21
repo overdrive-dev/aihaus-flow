@@ -129,7 +129,7 @@ Per architecture.md §4 module-by-module + ADR-260515-E forever-scope discipline
 - **M036 — Privacy gates:** `internal/privacy/` (XDG resolution: `$XDG_STATE_HOME/aih-graph/<repo-hash>/graph.db` or platform equivalent + per-repo file isolation + consent gate via `.aih-graph-consent` marker file + `--purge` = single file delete + NDA opt-out via `--embed-provider bm25` (default, zero external calls) or `--embed-provider none`).
 - **M037 — CI cross-compile:** `.github/workflows/aih-graph-ci.yml` — 4-platform matrix (linux-amd64, darwin-amd64, darwin-arm64, windows-amd64). **Trivial post-pivot:** `GOOS=X GOARCH=Y go build`. Single binary per platform. No extension bundling. No CGO toolchain setup in CI.
 - **M038 — v0.1.0 ship:** README, version-tagging, binary release to GitHub Releases. 4 artifacts (one per platform).
-- **M039 — aihaus integration:** `pkg/scripts/install.sh` downloads aih-graph binary from GitHub Releases (primary path); source-build via `go install` remains contributor-only option. ADR-260515-D-amend-01 3-way prompt preserved but option [2] (binary) becomes default-recommended. `pkg/.aihaus/hooks/aih-graph-refresh.sh` new hook; ~15 agent prompt addenda with `aih-graph query --semantic` examples.
+- **M039 — aihaus integration:** `pkg/scripts/install.sh` downloads aih-graph binary from GitHub Releases (primary path); source-build via `go install` remains contributor-only option. ADR-260515-D-amend-01 3-way prompt preserved but option [2] (binary) becomes default-recommended. `pkg/.aihaus/hooks/aih-graph-refresh.sh` new hook; agent prompt addenda now use M048 JSON memory commands.
 - **M040 — smoke checks + release v0.35.0:** Smoke Check 84 (build smoke + DB schema applied + N ADRs extracted matching `grep -c '^## ADR' pkg/.aihaus/decisions.md`), 85 (privacy ADR enforcement: consent file, `--purge` effect), 86 (integration round-trip: aihaus agent prompt invocation → aih-graph query → token-bounded context returned, includes semantic query). aihaus v0.35.0 tag includes aih-graph v0.1.0.
 
 ## Acceptance Criteria for v0.1 (cross-milestone)
@@ -140,8 +140,8 @@ Test at M038 closeout:
 - [ ] `aih-graph build .` re-run with no source changes completes in <5s (SHA-based skip on unchanged embeddings).
 - [ ] `aih-graph query "ADR-260514-B"` returns `Decision` node within token budget (structural lookup).
 - [ ] `aih-graph query --type Milestone "M030"` returns Milestone node + Story edges (filtered structural).
-- [ ] `aih-graph query --semantic "how does merge-settings handle hooks arrays"` returns top-K relevant Decision/Milestone/Skill nodes by cosine similarity.
-- [ ] `aih-graph query "..."` (default hybrid mode) returns nodes ranked by combined SQL match + vector distance.
+- [ ] `aih-graph query --json "how does merge-settings handle hooks arrays"` returns a bounded agent-readable hybrid BM25 result.
+- [ ] `aih-graph query --semantic --json "..."` returns semantic matches when an embedding provider is configured.
 - [ ] `aih-graph build` on a new repo without `.aih-graph-consent` exits with code 2 + error message.
 - [ ] `aih-graph build /tmp/test --accept-all-repos` works.
 - [ ] `aih-graph build --embed-provider bm25` runs without external API calls (zero-credential path; default since M041).
