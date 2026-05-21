@@ -130,15 +130,16 @@ If the invocation prompt includes an Attachments block, Read the files (UI diffs
 - Be specific: file path, line number, code snippet, suggested fix
 - If you find zero issues, re-review with deeper scrutiny
 
-## Memory Lookup (M039+, optional)
+## Native Repository Memory (M048+, required when available)
 
 If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, surface relevant aihaus memory before reviewing code quality:
-- `aih-graph query --semantic "<your question>"` — top-K Decisions/Milestones/Skills/Hooks/Agents by cosine similarity
-- `aih-graph query --hybrid "<your question>"` — same + 1-hop edge expansion (parent ADRs, related Stories)
-- `aih-graph query --bfs ADR-XXX` — structural traversal from a known node
+or at `~/.aihaus/bin/`, consult repository memory before reviewing code quality:
+- `aih-graph status --repo .` — check whether the index is fresh enough for review evidence.
+- `aih-graph impact "<changed-file-or-symbol>"` — inspect likely affected code, tests, hooks, skills, and decisions.
+- `aih-graph callers "<function-or-symbol>"` — verify behavioral changes against call-site evidence.
+- `aih-graph query --hybrid "<review focus or changed area>"` — surface related decisions, known gotchas, and prior review memory.
 
-Skip silently when binary absent — aih-graph is supplemental, never blocking.
+If memory is stale, say so in REVIEW.md rather than treating memory output as current. Skip silently when binary absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

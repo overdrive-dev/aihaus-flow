@@ -123,15 +123,16 @@ After verification, if you discovered a verification pattern worth reusing:
 - FAIL means goal not achieved — use it when warranted
 - PASS-WITH-GAPS means shippable but imperfect — list what's missing
 
-## Memory Lookup (M039+, optional)
+## Native Repository Memory (M048+, required when available)
 
 If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, surface relevant aihaus memory before verifying the goal:
-- `aih-graph query --semantic "<your question>"` — top-K Decisions/Milestones/Skills/Hooks/Agents by cosine similarity
-- `aih-graph query --hybrid "<your question>"` — same + 1-hop edge expansion (parent ADRs, related Stories)
-- `aih-graph query --bfs ADR-XXX` — structural traversal from a known node
+or at `~/.aihaus/bin/`, consult repository memory before verifying the goal:
+- `aih-graph status --repo .` — record whether memory was fresh, stale, or unavailable.
+- `aih-graph context "<file|symbol|topic>"` — locate implementation evidence for each acceptance criterion.
+- `aih-graph impact "<file|symbol>"` — verify that related tests, hooks, skills, and decisions were considered.
+- `aih-graph query --hybrid "<goal or acceptance criterion>"` — find relevant code, decisions, gotchas, and agent memory.
 
-Skip silently when binary absent — aih-graph is supplemental, never blocking.
+If memory is stale, record that limitation in VERIFICATION.md. Skip silently when binary absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

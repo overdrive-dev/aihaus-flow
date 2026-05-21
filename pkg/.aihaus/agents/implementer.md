@@ -229,15 +229,17 @@ Use absolute paths for `cp`, `mv`, `mkdir` instead of relying on `cd` first. `gi
 - If you discover something, log it — future agents depend on your notes
 - Update agent memory with reusable learnings after each task
 
-## Memory Lookup (M039+, optional)
+## Native Repository Memory (M048+, required when available)
 
 If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, surface relevant aihaus memory before writing code:
-- `aih-graph query --semantic "<your question>"` — top-K Decisions/Milestones/Skills/Hooks/Agents by cosine similarity
-- `aih-graph query --hybrid "<your question>"` — same + 1-hop edge expansion (parent ADRs, related Stories)
-- `aih-graph query --bfs ADR-XXX` — structural traversal from a known node
+or at `~/.aihaus/bin/`, consult repository memory before writing code:
+- `aih-graph status --repo .` — check freshness before relying on memory.
+- `aih-graph context "<file|symbol|topic>"` — load local code context for the story's target area.
+- `aih-graph callers "<function-or-symbol>"` — find call-site evidence before changing behavior.
+- `aih-graph impact "<file|symbol>"` — inspect likely affected files, tests, hooks, skills, and decisions before editing.
+- `aih-graph query --hybrid "<story goal or error>"` — retrieve relevant decisions, gotchas, agent memory, and code chunks.
 
-Skip silently when binary absent — aih-graph is supplemental, never blocking.
+If memory is stale, run the refresh hook when cheap or record the stale status in the story summary. Skip silently when binary absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

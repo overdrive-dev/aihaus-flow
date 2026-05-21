@@ -15,10 +15,10 @@
 #
 # Env vars:
 #   AIH_GRAPH_BIN       Explicit binary path (skip discovery)
-#   AIH_GRAPH_PROVIDER  Search/embedding provider. Default unset → uses
-#                       binary default (bm25 — pure-Go offline FTS5). Pass
-#                       fake|none for tests; opt-in external providers are
-#                       binary-supported but not advertised (ADR-260516-A).
+#   AIH_GRAPH_PROVIDER  Search/embedding provider. Default unset -> uses
+#                       binary default (bm25, pure-Go offline FTS5). Pass
+#                       ollama for local semantic embeddings, fake for tests,
+#                       or none to skip the search index.
 #   AIH_GRAPH_DB        Override .db path (default: aih-graph manages via XDG)
 #   AIH_GRAPH_QUIET     If set non-empty, suppress per-line output.
 
@@ -85,4 +85,5 @@ if ! "$bin" "${args[@]}"; then
   exit 0
 fi
 
+rm -f "$repo_root/.claude/audit/aih-graph.stale" 2>/dev/null || true
 log "refresh complete"

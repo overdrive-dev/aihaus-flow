@@ -1,6 +1,6 @@
 # M048 - aihaus-flow 2.0 Native Repository Memory
 
-**Status:** Draft
+**Status:** In progress
 **Date:** 2026-05-21
 **Milestone:** `M048-aihaus-flow-2-native-repo-memory`
 
@@ -405,6 +405,23 @@ The milestone is reviewed and verified using its own repository memory layer.
 - Lifecycle hooks keep the index current or mark it stale.
 - Core agents consume memory as part of normal operation.
 - Final verification uses the new memory layer on the milestone's own changes.
+
+## Current Implementation Progress
+
+Implemented in this branch:
+
+- S03: repository walker and chunk indexing now persist `File` and `Chunk` nodes, with skip rules for generated/vendor/runtime directories and binary/oversized files.
+- S04: code symbol extraction now persists `Symbol` and `Call` nodes for Go functions/methods plus shell and PowerShell functions; Go call sites include file/line evidence and resolved symbol edges where static resolution is unique.
+- S05: `--embed-provider ollama` is wired as a local semantic provider through Ollama's `/api/embed` endpoint; model defaults to `embeddinggemma`, with `AIH_GRAPH_OLLAMA_MODEL`, `AIH_GRAPH_OLLAMA_URL`, and `OLLAMA_HOST` overrides.
+- S06: `context`, `callers`, and `impact` commands expose repository-brain queries over exact graph nodes and BM25 fallback.
+- S08/S09 first slice: `status` and `mark-stale` commands plus hooks mark memory stale after writes/git history changes and refresh after task completion/session end; planner, implementer, code-reviewer, and verifier prompts now require memory consultation when available.
+
+Dogfood evidence from aihaus-flow:
+
+- `aih-graph build --db C:\tmp\aih-graph-m048-memory-final-rebuild.db --accept-all-repos ..` indexed 322 files, 487 chunks, 367 symbols, and 1168 calls.
+- `aih-graph callers ParseRepositoryText` returned call-site evidence from `aih-graph/cmd/aih-graph/main.go` and `aih-graph/internal/extract/repository_test.go`.
+- `aih-graph context aih-graph/internal/extract/repository.go:ParseRepositoryText --depth 1` returned exact symbol context plus called helper symbols and call sites.
+- `go test ./...` passes inside `aih-graph`.
 
 ## Open Questions
 

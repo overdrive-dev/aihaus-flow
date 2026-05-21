@@ -227,6 +227,9 @@ func resolveCalls(symbols []types.RepoSymbol, calls []types.RepoCall) {
 		}
 	}
 	for i := range calls {
+		if calls[i].CalleeQualifier != "" {
+			continue
+		}
 		matches := byName[calls[i].CalleeName]
 		if len(matches) == 1 {
 			calls[i].CalleeIdentifier = matches[0]

@@ -103,6 +103,11 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/backup-file.sh",
             "async": true,
             "statusMessage": "Backing up..."
+          },
+          {
+            "type": "command",
+            "command": "AIH_GRAPH_STALE_REASON=write-edit bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-stale.sh --reason write-edit",
+            "async": true
           }
         ]
       },
@@ -112,6 +117,11 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit-log.sh",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-stale.sh --from-hook bash",
             "async": true
           }
         ]
@@ -139,6 +149,12 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/task-completed.sh",
             "timeout": 30,
             "statusMessage": "Verifying completion..."
+          },
+          {
+            "type": "command",
+            "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-refresh.sh",
+            "timeout": 60,
+            "async": true
           }
         ]
       }

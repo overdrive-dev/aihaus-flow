@@ -1,6 +1,7 @@
 // Package embed implements aih-graph's pluggable embedding pipeline per
-// ADR-260515-E-amend-02. v0.1 ships two providers:
+// ADR-260515-E-amend-02. v0.1 ships multiple providers:
 //
+//	ollama  - local Ollama /api/embed endpoint (preferred local semantic mode)
 //	voyage  — Voyage AI HTTP API (default; requires VOYAGE_API_KEY env var)
 //	fake    — deterministic SHA-derived pseudo-embeddings (no network; test
 //	          + offline scaffold mode; vectors are unit-normalized but
@@ -98,7 +99,106 @@ func (p *FakeProvider) Embed(text string) ([]float32, error) {
 }
 
 // ---------------------------------------------------------------------------
-// VoyageProvider — Voyage AI HTTP API client.
+// OllamaProvider calls a local Ollama embedding model.
+// ---------------------------------------------------------------------------
+
+const (
+	ollamaDefaultEndpoint = "http://localhost:11434/api/embed"
+	ollamaDefaultModel    = "embeddinggemma"
+)
+
+// OllamaProvider calls Ollama's /api/embed endpoint. It is the preferred local
+// semantic provider for M048 because vectors stay on the developer machine.
+type OllamaProvider struct {
+	model    string
+	endpoint string
+	dim      int
+	client   *http.Client
+}
+
+// OllamaOptions configures an Ollama provider.
+type OllamaOptions struct {
+	Model    string // defaults to $AIH_GRAPH_OLLAMA_MODEL or "embeddinggemma"
+	Endpoint string // defaults to $AIH_GRAPH_OLLAMA_URL, $OLLAMA_HOST, or localhost
+}
+
+// NewOllamaProvider returns a provider for Ollama's embedding endpoint.
+func NewOllamaProvider(opts OllamaOptions) (*OllamaProvider, error) {
+	model := strings.TrimSpace(opts.Model)
+	if model == "" {
+		model = strings.TrimSpace(os.Getenv("AIH_GRAPH_OLLAMA_MODEL"))
+	}
+	if model == "" {
+		model = ollamaDefaultModel
+	}
+	endpoint := strings.TrimSpace(opts.Endpoint)
+	if endpoint == "" {
+		endpoint = strings.TrimSpace(os.Getenv("AIH_GRAPH_OLLAMA_URL"))
+	}
+	if endpoint == "" {
+		endpoint = strings.TrimSpace(os.Getenv("OLLAMA_HOST"))
+	}
+	endpoint = normalizeOllamaEndpoint(endpoint)
+	return &OllamaProvider{
+		model:    model,
+		endpoint: endpoint,
+		client:   &http.Client{Timeout: 60 * time.Second},
+	}, nil
+}
+
+func (p *OllamaProvider) Dim() int      { return p.dim }
+func (p *OllamaProvider) Model() string { return "ollama:" + p.model }
+
+func (p *OllamaProvider) Embed(text string) ([]float32, error) {
+	body, _ := json.Marshal(map[string]any{
+		"model": p.model,
+		"input": text,
+	})
+	req, err := http.NewRequest("POST", p.endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ollama: HTTP request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("ollama: HTTP %d: %s", resp.StatusCode, string(b))
+	}
+	var payload struct {
+		Embeddings [][]float32 `json:"embeddings"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("ollama: decode response: %w", err)
+	}
+	if len(payload.Embeddings) == 0 || len(payload.Embeddings[0]) == 0 {
+		return nil, fmt.Errorf("ollama: empty embeddings in response")
+	}
+	p.dim = len(payload.Embeddings[0])
+	return payload.Embeddings[0], nil
+}
+
+func normalizeOllamaEndpoint(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		endpoint = ollamaDefaultEndpoint
+	}
+	endpoint = strings.TrimRight(endpoint, "/")
+	if strings.HasSuffix(endpoint, "/api/embed") {
+		return endpoint
+	}
+	if strings.HasSuffix(endpoint, "/api") {
+		return endpoint + "/embed"
+	}
+	return endpoint + "/api/embed"
+}
+
+// ---------------------------------------------------------------------------
+// VoyageProvider calls Voyage AI's embedding API.
 // https://docs.voyageai.com/reference/embeddings-api
 // ---------------------------------------------------------------------------
 

@@ -3,7 +3,7 @@
 // aih-graph is aihaus's standalone Go binary memory engine. It builds and
 // queries a knowledge graph of aihaus-managed repositories with first-class
 // aihaus types (Decision, Milestone, Story, Agent, Hook, Skill) plus M048
-// native repository-memory nodes (File, Chunk).
+// native repository-memory nodes (File, Chunk, Symbol, Call).
 //
 // v0.1 forever-scope (per ADR-260515-B-amend-02 + C-amend-02 + E-amend-03,
 // embedding surface narrowed per ADR-260516-A):
@@ -22,6 +22,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/embed"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/extract"
@@ -49,7 +51,7 @@ Usage:
 Commands:
   build <repo-path>       Extract aihaus graph from repo
     --dry-run             Print extraction summary without persisting
-    --embed-provider P    bm25 (default) | fake | none
+    --embed-provider P    bm25 (default) | ollama | fake | none
     --accept-all-repos    Bypass consent gate (auto-creates marker)
   query "<question>"      Query the graph (default: hybrid)
     --bfs                 Structural BFS only (no embeddings needed)
@@ -58,6 +60,8 @@ Commands:
   context <node-or-topic> Show exact-node neighborhood or hybrid retrieval
   callers <symbol>        List call sites that target a symbol/name
   impact <node>           Show graph neighborhood for impact analysis
+  status [--repo PATH]    Show memory index freshness and counts
+  mark-stale [--reason R] Mark derived memory stale after repo changes
   uninstall [--purge]     Remove aih-graph state (single .db file delete)
   version                 Print version
   help                    Show this help
@@ -79,13 +83,22 @@ func openQueryDB(dbPath string) (*storage.DB, error) {
 	return storage.Open(dbPath)
 }
 
+func resetDerivedIndex(db *storage.DB) error {
+	_, err := db.SQL().Exec(`
+		DELETE FROM edges;
+		DELETE FROM nodes_fts;
+		DELETE FROM nodes;
+	`)
+	return err
+}
+
 // runBuild implements the M033 build subcommand. Extracts Decision / Agent /
 // Skill / Hook nodes; Milestone + Story parsers land in follow-on commits.
 func runBuild(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
 	dbPath := fs.String("db", "", "path to SQLite database file (default: XDG state dir, per-repo isolated)")
-	embedProvider := fs.String("embed-provider", "bm25", "search provider: bm25|fake|none (default bm25 — pure-Go offline lexical via FTS5)")
+	embedProvider := fs.String("embed-provider", "bm25", "search provider: bm25|ollama|fake|none (default bm25 — pure-Go offline lexical via FTS5)")
 	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate (auto-creates .aih-graph-consent marker)")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -260,6 +273,10 @@ func runBuild(args []string) int {
 		return 1
 	}
 	defer db.Close()
+	if err := resetDerivedIndex(db); err != nil {
+		fmt.Fprintf(os.Stderr, "build: reset derived index: %v\n", err)
+		return 1
+	}
 
 	persisted := 0
 	for _, d := range decisions {
@@ -486,7 +503,7 @@ func runBuild(args []string) int {
 			fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
 			return 1
 		}
-	case "voyage", "fake":
+	case "voyage", "ollama", "fake":
 		provider, err := buildEmbedProvider(*embedProvider)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "build: embed provider: %v\n", err)
@@ -497,9 +514,10 @@ func runBuild(args []string) int {
 			return 1
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "build: unknown --embed-provider %q (want bm25|voyage|fake|none)\n", *embedProvider)
+		fmt.Fprintf(os.Stderr, "build: unknown --embed-provider %q (want bm25|voyage|ollama|fake|none)\n", *embedProvider)
 		return 2
 	}
+	clearStaleMarker(repoPath)
 	return 0
 }
 
@@ -580,10 +598,12 @@ func buildEmbedProvider(name string) (embed.Provider, error) {
 	switch name {
 	case "voyage":
 		return embed.NewVoyageProvider(embed.VoyageOptions{})
+	case "ollama":
+		return embed.NewOllamaProvider(embed.OllamaOptions{})
 	case "fake":
 		return embed.NewFakeProvider(1024), nil
 	default:
-		return nil, fmt.Errorf("unknown provider %q (want voyage|fake|none)", name)
+		return nil, fmt.Errorf("unknown provider %q (want voyage|ollama|fake|none)", name)
 	}
 }
 
@@ -730,7 +750,7 @@ func runQuery(args []string) int {
 	depth := fs.Int("depth", 1, "BFS depth (hops outward from root)")
 	typ := fs.String("type", "", "restrict root match (BFS) or candidate type (semantic/hybrid) to one of: Decision|Milestone|Story|Agent|Hook|Skill")
 	topK := fs.Int("top", 10, "semantic/hybrid: number of top matches to return")
-	provider := fs.String("embed-provider", "", "semantic/hybrid: embedding provider (voyage|fake; default: derive from stored embedding_model)")
+	provider := fs.String("embed-provider", "", "semantic/hybrid: embedding provider (voyage|ollama|fake; default: derive from stored embedding_model)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -818,6 +838,8 @@ func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, provide
 			).Scan(&model)
 			if model.String == "fake-sha256" {
 				providerName = "fake"
+			} else if strings.HasPrefix(model.String, "ollama:") {
+				providerName = "ollama"
 			} else if model.String != "" {
 				providerName = "voyage"
 			} else {
@@ -845,7 +867,7 @@ func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, provide
 		return 1
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(os.Stderr, "query: no embeddings stored (run `aih-graph build --embed-provider fake|voyage` first)")
+		fmt.Fprintln(os.Stderr, "query: no embeddings stored (run `aih-graph build --embed-provider ollama|fake|voyage` first)")
 		return 1
 	}
 
@@ -1019,6 +1041,117 @@ func runImpact(args []string) int {
 		printNodeSummary(r.Node)
 	}
 	return 0
+}
+
+func runStatus(args []string) int {
+	fs := flag.NewFlagSet("status", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database")
+	repoPath := fs.String("repo", ".", "repository path for default DB and stale marker")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() > 0 {
+		*repoPath = fs.Arg(0)
+	}
+	resolvedDB := *dbPath
+	var err error
+	if resolvedDB == "" {
+		resolvedDB, err = privacy.DefaultDBPath(*repoPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "status: resolve db path: %v\n", err)
+			return 1
+		}
+	}
+	fmt.Printf("aih-graph status %s\n", *repoPath)
+	fmt.Printf("  db: %s\n", resolvedDB)
+
+	stalePath, staleErr := staleMarkerPath(*repoPath)
+	staleInfo, staleStatErr := os.Stat(stalePath)
+	if staleErr == nil && staleStatErr == nil {
+		fmt.Printf("  state: stale (since %s)\n", staleInfo.ModTime().Format(time.RFC3339))
+		fmt.Printf("  marker: %s\n", stalePath)
+	} else {
+		fmt.Println("  state: fresh")
+	}
+
+	if _, err := os.Stat(resolvedDB); err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("  index: not built")
+			return 0
+		}
+		fmt.Fprintf(os.Stderr, "status: stat db: %v\n", err)
+		return 1
+	}
+	db, err := storage.Open(resolvedDB)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "status: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+
+	counts, err := db.CountByType()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "status: count nodes: %v\n", err)
+		return 1
+	}
+	total := 0
+	for _, n := range counts {
+		total += n
+	}
+	ftsRows, _ := db.CountFTS()
+	embeddingRows := 0
+	_ = db.SQL().QueryRow("SELECT COUNT(*) FROM nodes WHERE embedding IS NOT NULL").Scan(&embeddingRows)
+	fmt.Printf("  nodes: %d\n", total)
+	for _, t := range keysSorted(counts) {
+		fmt.Printf("    %s: %d\n", t, counts[t])
+	}
+	fmt.Printf("  bm25_rows: %d\n", ftsRows)
+	fmt.Printf("  embedding_rows: %d\n", embeddingRows)
+	return 0
+}
+
+func runMarkStale(args []string) int {
+	fs := flag.NewFlagSet("mark-stale", flag.ExitOnError)
+	repoPath := fs.String("repo", ".", "repository path")
+	reason := fs.String("reason", "repository changed", "staleness reason")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() > 0 {
+		*reason = strings.Join(fs.Args(), " ")
+	}
+	path, err := staleMarkerPath(*repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "mark-stale: resolve marker: %v\n", err)
+		return 1
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "mark-stale: create marker dir: %v\n", err)
+		return 1
+	}
+	body := fmt.Sprintf("stale_since=%s\nreason=%s\n", time.Now().UTC().Format(time.RFC3339), *reason)
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "mark-stale: write marker: %v\n", err)
+		return 1
+	}
+	fmt.Printf("aih-graph marked stale: %s\n", path)
+	return 0
+}
+
+func staleMarkerPath(repoPath string) (string, error) {
+	abs, err := filepath.Abs(repoPath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(abs, ".claude", "audit", "aih-graph.stale"), nil
+}
+
+func clearStaleMarker(repoPath string) {
+	path, err := staleMarkerPath(repoPath)
+	if err != nil {
+		return
+	}
+	_ = os.Remove(path)
 }
 
 // runUninstall implements the M036 uninstall subcommand. Modes:
@@ -1274,6 +1407,8 @@ func resolveProvider(db *storage.DB, providerName string) (embed.Provider, error
 			).Scan(&model)
 			if model.String == "fake-sha256" {
 				providerName = "fake"
+			} else if strings.HasPrefix(model.String, "ollama:") {
+				providerName = "ollama"
 			} else if model.String != "" {
 				providerName = "voyage"
 			} else {
@@ -1479,6 +1614,10 @@ func main() {
 		os.Exit(runCallers(args))
 	case "impact":
 		os.Exit(runImpact(args))
+	case "status":
+		os.Exit(runStatus(args))
+	case "mark-stale":
+		os.Exit(runMarkStale(args))
 	case "uninstall":
 		os.Exit(runUninstall(args))
 	default:

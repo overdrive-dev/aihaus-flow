@@ -95,15 +95,16 @@ After completing work, if you discovered a reusable pattern:
 - Separate concerns: one plan per logical unit of work
 - Do NOT commit — the orchestrator handles git operations
 
-## Memory Lookup (M039+, optional)
+## Native Repository Memory (M048+, required when available)
 
 If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, surface relevant aihaus memory before decomposing into tasks:
-- `aih-graph query --semantic "<your question>"` — top-K Decisions/Milestones/Skills/Hooks/Agents by cosine similarity
-- `aih-graph query --hybrid "<your question>"` — same + 1-hop edge expansion (parent ADRs, related Stories)
-- `aih-graph query --bfs ADR-XXX` — structural traversal from a known node
+or at `~/.aihaus/bin/`, consult repository memory before decomposing into tasks:
+- `aih-graph status --repo .` — check whether memory is fresh or stale.
+- `aih-graph query --hybrid "<phase goal or affected area>"` — retrieve relevant code, decisions, hooks, skills, and agent memory.
+- `aih-graph context "<file|symbol|topic>"` — ground tasks in concrete code context when target areas are known.
+- `aih-graph impact "<file|symbol>"` — identify likely affected files, tests, hooks, skills, and decisions before assigning work.
 
-Skip silently when binary absent — aih-graph is supplemental, never blocking.
+If memory is stale, include a refresh task or note the stale status in the plan. Skip silently when binary absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

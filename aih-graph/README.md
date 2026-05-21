@@ -2,22 +2,27 @@
 
 Standalone Go binary memory engine for [aihaus](https://github.com/overdrive-dev/aihaus-flow).
 
-**Status:** v0.1.4 (shipped M033–M046; markdown extraction + modernc/sqlite storage + 3 query modes + BM25/FTS5 lexical search + native CC agent-memory indexing + 4-platform binary release).
+**Status:** v0.1.4 shipped baseline plus M048 in-progress native repository memory (files, chunks, symbols, calls, local Ollama embeddings, context/callers/impact commands).
 
 ## What this is
 
-aih-graph is the **memory + structural retrieval engine** aihaus uses as a mandatory addon. It builds a queryable knowledge graph of aihaus-managed repositories with **first-class ontological types** for aihaus concepts (Decision, Milestone, Story, Agent, Hook, Skill).
+aih-graph is the **memory + structural retrieval engine** aihaus uses as a mandatory addon. It builds a queryable knowledge graph of aihaus-managed repositories with **first-class ontological types** for aihaus concepts (Decision, Milestone, Story, Agent, Hook, Skill) and M048 repository-memory types (File, Chunk, Symbol, Call).
+
+M048 adds a local repository-brain slice:
+- `File` and `Chunk` nodes for real repository text
+- `Symbol` and `Call` nodes for Go functions/methods plus shell and PowerShell functions
+- `context`, `callers`, `impact`, `status`, and `mark-stale` commands
+- `--embed-provider ollama` for local semantic embeddings through Ollama `/api/embed`
 
 This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
 - **Markdown-only extraction** for 6 aihaus typed nodes (Decision/Milestone/Story/Agent/Hook/Skill) — per ADR-260515-C-amend-02
 - **modernc.org/sqlite storage** (pure-Go, no CGO) — per ADR-260515-B-amend-02
-- **Lexical search via BM25/FTS5** (pure-Go offline, zero API keys, zero model downloads) — default per ADR-260515-B-amend-02 + ADR-260516-A. Optional external embedding providers are wired but **not advertised** by aihaus skills.
+- **Lexical search via BM25/FTS5** (pure-Go offline, zero API keys, zero model downloads) — default per ADR-260515-B-amend-02 + ADR-260516-A. Optional vector providers include local Ollama (`--embed-provider ollama`) and test-only fake embeddings.
 - **Three query modes:** structural BFS, vector similarity (`--semantic`), hybrid
 - **Pure-Go single binary** — zero CGO requirement, works on any platform Go supports
 
-Out of scope for v0.1 (use graphify in parallel if needed):
-- AST extraction for code files (Python/JS/Go/bash/PowerShell) — deferred to v0.2+ when CGO ecosystem matures or pure-Go tree-sitter port emerges
-- Symbol/File generic node types for code — paired with above
+Out of scope for v0.1 baseline (M048 is now adding a first native slice):
+- Broad AST extraction for every language (Python/JS/TS/etc.) remains deferred; current M048 extraction is intentionally focused on aihaus-flow's Go, shell, PowerShell, and markdown needs
 - Semantic LLM extraction (paid LLM-driven node/edge extraction — distinct from embeddings)
 - Clustering (Leiden community detection)
 - HNSW/IVF vector indexes (brute-force only; sufficient for target repos up to ~500k nodes)

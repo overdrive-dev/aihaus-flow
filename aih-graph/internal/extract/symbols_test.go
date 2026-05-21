@@ -10,8 +10,11 @@ func TestParseRepositorySymbolsExtractsGoFunctionsAndCalls(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "internal/demo/demo.go", `package demo
 
+import "fmt"
+
 func Alpha() {
 	Beta()
+	fmt.Println("hi")
 }
 
 func Beta() {}
@@ -28,14 +31,17 @@ func Beta() {}
 	if len(symbols) != 2 {
 		t.Fatalf("expected 2 symbols, got %d: %#v", len(symbols), symbols)
 	}
-	if len(calls) != 1 {
-		t.Fatalf("expected 1 call, got %d: %#v", len(calls), calls)
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 calls, got %d: %#v", len(calls), calls)
 	}
 	if calls[0].CallerIdentifier != "internal/demo/demo.go:Alpha" {
 		t.Fatalf("unexpected caller: %#v", calls[0])
 	}
 	if calls[0].CalleeIdentifier != "internal/demo/demo.go:Beta" {
 		t.Fatalf("expected call to resolve to Beta symbol, got %#v", calls[0])
+	}
+	if calls[1].CalleeIdentifier != "" {
+		t.Fatalf("selector call should not resolve to an unrelated local symbol: %#v", calls[1])
 	}
 }
 
