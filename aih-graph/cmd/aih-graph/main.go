@@ -1506,6 +1506,33 @@ func printStatusState(state, staleSince, marker string) {
 	fmt.Println("  state: fresh")
 }
 
+func countEmbeddingModels(db *storage.DB) map[string]int {
+	rows, err := db.SQL().Query(`
+		SELECT COALESCE(NULLIF(embedding_model, ''), '(unknown)'), COUNT(*)
+		FROM nodes
+		WHERE embedding IS NOT NULL
+		GROUP BY COALESCE(NULLIF(embedding_model, ''), '(unknown)')
+		ORDER BY 1
+	`)
+	if err != nil {
+		return map[string]int{}
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var model string
+		var count int
+		if err := rows.Scan(&model, &count); err != nil {
+			return map[string]int{}
+		}
+		out[model] = count
+	}
+	if err := rows.Err(); err != nil {
+		return map[string]int{}
+	}
+	return out
+}
+
 func loadMemoryFreshness(repoPath string) memoryFreshness {
 	freshness := memoryFreshness{
 		Repo:  repoPath,
@@ -1613,15 +1640,16 @@ func runStatus(args []string) int {
 		if os.IsNotExist(err) {
 			if *jsonOut {
 				return writeJSON(statusJSON{
-					Repo:          *repoPath,
-					DB:            resolvedDB,
-					State:         state,
-					StaleSince:    staleSince,
-					Marker:        marker,
-					IndexBuilt:    false,
-					NodeCounts:    map[string]int{},
-					BM25Rows:      0,
-					EmbeddingRows: 0,
+					Repo:            *repoPath,
+					DB:              resolvedDB,
+					State:           state,
+					StaleSince:      staleSince,
+					Marker:          marker,
+					IndexBuilt:      false,
+					NodeCounts:      map[string]int{},
+					BM25Rows:        0,
+					EmbeddingRows:   0,
+					EmbeddingModels: map[string]int{},
 				})
 			}
 			fmt.Printf("aih-graph status %s\n", *repoPath)
@@ -1652,18 +1680,20 @@ func runStatus(args []string) int {
 	ftsRows, _ := db.CountFTS()
 	embeddingRows := 0
 	_ = db.SQL().QueryRow("SELECT COUNT(*) FROM nodes WHERE embedding IS NOT NULL").Scan(&embeddingRows)
+	embeddingModels := countEmbeddingModels(db)
 	if *jsonOut {
 		return writeJSON(statusJSON{
-			Repo:          *repoPath,
-			DB:            resolvedDB,
-			State:         state,
-			StaleSince:    staleSince,
-			Marker:        marker,
-			IndexBuilt:    true,
-			NodesTotal:    total,
-			NodeCounts:    counts,
-			BM25Rows:      ftsRows,
-			EmbeddingRows: embeddingRows,
+			Repo:            *repoPath,
+			DB:              resolvedDB,
+			State:           state,
+			StaleSince:      staleSince,
+			Marker:          marker,
+			IndexBuilt:      true,
+			NodesTotal:      total,
+			NodeCounts:      counts,
+			BM25Rows:        ftsRows,
+			EmbeddingRows:   embeddingRows,
+			EmbeddingModels: embeddingModels,
 		})
 	}
 	fmt.Printf("aih-graph status %s\n", *repoPath)
@@ -1675,6 +1705,9 @@ func runStatus(args []string) int {
 	}
 	fmt.Printf("  bm25_rows: %d\n", ftsRows)
 	fmt.Printf("  embedding_rows: %d\n", embeddingRows)
+	for _, model := range keysSorted(embeddingModels) {
+		fmt.Printf("    %s: %d\n", model, embeddingModels[model])
+	}
 	return 0
 }
 
@@ -2083,16 +2116,17 @@ type impactJSON struct {
 }
 
 type statusJSON struct {
-	Repo          string         `json:"repo"`
-	DB            string         `json:"db"`
-	State         string         `json:"state"`
-	StaleSince    string         `json:"stale_since,omitempty"`
-	Marker        string         `json:"marker,omitempty"`
-	IndexBuilt    bool           `json:"index_built"`
-	NodesTotal    int            `json:"nodes_total"`
-	NodeCounts    map[string]int `json:"node_counts"`
-	BM25Rows      int            `json:"bm25_rows"`
-	EmbeddingRows int            `json:"embedding_rows"`
+	Repo            string         `json:"repo"`
+	DB              string         `json:"db"`
+	State           string         `json:"state"`
+	StaleSince      string         `json:"stale_since,omitempty"`
+	Marker          string         `json:"marker,omitempty"`
+	IndexBuilt      bool           `json:"index_built"`
+	NodesTotal      int            `json:"nodes_total"`
+	NodeCounts      map[string]int `json:"node_counts"`
+	BM25Rows        int            `json:"bm25_rows"`
+	EmbeddingRows   int            `json:"embedding_rows"`
+	EmbeddingModels map[string]int `json:"embedding_models"`
 }
 
 func writeJSON(v any) int {

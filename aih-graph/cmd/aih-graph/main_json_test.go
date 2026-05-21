@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/embed"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/query"
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/storage"
 )
@@ -246,6 +247,39 @@ func TestRunSearchJSONCommands(t *testing.T) {
 	decodeJSON(t, stdout, &milestone)
 	if milestone.Command != "milestone" || milestone.ResultCount != 1 {
 		t.Fatalf("unexpected milestone payload: %#v", milestone)
+	}
+}
+
+func TestRunStatusJSONIncludesEmbeddingModels(t *testing.T) {
+	dbPath, repoPath := seedJSONCommandDB(t)
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeID, err := db.LookupNodeID("Symbol", "a.go:Root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpdateEmbedding(nodeID, embed.EncodeVector([]float32{0.1, 0.2}), "ollama:nomic-embed-text", "sha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout := captureStdout(t, func() int {
+		return runStatus([]string{"--repo", repoPath, "--db", dbPath, "--json"})
+	})
+	if code != 0 {
+		t.Fatalf("runStatus returned %d", code)
+	}
+	var payload statusJSON
+	decodeJSON(t, stdout, &payload)
+	if payload.EmbeddingRows != 1 {
+		t.Fatalf("expected one embedding row, got %d", payload.EmbeddingRows)
+	}
+	if payload.EmbeddingModels["ollama:nomic-embed-text"] != 1 {
+		t.Fatalf("unexpected embedding models: %#v", payload.EmbeddingModels)
 	}
 }
 

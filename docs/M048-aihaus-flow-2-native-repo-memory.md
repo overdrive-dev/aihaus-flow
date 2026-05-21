@@ -426,7 +426,7 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph impact aih-graph/internal/extract/repository.go:ParseRepositoryText --type Symbol --depth 1` surfaced `TestParseRepositoryTextIndexesTextFilesAndChunks` as a related test.
 - `aih-graph gotchas git checkout` returned gotcha memory from `pkg/.aihaus/memory/global/gotchas.md`.
 - `aih-graph milestone Ollama` returned M048 docs, Ollama code chunks, the M048 commit, and ADR-260521-A.
-- `aih-graph status --json` returned a machine-readable fresh index state with node counts and BM25/embedding row counts.
+- `aih-graph status --json` returned a machine-readable fresh index state with node counts, BM25/embedding row counts, and embedding model counts.
 - `aih-graph query --json Ollama` defaults to hybrid BM25 and returned a structured query payload with match nodes and neighbor context; `--semantic --json` also returned structured BM25-backed query results.
 - Real local Ollama validation with `nomic-embed-text` embedded 3400 nodes with 0 errors after capping embedding input text, and `query --semantic --embed-provider ollama --json "Ollama embedding provider"` returned `semantic_vector` results.
 - `aih-graph context --json --type Symbol --depth 1 aih-graph/internal/extract/repository.go:ParseRepositoryText` returned exact symbol context as JSON, including related helper symbols, call nodes, and test evidence.

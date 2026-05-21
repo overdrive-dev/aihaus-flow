@@ -35,7 +35,7 @@ aihaus memory gotchas --json git checkout
 aihaus memory milestone --json Ollama
 ```
 
-`query`, `context`, `impact`, `callers`, `gotchas`, `milestone`, and `status` support `--json`. Exact graph lookups include node `type`, `identifier`, derived `title`, and stored `properties`. Long string properties are capped in JSON output and marked with `<field>_truncated` plus `<field>_original_bytes`; the SQLite index keeps the complete value. `query`, `context`, and `impact` include `freshness`; `context` and `impact` also include `neighborhood_total`, `neighborhood_returned`, and `neighborhood_truncated`; use `--limit N` to bound agent payloads, or `--limit 0` for a full neighborhood. Pass `--repo PATH` when the command runs from outside the indexed repository.
+`query`, `context`, `impact`, `callers`, `gotchas`, `milestone`, and `status` support `--json`. Exact graph lookups include node `type`, `identifier`, derived `title`, and stored `properties`. Long string properties are capped in JSON output and marked with `<field>_truncated` plus `<field>_original_bytes`; the SQLite index keeps the complete value. `status --json` includes `embedding_models` counts. `query`, `context`, and `impact` include `freshness`; `context` and `impact` also include `neighborhood_total`, `neighborhood_returned`, and `neighborhood_truncated`; use `--limit N` to bound agent payloads, or `--limit 0` for a full neighborhood. Pass `--repo PATH` when the command runs from outside the indexed repository.
 
 This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
 - **Markdown-only extraction** for 6 aihaus typed nodes (Decision/Milestone/Story/Agent/Hook/Skill) — per ADR-260515-C-amend-02
