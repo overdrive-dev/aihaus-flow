@@ -62,11 +62,13 @@ Commands:
     --semantic            Vector similarity (cosine) ranking
     --budget N            Token cap on returned context
   context <node-or-topic> Show exact-node neighborhood or hybrid retrieval
+    --repo PATH           Repository path for DB default and freshness checks
     --json                Print stable machine-readable output
     --limit N             Maximum JSON neighborhood nodes (default 80; 0 = all)
   callers <symbol>        List call sites that target a symbol/name
     --json                Print stable machine-readable output
   impact <node>           Show graph neighborhood for impact analysis
+    --repo PATH           Repository path for DB default and freshness checks
     --json                Print stable machine-readable output
     --limit N             Maximum JSON neighborhood nodes (default 80; 0 = all)
   gotchas [topic]         Search markdown memory for gotchas/learnings
@@ -87,8 +89,12 @@ Specs:
 }
 
 func openQueryDB(dbPath string) (*storage.DB, error) {
+	return openQueryDBForRepo(dbPath, ".")
+}
+
+func openQueryDBForRepo(dbPath, repoPath string) (*storage.DB, error) {
 	if dbPath == "" {
-		if resolved, err := privacy.DefaultDBPath("."); err == nil {
+		if resolved, err := privacy.DefaultDBPath(repoPath); err == nil {
 			dbPath = resolved
 		} else {
 			dbPath = "aih-graph.db"
@@ -1083,6 +1089,7 @@ func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, provide
 func runContext(args []string) int {
 	fs := flag.NewFlagSet("context", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
+	repoPath := fs.String("repo", ".", "repository path for DB default and freshness checks")
 	typ := fs.String("type", "", "optional exact type filter")
 	depth := fs.Int("depth", 1, "exact-node graph depth")
 	topK := fs.Int("top", 8, "hybrid fallback result count")
@@ -1092,10 +1099,12 @@ func runContext(args []string) int {
 		return 2
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: aih-graph context [--db PATH] [--type T] [--json] <node-or-topic>")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph context [--repo PATH] [--db PATH] [--type T] [--json] <node-or-topic>")
 		return 2
 	}
-	db, err := openQueryDB(*dbPath)
+	*repoPath = resolveRepoPath(*repoPath)
+	freshness := loadMemoryFreshness(*repoPath)
+	db, err := openQueryDBForRepo(*dbPath, *repoPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "context: open db: %v\n", err)
 		return 1
@@ -1120,9 +1129,11 @@ func runContext(args []string) int {
 				Query:      target,
 				TypeFilter: *typ,
 				Mode:       "bm25_fallback",
+				Freshness:  freshness,
 				Matches:    matches,
 			})
 		}
+		printFreshnessWarning(freshness)
 		fmt.Printf("No exact node for %q; showing hybrid memory matches.\n", target)
 		return runHybrid(db, target, *typ, *topK, "bm25")
 	}
@@ -1139,12 +1150,14 @@ func runContext(args []string) int {
 			TypeFilter:            *typ,
 			Mode:                  "exact",
 			Target:                &targetNode,
+			Freshness:             freshness,
 			Neighborhood:          neighborhood,
 			NeighborhoodTotal:     len(results),
 			NeighborhoodReturned:  len(neighborhood),
 			NeighborhoodTruncated: truncated,
 		})
 	}
+	printFreshnessWarning(freshness)
 	fmt.Println("Exact memory context:")
 	printNodeSummary(*node)
 	for _, r := range results {
@@ -1236,6 +1249,7 @@ func runCallers(args []string) int {
 func runImpact(args []string) int {
 	fs := flag.NewFlagSet("impact", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
+	repoPath := fs.String("repo", ".", "repository path for DB default and freshness checks")
 	typ := fs.String("type", "", "optional exact type filter")
 	depth := fs.Int("depth", 2, "graph depth")
 	limit := fs.Int("limit", 80, "maximum JSON neighborhood nodes (0 = no limit)")
@@ -1244,10 +1258,12 @@ func runImpact(args []string) int {
 		return 2
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: aih-graph impact [--db PATH] [--type T] [--json] <node>")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph impact [--repo PATH] [--db PATH] [--type T] [--json] <node>")
 		return 2
 	}
-	db, err := openQueryDB(*dbPath)
+	*repoPath = resolveRepoPath(*repoPath)
+	freshness := loadMemoryFreshness(*repoPath)
+	db, err := openQueryDBForRepo(*dbPath, *repoPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "impact: open db: %v\n", err)
 		return 1
@@ -1272,6 +1288,7 @@ func runImpact(args []string) int {
 			TypeFilter:   *typ,
 			Depth:        *depth,
 			Target:       nodeForJSON(*node),
+			Freshness:    freshness,
 			RelatedTests: bfsByTypeForJSON(results, "Test", 8),
 			RecentCommits: bfsByTypeForJSON(
 				results,
@@ -1284,6 +1301,7 @@ func runImpact(args []string) int {
 			NeighborhoodTruncated: truncated,
 		})
 	}
+	printFreshnessWarning(freshness)
 	printImpactSummary(results)
 	fmt.Println("Impact neighborhood:")
 	printNodeSummary(*node)
@@ -1338,6 +1356,28 @@ func printStatusState(state, staleSince, marker string) {
 		return
 	}
 	fmt.Println("  state: fresh")
+}
+
+func loadMemoryFreshness(repoPath string) memoryFreshness {
+	freshness := memoryFreshness{
+		Repo:  repoPath,
+		State: "fresh",
+	}
+	stalePath, staleErr := staleMarkerPath(repoPath)
+	staleInfo, staleStatErr := os.Stat(stalePath)
+	if staleErr == nil && staleStatErr == nil {
+		freshness.State = "stale"
+		freshness.StaleSince = staleInfo.ModTime().Format(time.RFC3339)
+		freshness.Marker = stalePath
+	}
+	return freshness
+}
+
+func printFreshnessWarning(f memoryFreshness) {
+	if f.State != "stale" {
+		return
+	}
+	fmt.Printf("Memory warning: index stale since %s; refresh with `aih-graph refresh --repo %s`.\n", f.StaleSince, f.Repo)
 }
 
 func runGotchas(args []string) int {
@@ -1821,11 +1861,19 @@ type bm25MatchJSON struct {
 	Neighbors []jsonNode `json:"neighbors,omitempty"`
 }
 
+type memoryFreshness struct {
+	Repo       string `json:"repo"`
+	State      string `json:"state"`
+	StaleSince string `json:"stale_since,omitempty"`
+	Marker     string `json:"marker,omitempty"`
+}
+
 type contextJSON struct {
 	Query                 string          `json:"query"`
 	TypeFilter            string          `json:"type_filter,omitempty"`
 	Mode                  string          `json:"mode"`
 	Target                *jsonNode       `json:"target,omitempty"`
+	Freshness             memoryFreshness `json:"freshness"`
 	Neighborhood          []jsonBFSResult `json:"neighborhood,omitempty"`
 	NeighborhoodTotal     int             `json:"neighborhood_total"`
 	NeighborhoodReturned  int             `json:"neighborhood_returned"`
@@ -1860,6 +1908,7 @@ type impactJSON struct {
 	TypeFilter            string          `json:"type_filter,omitempty"`
 	Depth                 int             `json:"depth"`
 	Target                jsonNode        `json:"target"`
+	Freshness             memoryFreshness `json:"freshness"`
 	RelatedTests          []jsonBFSResult `json:"related_tests,omitempty"`
 	RecentCommits         []jsonBFSResult `json:"recent_commits,omitempty"`
 	Neighborhood          []jsonBFSResult `json:"neighborhood"`
