@@ -58,9 +58,12 @@ Commands:
     --accept-all-repos    Bypass consent gate (auto-creates marker)
   refresh [--repo PATH]   Rebuild repository memory index
   query "<question>"      Query the graph (default: hybrid)
+    --repo PATH           Repository path for DB default and freshness checks
     --bfs                 Structural BFS only (no embeddings needed)
     --semantic            Vector similarity (cosine) ranking
     --budget N            Token cap on returned context
+    --json                Print stable machine-readable output
+    --limit N             Maximum JSON BFS result nodes (default 80; 0 = all)
   context <node-or-topic> Show exact-node neighborhood or hybrid retrieval
     --repo PATH           Repository path for DB default and freshness checks
     --json                Print stable machine-readable output
@@ -926,6 +929,7 @@ func runEmbedPipeline(
 func runQuery(args []string) int {
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database (default: privacy.DefaultDBPath for cwd, matching `build`)")
+	repoPath := fs.String("repo", ".", "repository path for DB default and freshness checks")
 	bfs := fs.Bool("bfs", false, "structural BFS query (default if no other mode set)")
 	semantic := fs.Bool("semantic", false, "vector similarity (cosine) ranking — pure KNN")
 	hybrid := fs.Bool("hybrid", false, "hybrid mode: KNN top-K + 1-hop edge expansion per match")
@@ -933,12 +937,14 @@ func runQuery(args []string) int {
 	typ := fs.String("type", "", "restrict root match (BFS) or candidate type (semantic/hybrid) to a node type")
 	topK := fs.Int("top", 10, "semantic/hybrid: number of top matches to return")
 	provider := fs.String("embed-provider", "", "semantic/hybrid: embedding provider (voyage|ollama|fake; default: derive from stored embedding_model)")
+	limit := fs.Int("limit", 80, "maximum JSON BFS result nodes (0 = no limit)")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "query: <identifier-or-text> required")
-		fmt.Fprintln(os.Stderr, "usage: aih-graph query [--bfs|--semantic|--hybrid] [--type T] [--depth N] [--top K] [--db PATH] <identifier-or-text>")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph query [--bfs|--semantic|--hybrid] [--type T] [--depth N] [--top K] [--repo PATH] [--db PATH] [--json] <identifier-or-text>")
 		return 2
 	}
 	// Default mode: bfs unless --semantic or --hybrid explicitly set.
@@ -946,18 +952,9 @@ func runQuery(args []string) int {
 		*bfs = true
 	}
 
-	// Resolve --db default: match build's default (XDG path keyed by cwd hash).
-	// Mirrors install.sh / /aih-init expectation: build and query agree on
-	// where the repo's graph lives without the user passing --db each time.
-	if *dbPath == "" {
-		if resolved, err := privacy.DefaultDBPath("."); err == nil {
-			*dbPath = resolved
-		} else {
-			*dbPath = "aih-graph.db"
-		}
-	}
-
-	db, err := storage.Open(*dbPath)
+	*repoPath = resolveRepoPath(*repoPath)
+	freshness := loadMemoryFreshness(*repoPath)
+	db, err := openQueryDBForRepo(*dbPath, *repoPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: open db: %v\n", err)
 		return 1
@@ -965,9 +962,15 @@ func runQuery(args []string) int {
 	defer db.Close()
 
 	if *hybrid {
+		if *jsonOut {
+			return runQueryHybridJSON(db, fs.Arg(0), *typ, *topK, *provider, freshness)
+		}
 		return runHybrid(db, fs.Arg(0), *typ, *topK, *provider)
 	}
 	if *semantic {
+		if *jsonOut {
+			return runQuerySemanticJSON(db, fs.Arg(0), *typ, *topK, *provider, freshness)
+		}
 		return runSemantic(db, fs.Arg(0), *typ, *topK, *provider)
 	}
 
@@ -984,6 +987,22 @@ func runQuery(args []string) int {
 		return 1
 	}
 
+	if *jsonOut {
+		resultsJSON, truncated := bfsForJSON(results, *limit)
+		return writeJSON(queryJSON{
+			Command:          "query",
+			Query:            identifier,
+			Mode:             "bfs",
+			TypeFilter:       *typ,
+			Depth:            *depth,
+			Freshness:        freshness,
+			ResultCount:      len(resultsJSON),
+			Results:          resultsJSON,
+			ResultsTotal:     len(results),
+			ResultsReturned:  len(resultsJSON),
+			ResultsTruncated: truncated,
+		})
+	}
 	for _, r := range results {
 		title := titleFromProperties(r.Node.Properties)
 		if len(title) > 80 {
@@ -1084,6 +1103,129 @@ func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, provide
 		fmt.Printf("[s=%.3f] %-10s %-40s %s\n", m.Score, meta.typ, meta.identifier, title)
 	}
 	return 0
+}
+
+func runQuerySemanticJSON(db *storage.DB, queryText, typeFilter string, topK int, providerName string, freshness memoryFreshness) int {
+	if providerName == "" {
+		if n, _ := db.CountFTS(); n > 0 {
+			providerName = "bm25"
+		}
+	}
+	if providerName == "bm25" {
+		return runQueryBM25JSON(db, "semantic_bm25", queryText, typeFilter, topK, freshness)
+	}
+	return runQueryVectorJSON(db, "semantic_vector", queryText, typeFilter, topK, providerName, false, freshness)
+}
+
+func runQueryHybridJSON(db *storage.DB, queryText, typeFilter string, topK int, providerName string, freshness memoryFreshness) int {
+	if providerName == "" || providerName == "bm25" {
+		ftsRows, _ := db.CountFTS()
+		embRows, _ := db.IterateEmbeddings("")
+		if ftsRows > 0 && (providerName == "bm25" || len(embRows) == 0) {
+			return runQueryBM25JSON(db, "hybrid_bm25", queryText, typeFilter, topK, freshness)
+		}
+	}
+	return runQueryVectorJSON(db, "hybrid_vector", queryText, typeFilter, topK, providerName, true, freshness)
+}
+
+func runQueryBM25JSON(db *storage.DB, mode, queryText, typeFilter string, topK int, freshness memoryFreshness) int {
+	eng := query.New(db.SQL())
+	matches, err := bm25MatchesForJSON(db, eng, queryText, typeFilter, topK)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: bm25 json: %v\n", err)
+		return 1
+	}
+	if len(matches) == 0 {
+		fmt.Fprintf(os.Stderr, "query: no BM25 matches for %q\n", queryText)
+		return 1
+	}
+	return writeJSON(queryJSON{
+		Command:     "query",
+		Query:       queryText,
+		Mode:        mode,
+		TypeFilter:  typeFilter,
+		Freshness:   freshness,
+		ResultCount: len(matches),
+		Matches:     matches,
+	})
+}
+
+func runQueryVectorJSON(db *storage.DB, mode, queryText, typeFilter string, topK int, providerName string, includeNeighbors bool, freshness memoryFreshness) int {
+	provider, err := resolveProvider(db, providerName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: %v\n", err)
+		return 1
+	}
+	queryVec, err := provider.Embed(queryText)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: embed query: %v\n", err)
+		return 1
+	}
+	rows, err := db.IterateEmbeddings(typeFilter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
+		return 1
+	}
+	if len(rows) == 0 {
+		fmt.Fprintln(os.Stderr, "query: no embeddings stored (run `aih-graph build --embed-provider ollama|fake|voyage` first)")
+		return 1
+	}
+
+	candidates := make([]embed.Candidate, 0, len(rows))
+	idMap := map[int64]struct {
+		typ, identifier string
+	}{}
+	for _, r := range rows {
+		candidates = append(candidates, embed.Candidate{
+			NodeID:    r.NodeID,
+			Embedding: embed.DecodeVector(r.Embedding),
+		})
+		idMap[r.NodeID] = struct{ typ, identifier string }{r.Type, r.Identifier}
+	}
+	matches := embed.TopK(queryVec, candidates, topK)
+	if len(matches) == 0 {
+		fmt.Fprintln(os.Stderr, "query: no matches")
+		return 1
+	}
+
+	eng := query.New(db.SQL())
+	out := make([]bm25MatchJSON, 0, len(matches))
+	for _, m := range matches {
+		meta := idMap[m.NodeID]
+		node, err := eng.GetByIdentifier(meta.typ, meta.identifier)
+		if err != nil {
+			node = &query.Node{
+				ID:         m.NodeID,
+				Type:       meta.typ,
+				Identifier: meta.identifier,
+			}
+		}
+		var jsonNeighbors []jsonNode
+		if includeNeighbors {
+			neighbors, err := eng.LoadNeighbors(m.NodeID, 5)
+			if err == nil {
+				jsonNeighbors = make([]jsonNode, 0, len(neighbors))
+				for _, n := range neighbors {
+					jsonNeighbors = append(jsonNeighbors, nodeForJSON(n))
+				}
+			}
+		}
+		out = append(out, bm25MatchJSON{
+			Score:     float64(m.Score),
+			Node:      nodeForJSON(*node),
+			Neighbors: jsonNeighbors,
+		})
+	}
+	return writeJSON(queryJSON{
+		Command:     "query",
+		Query:       queryText,
+		Mode:        mode,
+		TypeFilter:  typeFilter,
+		Provider:    provider.Model(),
+		Freshness:   freshness,
+		ResultCount: len(out),
+		Matches:     out,
+	})
 }
 
 func runContext(args []string) int {
@@ -1898,9 +2040,26 @@ type callersJSON struct {
 type searchJSON struct {
 	Command     string          `json:"command"`
 	Query       string          `json:"query"`
+	Mode        string          `json:"mode,omitempty"`
 	TypeFilter  string          `json:"type_filter,omitempty"`
 	ResultCount int             `json:"result_count"`
 	Matches     []bm25MatchJSON `json:"matches"`
+}
+
+type queryJSON struct {
+	Command          string          `json:"command"`
+	Query            string          `json:"query"`
+	Mode             string          `json:"mode"`
+	TypeFilter       string          `json:"type_filter,omitempty"`
+	Depth            int             `json:"depth,omitempty"`
+	Provider         string          `json:"provider,omitempty"`
+	Freshness        memoryFreshness `json:"freshness"`
+	ResultCount      int             `json:"result_count"`
+	Results          []jsonBFSResult `json:"results,omitempty"`
+	ResultsTotal     int             `json:"results_total,omitempty"`
+	ResultsReturned  int             `json:"results_returned,omitempty"`
+	ResultsTruncated bool            `json:"results_truncated,omitempty"`
+	Matches          []bm25MatchJSON `json:"matches,omitempty"`
 }
 
 type impactJSON struct {

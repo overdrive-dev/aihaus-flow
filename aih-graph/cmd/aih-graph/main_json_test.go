@@ -82,7 +82,7 @@ func TestPropertiesForJSONTruncatesLongStrings(t *testing.T) {
 }
 
 func TestTruncateJSONStringDoesNotSplitUTF8(t *testing.T) {
-	got := truncateJSONString("abçd", 3)
+	got := truncateJSONString("ab\u00e7d", 3)
 	if got != "ab" {
 		t.Fatalf("expected UTF-8 safe byte truncation, got %q", got)
 	}
@@ -119,6 +119,57 @@ func TestRunContextJSONIncludesFreshnessAndBoundedNeighborhood(t *testing.T) {
 	}
 	if payload.NeighborhoodReturned != 2 || !payload.NeighborhoodTruncated {
 		t.Fatalf("expected bounded truncated neighborhood, got returned=%d truncated=%v", payload.NeighborhoodReturned, payload.NeighborhoodTruncated)
+	}
+}
+
+func TestRunQueryJSONBFS(t *testing.T) {
+	dbPath, repoPath := seedJSONCommandDB(t)
+	code, stdout := captureStdout(t, func() int {
+		return runQuery([]string{
+			"--repo", repoPath,
+			"--db", dbPath,
+			"--bfs",
+			"--type", "Symbol",
+			"--depth", "1",
+			"--limit", "2",
+			"--json",
+			"a.go:Root",
+		})
+	})
+	if code != 0 {
+		t.Fatalf("runQuery returned %d", code)
+	}
+	var payload queryJSON
+	decodeJSON(t, stdout, &payload)
+	if payload.Mode != "bfs" {
+		t.Fatalf("expected bfs mode, got %q", payload.Mode)
+	}
+	if payload.ResultsReturned != 2 || !payload.ResultsTruncated {
+		t.Fatalf("expected bounded truncated results, got returned=%d truncated=%v", payload.ResultsReturned, payload.ResultsTruncated)
+	}
+}
+
+func TestRunQueryJSONSemanticBM25(t *testing.T) {
+	dbPath, repoPath := seedJSONCommandDB(t)
+	code, stdout := captureStdout(t, func() int {
+		return runQuery([]string{
+			"--repo", repoPath,
+			"--db", dbPath,
+			"--semantic",
+			"--json",
+			"Ollama",
+		})
+	})
+	if code != 0 {
+		t.Fatalf("runQuery returned %d", code)
+	}
+	var payload queryJSON
+	decodeJSON(t, stdout, &payload)
+	if payload.Mode != "semantic_bm25" {
+		t.Fatalf("expected semantic_bm25 mode, got %q", payload.Mode)
+	}
+	if payload.ResultCount != 1 || payload.Matches[0].Node.Identifier != "chunk:ollama" {
+		t.Fatalf("unexpected semantic payload: %#v", payload)
 	}
 }
 
