@@ -2,8 +2,7 @@
 //
 // Per ADR-260521-A, M048 expands aih-graph from aihaus-artifact memory into
 // native repository memory. The original 6 aihaus types remain first-class,
-// and generic repository types (RepoFile, RepoChunk) become the first codebase
-// memory nodes.
+// and generic repository types become codebase memory nodes.
 //
 // Node + Edge are the storage-substrate-shaped generic types; the 6 typed
 // structs are property-view structs that consumers of the public API see.
@@ -15,7 +14,7 @@ import "time"
 // JSON-serializable map.
 type Node struct {
 	ID             int64
-	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill" | "File" | "Chunk"
+	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill" | "File" | "Chunk" | "Symbol" | "Call"
 	Identifier     string // e.g. "ADR-260514-B", "M030", "aih-milestone"
 	Properties     map[string]any
 	Embedding      []float32 // optional; nil if not yet embedded
@@ -90,6 +89,34 @@ type RepoChunk struct {
 	EndLine    int
 	Text       string
 	SHA256     string
+}
+
+// RepoSymbol represents a code symbol discovered from a source file. M048's
+// first extractor supports Go functions/methods plus shell/PowerShell function
+// definitions; later stories can add richer language-specific symbols.
+type RepoSymbol struct {
+	Identifier string
+	Name       string
+	Kind       string
+	Language   string
+	FilePath   string
+	StartLine  int
+	EndLine    int
+	Signature  string
+}
+
+// RepoCall represents a call expression discovered inside a symbol body. It is
+// persisted separately so callers/impact queries can cite call-site evidence.
+type RepoCall struct {
+	Identifier       string
+	CallerIdentifier string
+	CalleeIdentifier string
+	CalleeName       string
+	CalleeQualifier  string
+	Language         string
+	FilePath         string
+	Line             int
+	Column           int
 }
 
 // Agent represents an aihaus agent definition.

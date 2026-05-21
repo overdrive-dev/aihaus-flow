@@ -55,6 +55,9 @@ Commands:
     --bfs                 Structural BFS only (no embeddings needed)
     --semantic            Vector similarity (cosine) ranking
     --budget N            Token cap on returned context
+  context <node-or-topic> Show exact-node neighborhood or hybrid retrieval
+  callers <symbol>        List call sites that target a symbol/name
+  impact <node>           Show graph neighborhood for impact analysis
   uninstall [--purge]     Remove aih-graph state (single .db file delete)
   version                 Print version
   help                    Show this help
@@ -63,6 +66,17 @@ Specs:
   pkg/.aihaus/decisions.md  — ADR-260515-A through -E (+ amendments), ADR-260516-A
   aih-graph/PRD.md          — v0.1 forever-scope
 `, version)
+}
+
+func openQueryDB(dbPath string) (*storage.DB, error) {
+	if dbPath == "" {
+		if resolved, err := privacy.DefaultDBPath("."); err == nil {
+			dbPath = resolved
+		} else {
+			dbPath = "aih-graph.db"
+		}
+	}
+	return storage.Open(dbPath)
 }
 
 // runBuild implements the M033 build subcommand. Extracts Decision / Agent /
@@ -214,6 +228,13 @@ func runBuild(args []string) int {
 	}
 	fmt.Printf("  Files:      %d\n", len(repoFiles))
 	fmt.Printf("  Chunks:     %d\n", len(repoChunks))
+	repoSymbols, repoCalls, err := extract.ParseRepositorySymbols(repoPath, repoFiles)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: parse repository symbols: %v\n", err)
+		return 1
+	}
+	fmt.Printf("  Symbols:    %d\n", len(repoSymbols))
+	fmt.Printf("  Calls:      %d\n", len(repoCalls))
 
 	// Status breakdown for Decisions (most informative type-level summary).
 	fmt.Println()
@@ -335,6 +356,20 @@ func runBuild(args []string) int {
 		}
 		persisted++
 	}
+	for _, s := range repoSymbols {
+		if _, err := db.UpsertNode("Symbol", s.Identifier, repoSymbolProps(s)); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert symbol %s: %v\n", s.Identifier, err)
+			return 1
+		}
+		persisted++
+	}
+	for _, c := range repoCalls {
+		if _, err := db.UpsertNode("Call", c.Identifier, repoCallProps(c)); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert call %s: %v\n", c.Identifier, err)
+			return 1
+		}
+		persisted++
+	}
 
 	// Edge derivation: Decision.Amends → Decision-[amends]→Decision;
 	// Story.MilestoneID → Story-[in_milestone]→Milestone. More edge types
@@ -387,6 +422,42 @@ func runBuild(args []string) int {
 			edgesAdded++
 		}
 	}
+	for _, s := range repoSymbols {
+		fromID, err := db.LookupNodeID("File", s.FilePath)
+		if err != nil {
+			continue
+		}
+		toID, err := db.LookupNodeID("Symbol", s.Identifier)
+		if err != nil {
+			continue
+		}
+		if err := db.UpsertEdge(fromID, toID, "defines", nil); err == nil {
+			edgesAdded++
+		}
+	}
+	for _, c := range repoCalls {
+		fromID, err := db.LookupNodeID("Symbol", c.CallerIdentifier)
+		if err == nil {
+			if toID, err := db.LookupNodeID("Call", c.Identifier); err == nil {
+				if err := db.UpsertEdge(fromID, toID, "calls", nil); err == nil {
+					edgesAdded++
+				}
+			}
+		}
+		if c.CalleeIdentifier != "" {
+			fromID, err := db.LookupNodeID("Symbol", c.CallerIdentifier)
+			if err != nil {
+				continue
+			}
+			toID, err := db.LookupNodeID("Symbol", c.CalleeIdentifier)
+			if err != nil {
+				continue
+			}
+			if err := db.UpsertEdge(fromID, toID, "calls", nil); err == nil {
+				edgesAdded++
+			}
+		}
+	}
 
 	// Persistence summary.
 	counts, err := db.CountByType()
@@ -411,7 +482,7 @@ func runBuild(args []string) int {
 	case "", "none":
 		// Skip — structural BFS still works without any search index.
 	case "bm25":
-		if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks); err != nil {
+		if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls); err != nil {
 			fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
 			return 1
 		}
@@ -421,7 +492,7 @@ func runBuild(args []string) int {
 			fmt.Fprintf(os.Stderr, "build: embed provider: %v\n", err)
 			return 1
 		}
-		if err := runEmbedPipeline(db, provider, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks); err != nil {
+		if err := runEmbedPipeline(db, provider, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls); err != nil {
 			fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
 			return 1
 		}
@@ -446,6 +517,8 @@ func runBM25Pipeline(
 	stories []types.Story,
 	repoFiles []types.RepoFile,
 	repoChunks []types.RepoChunk,
+	repoSymbols []types.RepoSymbol,
+	repoCalls []types.RepoCall,
 ) error {
 	type unit struct{ typ, identifier, text string }
 	var units []unit
@@ -476,6 +549,12 @@ func runBM25Pipeline(
 	}
 	for _, c := range repoChunks {
 		units = append(units, unit{"Chunk", c.Identifier, embedTextForRepoChunk(c)})
+	}
+	for _, s := range repoSymbols {
+		units = append(units, unit{"Symbol", s.Identifier, embedTextForRepoSymbol(s)})
+	}
+	for _, c := range repoCalls {
+		units = append(units, unit{"Call", c.Identifier, embedTextForRepoCall(c)})
 	}
 
 	indexed, errs := 0, 0
@@ -543,6 +622,14 @@ func embedTextForRepoChunk(c types.RepoChunk) string {
 	return c.FilePath + "\n" + c.Identifier + "\n" + c.Text
 }
 
+func embedTextForRepoSymbol(s types.RepoSymbol) string {
+	return s.Identifier + "\n" + s.Name + "\n" + s.Kind + "\n" + s.Signature + "\n" + s.FilePath
+}
+
+func embedTextForRepoCall(c types.RepoCall) string {
+	return c.Identifier + "\n" + c.CallerIdentifier + "\n" + c.CalleeName + "\n" + c.CalleeQualifier + "\n" + c.FilePath
+}
+
 // runEmbedPipeline iterates extracted nodes and writes embeddings + content
 // SHAs onto the persisted rows. SHA-based change detection skips nodes whose
 // stored content_sha already matches the current text.
@@ -557,6 +644,8 @@ func runEmbedPipeline(
 	stories []types.Story,
 	repoFiles []types.RepoFile,
 	repoChunks []types.RepoChunk,
+	repoSymbols []types.RepoSymbol,
+	repoCalls []types.RepoCall,
 ) error {
 	type unit struct {
 		typ        string
@@ -591,6 +680,12 @@ func runEmbedPipeline(
 	}
 	for _, c := range repoChunks {
 		units = append(units, unit{"Chunk", c.Identifier, embedTextForRepoChunk(c)})
+	}
+	for _, s := range repoSymbols {
+		units = append(units, unit{"Symbol", s.Identifier, embedTextForRepoSymbol(s)})
+	}
+	for _, c := range repoCalls {
+		units = append(units, unit{"Call", c.Identifier, embedTextForRepoCall(c)})
 	}
 
 	embedded, skipped, errs := 0, 0, 0
@@ -783,6 +878,145 @@ func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, provide
 			title = title[:77] + "..."
 		}
 		fmt.Printf("[s=%.3f] %-10s %-40s %s\n", m.Score, meta.typ, meta.identifier, title)
+	}
+	return 0
+}
+
+func runContext(args []string) int {
+	fs := flag.NewFlagSet("context", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database")
+	typ := fs.String("type", "", "optional exact type filter")
+	depth := fs.Int("depth", 1, "exact-node graph depth")
+	topK := fs.Int("top", 8, "hybrid fallback result count")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "usage: aih-graph context [--db PATH] [--type T] <node-or-topic>")
+		return 2
+	}
+	db, err := openQueryDB(*dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "context: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+
+	target := fs.Arg(0)
+	eng := query.New(db.SQL())
+	node, err := resolveNode(eng, target, *typ)
+	if err != nil {
+		fmt.Printf("No exact node for %q; showing hybrid memory matches.\n", target)
+		return runHybrid(db, target, *typ, *topK, "bm25")
+	}
+	fmt.Println("Exact memory context:")
+	printNodeSummary(*node)
+	results, err := eng.BFS(node.Type, node.Identifier, *depth)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "context: bfs: %v\n", err)
+		return 1
+	}
+	for _, r := range results {
+		if r.Distance == 0 {
+			continue
+		}
+		fmt.Printf("[d=%d] ", r.Distance)
+		printNodeSummary(r.Node)
+	}
+	return 0
+}
+
+func runCallers(args []string) int {
+	fs := flag.NewFlagSet("callers", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "usage: aih-graph callers [--db PATH] <symbol-name-or-identifier>")
+		return 2
+	}
+	db, err := openQueryDB(*dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "callers: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+	eng := query.New(db.SQL())
+
+	target := fs.Arg(0)
+	targetIDs := map[string]bool{}
+	if node, err := resolveNode(eng, target, "Symbol"); err == nil {
+		targetIDs[node.Identifier] = true
+		if name := propString(node.Properties, "name"); name != "" {
+			targetIDs[name] = true
+		}
+	}
+	targetIDs[target] = true
+
+	calls, err := eng.ListByType("Call")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "callers: list calls: %v\n", err)
+		return 1
+	}
+	found := 0
+	for _, c := range calls {
+		calleeID := propString(c.Properties, "callee_identifier")
+		calleeName := propString(c.Properties, "callee_name")
+		if !targetIDs[calleeID] && !targetIDs[calleeName] {
+			continue
+		}
+		found++
+		caller := propString(c.Properties, "caller_identifier")
+		file := propString(c.Properties, "file_path")
+		line := int(propFloat(c.Properties, "line"))
+		fmt.Printf("%-55s %s:%d calls %s\n", caller, file, line, calleeName)
+	}
+	if found == 0 {
+		fmt.Fprintf(os.Stderr, "callers: no call sites found for %q\n", target)
+		return 1
+	}
+	return 0
+}
+
+func runImpact(args []string) int {
+	fs := flag.NewFlagSet("impact", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database")
+	typ := fs.String("type", "", "optional exact type filter")
+	depth := fs.Int("depth", 2, "graph depth")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "usage: aih-graph impact [--db PATH] [--type T] <node>")
+		return 2
+	}
+	db, err := openQueryDB(*dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "impact: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+	eng := query.New(db.SQL())
+	target := fs.Arg(0)
+	node, err := resolveNode(eng, target, *typ)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "impact: no exact node found for %q; use `query --hybrid` to discover identifiers\n", target)
+		return 1
+	}
+	fmt.Println("Impact neighborhood:")
+	printNodeSummary(*node)
+	results, err := eng.BFS(node.Type, node.Identifier, *depth)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "impact: bfs: %v\n", err)
+		return 1
+	}
+	for _, r := range results {
+		if r.Distance == 0 {
+			continue
+		}
+		fmt.Printf("[d=%d] ", r.Distance)
+		printNodeSummary(r.Node)
 	}
 	return 0
 }
@@ -1065,6 +1299,15 @@ func titleFromProperties(p map[string]any) string {
 	if d, ok := p["summary"].(string); ok && d != "" {
 		return d
 	}
+	if sig, ok := p["signature"].(string); ok && sig != "" {
+		return sig
+	}
+	if callee, ok := p["callee_name"].(string); ok && callee != "" {
+		if line, ok := p["line"].(float64); ok {
+			return fmt.Sprintf("%s at line %d", callee, int(line))
+		}
+		return callee
+	}
 	if path, ok := p["path"].(string); ok && path != "" {
 		return path
 	}
@@ -1077,6 +1320,57 @@ func titleFromProperties(p map[string]any) string {
 		return path
 	}
 	return ""
+}
+
+func resolveNode(eng *query.Engine, target, typ string) (*query.Node, error) {
+	if typ != "" {
+		return eng.GetByIdentifier(typ, target)
+	}
+	if node, err := eng.GetByIdentifier("", target); err == nil {
+		return node, nil
+	}
+	symbols, err := eng.ListByType("Symbol")
+	if err == nil {
+		var match *query.Node
+		for i := range symbols {
+			if propString(symbols[i].Properties, "name") == target {
+				if match != nil {
+					return &symbols[i], nil
+				}
+				match = &symbols[i]
+			}
+		}
+		if match != nil {
+			return match, nil
+		}
+	}
+	return eng.GetByIdentifier("", target)
+}
+
+func printNodeSummary(n query.Node) {
+	title := titleFromProperties(n.Properties)
+	if len(title) > 90 {
+		title = title[:87] + "..."
+	}
+	fmt.Printf("%-8s %-55s %s\n", n.Type, n.Identifier, title)
+}
+
+func propString(props map[string]any, key string) string {
+	if v, ok := props[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func propFloat(props map[string]any, key string) float64 {
+	switch v := props[key].(type) {
+	case float64:
+		return v
+	case int:
+		return float64(v)
+	default:
+		return 0
+	}
 }
 
 // agentProps reshapes a types.Agent into a properties map for storage.
@@ -1125,6 +1419,31 @@ func repoChunkProps(c types.RepoChunk) map[string]any {
 	}
 }
 
+func repoSymbolProps(s types.RepoSymbol) map[string]any {
+	return map[string]any{
+		"name":       s.Name,
+		"kind":       s.Kind,
+		"language":   s.Language,
+		"file_path":  s.FilePath,
+		"start_line": s.StartLine,
+		"end_line":   s.EndLine,
+		"signature":  s.Signature,
+	}
+}
+
+func repoCallProps(c types.RepoCall) map[string]any {
+	return map[string]any{
+		"caller_identifier": c.CallerIdentifier,
+		"callee_identifier": c.CalleeIdentifier,
+		"callee_name":       c.CalleeName,
+		"callee_qualifier":  c.CalleeQualifier,
+		"language":          c.Language,
+		"file_path":         c.FilePath,
+		"line":              c.Line,
+		"column":            c.Column,
+	}
+}
+
 func keysSorted(m map[string]int) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -1154,6 +1473,12 @@ func main() {
 		os.Exit(runBuild(args))
 	case "query":
 		os.Exit(runQuery(args))
+	case "context":
+		os.Exit(runContext(args))
+	case "callers":
+		os.Exit(runCallers(args))
+	case "impact":
+		os.Exit(runImpact(args))
 	case "uninstall":
 		os.Exit(runUninstall(args))
 	default:
