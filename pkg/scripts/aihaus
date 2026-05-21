@@ -65,7 +65,7 @@ _memory() {
     exec "${bin}" "$@"
   fi
   if [[ -f "${AIHAUS_HOME}/aih-graph/go.mod" ]] && command -v go >/dev/null 2>&1; then
-    exec go -C "${AIHAUS_HOME}/aih-graph" run ./cmd/aih-graph "$@"
+    AIH_GRAPH_CALLER_CWD="${PWD}" exec go -C "${AIHAUS_HOME}/aih-graph" run ./cmd/aih-graph "$@"
   fi
   if [[ -x "${AIHAUS_HOME}/aih-graph/bin/aih-graph${ext}" ]]; then
     exec "${AIHAUS_HOME}/aih-graph/bin/aih-graph${ext}" "$@"

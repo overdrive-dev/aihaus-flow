@@ -53,6 +53,7 @@ Commands:
     --dry-run             Print extraction summary without persisting
     --embed-provider P    bm25 (default) | ollama | fake | none
     --accept-all-repos    Bypass consent gate (auto-creates marker)
+  refresh [--repo PATH]   Rebuild repository memory index
   query "<question>"      Query the graph (default: hybrid)
     --bfs                 Structural BFS only (no embeddings needed)
     --semantic            Vector similarity (cosine) ranking
@@ -94,6 +95,16 @@ func resetDerivedIndex(db *storage.DB) error {
 	return err
 }
 
+func resolveRepoPath(repoPath string) string {
+	if repoPath == "" || filepath.IsAbs(repoPath) {
+		return repoPath
+	}
+	if callerCWD := strings.TrimSpace(os.Getenv("AIH_GRAPH_CALLER_CWD")); callerCWD != "" {
+		return filepath.Join(callerCWD, repoPath)
+	}
+	return repoPath
+}
+
 // runBuild implements the M033 build subcommand. Extracts Decision / Agent /
 // Skill / Hook nodes; Milestone + Story parsers land in follow-on commits.
 func runBuild(args []string) int {
@@ -111,7 +122,7 @@ func runBuild(args []string) int {
 		return 2
 	}
 
-	repoPath := fs.Arg(0)
+	repoPath := resolveRepoPath(fs.Arg(0))
 	decisionsPath := filepath.Join(repoPath, "pkg", ".aihaus", "decisions.md")
 	if _, err := os.Stat(decisionsPath); err != nil {
 		fmt.Fprintf(os.Stderr, "build: %s not found\n", decisionsPath)
@@ -613,6 +624,30 @@ func runBuild(args []string) int {
 	}
 	clearStaleMarker(repoPath)
 	return 0
+}
+
+func runRefresh(args []string) int {
+	fs := flag.NewFlagSet("refresh", flag.ExitOnError)
+	repoPath := fs.String("repo", ".", "repository path")
+	dbPath := fs.String("db", "", "path to SQLite database file")
+	embedProvider := fs.String("embed-provider", "bm25", "search provider: bm25|ollama|fake|none")
+	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() > 0 {
+		*repoPath = fs.Arg(0)
+	}
+	*repoPath = resolveRepoPath(*repoPath)
+	buildArgs := []string{"--embed-provider", *embedProvider}
+	if *dbPath != "" {
+		buildArgs = append(buildArgs, "--db", *dbPath)
+	}
+	if *acceptAll {
+		buildArgs = append(buildArgs, "--accept-all-repos")
+	}
+	buildArgs = append(buildArgs, *repoPath)
+	return runBuild(buildArgs)
 }
 
 // runBM25Pipeline writes one FTS5 row per node. Per-node text is the same
@@ -1258,6 +1293,7 @@ func runStatus(args []string) int {
 	if fs.NArg() > 0 {
 		*repoPath = fs.Arg(0)
 	}
+	*repoPath = resolveRepoPath(*repoPath)
 	resolvedDB := *dbPath
 	var err error
 	if resolvedDB == "" {
@@ -1325,6 +1361,7 @@ func runMarkStale(args []string) int {
 	if fs.NArg() > 0 {
 		*reason = strings.Join(fs.Args(), " ")
 	}
+	*repoPath = resolveRepoPath(*repoPath)
 	path, err := staleMarkerPath(*repoPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "mark-stale: resolve marker: %v\n", err)
@@ -1853,6 +1890,8 @@ func main() {
 		usage()
 	case "build":
 		os.Exit(runBuild(args))
+	case "refresh":
+		os.Exit(runRefresh(args))
 	case "query":
 		os.Exit(runQuery(args))
 	case "context":

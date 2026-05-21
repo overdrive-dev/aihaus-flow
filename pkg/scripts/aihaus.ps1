@@ -2,8 +2,7 @@
 # 8-tier AIHAUS_HOME chain inlined (D-Z5-A; sourcing install.ps1 unsafe).
 # self-update → update.ps1 -Self / update.sh --self  (Z9 implements flag; fails until then)
 # update --all → $env:USERPROFILE\.aihaus\.targets registry  (Z9 writes on install)
-[CmdletBinding()]
-param([Parameter(Position=0)][string]$Verb="",[Parameter(ValueFromRemainingArguments=$true)][string[]]$Rest)
+param([Parameter(Position=0)][string]$Verb="",[Parameter(Position=1,ValueFromRemainingArguments=$true)][string[]]$Rest)
 $ErrorActionPreference='Stop'
 
 function Resolve-Home {
@@ -56,6 +55,7 @@ function Invoke-Memory([string]$HomePath,[string[]]$GraphArgs) {
     }
     $sourceDir=Join-Path $HomePath "aih-graph"
     if ((Test-Path (Join-Path $sourceDir "go.mod")) -and (Get-Command go -ErrorAction SilentlyContinue)) {
+        $env:AIH_GRAPH_CALLER_CWD=(Get-Location).Path
         & go -C $sourceDir run ./cmd/aih-graph @GraphArgs
         exit $LASTEXITCODE
     }

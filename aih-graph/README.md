@@ -14,6 +14,7 @@ M048 adds a local repository-brain slice:
 - `Test` nodes for Go tests and common script/spec test files
 - `Memory` nodes from markdown memory and `Commit` nodes from recent git history
 - `context`, `callers`, `impact`, `gotchas`, `milestone`, `status`, and `mark-stale` commands
+- `refresh` as the agent-facing rebuild command (`build` remains the lower-level primitive)
 - `--embed-provider ollama` for local semantic embeddings through Ollama `/api/embed`
 
 The installed `aihaus` shim exposes these as `aihaus memory <subcommand> ...`.
