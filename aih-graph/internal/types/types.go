@@ -1,9 +1,9 @@
 // Package types defines the core domain types for aih-graph.
 //
-// Per ADR-260515-B-amend-02 (pure-Go SQLite) + ADR-260515-C-amend-02
-// (markdown-only extraction) + ADR-260515-E-amend-03 (6 aihaus typed nodes only
-// in v0.1), the 6 first-class types are Decision, Milestone, Story, Agent,
-// Hook, Skill.
+// Per ADR-260521-A, M048 expands aih-graph from aihaus-artifact memory into
+// native repository memory. The original 6 aihaus types remain first-class,
+// and generic repository types (RepoFile, RepoChunk) become the first codebase
+// memory nodes.
 //
 // Node + Edge are the storage-substrate-shaped generic types; the 6 typed
 // structs are property-view structs that consumers of the public API see.
@@ -15,7 +15,7 @@ import "time"
 // JSON-serializable map.
 type Node struct {
 	ID             int64
-	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill"
+	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill" | "File" | "Chunk"
 	Identifier     string // e.g. "ADR-260514-B", "M030", "aih-milestone"
 	Properties     map[string]any
 	Embedding      []float32 // optional; nil if not yet embedded
@@ -50,11 +50,11 @@ type Decision struct {
 // Milestone represents an aihaus execution milestone.
 // Source: .aihaus/milestones/<slug>/RUN-MANIFEST.md Metadata section.
 type Milestone struct {
-	ID          string    // "M030"
-	Slug        string    // "M030-260514-merge-settings-array-aware"
-	Status      string    // "completed" | "running" | "paused" | "aborted"
-	Phase       string    // free-text phase label
-	PauseClass  string    // when status=paused: "external-dep-down" | etc.
+	ID          string // "M030"
+	Slug        string // "M030-260514-merge-settings-array-aware"
+	Status      string // "completed" | "running" | "paused" | "aborted"
+	Phase       string // free-text phase label
+	PauseClass  string // when status=paused: "external-dep-down" | etc.
 	LastUpdated time.Time
 }
 
@@ -66,6 +66,30 @@ type Story struct {
 	Summary     string
 	Status      string // "completed" | "running" | "draft"
 	OwnedFiles  []string
+}
+
+// RepoFile represents a text file indexed from the repository itself. It is a
+// generic repository-memory node, not an aihaus-only artifact type.
+type RepoFile struct {
+	Path       string
+	Extension  string
+	Language   string
+	SizeBytes  int64
+	LineCount  int
+	ChunkCount int
+	SHA256     string
+}
+
+// RepoChunk represents a bounded text chunk from a RepoFile. Chunk text is
+// stored in properties so lexical/vector retrieval can ground answers in code.
+type RepoChunk struct {
+	Identifier string
+	FilePath   string
+	Index      int
+	StartLine  int
+	EndLine    int
+	Text       string
+	SHA256     string
 }
 
 // Agent represents an aihaus agent definition.

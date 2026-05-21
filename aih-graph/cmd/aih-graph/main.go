@@ -2,7 +2,8 @@
 //
 // aih-graph is aihaus's standalone Go binary memory engine. It builds and
 // queries a knowledge graph of aihaus-managed repositories with first-class
-// ontological types (Decision, Milestone, Story, Agent, Hook, Skill).
+// aihaus types (Decision, Milestone, Story, Agent, Hook, Skill) plus M048
+// native repository-memory nodes (File, Chunk).
 //
 // v0.1 forever-scope (per ADR-260515-B-amend-02 + C-amend-02 + E-amend-03,
 // embedding surface narrowed per ADR-260516-A):
@@ -31,7 +32,9 @@ import (
 )
 
 // version is overridden at release build via:
-//   go build -ldflags="-X main.version=v0.1.X"
+//
+//	go build -ldflags="-X main.version=v0.1.X"
+//
 // (Go's -X only works on string vars, not consts — keeping this as var is
 // load-bearing for release pipeline correctness.)
 var version = "0.1.4-dev"
@@ -201,6 +204,17 @@ func runBuild(args []string) int {
 	fmt.Printf("  Milestones: %d\n", len(milestones))
 	fmt.Printf("  Stories:    %d\n", len(stories))
 
+	// M048: generic repository file/chunk extraction. This is the first
+	// native codebase-memory layer; parser-backed symbols land in follow-up
+	// stories.
+	repoFiles, repoChunks, err := extract.ParseRepositoryText(repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: parse repository text: %v\n", err)
+		return 1
+	}
+	fmt.Printf("  Files:      %d\n", len(repoFiles))
+	fmt.Printf("  Chunks:     %d\n", len(repoChunks))
+
 	// Status breakdown for Decisions (most informative type-level summary).
 	fmt.Println()
 	fmt.Println("  Decisions by status:")
@@ -307,6 +321,20 @@ func runBuild(args []string) int {
 		}
 		persisted++
 	}
+	for _, f := range repoFiles {
+		if _, err := db.UpsertNode("File", f.Path, repoFileProps(f)); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert file %s: %v\n", f.Path, err)
+			return 1
+		}
+		persisted++
+	}
+	for _, c := range repoChunks {
+		if _, err := db.UpsertNode("Chunk", c.Identifier, repoChunkProps(c)); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert chunk %s: %v\n", c.Identifier, err)
+			return 1
+		}
+		persisted++
+	}
 
 	// Edge derivation: Decision.Amends → Decision-[amends]→Decision;
 	// Story.MilestoneID → Story-[in_milestone]→Milestone. More edge types
@@ -346,6 +374,20 @@ func runBuild(args []string) int {
 		}
 	}
 
+	for _, c := range repoChunks {
+		fromID, err := db.LookupNodeID("File", c.FilePath)
+		if err != nil {
+			continue
+		}
+		toID, err := db.LookupNodeID("Chunk", c.Identifier)
+		if err != nil {
+			continue
+		}
+		if err := db.UpsertEdge(fromID, toID, "contains", nil); err == nil {
+			edgesAdded++
+		}
+	}
+
 	// Persistence summary.
 	counts, err := db.CountByType()
 	if err != nil {
@@ -369,7 +411,7 @@ func runBuild(args []string) int {
 	case "", "none":
 		// Skip — structural BFS still works without any search index.
 	case "bm25":
-		if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories); err != nil {
+		if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks); err != nil {
 			fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
 			return 1
 		}
@@ -379,7 +421,7 @@ func runBuild(args []string) int {
 			fmt.Fprintf(os.Stderr, "build: embed provider: %v\n", err)
 			return 1
 		}
-		if err := runEmbedPipeline(db, provider, decisions, agents, skills, hooks, milestones, stories); err != nil {
+		if err := runEmbedPipeline(db, provider, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks); err != nil {
 			fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
 			return 1
 		}
@@ -402,6 +444,8 @@ func runBM25Pipeline(
 	hooks []types.Hook,
 	milestones []types.Milestone,
 	stories []types.Story,
+	repoFiles []types.RepoFile,
+	repoChunks []types.RepoChunk,
 ) error {
 	type unit struct{ typ, identifier, text string }
 	var units []unit
@@ -426,6 +470,12 @@ func runBM25Pipeline(
 	}
 	for _, s := range stories {
 		units = append(units, unit{"Story", s.MilestoneID + "/" + s.ID, embedTextForStory(s)})
+	}
+	for _, f := range repoFiles {
+		units = append(units, unit{"File", f.Path, embedTextForRepoFile(f)})
+	}
+	for _, c := range repoChunks {
+		units = append(units, unit{"Chunk", c.Identifier, embedTextForRepoChunk(c)})
 	}
 
 	indexed, errs := 0, 0
@@ -485,6 +535,14 @@ func embedTextForStory(s types.Story) string {
 	return s.MilestoneID + "/" + s.ID + "\n" + s.Status + "\n" + s.Summary
 }
 
+func embedTextForRepoFile(f types.RepoFile) string {
+	return f.Path + "\n" + f.Language + "\n" + f.Extension
+}
+
+func embedTextForRepoChunk(c types.RepoChunk) string {
+	return c.FilePath + "\n" + c.Identifier + "\n" + c.Text
+}
+
 // runEmbedPipeline iterates extracted nodes and writes embeddings + content
 // SHAs onto the persisted rows. SHA-based change detection skips nodes whose
 // stored content_sha already matches the current text.
@@ -497,6 +555,8 @@ func runEmbedPipeline(
 	hooks []types.Hook,
 	milestones []types.Milestone,
 	stories []types.Story,
+	repoFiles []types.RepoFile,
+	repoChunks []types.RepoChunk,
 ) error {
 	type unit struct {
 		typ        string
@@ -525,6 +585,12 @@ func runEmbedPipeline(
 	}
 	for _, s := range stories {
 		units = append(units, unit{"Story", s.MilestoneID + "/" + s.ID, embedTextForStory(s)})
+	}
+	for _, f := range repoFiles {
+		units = append(units, unit{"File", f.Path, embedTextForRepoFile(f)})
+	}
+	for _, c := range repoChunks {
+		units = append(units, unit{"Chunk", c.Identifier, embedTextForRepoChunk(c)})
 	}
 
 	embedded, skipped, errs := 0, 0, 0
@@ -999,6 +1065,17 @@ func titleFromProperties(p map[string]any) string {
 	if d, ok := p["summary"].(string); ok && d != "" {
 		return d
 	}
+	if path, ok := p["path"].(string); ok && path != "" {
+		return path
+	}
+	if path, ok := p["file_path"].(string); ok && path != "" {
+		if start, ok := p["start_line"].(float64); ok {
+			if end, ok := p["end_line"].(float64); ok {
+				return fmt.Sprintf("%s:%d-%d", path, int(start), int(end))
+			}
+		}
+		return path
+	}
 	return ""
 }
 
@@ -1023,6 +1100,29 @@ func agentProps(a types.Agent) map[string]any {
 		props["memory_excerpt"] = a.MemoryExcerpt
 	}
 	return props
+}
+
+func repoFileProps(f types.RepoFile) map[string]any {
+	return map[string]any{
+		"path":        f.Path,
+		"extension":   f.Extension,
+		"language":    f.Language,
+		"size_bytes":  f.SizeBytes,
+		"line_count":  f.LineCount,
+		"chunk_count": f.ChunkCount,
+		"sha256":      f.SHA256,
+	}
+}
+
+func repoChunkProps(c types.RepoChunk) map[string]any {
+	return map[string]any{
+		"file_path":  c.FilePath,
+		"index":      c.Index,
+		"start_line": c.StartLine,
+		"end_line":   c.EndLine,
+		"text":       c.Text,
+		"sha256":     c.SHA256,
+	}
 }
 
 func keysSorted(m map[string]int) []string {
