@@ -37,7 +37,12 @@ FAILURES=0
 fail() { echo "[FAIL] reap-execute: $*" >&2; FAILURES=$((FAILURES + 1)); }
 
 # ---- Create temp workspace ---------------------------------------------------
-TMPDIR_BASE="$(mktemp -d 2>/dev/null || mktemp -d -t aih-reap-fix)"
+TMP_BASE="${AIHAUS_SMOKE_TMPDIR:-${TMPDIR:-}}"
+if [[ -z "$TMP_BASE" || ! -d "$TMP_BASE" || ! -w "$TMP_BASE" ]]; then
+  TMP_BASE="${REPO_ROOT}/tmp"
+  mkdir -p "$TMP_BASE" 2>/dev/null || exit 1
+fi
+TMPDIR_BASE="$(mktemp -d "${TMP_BASE%/}/aih-reap-fix.XXXXXX")"
 REPO="${TMPDIR_BASE}/repo"
 
 cleanup() {

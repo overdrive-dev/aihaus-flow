@@ -38,6 +38,26 @@ _start_check() {
   CHECK_NUMBER=$((CHECK_NUMBER + 1))
 }
 
+_mktemp_dir() {
+  local prefix="${1:-aihaus-smoke}"
+  local base="${AIHAUS_SMOKE_TMPDIR:-${TMPDIR:-}}"
+  local dir
+  if [[ -z "$base" || ! -d "$base" || ! -w "$base" ]]; then
+    base="$(cd "$SCRIPT_DIR/.." && pwd)/tmp"
+    mkdir -p "$base" 2>/dev/null || return 1
+  fi
+  dir="$(mktemp -d "${base%/}/${prefix}.XXXXXX" 2>/dev/null)" && {
+    printf '%s\n' "$dir"
+    return 0
+  }
+  dir="${base%/}/${prefix}.$$.$RANDOM"
+  mkdir -p "$dir" 2>/dev/null && {
+    printf '%s\n' "$dir"
+    return 0
+  }
+  return 1
+}
+
 # ---- Check 1: 14 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
@@ -300,7 +320,7 @@ check_agent_frontmatter() {
     # Part C logic extracts effort and compares to "max" — MUST detect violation.
     # If awk extraction fails to return "high" (returns "max" or empty) → gate broken.
     local _tmpdir
-    _tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t smoke6) || true
+    _tmpdir="$(_mktemp_dir smoke6)" || true
     if [[ -d "$_tmpdir" ]]; then
       # fixture-fail-c (load-bearing BLOCKER #2): plan-checker effort=high → must NOT read as max.
       local _fake_pc="${_tmpdir}/plan-checker.md"
@@ -1969,7 +1989,7 @@ check_schema_v3_migration() {
 
   # Create temp dir and a minimal v2 manifest fixture
   local tmpdir
-  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-smoke)"
+  tmpdir="$(_mktemp_dir aih-smoke)"
   local fixture="${tmpdir}/RUN-MANIFEST.md"
 
   cat > "$fixture" <<'MANIFEST_EOF'
@@ -2080,7 +2100,7 @@ check_worktree_reconcile_fixture() {
   fi
 
   local tmpdir
-  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-wt-smoke)"
+  tmpdir="$(_mktemp_dir aih-wt-smoke)"
 
   # ---- Bootstrap a bare git repo as the shared object store ------------------
   local repo="${tmpdir}/repo"
@@ -2177,7 +2197,7 @@ check_resume_substep_fixture() {
 
   # ---- Create temp dir + fixture manifest ------------------------------------
   local tmpdir
-  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-resume-smoke)"
+  tmpdir="$(_mktemp_dir aih-resume-smoke)"
   local fixture="${tmpdir}/RUN-MANIFEST.md"
 
   # Write a v3 RUN-MANIFEST with ## Checkpoints simulating a crash after
@@ -4393,7 +4413,7 @@ check_tdd_guard_hook() {
   fi
 
   local tmpdir
-  tmpdir="$(mktemp -d 2>/dev/null || echo "/tmp/tdd-guard-check-$$")"
+  tmpdir="$(_mktemp_dir tdd-guard-check)"
   mkdir -p "${tmpdir}/.claude/audit" 2>/dev/null || true
 
   # Helper: run hook with controlled env, returns exit code
@@ -4844,9 +4864,10 @@ check_aih_graph_build_smoke() {
     return
   fi
   local tmpbin
-  tmpbin="$(mktemp -d 2>/dev/null || mktemp -d -t aih-graph-smoke)"
+  tmpbin="$(_mktemp_dir aih-graph-smoke)"
   trap 'rm -rf "${tmpbin}"' RETURN
-  if ! (cd "${aih_graph_dir}" && go build -o "${tmpbin}/aih-graph" ./cmd/aih-graph) >/dev/null 2>&1; then
+  mkdir -p "${tmpbin}/gotmp" "${tmpbin}/gocache"
+  if ! (cd "${aih_graph_dir}" && GOTMPDIR="${tmpbin}/gotmp" GOCACHE="${tmpbin}/gocache" go build -o "${tmpbin}/aih-graph" ./cmd/aih-graph) >/dev/null 2>&1; then
     issues+=("go build failed")
     _fail "${label}" "${issues[@]}"
     return
@@ -4887,11 +4908,12 @@ check_aih_graph_integration_round_trip() {
     return
   fi
   local tmpdir
-  tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t aih-graph-itest)"
+  tmpdir="$(_mktemp_dir aih-graph-itest)"
   trap 'rm -rf "${tmpdir}"' RETURN
   local bin="${tmpdir}/aih-graph"
   local db="${tmpdir}/test.db"
-  if ! (cd "${aih_graph_dir}" && go build -o "${bin}" ./cmd/aih-graph) >/dev/null 2>&1; then
+  mkdir -p "${tmpdir}/gotmp" "${tmpdir}/gocache"
+  if ! (cd "${aih_graph_dir}" && GOTMPDIR="${tmpdir}/gotmp" GOCACHE="${tmpdir}/gocache" go build -o "${bin}" ./cmd/aih-graph) >/dev/null 2>&1; then
     issues+=("go build failed")
     _fail "${label}" "${issues[@]}"
     return

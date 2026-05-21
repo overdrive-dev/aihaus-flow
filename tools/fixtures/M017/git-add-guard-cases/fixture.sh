@@ -20,6 +20,7 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../../" && pwd)"
 HOOK="${SCRIPT_DIR}/../../../../pkg/.aihaus/hooks/git-add-guard.sh"
 HOOK="$(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
 
@@ -32,7 +33,12 @@ FAILURES=0
 fail() { echo "[FAIL] git-add-guard-cases: $*" >&2; FAILURES=$((FAILURES+1)); }
 
 # ---- Create temp git repo ----------------------------------------------------
-TMPDIR_BASE="$(mktemp -d 2>/dev/null || mktemp -d -t aih-gag-fix)"
+TMP_BASE="${AIHAUS_SMOKE_TMPDIR:-${TMPDIR:-}}"
+if [[ -z "$TMP_BASE" || ! -d "$TMP_BASE" || ! -w "$TMP_BASE" ]]; then
+  TMP_BASE="${REPO_ROOT}/tmp"
+  mkdir -p "$TMP_BASE" 2>/dev/null || exit 1
+fi
+TMPDIR_BASE="$(mktemp -d "${TMP_BASE%/}/aih-gag-fix.XXXXXX")"
 REPO="${TMPDIR_BASE}/repo"
 mkdir -p "$REPO"
 git -C "$REPO" init -b main >/dev/null 2>&1

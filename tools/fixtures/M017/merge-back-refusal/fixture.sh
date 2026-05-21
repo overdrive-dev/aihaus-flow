@@ -14,6 +14,7 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../../" && pwd)"
 HOOK="${SCRIPT_DIR}/../../../../pkg/.aihaus/hooks/merge-back.sh"
 
 # Resolve HOOK absolute path (removes ../ sequences)
@@ -28,7 +29,12 @@ FAILURES=0
 fail() { echo "[FAIL] merge-back-refusal: $*" >&2; FAILURES=$((FAILURES+1)); }
 
 # ---- Create temp workspace ---------------------------------------------------
-TMPDIR_BASE="$(mktemp -d 2>/dev/null || mktemp -d -t aih-mb-fix)"
+TMP_BASE="${AIHAUS_SMOKE_TMPDIR:-${TMPDIR:-}}"
+if [[ -z "$TMP_BASE" || ! -d "$TMP_BASE" || ! -w "$TMP_BASE" ]]; then
+  TMP_BASE="${REPO_ROOT}/tmp"
+  mkdir -p "$TMP_BASE" 2>/dev/null || exit 1
+fi
+TMPDIR_BASE="$(mktemp -d "${TMP_BASE%/}/aih-mb-fix.XXXXXX")"
 
 # Main repo (simulates milestone branch in real repo)
 REPO="${TMPDIR_BASE}/repo"

@@ -40,7 +40,12 @@ fail() { echo "[FAIL] release-notes-shape: $*" >&2; FAILURES=$((FAILURES + 1)); 
 pass() { echo "[PASS] release-notes-shape: $*"; }
 
 # ---- Create temp workspace ---------------------------------------------------
-TMPDIR_BASE="$(mktemp -d 2>/dev/null || mktemp -d -t aih-rn-shape)"
+TMP_BASE="${AIHAUS_SMOKE_TMPDIR:-${TMPDIR:-}}"
+if [[ -z "$TMP_BASE" || ! -d "$TMP_BASE" || ! -w "$TMP_BASE" ]]; then
+  TMP_BASE="${REPO_ROOT}/tmp"
+  mkdir -p "$TMP_BASE" 2>/dev/null || exit 1
+fi
+TMPDIR_BASE="$(mktemp -d "${TMP_BASE%/}/aih-rn-shape.XXXXXX")"
 
 cleanup() {
   rm -rf "${TMPDIR_BASE}" 2>/dev/null || true

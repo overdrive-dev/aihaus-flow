@@ -29,6 +29,19 @@ fi
 
 ts_iso() { date -u +%FT%TZ; }
 
+tmp_file() {
+  local dir
+  dir="$(dirname "$MANIFEST_PATH")"
+  local tmp
+  tmp="$(mktemp "${dir%/}/manifest-migrate.XXXXXX" 2>/dev/null)" && {
+    printf '%s\n' "$tmp"
+    return 0
+  }
+  tmp="${dir%/}/manifest-migrate.$$.$RANDOM"
+  : > "$tmp"
+  printf '%s\n' "$tmp"
+}
+
 log_audit() {
   local result="$1" detail="${2:-null}"
   mkdir -p "$(dirname "$AUDIT_LOG")" 2>/dev/null || true
@@ -77,7 +90,7 @@ if grep -qE '^schema:\s*v3\s*$' "$MANIFEST_PATH"; then
   done
   trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
 
-  TMP_V4="$(mktemp)"
+  TMP_V4="$(tmp_file)"
   trap 'rmdir "$LOCK" 2>/dev/null || true; rm -f "$TMP_V4"' EXIT INT TERM
   sed 's/^schema: v3$/schema: v4/' "$MANIFEST_PATH" > "$TMP_V4"
   if ! mv -f "$TMP_V4" "$MANIFEST_PATH"; then
@@ -119,7 +132,7 @@ if grep -qE '^schema:\s*v2\s*$' "$MANIFEST_PATH"; then
   # Idempotent: only append ## Checkpoints if the heading is absent
   if grep -q '^## Checkpoints$' "$MANIFEST_PATH"; then
     # Section exists; bump schema key only if still v2
-    TMP_V3="$(mktemp)"
+    TMP_V3="$(tmp_file)"
     trap 'rmdir "$LOCK" 2>/dev/null || true; rm -f "$TMP_V3"' EXIT INT TERM
     sed 's/^schema: v2$/schema: v3/' "$MANIFEST_PATH" > "$TMP_V3"
     if ! mv -f "$TMP_V3" "$MANIFEST_PATH"; then
@@ -132,7 +145,7 @@ if grep -qE '^schema:\s*v2\s*$' "$MANIFEST_PATH"; then
     exit 0
   fi
 
-  TMP_V3="$(mktemp)"
+  TMP_V3="$(tmp_file)"
   trap 'rmdir "$LOCK" 2>/dev/null || true; rm -f "$TMP_V3"' EXIT INT TERM
   {
     # Rewrite schema key from v2 to v3; append ## Checkpoints section at end.
@@ -206,7 +219,7 @@ fi
 
 # Extract Progress Log lines → best-effort story records
 # v1 Progress Log: "- [ts] — <text>" style bullets
-TMP="$(mktemp)"
+TMP="$(tmp_file)"
 trap 'rmdir "$LOCK" 2>/dev/null || true; rm -f "$TMP"' EXIT INT TERM
 
 PRESERVED=0

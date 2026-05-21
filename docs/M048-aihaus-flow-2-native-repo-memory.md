@@ -444,8 +444,9 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph query --json "all agents JSON memory"` returned commit `ff48c49`, the updated `tools/smoke-test.sh` contract, and the all-agent memory integration evidence from the fresh index.
 - `rg "query --semantic|query --hybrid|query --bfs|Memory Lookup \(M039\+" pkg/.aihaus/agents` returns no matches after the all-agent prompt migration.
 - `CLAUDE.md`, `INSTALL-VIA-LLM.md`, `aih-graph/README.md`, `aih-graph/PRD.md`, and `impact` fallback guidance now point agents and humans at `query --json` rather than the legacy M039 prompt examples.
+- Windows Git Bash smoke portability now uses workspace-local `tmp/` scratch directories, manifest-local temp files, and per-check `GOTMPDIR`/`GOCACHE`, avoiding sandbox-blocked `/tmp`, `C:\tmp`, and `%LOCALAPPDATA%\Temp` paths.
 - `go test ./...` passes inside `aih-graph`.
-- Full `tools/smoke-test.sh` under Windows Git Bash reached Check 65 before timeout; failures before that point were existing fixture portability issues around `mktemp -t` paths resolving to `/repo`, not M048 memory contract failures.
+- Full `tools/smoke-test.sh` under Windows Git Bash passes: `aihaus package smoke test PASSED [OK] (87/87)`.
 
 ## Resolved M048 Implementation Decisions
 
