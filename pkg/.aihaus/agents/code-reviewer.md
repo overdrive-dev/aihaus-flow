@@ -134,10 +134,10 @@ If the invocation prompt includes an Attachments block, Read the files (UI diffs
 
 If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
 or at `~/.aihaus/bin/`, consult repository memory before reviewing code quality:
-- `aih-graph status --repo .` — check whether the index is fresh enough for review evidence.
-- `aih-graph impact "<changed-file-or-symbol>"` — inspect likely affected code, tests, hooks, skills, and decisions.
-- `aih-graph callers "<function-or-symbol>"` — verify behavioral changes against call-site evidence.
-- `aih-graph query --hybrid "<review focus or changed area>"` — surface related decisions, known gotchas, and prior review memory.
+- `aih-graph status --repo . --json` — check whether the index is fresh enough for review evidence.
+- `aih-graph impact --repo . --json "<changed-file-or-symbol>"` — inspect likely affected code, tests, hooks, skills, and decisions.
+- `aih-graph callers --json "<function-or-symbol>"` — verify behavioral changes against call-site evidence.
+- `aih-graph query --repo . --json "<review focus or changed area>"` — surface related decisions, known gotchas, and prior review memory.
 
 If memory is stale, say so in REVIEW.md rather than treating memory output as current. Skip silently when binary absent.
 ## Per-agent memory (optional)

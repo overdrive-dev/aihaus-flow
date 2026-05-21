@@ -99,10 +99,10 @@ After completing work, if you discovered a reusable pattern:
 
 If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
 or at `~/.aihaus/bin/`, consult repository memory before decomposing into tasks:
-- `aih-graph status --repo .` — check whether memory is fresh or stale.
-- `aih-graph query --hybrid "<phase goal or affected area>"` — retrieve relevant code, decisions, hooks, skills, and agent memory.
-- `aih-graph context "<file|symbol|topic>"` — ground tasks in concrete code context when target areas are known.
-- `aih-graph impact "<file|symbol>"` — identify likely affected files, tests, hooks, skills, and decisions before assigning work.
+- `aih-graph status --repo . --json` — check whether memory is fresh or stale.
+- `aih-graph query --repo . --json "<phase goal or affected area>"` — retrieve relevant code, decisions, hooks, skills, and agent memory.
+- `aih-graph context --repo . --json "<file|symbol|topic>"` — ground tasks in concrete code context when target areas are known.
+- `aih-graph impact --repo . --json "<file|symbol>"` — identify likely affected files, tests, hooks, skills, and decisions before assigning work.
 
 If memory is stale, include a refresh task or note the stale status in the plan. Skip silently when binary absent.
 ## Per-agent memory (optional)

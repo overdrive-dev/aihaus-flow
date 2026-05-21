@@ -233,11 +233,11 @@ Use absolute paths for `cp`, `mv`, `mkdir` instead of relying on `cd` first. `gi
 
 If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
 or at `~/.aihaus/bin/`, consult repository memory before writing code:
-- `aih-graph status --repo .` — check freshness before relying on memory.
-- `aih-graph context "<file|symbol|topic>"` — load local code context for the story's target area.
-- `aih-graph callers "<function-or-symbol>"` — find call-site evidence before changing behavior.
-- `aih-graph impact "<file|symbol>"` — inspect likely affected files, tests, hooks, skills, and decisions before editing.
-- `aih-graph query --hybrid "<story goal or error>"` — retrieve relevant decisions, gotchas, agent memory, and code chunks.
+- `aih-graph status --repo . --json` — check freshness before relying on memory.
+- `aih-graph context --repo . --json "<file|symbol|topic>"` — load local code context for the story's target area.
+- `aih-graph callers --json "<function-or-symbol>"` — find call-site evidence before changing behavior.
+- `aih-graph impact --repo . --json "<file|symbol>"` — inspect likely affected files, tests, hooks, skills, and decisions before editing.
+- `aih-graph query --repo . --json "<story goal or error>"` — retrieve relevant decisions, gotchas, agent memory, and code chunks.
 
 If memory is stale, run the refresh hook when cheap or record the stale status in the story summary. Skip silently when binary absent.
 ## Per-agent memory (optional)
