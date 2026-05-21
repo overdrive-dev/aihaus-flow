@@ -181,6 +181,8 @@ Every agent reads the same small set of files before it touches anything else. N
 | `RUN-MANIFEST.md` | Per-milestone execution state. Lets `/aih-resume` pick up exactly where a crashed run stopped |
 | `CONVERSATION.md` | Append-only turn log for multi-round agent workflows (see ADR-001 — single-writer discipline) |
 
+M048 adds a derived local repository memory layer on top of these files. `aih-graph` indexes real code files, chunks, Go/shell/PowerShell symbols, call sites, tests, markdown memory, and recent commits into a rebuildable SQLite/BM25 graph. Agents consult it through `aihaus memory ... --json` before planning, editing, reviewing, and verifying; lifecycle hooks refresh the index or mark it stale after relevant writes and commits.
+
 ### Thin coordinator, specialist workforce
 
 The skill running a command is a coordinator. It spawns the specialist, reads the artifact the specialist writes, picks the next specialist. Nothing big happens in the coordinator's own context.
@@ -288,6 +290,12 @@ aihaus ships 14 intent-based skills. Every command follows the same pattern: **a
 | `/aih-update [--check] [--force]` | Pull latest aihaus from remote, re-link, re-validate |
 | `/aih-effort` | Retune agent effort tiers and model assignments (cohort-driven) |
 | `/aih-sync-notion` | Optional Notion Kanban sync for milestones |
+
+### Global CLI helpers
+
+| Command | What it does |
+|---------|--------------|
+| `aihaus memory <refresh|query|context|callers|impact|gotchas|milestone|status>` | Refresh or query the local repository memory engine (`aih-graph`); query commands support `--json` for agent-readable output |
 
 ---
 

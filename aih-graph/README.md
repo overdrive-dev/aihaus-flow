@@ -2,7 +2,7 @@
 
 Standalone Go binary memory engine for [aihaus](https://github.com/overdrive-dev/aihaus-flow).
 
-**Status:** v0.1.4 shipped baseline plus M048 in-progress native repository memory (files, chunks, symbols, calls, tests, markdown memory, commits, local Ollama embeddings, context/callers/impact/gotchas/milestone commands).
+**Status:** v0.1.4 baseline plus M048 native repository memory: files, chunks, symbols, calls, tests, markdown memory, commits, local Ollama embeddings, JSON agent output, lifecycle refresh hooks, and context/callers/impact/gotchas/milestone commands.
 
 ## What this is
 
@@ -44,7 +44,7 @@ This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
 - **Three query modes:** structural BFS, vector similarity (`--semantic`), hybrid
 - **Pure-Go single binary** — zero CGO requirement, works on any platform Go supports
 
-Out of scope for v0.1 baseline (M048 is now adding a first native slice):
+Out of scope for the current native memory slice:
 - Broad AST extraction for every language (Python/JS/TS/etc.) remains deferred; current M048 extraction is intentionally focused on aihaus-flow's Go, shell, PowerShell, and markdown needs
 - Semantic LLM extraction (paid LLM-driven node/edge extraction — distinct from embeddings)
 - Clustering (Leiden community detection)
@@ -69,6 +69,7 @@ Shipped milestone chain:
 - M041 dogfood: query --db default + hybrid BM25 routing + var-version ldflag fix; tag v0.1.2
 - M042: Voyage demotion from advertised surfaces; CLI/PRD/README reconciliation; tag v0.1.3
 - M046: Agent memory indexing — `.claude/agent-memory/<name>/MEMORY.md` excerpts (200 lines / 25KB cap matching native CC) injected into Agent node properties; tag v0.1.4
+- M048: Native repository memory for real code, tests, markdown memory, recent commits, local Ollama embeddings, JSON command payloads, lifecycle refresh/stale hooks, and all-agent memory consultation.
 
 ## Verifying the memory engine
 
@@ -78,7 +79,7 @@ After `/aih-init` has built the index for at least one project, you can verify t
 ```
 aih-graph version
 ```
-Should print `v0.1.3` (or higher). If the binary is absent: `bash pkg/scripts/install-aih-graph-binary.sh` re-downloads it from GitHub Releases.
+Should print `v0.1.4` (or higher). If the binary is absent: `bash pkg/scripts/install-aih-graph-binary.sh` re-downloads it from GitHub Releases.
 
 **2. DB file exists on disk** (per-repo isolated, XDG-scoped):
 

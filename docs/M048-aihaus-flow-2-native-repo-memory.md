@@ -1,6 +1,6 @@
 # M048 - aihaus-flow 2.0 Native Repository Memory
 
-**Status:** In progress
+**Status:** Ready for release validation
 **Date:** 2026-05-21
 **Milestone:** `M048-aihaus-flow-2-native-repo-memory`
 
@@ -26,11 +26,11 @@ The user wants aihaus-flow itself to be the integration point: agents plus compl
 
 When M048 ships, a human operating Codex or Claude with aihaus-flow can ask repository-aware questions and receive grounded answers from aihaus memory:
 
-- `aih memory context <file|symbol|topic>` explains the relevant code, related docs, decisions, gotchas, and current index freshness.
-- `aih memory callers <function-or-symbol>` lists where a function or symbol is called.
-- `aih memory impact <file|symbol>` reports likely affected files, tests, agents, hooks, milestones, and risk areas.
-- `aih memory milestone <file|symbol|commit>` links code to milestones, stories, commits, and decisions when evidence exists.
-- `aih memory gotchas <topic>` surfaces reusable lessons from project and agent memory.
+- `aihaus memory context <file|symbol|topic>` explains the relevant code, related docs, decisions, gotchas, and current index freshness.
+- `aihaus memory callers <function-or-symbol>` lists where a function or symbol is called.
+- `aihaus memory impact <file|symbol>` reports likely affected files, tests, agents, hooks, milestones, and risk areas.
+- `aihaus memory milestone <file|symbol|commit>` links code to milestones, stories, commits, and decisions when evidence exists.
+- `aihaus memory gotchas <topic>` surfaces reusable lessons from project and agent memory.
 - aihaus agents automatically consult this memory before doing high-impact work.
 - memory refresh happens after relevant events such as commits, task completion, milestone completion, gotcha append, and agent memory updates.
 
