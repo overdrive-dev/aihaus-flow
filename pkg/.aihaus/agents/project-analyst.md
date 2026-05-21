@@ -160,16 +160,17 @@ unusual directory names, mixed languages, etc. Cite file paths.
 - Keep discovery under five minutes of wall time on a medium repo — bail out
   of any step that exceeds it and emit `unknown`.
 
-## Memory Lookup (M039+, optional)
+## Native Repository Memory (M048)
 
 If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, surface relevant aihaus memory before analyzing the project:
-- `aih-graph query --semantic "<your question>"` — top-K Decisions/Milestones/Skills/Hooks/Agents by cosine similarity
-- `aih-graph query --hybrid "<your question>"` — same + 1-hop edge expansion (parent ADRs, related Stories)
-- `aih-graph query --bfs ADR-XXX` — structural traversal from a known node
+or at `~/.aihaus/bin/`, consult repository memory before acting:
+- `aih-graph status --repo . --json` - record freshness before using memory as evidence.
+- `aih-graph query --repo . --json "<task, question, or risk>"` - retrieve related decisions, gotchas, commits, code, and markdown memory.
+- `aih-graph context --repo . --json "<file-or-symbol>"` - inspect exact repository context when the task names code.
+- `aih-graph impact --repo . --json "<file-or-symbol>"` - inspect likely affected files, tests, hooks, agents, and decisions.
 
-Skip silently when binary absent — aih-graph is supplemental, never blocking.
-## Per-agent memory (optional)
+If memory is stale, say so in your output rather than treating memory output as
+current. Skip silently when binary absent.## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work
 produced a finding, decision, or gotcha the next invocation of your role

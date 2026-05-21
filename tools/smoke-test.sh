@@ -4944,7 +4944,7 @@ check_aih_graph_integration_round_trip() {
 
 # ---- Check 87: M048 repository memory integration contract ----------------
 # The installed settings template and the package-local template must keep the
-# same memory lifecycle hooks, and core/curation agents must consume
+# same memory lifecycle hooks, and all packaged agents must consume
 # machine-readable memory output.
 check_m048_memory_integration_contract() {
   _start_check
@@ -4971,21 +4971,24 @@ check_m048_memory_integration_contract() {
   done
 
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
-  local agent file
-  for agent in planner implementer code-reviewer verifier reviewer knowledge-curator; do
-    file="${agents_root}/${agent}.md"
-    if [[ ! -f "${file}" ]]; then
-      issues+=("agent missing: ${agent}.md")
-      continue
-    fi
+  local file agent
+  shopt -s nullglob
+  local agent_files=("${agents_root}"/*.md)
+  shopt -u nullglob
+  if [[ ${#agent_files[@]} -eq 0 ]]; then
+    issues+=("no packaged agents found under ${agents_root}")
+  fi
+
+  for file in "${agent_files[@]}"; do
+    agent="$(basename "${file}")"
     if ! grep -Fq 'aih-graph status --repo . --json' "${file}"; then
-      issues+=("${agent}.md: missing JSON status memory command")
+      issues+=("${agent}: missing JSON status memory command")
     fi
     if ! grep -Eq 'aih-graph (query|context|impact|callers)( --repo \.)? --json' "${file}"; then
-      issues+=("${agent}.md: missing role-specific JSON memory command")
+      issues+=("${agent}: missing role-specific JSON memory command")
     fi
     if grep -Eq 'aih-graph query --(semantic|hybrid|bfs)' "${file}"; then
-      issues+=("${agent}.md: uses legacy non-JSON query memory command")
+      issues+=("${agent}: uses legacy non-JSON query memory command")
     fi
   done
 
