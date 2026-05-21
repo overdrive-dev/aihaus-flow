@@ -60,6 +60,8 @@ Commands:
   context <node-or-topic> Show exact-node neighborhood or hybrid retrieval
   callers <symbol>        List call sites that target a symbol/name
   impact <node>           Show graph neighborhood for impact analysis
+  gotchas [topic]         Search markdown memory for gotchas/learnings
+  milestone <target>      Search milestone, decision, commit, and memory links
   status [--repo PATH]    Show memory index freshness and counts
   mark-stale [--reason R] Mark derived memory stale after repo changes
   uninstall [--purge]     Remove aih-graph state (single .db file delete)
@@ -248,6 +250,18 @@ func runBuild(args []string) int {
 	}
 	fmt.Printf("  Symbols:    %d\n", len(repoSymbols))
 	fmt.Printf("  Calls:      %d\n", len(repoCalls))
+	memories, err := extract.ParseMarkdownMemory(repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: parse markdown memory: %v\n", err)
+		return 1
+	}
+	commits, err := extract.ParseGitCommits(repoPath, 200)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: parse git commits: %v\n", err)
+		return 1
+	}
+	fmt.Printf("  Memories:   %d\n", len(memories))
+	fmt.Printf("  Commits:    %d\n", len(commits))
 
 	// Status breakdown for Decisions (most informative type-level summary).
 	fmt.Println()
@@ -387,6 +401,20 @@ func runBuild(args []string) int {
 		}
 		persisted++
 	}
+	for _, m := range memories {
+		if _, err := db.UpsertNode("Memory", m.Identifier, memoryProps(m)); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert memory %s: %v\n", m.Identifier, err)
+			return 1
+		}
+		persisted++
+	}
+	for _, c := range commits {
+		if _, err := db.UpsertNode("Commit", c.Hash, commitProps(c)); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert commit %s: %v\n", c.Hash, err)
+			return 1
+		}
+		persisted++
+	}
 
 	// Edge derivation: Decision.Amends → Decision-[amends]→Decision;
 	// Story.MilestoneID → Story-[in_milestone]→Milestone. More edge types
@@ -475,6 +503,34 @@ func runBuild(args []string) int {
 			}
 		}
 	}
+	for _, m := range memories {
+		fromID, err := db.LookupNodeID("File", m.FilePath)
+		if err != nil {
+			continue
+		}
+		toID, err := db.LookupNodeID("Memory", m.Identifier)
+		if err != nil {
+			continue
+		}
+		if err := db.UpsertEdge(fromID, toID, "contains", nil); err == nil {
+			edgesAdded++
+		}
+	}
+	for _, c := range commits {
+		fromID, err := db.LookupNodeID("Commit", c.Hash)
+		if err != nil {
+			continue
+		}
+		for _, path := range c.Files {
+			toID, err := db.LookupNodeID("File", path)
+			if err != nil {
+				continue
+			}
+			if err := db.UpsertEdge(fromID, toID, "touches", nil); err == nil {
+				edgesAdded++
+			}
+		}
+	}
 
 	// Persistence summary.
 	counts, err := db.CountByType()
@@ -499,7 +555,7 @@ func runBuild(args []string) int {
 	case "", "none":
 		// Skip — structural BFS still works without any search index.
 	case "bm25":
-		if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls); err != nil {
+		if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, memories, commits); err != nil {
 			fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
 			return 1
 		}
@@ -509,7 +565,7 @@ func runBuild(args []string) int {
 			fmt.Fprintf(os.Stderr, "build: embed provider: %v\n", err)
 			return 1
 		}
-		if err := runEmbedPipeline(db, provider, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls); err != nil {
+		if err := runEmbedPipeline(db, provider, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, memories, commits); err != nil {
 			fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
 			return 1
 		}
@@ -537,6 +593,8 @@ func runBM25Pipeline(
 	repoChunks []types.RepoChunk,
 	repoSymbols []types.RepoSymbol,
 	repoCalls []types.RepoCall,
+	memories []types.MarkdownMemory,
+	commits []types.RepoCommit,
 ) error {
 	type unit struct{ typ, identifier, text string }
 	var units []unit
@@ -573,6 +631,12 @@ func runBM25Pipeline(
 	}
 	for _, c := range repoCalls {
 		units = append(units, unit{"Call", c.Identifier, embedTextForRepoCall(c)})
+	}
+	for _, m := range memories {
+		units = append(units, unit{"Memory", m.Identifier, embedTextForMemory(m)})
+	}
+	for _, c := range commits {
+		units = append(units, unit{"Commit", c.Hash, embedTextForCommit(c)})
 	}
 
 	indexed, errs := 0, 0
@@ -650,6 +714,14 @@ func embedTextForRepoCall(c types.RepoCall) string {
 	return c.Identifier + "\n" + c.CallerIdentifier + "\n" + c.CalleeName + "\n" + c.CalleeQualifier + "\n" + c.FilePath
 }
 
+func embedTextForMemory(m types.MarkdownMemory) string {
+	return m.Identifier + "\n" + m.Category + "\n" + m.FilePath + "\n" + m.Heading + "\n" + m.Body
+}
+
+func embedTextForCommit(c types.RepoCommit) string {
+	return c.ShortHash + "\n" + c.AuthorDate + "\n" + c.Subject + "\n" + strings.Join(c.Files, "\n")
+}
+
 // runEmbedPipeline iterates extracted nodes and writes embeddings + content
 // SHAs onto the persisted rows. SHA-based change detection skips nodes whose
 // stored content_sha already matches the current text.
@@ -666,6 +738,8 @@ func runEmbedPipeline(
 	repoChunks []types.RepoChunk,
 	repoSymbols []types.RepoSymbol,
 	repoCalls []types.RepoCall,
+	memories []types.MarkdownMemory,
+	commits []types.RepoCommit,
 ) error {
 	type unit struct {
 		typ        string
@@ -706,6 +780,12 @@ func runEmbedPipeline(
 	}
 	for _, c := range repoCalls {
 		units = append(units, unit{"Call", c.Identifier, embedTextForRepoCall(c)})
+	}
+	for _, m := range memories {
+		units = append(units, unit{"Memory", m.Identifier, embedTextForMemory(m)})
+	}
+	for _, c := range commits {
+		units = append(units, unit{"Commit", c.Hash, embedTextForCommit(c)})
 	}
 
 	embedded, skipped, errs := 0, 0, 0
@@ -748,7 +828,7 @@ func runQuery(args []string) int {
 	semantic := fs.Bool("semantic", false, "vector similarity (cosine) ranking — pure KNN")
 	hybrid := fs.Bool("hybrid", false, "hybrid mode: KNN top-K + 1-hop edge expansion per match")
 	depth := fs.Int("depth", 1, "BFS depth (hops outward from root)")
-	typ := fs.String("type", "", "restrict root match (BFS) or candidate type (semantic/hybrid) to one of: Decision|Milestone|Story|Agent|Hook|Skill")
+	typ := fs.String("type", "", "restrict root match (BFS) or candidate type (semantic/hybrid) to a node type")
 	topK := fs.Int("top", 10, "semantic/hybrid: number of top matches to return")
 	provider := fs.String("embed-provider", "", "semantic/hybrid: embedding provider (voyage|ollama|fake; default: derive from stored embedding_model)")
 	if err := fs.Parse(args); err != nil {
@@ -1041,6 +1121,46 @@ func runImpact(args []string) int {
 		printNodeSummary(r.Node)
 	}
 	return 0
+}
+
+func runGotchas(args []string) int {
+	fs := flag.NewFlagSet("gotchas", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database")
+	topK := fs.Int("top", 8, "result count")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	queryText := "gotcha OR gotchas OR trap OR pitfall"
+	if fs.NArg() > 0 {
+		queryText = strings.Join(fs.Args(), " ")
+	}
+	db, err := openQueryDB(*dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gotchas: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+	return runHybrid(db, queryText, "Memory", *topK, "bm25")
+}
+
+func runMilestone(args []string) int {
+	fs := flag.NewFlagSet("milestone", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database")
+	topK := fs.Int("top", 10, "result count")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "usage: aih-graph milestone [--db PATH] <file|symbol|commit|milestone-topic>")
+		return 2
+	}
+	db, err := openQueryDB(*dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "milestone: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+	return runHybrid(db, strings.Join(fs.Args(), " "), "", *topK, "bm25")
 }
 
 func runStatus(args []string) int {
@@ -1443,6 +1563,12 @@ func titleFromProperties(p map[string]any) string {
 		}
 		return callee
 	}
+	if heading, ok := p["heading"].(string); ok && heading != "" {
+		return heading
+	}
+	if subject, ok := p["subject"].(string); ok && subject != "" {
+		return subject
+	}
 	if path, ok := p["path"].(string); ok && path != "" {
 		return path
 	}
@@ -1579,6 +1705,26 @@ func repoCallProps(c types.RepoCall) map[string]any {
 	}
 }
 
+func memoryProps(m types.MarkdownMemory) map[string]any {
+	return map[string]any{
+		"category":   m.Category,
+		"file_path":  m.FilePath,
+		"heading":    m.Heading,
+		"body":       m.Body,
+		"start_line": m.StartLine,
+		"end_line":   m.EndLine,
+	}
+}
+
+func commitProps(c types.RepoCommit) map[string]any {
+	return map[string]any{
+		"short_hash":  c.ShortHash,
+		"author_date": c.AuthorDate,
+		"subject":     c.Subject,
+		"files":       c.Files,
+	}
+}
+
 func keysSorted(m map[string]int) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -1614,6 +1760,10 @@ func main() {
 		os.Exit(runCallers(args))
 	case "impact":
 		os.Exit(runImpact(args))
+	case "gotchas":
+		os.Exit(runGotchas(args))
+	case "milestone":
+		os.Exit(runMilestone(args))
 	case "status":
 		os.Exit(runStatus(args))
 	case "mark-stale":

@@ -14,7 +14,7 @@ import "time"
 // JSON-serializable map.
 type Node struct {
 	ID             int64
-	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill" | "File" | "Chunk" | "Symbol" | "Call"
+	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill" | "File" | "Chunk" | "Symbol" | "Call" | "Memory" | "Commit"
 	Identifier     string // e.g. "ADR-260514-B", "M030", "aih-milestone"
 	Properties     map[string]any
 	Embedding      []float32 // optional; nil if not yet embedded
@@ -117,6 +117,28 @@ type RepoCall struct {
 	FilePath         string
 	Line             int
 	Column           int
+}
+
+// MarkdownMemory is a human-curated memory section extracted from aihaus
+// markdown memory files. The database stores it as a derived Memory node; the
+// source-of-truth stays in markdown.
+type MarkdownMemory struct {
+	Identifier string
+	Category   string
+	FilePath   string
+	Heading    string
+	Body       string
+	StartLine  int
+	EndLine    int
+}
+
+// RepoCommit is recent git history captured as temporal repository memory.
+type RepoCommit struct {
+	Hash       string
+	ShortHash  string
+	AuthorDate string
+	Subject    string
+	Files      []string
 }
 
 // Agent represents an aihaus agent definition.

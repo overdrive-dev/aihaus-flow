@@ -413,14 +413,17 @@ Implemented in this branch:
 - S03: repository walker and chunk indexing now persist `File` and `Chunk` nodes, with skip rules for generated/vendor/runtime directories and binary/oversized files.
 - S04: code symbol extraction now persists `Symbol` and `Call` nodes for Go functions/methods plus shell and PowerShell functions; Go call sites include file/line evidence and resolved symbol edges where static resolution is unique.
 - S05: `--embed-provider ollama` is wired as a local semantic provider through Ollama's `/api/embed` endpoint; model defaults to `embeddinggemma`, with `AIH_GRAPH_OLLAMA_MODEL`, `AIH_GRAPH_OLLAMA_URL`, and `OLLAMA_HOST` overrides.
-- S06: `context`, `callers`, and `impact` commands expose repository-brain queries over exact graph nodes and BM25 fallback.
+- S06: `context`, `callers`, `impact`, `gotchas`, and `milestone` commands expose repository-brain queries over exact graph nodes and BM25 fallback.
+- S07: markdown memory sections now persist as `Memory` nodes and the latest 200 git commits persist as `Commit` nodes with `touches` edges to indexed files.
 - S08/S09 first slice: `status` and `mark-stale` commands plus hooks mark memory stale after writes/git history changes and refresh after task completion/session end; planner, implementer, code-reviewer, and verifier prompts now require memory consultation when available.
 
 Dogfood evidence from aihaus-flow:
 
-- `aih-graph build --db C:\tmp\aih-graph-m048-memory-final-rebuild.db --accept-all-repos ..` indexed 322 files, 487 chunks, 367 symbols, and 1168 calls.
+- `aih-graph build --db C:\tmp\aih-graph-m048-memory-complete.db --accept-all-repos ..` indexed 326 files, 492 chunks, 382 symbols, 1302 calls, 41 memory sections, and 200 commits.
 - `aih-graph callers ParseRepositoryText` returned call-site evidence from `aih-graph/cmd/aih-graph/main.go` and `aih-graph/internal/extract/repository_test.go`.
 - `aih-graph context aih-graph/internal/extract/repository.go:ParseRepositoryText --depth 1` returned exact symbol context plus called helper symbols and call sites.
+- `aih-graph gotchas git checkout` returned gotcha memory from `pkg/.aihaus/memory/global/gotchas.md`.
+- `aih-graph milestone Ollama` returned M048 docs, Ollama code chunks, the M048 commit, and ADR-260521-A.
 - `go test ./...` passes inside `aih-graph`.
 
 ## Open Questions
