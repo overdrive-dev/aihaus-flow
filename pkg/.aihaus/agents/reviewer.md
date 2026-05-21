@@ -204,15 +204,18 @@ Parent skill parses via invoke-guard.sh → dispatches aih-quick draft-adr (arch
 - The integration report is your most important deliverable
 - Update agent memory with recurring findings after each milestone
 
-## Memory Lookup (M039+, optional)
+## Native Repository Memory (M048)
 
 If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, surface relevant aihaus memory before reviewing changes:
-- `aih-graph query --semantic "<your question>"` — top-K Decisions/Milestones/Skills/Hooks/Agents by cosine similarity
-- `aih-graph query --hybrid "<your question>"` — same + 1-hop edge expansion (parent ADRs, related Stories)
-- `aih-graph query --bfs ADR-XXX` — structural traversal from a known node
+or at `~/.aihaus/bin/`, consult repository memory before reviewing changes:
+- `aih-graph status --repo . --json` - record freshness before using memory as evidence.
+- `aih-graph impact --repo . --json "<changed-file-or-symbol>"` - inspect likely affected files, tests, hooks, agents, decisions, and gotchas.
+- `aih-graph query --repo . --json "<review focus or risk>"` - surface related decisions, prior findings, gotchas, commits, and memory.
+- `aih-graph callers --repo . --json "<function-or-symbol>"` - verify call-site impact when reviewing function behavior changes.
+- `aih-graph gotchas --repo . --json "<risk or repeated finding>"` - check known reviewer lessons before flagging a recurring issue.
 
-Skip silently when binary absent — aih-graph is supplemental, never blocking.
+If memory is stale, say so in the integration report rather than treating memory
+output as current. Skip silently when binary absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work

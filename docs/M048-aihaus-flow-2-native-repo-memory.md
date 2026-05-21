@@ -415,7 +415,7 @@ Implemented in this branch:
 - S05: `--embed-provider ollama` is wired as a local semantic provider through Ollama's `/api/embed` endpoint; model defaults to `nomic-embed-text`, with `AIH_GRAPH_OLLAMA_MODEL`, `AIH_GRAPH_OLLAMA_URL`, and `OLLAMA_HOST` overrides.
 - S06: `query`, `context`, `callers`, `impact`, `gotchas`, and `milestone` commands expose repository-brain queries over exact graph nodes and BM25 fallback; `query`, `context`, `callers`, `impact`, `gotchas`, `milestone`, `status`, and `refresh` also expose stable `--json` payloads for agent consumption.
 - S07: markdown memory sections now persist as `Memory` nodes, tests persist as `Test` nodes, and the latest 200 git commits persist as `Commit` nodes with `touches` edges to indexed files.
-- S08/S09 first slice: `status` and `mark-stale` commands plus hooks mark memory stale after writes/git history changes and refresh after task completion/session end; both settings templates carry the memory lifecycle hooks, and planner, implementer, code-reviewer, and verifier prompts now require JSON-backed memory consultation when available.
+- S08/S09 first slice: `status` and `mark-stale` commands plus hooks mark memory stale after writes/git history changes and refresh after task completion/session end; both settings templates carry the memory lifecycle hooks, and planner, implementer, code-reviewer, verifier, reviewer, and knowledge-curator prompts now require JSON-backed memory consultation when available.
 - CLI ergonomics: `aihaus memory <subcommand>` delegates to the current source `aih-graph` engine, including `refresh`, with Windows `.cmd` preferring Git Bash over the WSL stub.
 
 Dogfood evidence from aihaus-flow:
@@ -440,7 +440,7 @@ Dogfood evidence from aihaus-flow:
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-wrapper-refresh-json.db --accept-all-repos --json` works through the PowerShell wrapper and returns the same structured refresh payload.
 - `aih-graph-refresh.sh` now delegates to `aih-graph refresh --repo ...`, preserves the default BM25 provider when `AIH_GRAPH_PROVIDER` is unset, honors explicit `AIH_GRAPH_PROVIDER=none`, and reports the real non-zero refresh exit code on failure; hook validation with `AIH_GRAPH_PROVIDER=none` produced a fresh index with `bm25_rows: 0`.
 - `aih-graph-stale.sh --from-hook bash` ignores `aihaus memory refresh ... --json` and does not recreate `.claude/audit/aih-graph.stale` after a refresh command.
-- `tools/smoke-test.sh` now includes an M048 contract check for memory lifecycle hooks in both settings templates and JSON memory commands in the four core agents; targeted `rg`, JSON parsing, and `bash -n` validations passed under Git Bash.
+- `tools/smoke-test.sh` now includes an M048 contract check for memory lifecycle hooks in both settings templates and JSON memory commands in the core review/curation agents; targeted `rg`, JSON parsing, and `bash -n` validations passed under Git Bash.
 - `go test ./...` passes inside `aih-graph`.
 - Full `tools/smoke-test.sh` under Windows Git Bash reached Check 65 before timeout; failures before that point were existing fixture portability issues around `mktemp -t` paths resolving to `/repo`, not M048 memory contract failures.
 

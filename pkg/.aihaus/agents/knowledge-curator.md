@@ -182,15 +182,18 @@ warning-dismissed: <uuid-3> reason: <1-sentence rationale>
 - Emit all 5 blocks even if some are empty (use `<!-- no-signal-this-milestone -->` per Curation Rules above — NOT `<!-- nothing to promote -->`).
 - Cost budget: one opus run per milestone. Be thorough but focused.
 
-## Memory Lookup (M039+, optional)
+## Native Repository Memory (M048)
 
 If `aih-graph` is on `$PATH`, available at `$CLAUDE_PROJECT_DIR/aih-graph/bin/`,
-or at `~/.aihaus/bin/`, surface relevant aihaus memory before curating knowledge:
-- `aih-graph query --semantic "<your question>"` — top-K Decisions/Milestones/Skills/Hooks/Agents by cosine similarity
-- `aih-graph query --hybrid "<your question>"` — same + 1-hop edge expansion (parent ADRs, related Stories)
-- `aih-graph query --bfs ADR-XXX` — structural traversal from a known node
+or at `~/.aihaus/bin/`, consult repository memory before curating knowledge:
+- `aih-graph status --repo . --json` - record freshness before using memory as evidence.
+- `aih-graph query --repo . --json "<milestone id or theme>"` - retrieve related decisions, knowledge, gotchas, commits, and existing memory.
+- `aih-graph gotchas --repo . --json "<candidate gotcha>"` - avoid duplicate gotcha entries.
+- `aih-graph milestone --repo . --json "<milestone id or changed area>"` - connect candidate learnings to milestone, decision, commit, and memory evidence.
+- `aih-graph impact --repo . --json "<file-or-symbol>"` - verify code, test, and hook impact before promoting reusable learnings tied to code.
 
-Skip silently when binary absent — aih-graph is supplemental, never blocking.
+If memory is stale, include that limitation in curator output and prefer source
+markdown artifacts over derived index claims. Skip silently when binary absent.
 ## Per-agent memory (optional)
 
 At return, you MAY emit an aihaus:agent-memory fenced block when your work
