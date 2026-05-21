@@ -5217,3 +5217,75 @@ When any trigger fires, M046+ can re-plan `--team` flag wiring using the existin
 - ADR-260511-A (M029) — retirement of `manifest-append.sh --audit` mode (driving F-01)
 - BRIEF Turn 3 (`.aihaus/brainstorm/260515-leverage-cc-agent-teams/`) — original B3 ratification
 - User exchange 2026-05-16 ("quem decide sou eu, execute TUDO o que falta" — triggered M045 attempt)
+
+---
+
+## ADR-260521-A - aihaus-flow 2.0 native repository memory is an integrated agent substrate
+
+**Status:** Accepted
+**Date:** 2026-05-21
+**Milestone:** M048
+
+### Context
+
+The user wants aihaus-flow 2.0 to be more than an agent workflow package with a separate retrieval helper. The target is one integrated system: aihaus agents plus complete repository memory. The memory must answer codebase questions such as what a function does, where it is called, what it impacts, which tests and runtime hooks relate to it, and which milestones, commits, decisions, gotchas, or agent memories carry relevant history.
+
+The existing aihaus substrate already has strong operational pieces: specialist agents, skills, hooks, run manifests, decisions, knowledge files, and completion protocols. It also has `aih-graph`, which stores typed aihaus concepts in SQLite and supports BM25/FTS5 plus optional vector embeddings. However, the current `aih-graph` scope is mostly aihaus artifact memory. It does not yet index real repository code as first-class memory, and it does not make memory consultation a native obligation of the agent workflow.
+
+The user explicitly prefers a single large milestone for this transformation, not a multi-milestone release train. The execution model must therefore be one milestone with internal stories and gates.
+
+### Decision
+
+M048 establishes aihaus-flow 2.0 as an integrated agent-memory system.
+
+1. **Native memory is part of aihaus-flow, not a sidecar.** Agents and skills must treat repository memory as a normal substrate for planning, implementation, review, verification, and learning.
+2. **Markdown memory remains source of truth.** Decisions, knowledge, gotchas, reviews, milestone summaries, and agent memories stay in human-readable markdown. SQLite, lexical indexes, graph edges, and vector embeddings are derived caches that can be rebuilt.
+3. **Repository code becomes first-class memory.** The memory engine must add generic repository entities such as File, Chunk, Symbol, Function, Class, Import, CallSite, Test, Commit, AgentMemory, Gotcha, and ReviewFinding where extraction supports them.
+4. **Deterministic graph comes before semantic recall.** Embeddings are necessary for topic recall, but impact and caller questions must lean on graph edges whenever evidence exists.
+5. **Ollama is the local semantic provider.** M048 adds Ollama embeddings for local semantic search, with deterministic lexical/structural fallback when Ollama is unavailable.
+6. **CLI is the first stable integration surface.** MCP can follow once commands and data contracts stabilize, unless agent ergonomics prove MCP is needed earlier.
+7. **Agent protocols must be memory-aware.** At minimum, planner, implementer, code-reviewer, and verifier must consult memory at their role-appropriate points. Memory-writing roles must keep reusable learning in markdown and trigger re-indexing or stale marking.
+8. **Refresh and staleness are explicit.** Hooks should refresh derived memory or mark it stale after relevant events such as commits, task completion, milestone completion, gotcha append, and agent-memory updates.
+9. **M048 ships as one milestone.** Internal stories and gates are mandatory, but the user-facing release unit is a single aihaus-flow 2.0 milestone.
+
+### Consequences
+
+**Positive:**
+- aihaus agents can operate with codebase context instead of recreating architecture from flat file reads each session.
+- The repository accumulates durable operational understanding across code, history, decisions, gotchas, and agent memory.
+- Markdown remains auditable and recoverable while the derived index enables fast search, context, and impact queries.
+- Local Ollama embeddings support semantic recall without requiring external embedding APIs.
+
+**Negative:**
+- M048 is broad and needs strict internal gates to avoid becoming an unreviewable rewrite.
+- Static call and impact extraction will be imperfect, especially for dynamic language patterns.
+- Agent protocol updates can become noisy if memory payloads are not bounded by role and task.
+- The active/inactive status of `pkg`, plugin packaging, and `aih-graph` naming must be clarified as part of the work.
+
+**Neutral:**
+- Existing aihaus agents, skills, and hooks are preserved as the operating layer.
+- `aih-graph` is the likely implementation base, but M048 may introduce `aih-memory` naming or compatibility aliases if that better reflects the expanded scope.
+- MCP remains deferred by default, not rejected permanently.
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| Keep `aih-graph` as optional markdown/ADR retrieval only | Rejected | Does not satisfy codebase brain requirements such as callers, impact, tests, and milestone linkage |
+| Build vector-only RAG over chunks | Rejected | Semantic similarity cannot reliably answer structural questions like "where is this called" or "what breaks if this changes" |
+| Split aihaus-flow 2.0 across multiple milestones | Rejected by user preference | User requested one milestone for the whole integrated transformation |
+| Start with MCP server first | Deferred | CLI commands are easier to test and consume from Codex/Claude; MCP can wrap proven commands later |
+| Move agent memory into SQLite only | Rejected | Violates aihaus files-as-state discipline and weakens auditability/recoverability |
+
+### Rollback
+
+Reverting this ADR returns aihaus-flow to the previous model: agents and hooks remain primary, while repository memory remains a supplemental `aih-graph` capability. Any M048 implementation commits would need to be reverted separately by story.
+
+### References
+
+- `docs/M048-aihaus-flow-2-native-repo-memory.md` - milestone plan and gates
+- `aih-graph/README.md` - current memory engine scope
+- `aih-graph/internal/embed/embed.go` - existing embedding provider interface
+- `pkg/.aihaus/hooks/context-inject.sh` - current context injection mechanism
+- ADR-001 - files are state
+- ADR-260515-A through ADR-260516-A - current aih-graph privacy, storage, scope, and BM25 decisions
