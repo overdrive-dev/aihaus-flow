@@ -412,7 +412,7 @@ Implemented in this branch:
 
 - S03: repository walker and chunk indexing now persist `File` and `Chunk` nodes, with skip rules for generated/vendor/runtime directories and binary/oversized files.
 - S04: code symbol extraction now persists `Symbol` and `Call` nodes for Go functions/methods plus shell and PowerShell functions; Go call sites include file/line evidence and resolved symbol edges where static resolution is unique.
-- S05: `--embed-provider ollama` is wired as a local semantic provider through Ollama's `/api/embed` endpoint; model defaults to `embeddinggemma`, with `AIH_GRAPH_OLLAMA_MODEL`, `AIH_GRAPH_OLLAMA_URL`, and `OLLAMA_HOST` overrides.
+- S05: `--embed-provider ollama` is wired as a local semantic provider through Ollama's `/api/embed` endpoint; model defaults to `nomic-embed-text`, with `AIH_GRAPH_OLLAMA_MODEL`, `AIH_GRAPH_OLLAMA_URL`, and `OLLAMA_HOST` overrides.
 - S06: `query`, `context`, `callers`, `impact`, `gotchas`, and `milestone` commands expose repository-brain queries over exact graph nodes and BM25 fallback; `query`, `context`, `callers`, `impact`, `gotchas`, `milestone`, and `status` also expose stable `--json` payloads for agent consumption.
 - S07: markdown memory sections now persist as `Memory` nodes, tests persist as `Test` nodes, and the latest 200 git commits persist as `Commit` nodes with `touches` edges to indexed files.
 - S08/S09 first slice: `status` and `mark-stale` commands plus hooks mark memory stale after writes/git history changes and refresh after task completion/session end; planner, implementer, code-reviewer, and verifier prompts now require memory consultation when available.
@@ -428,6 +428,7 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph milestone Ollama` returned M048 docs, Ollama code chunks, the M048 commit, and ADR-260521-A.
 - `aih-graph status --json` returned a machine-readable fresh index state with node counts and BM25/embedding row counts.
 - `aih-graph query --json Ollama` defaults to hybrid BM25 and returned a structured query payload with match nodes and neighbor context; `--semantic --json` also returned structured BM25-backed query results.
+- Real local Ollama validation with `nomic-embed-text` embedded 3400 nodes with 0 errors after capping embedding input text, and `query --semantic --embed-provider ollama --json "Ollama embedding provider"` returned `semantic_vector` results.
 - `aih-graph context --json --type Symbol --depth 1 aih-graph/internal/extract/repository.go:ParseRepositoryText` returned exact symbol context as JSON, including related helper symbols, call nodes, and test evidence.
 - `aih-graph impact --json --type File --depth 1 --limit 80 aih-graph/cmd/aih-graph/main.go` returned bounded JSON impact context with `freshness`, `neighborhood_total`, `neighborhood_returned`, `neighborhood_truncated`, and truncated long string properties.
 - `aih-graph callers --json ParseRepositoryText` returned call-site evidence as structured JSON.
@@ -442,6 +443,5 @@ Dogfood evidence from aihaus-flow:
 - Which parser stack should be used for the first implementation: Go-native parsers, Tree-sitter, language-specific lightweight parsers, or a hybrid?
 - What is the first supported language set beyond aihaus-flow's own Go, Bash, PowerShell, and Markdown needs?
 - Should MCP be included in M048 if CLI integration proves sufficient for Codex and Claude workflows?
-- What Ollama embedding model should be recommended by default?
 - How strict should agent memory consultation be: hard gate for high-risk edits only, or required for every planned code change?
 - What evidence is required before claiming a file or symbol belongs to a milestone when commit and manifest data are incomplete?

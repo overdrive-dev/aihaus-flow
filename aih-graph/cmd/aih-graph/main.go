@@ -43,6 +43,7 @@ import (
 var version = "0.1.4-dev"
 
 const jsonPropertyStringLimit = 4000
+const embedInputStringLimit = 4000
 
 // usage prints the top-level CLI help.
 func usage() {
@@ -823,6 +824,10 @@ func embedTextForCommit(c types.RepoCommit) string {
 	return c.ShortHash + "\n" + c.AuthorDate + "\n" + c.Subject + "\n" + strings.Join(c.Files, "\n")
 }
 
+func embedInputText(text string) string {
+	return truncateJSONString(text, embedInputStringLimit)
+}
+
 // runEmbedPipeline iterates extracted nodes and writes embeddings + content
 // SHAs onto the persisted rows. SHA-based change detection skips nodes whose
 // stored content_sha already matches the current text.
@@ -906,7 +911,7 @@ func runEmbedPipeline(
 			skipped++
 			continue
 		}
-		vec, err := provider.Embed(u.text)
+		vec, err := provider.Embed(embedInputText(u.text))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  embed: skip %s %s: %v\n", u.typ, u.identifier, err)
 			errs++
@@ -1057,7 +1062,7 @@ func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, provide
 		return 1
 	}
 
-	queryVec, err := provider.Embed(queryText)
+	queryVec, err := provider.Embed(embedInputText(queryText))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: embed query: %v\n", err)
 		return 1
@@ -1157,7 +1162,7 @@ func runQueryVectorJSON(db *storage.DB, mode, queryText, typeFilter string, topK
 		fmt.Fprintf(os.Stderr, "query: %v\n", err)
 		return 1
 	}
-	queryVec, err := provider.Embed(queryText)
+	queryVec, err := provider.Embed(embedInputText(queryText))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: embed query: %v\n", err)
 		return 1
@@ -1904,7 +1909,7 @@ func runHybrid(db *storage.DB, queryText, typeFilter string, topK int, providerN
 		fmt.Fprintf(os.Stderr, "query: %v\n", err)
 		return 1
 	}
-	queryVec, err := provider.Embed(queryText)
+	queryVec, err := provider.Embed(embedInputText(queryText))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: embed: %v\n", err)
 		return 1

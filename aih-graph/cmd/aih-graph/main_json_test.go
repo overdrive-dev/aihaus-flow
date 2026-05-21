@@ -81,6 +81,13 @@ func TestPropertiesForJSONTruncatesLongStrings(t *testing.T) {
 	}
 }
 
+func TestEmbedInputTextTruncatesLongStrings(t *testing.T) {
+	got := embedInputText(strings.Repeat("x", embedInputStringLimit+1))
+	if len(got) != embedInputStringLimit {
+		t.Fatalf("expected embed input to be capped at %d bytes, got %d", embedInputStringLimit, len(got))
+	}
+}
+
 func TestTruncateJSONStringDoesNotSplitUTF8(t *testing.T) {
 	got := truncateJSONString("ab\u00e7d", 3)
 	if got != "ab" {

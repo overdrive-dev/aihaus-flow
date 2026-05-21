@@ -16,6 +16,8 @@ M048 adds a local repository-brain slice:
 - `context`, `callers`, `impact`, `gotchas`, `milestone`, `status`, and `mark-stale` commands
 - `refresh` as the agent-facing rebuild command (`build` remains the lower-level primitive)
 - `--embed-provider ollama` for local semantic embeddings through Ollama `/api/embed`
+  - default model: `nomic-embed-text`
+  - override with `AIH_GRAPH_OLLAMA_MODEL`
 
 The installed `aihaus` shim exposes these as `aihaus memory <subcommand> ...`.
 

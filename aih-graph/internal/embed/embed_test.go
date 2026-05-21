@@ -55,6 +55,18 @@ func TestOllamaProviderEmbedsWithLocalEndpoint(t *testing.T) {
 	}
 }
 
+func TestOllamaProviderDefaultModel(t *testing.T) {
+	provider, err := NewOllamaProvider(OllamaOptions{
+		Endpoint: "http://localhost:11434",
+	})
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+	if provider.Model() != "ollama:nomic-embed-text" {
+		t.Fatalf("provider model = %q", provider.Model())
+	}
+}
+
 func TestNormalizeOllamaEndpoint(t *testing.T) {
 	tests := map[string]string{
 		"":                            ollamaDefaultEndpoint,

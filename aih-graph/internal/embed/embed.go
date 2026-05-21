@@ -104,7 +104,7 @@ func (p *FakeProvider) Embed(text string) ([]float32, error) {
 
 const (
 	ollamaDefaultEndpoint = "http://localhost:11434/api/embed"
-	ollamaDefaultModel    = "embeddinggemma"
+	ollamaDefaultModel    = "nomic-embed-text"
 )
 
 // OllamaProvider calls Ollama's /api/embed endpoint. It is the preferred local
@@ -118,7 +118,7 @@ type OllamaProvider struct {
 
 // OllamaOptions configures an Ollama provider.
 type OllamaOptions struct {
-	Model    string // defaults to $AIH_GRAPH_OLLAMA_MODEL or "embeddinggemma"
+	Model    string // defaults to $AIH_GRAPH_OLLAMA_MODEL or "nomic-embed-text"
 	Endpoint string // defaults to $AIH_GRAPH_OLLAMA_URL, $OLLAMA_HOST, or localhost
 }
 
