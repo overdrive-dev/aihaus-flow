@@ -4942,9 +4942,61 @@ check_aih_graph_integration_round_trip() {
   fi
 }
 
+# ---- Check 87: M048 repository memory integration contract ----------------
+# The installed settings template and the package-local template must keep the
+# same memory lifecycle hooks, and core agents must consume machine-readable
+# memory output.
+check_m048_memory_integration_contract() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: M048 repository memory hooks and agent JSON contracts"
+  local issues=()
+  local tpl
+
+  for tpl in \
+    "${PACKAGE_ROOT}/templates/settings.local.json" \
+    "${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"; do
+    if [[ ! -f "${tpl}" ]]; then
+      issues+=("settings template missing: ${tpl}")
+      continue
+    fi
+    if ! grep -Fq 'aih-graph-stale.sh --reason write-edit' "${tpl}"; then
+      issues+=("${tpl}: missing Write/Edit stale hook")
+    fi
+    if ! grep -Fq 'aih-graph-stale.sh --from-hook bash' "${tpl}"; then
+      issues+=("${tpl}: missing Bash stale hook")
+    fi
+    if ! grep -Fq 'aih-graph-refresh.sh' "${tpl}"; then
+      issues+=("${tpl}: missing lifecycle refresh hook")
+    fi
+  done
+
+  local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
+  local agent file
+  for agent in planner implementer code-reviewer verifier; do
+    file="${agents_root}/${agent}.md"
+    if [[ ! -f "${file}" ]]; then
+      issues+=("agent missing: ${agent}.md")
+      continue
+    fi
+    if ! grep -Fq 'aih-graph status --repo . --json' "${file}"; then
+      issues+=("${agent}.md: missing JSON status memory command")
+    fi
+    if ! grep -Eq 'aih-graph (query|context|impact|callers)( --repo \.)? --json' "${file}"; then
+      issues+=("${agent}.md: missing role-specific JSON memory command")
+    fi
+  done
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "${label}"
+  else
+    _fail "${label}" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
+check_m048_memory_integration_contract
 check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
 
