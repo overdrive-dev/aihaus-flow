@@ -427,7 +427,7 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph gotchas git checkout` returned gotcha memory from `pkg/.aihaus/memory/global/gotchas.md`.
 - `aih-graph milestone Ollama` returned M048 docs, Ollama code chunks, the M048 commit, and ADR-260521-A.
 - `aih-graph status --json` returned a machine-readable fresh index state with node counts and BM25/embedding row counts.
-- `aih-graph query --semantic --json Ollama` returned a structured BM25-backed query payload with match nodes and neighbor context.
+- `aih-graph query --json Ollama` defaults to hybrid BM25 and returned a structured query payload with match nodes and neighbor context; `--semantic --json` also returned structured BM25-backed query results.
 - `aih-graph context --json --type Symbol --depth 1 aih-graph/internal/extract/repository.go:ParseRepositoryText` returned exact symbol context as JSON, including related helper symbols, call nodes, and test evidence.
 - `aih-graph impact --json --type File --depth 1 --limit 80 aih-graph/cmd/aih-graph/main.go` returned bounded JSON impact context with `freshness`, `neighborhood_total`, `neighborhood_returned`, `neighborhood_truncated`, and truncated long string properties.
 - `aih-graph callers --json ParseRepositoryText` returned call-site evidence as structured JSON.

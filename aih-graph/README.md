@@ -90,7 +90,7 @@ The 16-hex subfolder is the SHA-256 prefix of the absolute repo path — one sub
 
 **3. Query returns scored results:**
 ```
-aih-graph query --hybrid "decision"
+aih-graph query "decision"
 ```
 A healthy index returns at least one `[s=N.NN]` line, for example:
 ```
@@ -98,13 +98,13 @@ A healthy index returns at least one `[s=N.NN]` line, for example:
 [s=4.72] Hook       aih-graph-refresh.sh    aih-graph-refresh.sh — refresh...
 ```
 
-Use `--semantic` (vector-only, when an embedding provider is configured) or `--bfs <exact-identifier>` (structural lookup) instead of `--hybrid` for narrower queries.
+Use `--semantic` (vector-only, when an embedding provider is configured) or `--bfs <exact-identifier>` (structural lookup) instead of the default hybrid mode for narrower queries.
 
 ### Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `no node matches identifier "..."` | Used the default mode (identifier exact-match) on free-text input | Pass `--hybrid` or `--semantic` |
+| `no node matches identifier "..."` | Used `--bfs` with free-text input | Pass an exact identifier, or omit `--bfs` for default hybrid retrieval |
 | `consent gate: missing .aih-graph-consent` | Repo not opted-in to indexing | `aih-graph build --accept-all-repos .` or run `/aih-init` |
 | `database is locked` | Another process writing to the DB | Wait a few seconds and retry |
 | Build prints `0 nodes` | `pkg/.aihaus/decisions.md` empty or repo has no aihaus typed nodes | Verify the repo is an aihaus-managed project (has `pkg/.aihaus/` or `.aihaus/`) |

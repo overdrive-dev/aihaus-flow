@@ -930,7 +930,7 @@ func runQuery(args []string) int {
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database (default: privacy.DefaultDBPath for cwd, matching `build`)")
 	repoPath := fs.String("repo", ".", "repository path for DB default and freshness checks")
-	bfs := fs.Bool("bfs", false, "structural BFS query (default if no other mode set)")
+	bfs := fs.Bool("bfs", false, "structural BFS query over an exact node identifier")
 	semantic := fs.Bool("semantic", false, "vector similarity (cosine) ranking — pure KNN")
 	hybrid := fs.Bool("hybrid", false, "hybrid mode: KNN top-K + 1-hop edge expansion per match")
 	depth := fs.Int("depth", 1, "BFS depth (hops outward from root)")
@@ -947,9 +947,10 @@ func runQuery(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: aih-graph query [--bfs|--semantic|--hybrid] [--type T] [--depth N] [--top K] [--repo PATH] [--db PATH] [--json] <identifier-or-text>")
 		return 2
 	}
-	// Default mode: bfs unless --semantic or --hybrid explicitly set.
+	// Default mode: hybrid free-text retrieval; exact graph traversal is
+	// explicit via --bfs.
 	if !*semantic && !*bfs && !*hybrid {
-		*bfs = true
+		*hybrid = true
 	}
 
 	*repoPath = resolveRepoPath(*repoPath)

@@ -173,6 +173,29 @@ func TestRunQueryJSONSemanticBM25(t *testing.T) {
 	}
 }
 
+func TestRunQueryJSONDefaultsToHybridBM25(t *testing.T) {
+	dbPath, repoPath := seedJSONCommandDB(t)
+	code, stdout := captureStdout(t, func() int {
+		return runQuery([]string{
+			"--repo", repoPath,
+			"--db", dbPath,
+			"--json",
+			"Ollama",
+		})
+	})
+	if code != 0 {
+		t.Fatalf("runQuery returned %d", code)
+	}
+	var payload queryJSON
+	decodeJSON(t, stdout, &payload)
+	if payload.Mode != "hybrid_bm25" {
+		t.Fatalf("expected hybrid_bm25 mode, got %q", payload.Mode)
+	}
+	if payload.ResultCount != 1 || payload.Matches[0].Node.Identifier != "chunk:ollama" {
+		t.Fatalf("unexpected default query payload: %#v", payload)
+	}
+}
+
 func TestRunCallersJSON(t *testing.T) {
 	dbPath, _ := seedJSONCommandDB(t)
 	code, stdout := captureStdout(t, func() int {
