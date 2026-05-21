@@ -206,7 +206,7 @@ Parent skill parses via invoke-guard.sh → dispatches aih-quick draft-adr (arch
 
 ## Native Repository Memory (M048)
 
-If `aihaus memory` is available, consult repository memory before reviewing changes:
+Use the auto-injected Native repository memory packet first. If it is missing or insufficient and `aihaus memory` is available, consult repository memory before reviewing changes:
 - `aihaus memory status --repo . --json` - record freshness before using memory as evidence.
 - `aihaus memory impact --repo . --json "<changed-file-or-symbol>"` - inspect likely affected files, tests, hooks, agents, decisions, and gotchas.
 - `aihaus memory query --repo . --json "<review focus or risk>"` - surface related decisions, prior findings, gotchas, commits, and memory.

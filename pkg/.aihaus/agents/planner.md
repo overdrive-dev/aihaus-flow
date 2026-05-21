@@ -97,7 +97,7 @@ After completing work, if you discovered a reusable pattern:
 
 ## Native Repository Memory (M048+, required when available)
 
-If `aihaus memory` is available, consult repository memory before decomposing into tasks:
+Use the auto-injected Native repository memory packet first. If it is missing or insufficient and `aihaus memory` is available, consult repository memory before decomposing into tasks:
 - `aihaus memory status --repo . --json` — check whether memory is fresh or stale.
 - `aihaus memory query --repo . --json "<phase goal or affected area>"` — retrieve relevant code, decisions, hooks, skills, and agent memory.
 - `aihaus memory context --repo . --json "<file|symbol|topic>"` — ground tasks in concrete code context when target areas are known.

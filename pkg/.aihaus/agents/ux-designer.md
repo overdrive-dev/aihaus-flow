@@ -61,7 +61,7 @@ If the invocation prompt includes an Attachments block, Read the files (mockups,
 
 ## Native Repository Memory (M048)
 
-If `aihaus memory` is available, consult repository memory before acting:
+Use the auto-injected Native repository memory packet first. If it is missing or insufficient and `aihaus memory` is available, consult repository memory before acting:
 - `aihaus memory status --repo . --json` - record freshness before using memory as evidence.
 - `aihaus memory query --repo . --json "<task, question, or risk>"` - retrieve related decisions, gotchas, commits, code, and markdown memory.
 - `aihaus memory context --repo . --json "<file-or-symbol>"` - inspect exact repository context when the task names code.

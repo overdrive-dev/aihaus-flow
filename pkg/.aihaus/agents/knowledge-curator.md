@@ -184,7 +184,7 @@ warning-dismissed: <uuid-3> reason: <1-sentence rationale>
 
 ## Native Repository Memory (M048)
 
-If `aihaus memory` is available, consult repository memory before curating knowledge:
+Use the auto-injected Native repository memory packet first. If it is missing or insufficient and `aihaus memory` is available, consult repository memory before curating knowledge:
 - `aihaus memory status --repo . --json` - record freshness before using memory as evidence.
 - `aihaus memory query --repo . --json "<milestone id or theme>"` - retrieve related decisions, knowledge, gotchas, commits, and existing memory.
 - `aihaus memory gotchas --repo . --json "<candidate gotcha>"` - avoid duplicate gotcha entries.

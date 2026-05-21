@@ -74,6 +74,12 @@
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh",
             "statusMessage": "Loading project context..."
+          },
+          {
+            "type": "command",
+            "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-refresh.sh",
+            "timeout": 300,
+            "async": true
           }
         ]
       }
@@ -161,7 +167,7 @@
           {
             "type": "command",
             "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-refresh.sh",
-            "timeout": 60,
+            "timeout": 300,
             "async": true
           }
         ]
@@ -180,6 +186,17 @@
       }
     ],
     "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/context-inject.sh",
+            "timeout": 10,
+            "statusMessage": "Injecting context..."
+          }
+        ]
+      },
       {
         "matcher": "",
         "hooks": [
@@ -208,7 +225,7 @@
           {
             "type": "command",
             "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-refresh.sh",
-            "timeout": 60,
+            "timeout": 300,
             "async": true
           }
         ]

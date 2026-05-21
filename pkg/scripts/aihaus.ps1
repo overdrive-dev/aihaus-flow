@@ -56,7 +56,12 @@ function Invoke-Memory([string]$HomePath,[string[]]$GraphArgs) {
     }
     $sourceDir=Join-Path $HomePath "aih-graph"
     if ((Test-Path (Join-Path $sourceDir "go.mod")) -and (Get-Command go -ErrorAction SilentlyContinue)) {
+        $goTmpRoot = if ($env:AIH_GRAPH_GO_TMP) { $env:AIH_GRAPH_GO_TMP } else { Join-Path $HomePath "tmp\aih-graph-go" }
+        New-Item -ItemType Directory -Force -Path (Join-Path $goTmpRoot "tmp") | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $goTmpRoot "cache") | Out-Null
         $env:AIH_GRAPH_CALLER_CWD=(Get-Location).Path
+        $env:GOTMPDIR=(Join-Path $goTmpRoot "tmp")
+        $env:GOCACHE=(Join-Path $goTmpRoot "cache")
         & go -C $sourceDir run ./cmd/aih-graph @GraphArgs
         exit $LASTEXITCODE
     }

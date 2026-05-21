@@ -125,7 +125,7 @@ After verification, if you discovered a verification pattern worth reusing:
 
 ## Native Repository Memory (M048+, required when available)
 
-If `aihaus memory` is available, consult repository memory before verifying the goal:
+Use the auto-injected Native repository memory packet first. If it is missing or insufficient and `aihaus memory` is available, consult repository memory before verifying the goal:
 - `aihaus memory status --repo . --json` — record whether memory was fresh, stale, or unavailable.
 - `aihaus memory context --repo . --json "<file|symbol|topic>"` — locate implementation evidence for each acceptance criterion.
 - `aihaus memory impact --repo . --json "<file|symbol>"` — verify that related tests, hooks, skills, and decisions were considered.

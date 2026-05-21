@@ -132,7 +132,7 @@ If the invocation prompt includes an Attachments block, Read the files (UI diffs
 
 ## Native Repository Memory (M048+, required when available)
 
-If `aihaus memory` is available, consult repository memory before reviewing code quality:
+Use the auto-injected Native repository memory packet first. If it is missing or insufficient and `aihaus memory` is available, consult repository memory before reviewing code quality:
 - `aihaus memory status --repo . --json` — check whether the index is fresh enough for review evidence.
 - `aihaus memory impact --repo . --json "<changed-file-or-symbol>"` — inspect likely affected code, tests, hooks, skills, and decisions.
 - `aihaus memory callers --repo . --json "<function-or-symbol>"` — verify behavioral changes against call-site evidence.

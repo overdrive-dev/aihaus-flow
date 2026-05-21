@@ -231,7 +231,7 @@ Use absolute paths for `cp`, `mv`, `mkdir` instead of relying on `cd` first. `gi
 
 ## Native Repository Memory (M048+, required when available)
 
-If `aihaus memory` is available, consult repository memory before writing code:
+Use the auto-injected Native repository memory packet first. If it is missing or insufficient and `aihaus memory` is available, consult repository memory before writing code:
 - `aihaus memory status --repo . --json` — check freshness before relying on memory.
 - `aihaus memory context --repo . --json "<file|symbol|topic>"` — load local code context for the story's target area.
 - `aihaus memory callers --repo . --json "<function-or-symbol>"` — find call-site evidence before changing behavior.

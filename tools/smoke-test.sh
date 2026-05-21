@@ -4973,6 +4973,8 @@ check_m048_memory_integration_contract() {
   local label="Check ${CHECK_NUMBER}: M048 repository memory hooks and agent JSON contracts"
   local issues=()
   local tpl
+  local context_hook="${PACKAGE_ROOT}/.aihaus/hooks/context-inject.sh"
+  local refresh_hook="${PACKAGE_ROOT}/.aihaus/hooks/aih-graph-refresh.sh"
 
   for tpl in \
     "${PACKAGE_ROOT}/templates/settings.local.json" \
@@ -4990,7 +4992,38 @@ check_m048_memory_integration_contract() {
     if ! grep -Fq 'aih-graph-refresh.sh' "${tpl}"; then
       issues+=("${tpl}: missing lifecycle refresh hook")
     fi
+    if ! grep -Fq 'SessionStart' "${tpl}" || ! grep -Fq 'AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-refresh.sh' "${tpl}"; then
+      issues+=("${tpl}: missing automatic SessionStart memory refresh")
+    fi
+    if ! grep -Fq 'context-inject.sh' "${tpl}"; then
+      issues+=("${tpl}: missing SubagentStart automatic context injection")
+    fi
   done
+
+  if [[ ! -f "${context_hook}" ]]; then
+    issues+=("context-inject.sh missing")
+  else
+    if ! grep -Fq 'Native repository memory (auto-injected, M048)' "${context_hook}"; then
+      issues+=("context-inject.sh: missing automatic native memory packet")
+    fi
+    if ! grep -Fq '_run_memory_with_timeout query --repo "$PROJECT_ROOT"' "${context_hook}" || ! grep -Fq -- '--json --top "$AIHAUS_MEMORY_QUERY_TOP"' "${context_hook}"; then
+      issues+=("context-inject.sh: missing automatic aihaus memory query")
+    fi
+    if ! grep -Fq 'local combined="${target_agent_name:-}|${cohort:-}|${task_description:-}"' "${context_hook}"; then
+      issues+=("context-inject.sh: cache key must include task-specific context")
+    fi
+  fi
+
+  if [[ ! -f "${refresh_hook}" ]]; then
+    issues+=("aih-graph-refresh.sh missing")
+  else
+    if ! grep -Fq 'AIHAUS_OLLAMA_AUTO' "${refresh_hook}"; then
+      issues+=("aih-graph-refresh.sh: missing Ollama auto-start control")
+    fi
+    if ! grep -Fq 'provider="ollama"' "${refresh_hook}"; then
+      issues+=("aih-graph-refresh.sh: missing automatic Ollama provider selection")
+    fi
+  fi
 
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   local file agent

@@ -17,7 +17,7 @@
 #
 # Audit: .claude/audit/context-inject.jsonl (ADR-M011-A rotation).
 # Cache: .claude/audit/context-inject.cache (M016-S07 5-min memoization).
-#   Cache key: hash(target_agent_name | cohort_name).
+#   Cache key: hash(target_agent_name | cohort_name | task_description).
 #   Cache hit skips S05 warning-recurrence read + S06 budget parse.
 #   Cache invalidated at milestone close (completion-protocol Step 6.5).
 # Architecture ref: M013 architecture.md §2.1, §4.1, §9.
@@ -58,6 +58,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo ".")"
 ROLE_DEFAULTS_JSON="${SCRIPT_DIR}/lib/role-defaults.json"
 COHORTS_MD_REL=".aihaus/skills/aih-effort/annexes/cohorts.md"
 BUDGET_CONF="${SCRIPT_DIR}/context-budget.conf"
+PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$PROJECT_ROOT" ]; then
+  PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+fi
+AIHAUS_MEMORY_INJECT="${AIHAUS_MEMORY_INJECT:-1}"
+AIHAUS_MEMORY_CONTEXT_MAX_BYTES="${AIHAUS_MEMORY_CONTEXT_MAX_BYTES:-6000}"
+AIHAUS_MEMORY_QUERY_TOP="${AIHAUS_MEMORY_QUERY_TOP:-3}"
 
 ts_iso() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
 
@@ -164,13 +171,13 @@ _write_audit() {
 # 4b. Cache helpers (M016-S07 — 5-min hash cache for context-inject)
 #     Byte-identical transplant from learning-advisor.sh compute_hash +
 #     append_cache_entry; variable names changed: ADVISOR_* → INJECT_*.
-#     Cache key: hash(target_agent_name | cohort_name).
+#     Cache key: hash(target_agent_name | cohort_name | task_description).
 #     Cache file: .claude/audit/context-inject.cache
 #     Cache row:  <unix_ts>|<hash>|<base64-encoded-payload>
 #     Rotation:   10 KB OR 100 lines (lighter than 10 MB/10000 in advisor)
 # ---------------------------------------------------------------------------
 compute_hash() {
-  local combined="${target_agent_name:-}|${cohort:-}"
+  local combined="${target_agent_name:-}|${cohort:-}|${task_description:-}"
   if command -v sha256sum >/dev/null 2>&1; then
     printf '%s' "$combined" | sha256sum | awk '{print $1}'
   elif command -v shasum >/dev/null 2>&1; then
@@ -273,7 +280,7 @@ cohort="$(_resolve_cohort "$target_agent_name")"
 [ -z "$cohort" ] && cohort=":doer"
 
 # ---------------------------------------------------------------------------
-# 6b. Cache lookup (M016-S07) — cache key: hash(target_agent_name | cohort)
+# 6b. Cache lookup (M016-S07) — cache key: hash(target_agent_name | cohort | task)
 #     Hit: skip S05 warning-recurrence read + S06 budget parse; emit cached
 #          payload directly and exit.  Miss: fall through to full S05+S06 path.
 # ---------------------------------------------------------------------------
@@ -325,6 +332,118 @@ PYEOF
   printf '{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"%s"}}\n' "$ctx_escaped"
   exit 0
 fi
+
+# ---------------------------------------------------------------------------
+# 6c. Native repository memory packet (M048)
+#     Subagents should not depend on the human remembering to call memory.
+#     This hook injects a bounded, best-effort `aihaus memory ... --json`
+#     packet before the agent starts. The role prompt may still run targeted
+#     follow-up memory commands when this packet is not enough.
+# ---------------------------------------------------------------------------
+declare -a AIHAUS_MEMORY_CMD=()
+
+_cap_text() {
+  local max_bytes="${1:-6000}"
+  local text
+  text="$(cat)"
+  if [ "${#text}" -le "$max_bytes" ]; then
+    printf '%s' "$text"
+    return
+  fi
+  printf '%s' "$text" | head -c "$max_bytes"
+  printf '\n... [truncated by context-inject.sh]\n'
+}
+
+_resolve_aihaus_memory_cmd() {
+  AIHAUS_MEMORY_CMD=()
+  if command -v aihaus >/dev/null 2>&1; then
+    AIHAUS_MEMORY_CMD=(aihaus memory)
+    return 0
+  fi
+
+  local roots=() reg root pkg_candidate
+  [[ -n "${AIHAUS_HOME:-}" ]] && roots+=("$AIHAUS_HOME")
+  reg="$HOME/.aihaus/.install-source"
+  if [[ -f "$reg" ]]; then
+    root="$(head -n1 "$reg" | tr -d '[:space:]' 2>/dev/null || true)"
+    [[ -n "$root" ]] && roots+=("$root")
+  fi
+  roots+=("$PROJECT_ROOT")
+  pkg_candidate="$(cd "$SCRIPT_DIR/../.." 2>/dev/null && pwd || true)"
+  [[ -n "$pkg_candidate" ]] && roots+=("$pkg_candidate")
+  pkg_candidate="$(cd "$SCRIPT_DIR/../../.." 2>/dev/null && pwd || true)"
+  [[ -n "$pkg_candidate" ]] && roots+=("$pkg_candidate")
+
+  for root in "${roots[@]}"; do
+    [[ -z "$root" ]] && continue
+    if [[ -f "$root/pkg/scripts/aihaus" ]]; then
+      export AIHAUS_HOME="$root"
+      AIHAUS_MEMORY_CMD=(bash "$root/pkg/scripts/aihaus" memory)
+      return 0
+    fi
+    if [[ -f "$root/scripts/aihaus" ]]; then
+      export AIHAUS_HOME="$(cd "$root/.." 2>/dev/null && pwd || echo "$root")"
+      AIHAUS_MEMORY_CMD=(bash "$root/scripts/aihaus" memory)
+      return 0
+    fi
+  done
+  return 1
+}
+
+_run_memory_with_timeout() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 8s "${AIHAUS_MEMORY_CMD[@]}" "$@"
+  else
+    "${AIHAUS_MEMORY_CMD[@]}" "$@"
+  fi
+}
+
+_build_memory_context() {
+  [ "$AIHAUS_MEMORY_INJECT" = "0" ] && return 0
+  _resolve_aihaus_memory_cmd || return 0
+
+  local query_text status_json query_json section
+  local db_args=()
+  [[ -n "${AIH_GRAPH_DB:-}" ]] && db_args+=(--db "$AIH_GRAPH_DB")
+  query_text="${task_description:-${target_agent_name:-repository context}}"
+  query_text="$(printf '%s' "$query_text" | tr '\n' ' ' | head -c 600)"
+
+  status_json="$(_run_memory_with_timeout status --repo "$PROJECT_ROOT" "${db_args[@]}" --json 2>/dev/null || true)"
+  query_json="$(_run_memory_with_timeout query --repo "$PROJECT_ROOT" "${db_args[@]}" --json --top "$AIHAUS_MEMORY_QUERY_TOP" "$query_text" 2>/dev/null || true)"
+
+  if [ -z "$status_json" ] && [ -z "$query_json" ]; then
+    return 0
+  fi
+  [ -z "$status_json" ] && status_json='{"state":"unavailable"}'
+  [ -z "$query_json" ] && query_json='{"result_count":0}'
+
+  local status_max=1800 query_max
+  query_max=$(( AIHAUS_MEMORY_CONTEXT_MAX_BYTES - status_max - 1200 ))
+  [ "$query_max" -lt 1000 ] && query_max=1000
+  status_json="$(printf '%s' "$status_json" | _cap_text "$status_max")"
+  query_json="$(printf '%s' "$query_json" | _cap_text "$query_max")"
+
+  section="$(cat <<EOF
+
+## Native repository memory (auto-injected, M048)
+
+This memory packet was loaded automatically by context-inject.sh. Use targeted \`aihaus memory ... --json\` only when this packet is insufficient.
+
+Query: ${query_text}
+
+Status:
+\`\`\`json
+${status_json}
+\`\`\`
+
+Relevant memory:
+\`\`\`json
+${query_json}
+\`\`\`
+EOF
+)"
+  printf '%s' "$section"
+}
 
 # ---------------------------------------------------------------------------
 # 7. Static role-default map lookup
@@ -538,6 +657,9 @@ MED:.aihaus/memory/MEMORY.md — Agent memory index for cross-task context."
   path_method="fallback"
 fi
 
+memory_context_section="$(_build_memory_context)"
+[ -n "$memory_context_section" ] && memory_context_section="${memory_context_section}"$'\n'
+
 # ---------------------------------------------------------------------------
 # 12. Build additionalContext block with per-cohort budget enforcement (M016-S06)
 # ---------------------------------------------------------------------------
@@ -556,9 +678,10 @@ char_budget=$(( token_budget * 4 ))
 
 # Priority-ordered assembly (highest priority first so trim-from-end is safe):
 #   1. recurring_warnings_section  (S05 feedback loop — actionable, high signal)
-#   2. payload_lines               (file list — core context)
+#   2. memory_context_section      (M048 repository memory packet)
+#   3. payload_lines               (file list — core context)
 # Footer appended last (lowest priority if we must trim).
-full_context="${header}${recurring_warnings_section}${payload_lines}${footer}"
+full_context="${header}${recurring_warnings_section}${memory_context_section}${payload_lines}${footer}"
 
 payload_bytes=${#full_context}
 truncated="false"
@@ -566,7 +689,7 @@ truncated="false"
 # Phase 1 — shed LOW-tier file lines if over budget.
 if [ "$payload_bytes" -gt "$char_budget" ]; then
   trimmed_lines="$(printf '%s' "$payload_lines" | grep -v '^LOW:')"
-  full_context="${header}${recurring_warnings_section}${trimmed_lines}${footer}"
+  full_context="${header}${recurring_warnings_section}${memory_context_section}${trimmed_lines}${footer}"
   payload_bytes=${#full_context}
   truncated="true"
 fi
@@ -575,13 +698,13 @@ fi
 #   Preserves recurring_warnings + header/footer; drops tail of file list.
 if [ "$payload_bytes" -gt "$char_budget" ]; then
   # Budget consumed by fixed parts (header + recurring_warnings + footer).
-  local_fixed="${header}${recurring_warnings_section}${footer}"
+  local_fixed="${header}${recurring_warnings_section}${memory_context_section}${footer}"
   fixed_bytes=${#local_fixed}
   remaining=$(( char_budget - fixed_bytes ))
   if [ "$remaining" -lt 0 ]; then remaining=0; fi
   # Truncate payload_lines to remaining chars.
   trimmed_lines="$(printf '%s' "$payload_lines" | head -c "$remaining")"
-  full_context="${header}${recurring_warnings_section}${trimmed_lines}${footer}"
+  full_context="${header}${recurring_warnings_section}${memory_context_section}${trimmed_lines}${footer}"
   payload_bytes=${#full_context}
   truncated="true"
 fi
