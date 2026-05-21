@@ -426,7 +426,7 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph impact aih-graph/internal/extract/repository.go:ParseRepositoryText --type Symbol --depth 1` surfaced `TestParseRepositoryTextIndexesTextFilesAndChunks` as a related test.
 - `aih-graph gotchas git checkout` returned gotcha memory from `pkg/.aihaus/memory/global/gotchas.md`.
 - `aih-graph milestone Ollama` returned M048 docs, Ollama code chunks, the M048 commit, and ADR-260521-A.
-- `aihaus memory version` works through both PowerShell and Windows `.cmd` wrappers.
+- `aihaus memory version` and `aihaus memory status --repo . --db ...` work through the PowerShell wrapper.
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-memory-alias-refresh.db --accept-all-repos` works through the Windows `.cmd` wrapper and preserves the caller repository path.
 - `go test ./...` passes inside `aih-graph`.
 

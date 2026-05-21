@@ -45,6 +45,7 @@ function Invoke-Sh([string]$sh,[string]$ps1,[string[]]$xa) {
     & pwsh -NoProfile -ExecutionPolicy Bypass -File $ps1 @xa; exit $LASTEXITCODE }
 
 function Invoke-Memory([string]$HomePath,[string[]]$GraphArgs) {
+    $GraphArgs = Repair-GraphArgs $GraphArgs
     $candidates=@()
     if ($env:AIH_GRAPH_BIN) { $candidates += $env:AIH_GRAPH_BIN }
     foreach ($candidate in $candidates) {
@@ -78,6 +79,22 @@ function Invoke-Memory([string]$HomePath,[string[]]$GraphArgs) {
     }
     Write-Host "aihaus memory: aih-graph not found. Install it with: bash pkg/scripts/install-aih-graph-binary.sh" -ForegroundColor Red
     exit 1
+}
+
+function Repair-GraphArgs([string[]]$GraphArgs) {
+    if (-not $GraphArgs -or $GraphArgs.Count -lt 2) { return $GraphArgs }
+    $cmd=$GraphArgs[0]
+    if ($cmd -notin @("build","refresh","status","mark-stale")) { return $GraphArgs }
+    $flags=@()
+    $positional=@()
+    foreach ($arg in $GraphArgs[1..($GraphArgs.Count-1)]) {
+        if ($arg -match '\.db$') {
+            $flags += @("-db", $arg)
+        } else {
+            $positional += $arg
+        }
+    }
+    return @($cmd) + $flags + $positional
 }
 
 if ($Verb -in @("--help","-h","")) { Show-Help; exit 0 }
