@@ -12,12 +12,12 @@
 
 **You think. ai builds.**
 
-**An autonomous developer workflow for Claude Code. One approval gate, then 46 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
+**An autonomous developer workflow for Claude Code. One approval gate, then 48 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
 
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.23.1-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.36.1-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -57,7 +57,7 @@ Most of your time with ai-assisted coding gets spent describing *how* instead of
 
 aihaus inverts that loop. **Front-load the thinking once; the system runs the rest.**
 
-After a single approval, a coordinated team of 46 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
+After a single approval, a coordinated team of 48 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
 
 ---
 
