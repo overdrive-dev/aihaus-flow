@@ -298,6 +298,12 @@ aihaus ships 11 intent-based skills. Every command follows the same pattern: **a
 | `/aih-update [--check] [--force]` | Pull latest aihaus from remote, re-link, re-validate |
 | `/aih-sync-notion` | Optional Notion Kanban sync for milestones |
 
+### Global CLI helpers
+
+| Command | What it does |
+|---------|--------------|
+| `aihaus memory <query|context|callers|impact|gotchas|milestone|status>` | Query the local repository memory engine (`aih-graph`) from a shell |
+
 ---
 
 ## The Agent Catalog

@@ -16,6 +16,8 @@ M048 adds a local repository-brain slice:
 - `context`, `callers`, `impact`, `gotchas`, `milestone`, `status`, and `mark-stale` commands
 - `--embed-provider ollama` for local semantic embeddings through Ollama `/api/embed`
 
+The installed `aihaus` shim exposes these as `aihaus memory <subcommand> ...`.
+
 This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
 - **Markdown-only extraction** for 6 aihaus typed nodes (Decision/Milestone/Story/Agent/Hook/Skill) — per ADR-260515-C-amend-02
 - **modernc.org/sqlite storage** (pure-Go, no CGO) — per ADR-260515-B-amend-02

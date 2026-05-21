@@ -41,10 +41,43 @@ Usage: aihaus <verb> [options]
 Verbs:
   install       Install aihaus into the current directory
   update        Update aihaus in the current directory
+  memory        Query repository memory (delegates to aih-graph)
   update --all  Update all registered installs (requires Z9 registry)
   self-update   Update the central aihaus clone from origin (requires Z9)
   --help, -h    Show this message
 EOF
+}
+
+_memory() {
+  local ext="" c bin=""
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) ext=".exe" ;;
+  esac
+  local candidates=()
+  [[ -n "${AIH_GRAPH_BIN:-}" ]] && candidates+=("${AIH_GRAPH_BIN}")
+  for c in "${candidates[@]}"; do
+    if [[ -x "${c}" ]]; then
+      bin="${c}"
+      break
+    fi
+  done
+  if [[ -n "${bin}" ]]; then
+    exec "${bin}" "$@"
+  fi
+  if [[ -f "${AIHAUS_HOME}/aih-graph/go.mod" ]] && command -v go >/dev/null 2>&1; then
+    exec go -C "${AIHAUS_HOME}/aih-graph" run ./cmd/aih-graph "$@"
+  fi
+  if [[ -x "${AIHAUS_HOME}/aih-graph/bin/aih-graph${ext}" ]]; then
+    exec "${AIHAUS_HOME}/aih-graph/bin/aih-graph${ext}" "$@"
+  fi
+  if [[ -x "$HOME/.aihaus/bin/aih-graph${ext}" ]]; then
+    exec "$HOME/.aihaus/bin/aih-graph${ext}" "$@"
+  fi
+  if command -v aih-graph >/dev/null 2>&1; then
+    exec aih-graph "$@"
+  fi
+  echo "aihaus memory: aih-graph not found. Install it with: bash pkg/scripts/install-aih-graph-binary.sh" >&2
+  exit 1
 }
 
 VERB="${1:-}"; shift || true
@@ -70,6 +103,8 @@ case "${VERB}" in
       done < "${reg}"; exit "${rc}"
     fi
     exec bash "${AIHAUS_HOME}/pkg/scripts/update.sh" --target "${PWD}" "$@" ;;
+  memory)
+    _memory "$@" ;;
   self-update)
     _dogfood_dirty
     exec bash "${AIHAUS_HOME}/pkg/scripts/update.sh" --self "$@" ;;

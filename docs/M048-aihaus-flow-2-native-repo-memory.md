@@ -416,6 +416,7 @@ Implemented in this branch:
 - S06: `context`, `callers`, `impact`, `gotchas`, and `milestone` commands expose repository-brain queries over exact graph nodes and BM25 fallback.
 - S07: markdown memory sections now persist as `Memory` nodes, tests persist as `Test` nodes, and the latest 200 git commits persist as `Commit` nodes with `touches` edges to indexed files.
 - S08/S09 first slice: `status` and `mark-stale` commands plus hooks mark memory stale after writes/git history changes and refresh after task completion/session end; planner, implementer, code-reviewer, and verifier prompts now require memory consultation when available.
+- CLI ergonomics: `aihaus memory <subcommand>` delegates to the current source `aih-graph` engine, with Windows `.cmd` preferring Git Bash over the WSL stub.
 
 Dogfood evidence from aihaus-flow:
 
@@ -425,6 +426,7 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph impact aih-graph/internal/extract/repository.go:ParseRepositoryText --type Symbol --depth 1` surfaced `TestParseRepositoryTextIndexesTextFilesAndChunks` as a related test.
 - `aih-graph gotchas git checkout` returned gotcha memory from `pkg/.aihaus/memory/global/gotchas.md`.
 - `aih-graph milestone Ollama` returned M048 docs, Ollama code chunks, the M048 commit, and ADR-260521-A.
+- `aihaus memory version` works through both PowerShell and Windows `.cmd` wrappers.
 - `go test ./...` passes inside `aih-graph`.
 
 ## Open Questions

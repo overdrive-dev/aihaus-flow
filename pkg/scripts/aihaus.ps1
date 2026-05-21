@@ -35,6 +35,7 @@ Usage: aihaus <verb> [options]
 Verbs:
   install       Install aihaus into the current directory
   update        Update aihaus in the current directory
+  memory        Query repository memory (delegates to aih-graph)
   update --all  Update all registered installs (requires Z9 registry)
   self-update   Update the central aihaus clone from origin (requires Z9)
   --help, -h    Show this message
@@ -43,6 +44,41 @@ Verbs:
 function Invoke-Sh([string]$sh,[string]$ps1,[string[]]$xa) {
     if (Get-Command bash -ErrorAction SilentlyContinue) { & bash $sh @xa; exit $LASTEXITCODE }
     & pwsh -NoProfile -ExecutionPolicy Bypass -File $ps1 @xa; exit $LASTEXITCODE }
+
+function Invoke-Memory([string]$HomePath,[string[]]$GraphArgs) {
+    $candidates=@()
+    if ($env:AIH_GRAPH_BIN) { $candidates += $env:AIH_GRAPH_BIN }
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            & $candidate @GraphArgs
+            exit $LASTEXITCODE
+        }
+    }
+    $sourceDir=Join-Path $HomePath "aih-graph"
+    if ((Test-Path (Join-Path $sourceDir "go.mod")) -and (Get-Command go -ErrorAction SilentlyContinue)) {
+        & go -C $sourceDir run ./cmd/aih-graph @GraphArgs
+        exit $LASTEXITCODE
+    }
+    foreach ($candidate in @((Join-Path $HomePath "aih-graph\bin\aih-graph.exe"), (Join-Path $HomePath "aih-graph\bin\aih-graph"))) {
+        if (Test-Path -LiteralPath $candidate) {
+            & $candidate @GraphArgs
+            exit $LASTEXITCODE
+        }
+    }
+    foreach ($candidate in @((Join-Path $env:USERPROFILE ".aihaus\bin\aih-graph.exe"), (Join-Path $env:USERPROFILE ".aihaus\bin\aih-graph"))) {
+        if (Test-Path -LiteralPath $candidate) {
+            & $candidate @Args
+            exit $LASTEXITCODE
+        }
+    }
+    $cmd=Get-Command aih-graph -ErrorAction SilentlyContinue
+    if ($cmd) {
+        & $cmd.Source @GraphArgs
+        exit $LASTEXITCODE
+    }
+    Write-Host "aihaus memory: aih-graph not found. Install it with: bash pkg/scripts/install-aih-graph-binary.sh" -ForegroundColor Red
+    exit 1
+}
 
 if ($Verb -in @("--help","-h","")) { Show-Help; exit 0 }
 $h=Resolve-Home
@@ -60,6 +96,7 @@ switch ($Verb) {
               & pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $h "pkg\scripts\update.ps1") -Target $t @extra
               if ($LASTEXITCODE -ne 0){$rc=$LASTEXITCODE} }; exit $rc }
       Invoke-Sh (Join-Path $h "pkg\scripts\update.sh") (Join-Path $h "pkg\scripts\update.ps1") (@("--target",(Get-Location).Path)+$Rest) }
+  "memory"      { Invoke-Memory $h $Rest }
   "self-update" { Test-DogfoodDirty; Invoke-Sh (Join-Path $h "pkg\scripts\update.sh") (Join-Path $h "pkg\scripts\update.ps1") (@("--self")+$Rest) }
   default       { Write-Host "aihaus: unknown verb '$Verb'" -ForegroundColor Red; Write-Host "Run 'aihaus --help' for usage." -ForegroundColor Red; exit 2 }
 }
