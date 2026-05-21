@@ -434,6 +434,7 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph callers --json ParseRepositoryText` returned call-site evidence as structured JSON.
 - `aih-graph gotchas --json git checkout` and `aih-graph milestone --json Ollama` returned BM25 match payloads with node summaries and neighbor context.
 - `aih-graph refresh --json --repo .. --db C:\tmp\aih-graph-m048-refresh-json.db --accept-all-repos` returned a machine-readable refresh payload with `provider`, nested `status`, node counts, BM25 rows, and embedding model counts.
+- `aih-graph query --json "refresh json output"` returned commit `3eb7b1b` plus the changed code, test, and M048 doc files; `context --json --type Symbol aih-graph/cmd/aih-graph/main.go:runRefresh` showed `collectStatusJSON`, `runBuild`, `runWithStdoutDiscard`, and `writeJSON` as first-hop context; `impact --json --type File aih-graph/cmd/aih-graph/main.go` surfaced the recent memory commits touching the CLI.
 - `aihaus memory version` and `aihaus memory status --repo . --db ...` work through the PowerShell wrapper.
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-memory-alias-refresh.db --accept-all-repos` works through the Windows `.cmd` wrapper and preserves the caller repository path.
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-wrapper-refresh-json.db --accept-all-repos --json` works through the PowerShell wrapper and returns the same structured refresh payload.

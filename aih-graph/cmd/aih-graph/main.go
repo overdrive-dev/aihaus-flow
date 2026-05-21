@@ -1616,10 +1616,11 @@ func runWithStdoutDiscard(fn func() int) int {
 	}
 	old := os.Stdout
 	os.Stdout = devNull
-	code := fn()
-	os.Stdout = old
-	_ = devNull.Close()
-	return code
+	defer func() {
+		os.Stdout = old
+		_ = devNull.Close()
+	}()
+	return fn()
 }
 
 func loadMemoryFreshness(repoPath string) memoryFreshness {
