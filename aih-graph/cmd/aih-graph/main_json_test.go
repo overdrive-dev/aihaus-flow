@@ -283,6 +283,38 @@ func TestRunStatusJSONIncludesEmbeddingModels(t *testing.T) {
 	}
 }
 
+func TestRunRefreshJSONReturnsStatusPayload(t *testing.T) {
+	repoPath, dbPath := seedRefreshRepo(t)
+	code, stdout := captureStdout(t, func() int {
+		return runRefresh([]string{
+			"--repo", repoPath,
+			"--db", dbPath,
+			"--accept-all-repos",
+			"--json",
+		})
+	})
+	if code != 0 {
+		t.Fatalf("runRefresh returned %d", code)
+	}
+	if strings.Contains(stdout, "aih-graph build") {
+		t.Fatalf("expected refresh --json to suppress human build output, got:\n%s", stdout)
+	}
+	var payload refreshJSON
+	decodeJSON(t, stdout, &payload)
+	if payload.Command != "refresh" || payload.Provider != "bm25" {
+		t.Fatalf("unexpected refresh metadata: %#v", payload)
+	}
+	if !payload.Status.IndexBuilt {
+		t.Fatal("expected refreshed index to be built")
+	}
+	if payload.Status.NodeCounts["Decision"] != 1 {
+		t.Fatalf("expected one Decision node, got counts %#v", payload.Status.NodeCounts)
+	}
+	if payload.Status.BM25Rows == 0 {
+		t.Fatalf("expected BM25 rows after refresh, got %#v", payload.Status)
+	}
+}
+
 func seedJSONCommandDB(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -354,6 +386,32 @@ func seedJSONCommandDB(t *testing.T) (string, string) {
 		t.Fatal(err)
 	}
 	return dbPath, repoPath
+}
+
+func seedRefreshRepo(t *testing.T) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	repoPath := filepath.Join(dir, "repo")
+	if err := os.MkdirAll(filepath.Join(repoPath, "pkg", ".aihaus"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	decisions := strings.Join([]string{
+		"# Decisions",
+		"",
+		"## ADR-TEST-A - Refresh JSON",
+		"**Status:** Accepted",
+		"**Date:** 2026-05-21",
+		"",
+		"Refresh JSON must return a machine-readable status payload.",
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(repoPath, "pkg", ".aihaus", "decisions.md"), []byte(decisions), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("# Test Repo\n\nRepository memory refresh fixture.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return repoPath, filepath.Join(dir, "graph.db")
 }
 
 func captureStdout(t *testing.T, fn func() int) (int, string) {

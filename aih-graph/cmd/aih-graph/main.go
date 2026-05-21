@@ -58,6 +58,7 @@ Commands:
     --embed-provider P    bm25 (default) | ollama | fake | none
     --accept-all-repos    Bypass consent gate (auto-creates marker)
   refresh [--repo PATH]   Rebuild repository memory index
+    --json                Print stable machine-readable output
   query "<question>"      Query the graph (default: hybrid)
     --repo PATH           Repository path for DB default and freshness checks
     --bfs                 Structural BFS only (no embeddings needed)
@@ -653,6 +654,7 @@ func runRefresh(args []string) int {
 	dbPath := fs.String("db", "", "path to SQLite database file")
 	embedProvider := fs.String("embed-provider", "bm25", "search provider: bm25|ollama|fake|none")
 	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -660,15 +662,40 @@ func runRefresh(args []string) int {
 		*repoPath = fs.Arg(0)
 	}
 	*repoPath = resolveRepoPath(*repoPath)
-	buildArgs := []string{"--embed-provider", *embedProvider}
-	if *dbPath != "" {
-		buildArgs = append(buildArgs, "--db", *dbPath)
+	resolvedDB := *dbPath
+	if resolvedDB == "" {
+		p, err := privacy.DefaultDBPath(*repoPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "refresh: resolve db path: %v\n", err)
+			return 1
+		}
+		resolvedDB = p
 	}
+	buildArgs := []string{"--embed-provider", *embedProvider}
+	buildArgs = append(buildArgs, "--db", resolvedDB)
 	if *acceptAll {
 		buildArgs = append(buildArgs, "--accept-all-repos")
 	}
 	buildArgs = append(buildArgs, *repoPath)
-	return runBuild(buildArgs)
+	if !*jsonOut {
+		return runBuild(buildArgs)
+	}
+	code := runWithStdoutDiscard(func() int {
+		return runBuild(buildArgs)
+	})
+	if code != 0 {
+		return code
+	}
+	status, err := collectStatusJSON(*repoPath, resolvedDB)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "refresh: %v\n", err)
+		return 1
+	}
+	return writeJSON(refreshJSON{
+		Command:  "refresh",
+		Provider: *embedProvider,
+		Status:   status,
+	})
 }
 
 // runBM25Pipeline writes one FTS5 row per node. Per-node text is the same
@@ -1506,6 +1533,55 @@ func printStatusState(state, staleSince, marker string) {
 	fmt.Println("  state: fresh")
 }
 
+func collectStatusJSON(repoPath, dbPath string) (statusJSON, error) {
+	status := statusJSON{
+		Repo:            repoPath,
+		DB:              dbPath,
+		State:           "fresh",
+		NodeCounts:      map[string]int{},
+		EmbeddingModels: map[string]int{},
+	}
+	stalePath, staleErr := staleMarkerPath(repoPath)
+	staleInfo, staleStatErr := os.Stat(stalePath)
+	if staleErr == nil && staleStatErr == nil {
+		status.State = "stale"
+		status.StaleSince = staleInfo.ModTime().Format(time.RFC3339)
+		status.Marker = stalePath
+	}
+
+	if _, err := os.Stat(dbPath); err != nil {
+		if os.IsNotExist(err) {
+			return status, nil
+		}
+		return status, fmt.Errorf("stat db: %w", err)
+	}
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		return status, fmt.Errorf("open db: %w", err)
+	}
+	defer db.Close()
+
+	counts, err := db.CountByType()
+	if err != nil {
+		return status, fmt.Errorf("count nodes: %w", err)
+	}
+	total := 0
+	for _, n := range counts {
+		total += n
+	}
+	ftsRows, _ := db.CountFTS()
+	embeddingRows := 0
+	_ = db.SQL().QueryRow("SELECT COUNT(*) FROM nodes WHERE embedding IS NOT NULL").Scan(&embeddingRows)
+
+	status.IndexBuilt = true
+	status.NodesTotal = total
+	status.NodeCounts = counts
+	status.BM25Rows = ftsRows
+	status.EmbeddingRows = embeddingRows
+	status.EmbeddingModels = countEmbeddingModels(db)
+	return status, nil
+}
+
 func countEmbeddingModels(db *storage.DB) map[string]int {
 	rows, err := db.SQL().Query(`
 		SELECT COALESCE(NULLIF(embedding_model, ''), '(unknown)'), COUNT(*)
@@ -1531,6 +1607,19 @@ func countEmbeddingModels(db *storage.DB) map[string]int {
 		return map[string]int{}
 	}
 	return out
+}
+
+func runWithStdoutDiscard(fn func() int) int {
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		return fn()
+	}
+	old := os.Stdout
+	os.Stdout = devNull
+	code := fn()
+	os.Stdout = old
+	_ = devNull.Close()
+	return code
 }
 
 func loadMemoryFreshness(repoPath string) memoryFreshness {
@@ -1625,88 +1714,29 @@ func runStatus(args []string) int {
 			return 1
 		}
 	}
-	state := "fresh"
-	staleSince := ""
-	marker := ""
-	stalePath, staleErr := staleMarkerPath(*repoPath)
-	staleInfo, staleStatErr := os.Stat(stalePath)
-	if staleErr == nil && staleStatErr == nil {
-		state = "stale"
-		staleSince = staleInfo.ModTime().Format(time.RFC3339)
-		marker = stalePath
-	}
-
-	if _, err := os.Stat(resolvedDB); err != nil {
-		if os.IsNotExist(err) {
-			if *jsonOut {
-				return writeJSON(statusJSON{
-					Repo:            *repoPath,
-					DB:              resolvedDB,
-					State:           state,
-					StaleSince:      staleSince,
-					Marker:          marker,
-					IndexBuilt:      false,
-					NodeCounts:      map[string]int{},
-					BM25Rows:        0,
-					EmbeddingRows:   0,
-					EmbeddingModels: map[string]int{},
-				})
-			}
-			fmt.Printf("aih-graph status %s\n", *repoPath)
-			fmt.Printf("  db: %s\n", resolvedDB)
-			printStatusState(state, staleSince, marker)
-			fmt.Println("  index: not built")
-			return 0
-		}
-		fmt.Fprintf(os.Stderr, "status: stat db: %v\n", err)
-		return 1
-	}
-	db, err := storage.Open(resolvedDB)
+	status, err := collectStatusJSON(*repoPath, resolvedDB)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "status: open db: %v\n", err)
+		fmt.Fprintf(os.Stderr, "status: %v\n", err)
 		return 1
 	}
-	defer db.Close()
-
-	counts, err := db.CountByType()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "status: count nodes: %v\n", err)
-		return 1
-	}
-	total := 0
-	for _, n := range counts {
-		total += n
-	}
-	ftsRows, _ := db.CountFTS()
-	embeddingRows := 0
-	_ = db.SQL().QueryRow("SELECT COUNT(*) FROM nodes WHERE embedding IS NOT NULL").Scan(&embeddingRows)
-	embeddingModels := countEmbeddingModels(db)
 	if *jsonOut {
-		return writeJSON(statusJSON{
-			Repo:            *repoPath,
-			DB:              resolvedDB,
-			State:           state,
-			StaleSince:      staleSince,
-			Marker:          marker,
-			IndexBuilt:      true,
-			NodesTotal:      total,
-			NodeCounts:      counts,
-			BM25Rows:        ftsRows,
-			EmbeddingRows:   embeddingRows,
-			EmbeddingModels: embeddingModels,
-		})
+		return writeJSON(status)
 	}
 	fmt.Printf("aih-graph status %s\n", *repoPath)
 	fmt.Printf("  db: %s\n", resolvedDB)
-	printStatusState(state, staleSince, marker)
-	fmt.Printf("  nodes: %d\n", total)
-	for _, t := range keysSorted(counts) {
-		fmt.Printf("    %s: %d\n", t, counts[t])
+	printStatusState(status.State, status.StaleSince, status.Marker)
+	if !status.IndexBuilt {
+		fmt.Println("  index: not built")
+		return 0
 	}
-	fmt.Printf("  bm25_rows: %d\n", ftsRows)
-	fmt.Printf("  embedding_rows: %d\n", embeddingRows)
-	for _, model := range keysSorted(embeddingModels) {
-		fmt.Printf("    %s: %d\n", model, embeddingModels[model])
+	fmt.Printf("  nodes: %d\n", status.NodesTotal)
+	for _, t := range keysSorted(status.NodeCounts) {
+		fmt.Printf("    %s: %d\n", t, status.NodeCounts[t])
+	}
+	fmt.Printf("  bm25_rows: %d\n", status.BM25Rows)
+	fmt.Printf("  embedding_rows: %d\n", status.EmbeddingRows)
+	for _, model := range keysSorted(status.EmbeddingModels) {
+		fmt.Printf("    %s: %d\n", model, status.EmbeddingModels[model])
 	}
 	return 0
 }
@@ -2127,6 +2157,12 @@ type statusJSON struct {
 	BM25Rows        int            `json:"bm25_rows"`
 	EmbeddingRows   int            `json:"embedding_rows"`
 	EmbeddingModels map[string]int `json:"embedding_models"`
+}
+
+type refreshJSON struct {
+	Command  string     `json:"command"`
+	Provider string     `json:"provider"`
+	Status   statusJSON `json:"status"`
 }
 
 func writeJSON(v any) int {

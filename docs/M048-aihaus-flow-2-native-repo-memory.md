@@ -413,7 +413,7 @@ Implemented in this branch:
 - S03: repository walker and chunk indexing now persist `File` and `Chunk` nodes, with skip rules for generated/vendor/runtime directories and binary/oversized files.
 - S04: code symbol extraction now persists `Symbol` and `Call` nodes for Go functions/methods plus shell and PowerShell functions; Go call sites include file/line evidence and resolved symbol edges where static resolution is unique.
 - S05: `--embed-provider ollama` is wired as a local semantic provider through Ollama's `/api/embed` endpoint; model defaults to `nomic-embed-text`, with `AIH_GRAPH_OLLAMA_MODEL`, `AIH_GRAPH_OLLAMA_URL`, and `OLLAMA_HOST` overrides.
-- S06: `query`, `context`, `callers`, `impact`, `gotchas`, and `milestone` commands expose repository-brain queries over exact graph nodes and BM25 fallback; `query`, `context`, `callers`, `impact`, `gotchas`, `milestone`, and `status` also expose stable `--json` payloads for agent consumption.
+- S06: `query`, `context`, `callers`, `impact`, `gotchas`, and `milestone` commands expose repository-brain queries over exact graph nodes and BM25 fallback; `query`, `context`, `callers`, `impact`, `gotchas`, `milestone`, `status`, and `refresh` also expose stable `--json` payloads for agent consumption.
 - S07: markdown memory sections now persist as `Memory` nodes, tests persist as `Test` nodes, and the latest 200 git commits persist as `Commit` nodes with `touches` edges to indexed files.
 - S08/S09 first slice: `status` and `mark-stale` commands plus hooks mark memory stale after writes/git history changes and refresh after task completion/session end; both settings templates carry the memory lifecycle hooks, and planner, implementer, code-reviewer, and verifier prompts now require JSON-backed memory consultation when available.
 - CLI ergonomics: `aihaus memory <subcommand>` delegates to the current source `aih-graph` engine, including `refresh`, with Windows `.cmd` preferring Git Bash over the WSL stub.
@@ -433,8 +433,10 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph impact --json --type File --depth 1 --limit 80 aih-graph/cmd/aih-graph/main.go` returned bounded JSON impact context with `freshness`, `neighborhood_total`, `neighborhood_returned`, `neighborhood_truncated`, and truncated long string properties.
 - `aih-graph callers --json ParseRepositoryText` returned call-site evidence as structured JSON.
 - `aih-graph gotchas --json git checkout` and `aih-graph milestone --json Ollama` returned BM25 match payloads with node summaries and neighbor context.
+- `aih-graph refresh --json --repo .. --db C:\tmp\aih-graph-m048-refresh-json.db --accept-all-repos` returned a machine-readable refresh payload with `provider`, nested `status`, node counts, BM25 rows, and embedding model counts.
 - `aihaus memory version` and `aihaus memory status --repo . --db ...` work through the PowerShell wrapper.
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-memory-alias-refresh.db --accept-all-repos` works through the Windows `.cmd` wrapper and preserves the caller repository path.
+- `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-wrapper-refresh-json.db --accept-all-repos --json` works through the PowerShell wrapper and returns the same structured refresh payload.
 - `tools/smoke-test.sh` now includes an M048 contract check for memory lifecycle hooks in both settings templates and JSON memory commands in the four core agents; targeted `rg`, JSON parsing, and `bash -n` validations passed under Git Bash.
 - `go test ./...` passes inside `aih-graph`.
 - Full `tools/smoke-test.sh` under Windows Git Bash reached Check 65 before timeout; failures before that point were existing fixture portability issues around `mktemp -t` paths resolving to `/repo`, not M048 memory contract failures.
