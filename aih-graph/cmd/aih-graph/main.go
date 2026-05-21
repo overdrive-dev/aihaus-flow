@@ -16,6 +16,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -41,6 +42,8 @@ import (
 // load-bearing for release pipeline correctness.)
 var version = "0.1.4-dev"
 
+const jsonPropertyStringLimit = 4000
+
 // usage prints the top-level CLI help.
 func usage() {
 	fmt.Fprintf(os.Stderr, `aih-graph %s — aihaus standalone memory engine
@@ -59,11 +62,17 @@ Commands:
     --semantic            Vector similarity (cosine) ranking
     --budget N            Token cap on returned context
   context <node-or-topic> Show exact-node neighborhood or hybrid retrieval
+    --json                Print stable machine-readable output
+    --limit N             Maximum JSON neighborhood nodes (default 80; 0 = all)
   callers <symbol>        List call sites that target a symbol/name
+    --json                Print stable machine-readable output
   impact <node>           Show graph neighborhood for impact analysis
+    --json                Print stable machine-readable output
+    --limit N             Maximum JSON neighborhood nodes (default 80; 0 = all)
   gotchas [topic]         Search markdown memory for gotchas/learnings
   milestone <target>      Search milestone, decision, commit, and memory links
   status [--repo PATH]    Show memory index freshness and counts
+    --json                Print stable machine-readable output
   mark-stale [--reason R] Mark derived memory stale after repo changes
   uninstall [--purge]     Remove aih-graph state (single .db file delete)
   version                 Print version
@@ -1075,11 +1084,13 @@ func runContext(args []string) int {
 	typ := fs.String("type", "", "optional exact type filter")
 	depth := fs.Int("depth", 1, "exact-node graph depth")
 	topK := fs.Int("top", 8, "hybrid fallback result count")
+	limit := fs.Int("limit", 80, "maximum JSON neighborhood nodes (0 = no limit)")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: aih-graph context [--db PATH] [--type T] <node-or-topic>")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph context [--db PATH] [--type T] [--json] <node-or-topic>")
 		return 2
 	}
 	db, err := openQueryDB(*dbPath)
@@ -1093,16 +1104,47 @@ func runContext(args []string) int {
 	eng := query.New(db.SQL())
 	node, err := resolveNode(eng, target, *typ)
 	if err != nil {
+		if *jsonOut {
+			matches, err := bm25MatchesForJSON(db, eng, target, *typ, *topK)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "context: bm25 fallback: %v\n", err)
+				return 1
+			}
+			if len(matches) == 0 {
+				fmt.Fprintf(os.Stderr, "context: no exact node or BM25 matches for %q\n", target)
+				return 1
+			}
+			return writeJSON(contextJSON{
+				Query:      target,
+				TypeFilter: *typ,
+				Mode:       "bm25_fallback",
+				Matches:    matches,
+			})
+		}
 		fmt.Printf("No exact node for %q; showing hybrid memory matches.\n", target)
 		return runHybrid(db, target, *typ, *topK, "bm25")
 	}
-	fmt.Println("Exact memory context:")
-	printNodeSummary(*node)
 	results, err := eng.BFS(node.Type, node.Identifier, *depth)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "context: bfs: %v\n", err)
 		return 1
 	}
+	if *jsonOut {
+		targetNode := nodeForJSON(*node)
+		neighborhood, truncated := bfsForJSON(results, *limit)
+		return writeJSON(contextJSON{
+			Query:                 target,
+			TypeFilter:            *typ,
+			Mode:                  "exact",
+			Target:                &targetNode,
+			Neighborhood:          neighborhood,
+			NeighborhoodTotal:     len(results),
+			NeighborhoodReturned:  len(neighborhood),
+			NeighborhoodTruncated: truncated,
+		})
+	}
+	fmt.Println("Exact memory context:")
+	printNodeSummary(*node)
 	for _, r := range results {
 		if r.Distance == 0 {
 			continue
@@ -1116,11 +1158,12 @@ func runContext(args []string) int {
 func runCallers(args []string) int {
 	fs := flag.NewFlagSet("callers", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: aih-graph callers [--db PATH] <symbol-name-or-identifier>")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph callers [--db PATH] [--json] <symbol-name-or-identifier>")
 		return 2
 	}
 	db, err := openQueryDB(*dbPath)
@@ -1147,6 +1190,7 @@ func runCallers(args []string) int {
 		return 1
 	}
 	found := 0
+	var callSites []callSiteJSON
 	for _, c := range calls {
 		calleeID := propString(c.Properties, "callee_identifier")
 		calleeName := propString(c.Properties, "callee_name")
@@ -1157,7 +1201,28 @@ func runCallers(args []string) int {
 		caller := propString(c.Properties, "caller_identifier")
 		file := propString(c.Properties, "file_path")
 		line := int(propFloat(c.Properties, "line"))
+		if *jsonOut {
+			callSites = append(callSites, callSiteJSON{
+				CallerIdentifier: caller,
+				CalleeIdentifier: calleeID,
+				CalleeName:       calleeName,
+				FilePath:         file,
+				Line:             line,
+				Call:             nodeForJSON(c),
+			})
+			continue
+		}
 		fmt.Printf("%-55s %s:%d calls %s\n", caller, file, line, calleeName)
+	}
+	if *jsonOut {
+		if found == 0 {
+			fmt.Fprintf(os.Stderr, "callers: no call sites found for %q\n", target)
+			return 1
+		}
+		return writeJSON(callersJSON{
+			Query:     target,
+			CallSites: callSites,
+		})
 	}
 	if found == 0 {
 		fmt.Fprintf(os.Stderr, "callers: no call sites found for %q\n", target)
@@ -1171,11 +1236,13 @@ func runImpact(args []string) int {
 	dbPath := fs.String("db", "", "path to SQLite database")
 	typ := fs.String("type", "", "optional exact type filter")
 	depth := fs.Int("depth", 2, "graph depth")
+	limit := fs.Int("limit", 80, "maximum JSON neighborhood nodes (0 = no limit)")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: aih-graph impact [--db PATH] [--type T] <node>")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph impact [--db PATH] [--type T] [--json] <node>")
 		return 2
 	}
 	db, err := openQueryDB(*dbPath)
@@ -1195,6 +1262,25 @@ func runImpact(args []string) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "impact: bfs: %v\n", err)
 		return 1
+	}
+	if *jsonOut {
+		neighborhood, truncated := bfsForJSON(results, *limit)
+		return writeJSON(impactJSON{
+			Query:        target,
+			TypeFilter:   *typ,
+			Depth:        *depth,
+			Target:       nodeForJSON(*node),
+			RelatedTests: bfsByTypeForJSON(results, "Test", 8),
+			RecentCommits: bfsByTypeForJSON(
+				results,
+				"Commit",
+				5,
+			),
+			Neighborhood:          neighborhood,
+			NeighborhoodTotal:     len(results),
+			NeighborhoodReturned:  len(neighborhood),
+			NeighborhoodTruncated: truncated,
+		})
 	}
 	printImpactSummary(results)
 	fmt.Println("Impact neighborhood:")
@@ -1243,6 +1329,15 @@ func printImpactSummary(results []query.BFSResult) {
 	}
 }
 
+func printStatusState(state, staleSince, marker string) {
+	if state == "stale" {
+		fmt.Printf("  state: stale (since %s)\n", staleSince)
+		fmt.Printf("  marker: %s\n", marker)
+		return
+	}
+	fmt.Println("  state: fresh")
+}
+
 func runGotchas(args []string) int {
 	fs := flag.NewFlagSet("gotchas", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
@@ -1287,6 +1382,7 @@ func runStatus(args []string) int {
 	fs := flag.NewFlagSet("status", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
 	repoPath := fs.String("repo", ".", "repository path for default DB and stale marker")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -1303,20 +1399,35 @@ func runStatus(args []string) int {
 			return 1
 		}
 	}
-	fmt.Printf("aih-graph status %s\n", *repoPath)
-	fmt.Printf("  db: %s\n", resolvedDB)
-
+	state := "fresh"
+	staleSince := ""
+	marker := ""
 	stalePath, staleErr := staleMarkerPath(*repoPath)
 	staleInfo, staleStatErr := os.Stat(stalePath)
 	if staleErr == nil && staleStatErr == nil {
-		fmt.Printf("  state: stale (since %s)\n", staleInfo.ModTime().Format(time.RFC3339))
-		fmt.Printf("  marker: %s\n", stalePath)
-	} else {
-		fmt.Println("  state: fresh")
+		state = "stale"
+		staleSince = staleInfo.ModTime().Format(time.RFC3339)
+		marker = stalePath
 	}
 
 	if _, err := os.Stat(resolvedDB); err != nil {
 		if os.IsNotExist(err) {
+			if *jsonOut {
+				return writeJSON(statusJSON{
+					Repo:          *repoPath,
+					DB:            resolvedDB,
+					State:         state,
+					StaleSince:    staleSince,
+					Marker:        marker,
+					IndexBuilt:    false,
+					NodeCounts:    map[string]int{},
+					BM25Rows:      0,
+					EmbeddingRows: 0,
+				})
+			}
+			fmt.Printf("aih-graph status %s\n", *repoPath)
+			fmt.Printf("  db: %s\n", resolvedDB)
+			printStatusState(state, staleSince, marker)
 			fmt.Println("  index: not built")
 			return 0
 		}
@@ -1342,6 +1453,23 @@ func runStatus(args []string) int {
 	ftsRows, _ := db.CountFTS()
 	embeddingRows := 0
 	_ = db.SQL().QueryRow("SELECT COUNT(*) FROM nodes WHERE embedding IS NOT NULL").Scan(&embeddingRows)
+	if *jsonOut {
+		return writeJSON(statusJSON{
+			Repo:          *repoPath,
+			DB:            resolvedDB,
+			State:         state,
+			StaleSince:    staleSince,
+			Marker:        marker,
+			IndexBuilt:    true,
+			NodesTotal:    total,
+			NodeCounts:    counts,
+			BM25Rows:      ftsRows,
+			EmbeddingRows: embeddingRows,
+		})
+	}
+	fmt.Printf("aih-graph status %s\n", *repoPath)
+	fmt.Printf("  db: %s\n", resolvedDB)
+	printStatusState(state, staleSince, marker)
 	fmt.Printf("  nodes: %d\n", total)
 	for _, t := range keysSorted(counts) {
 		fmt.Printf("    %s: %d\n", t, counts[t])
@@ -1661,6 +1789,202 @@ func resolveProvider(db *storage.DB, providerName string) (embed.Provider, error
 		}
 	}
 	return buildEmbedProvider(providerName)
+}
+
+type jsonNode struct {
+	Type       string         `json:"type"`
+	Identifier string         `json:"identifier"`
+	Title      string         `json:"title,omitempty"`
+	Properties map[string]any `json:"properties,omitempty"`
+}
+
+type jsonBFSResult struct {
+	Distance int      `json:"distance"`
+	Node     jsonNode `json:"node"`
+	Path     []string `json:"path,omitempty"`
+}
+
+type bm25MatchJSON struct {
+	Score     float64    `json:"score"`
+	Node      jsonNode   `json:"node"`
+	Neighbors []jsonNode `json:"neighbors,omitempty"`
+}
+
+type contextJSON struct {
+	Query                 string          `json:"query"`
+	TypeFilter            string          `json:"type_filter,omitempty"`
+	Mode                  string          `json:"mode"`
+	Target                *jsonNode       `json:"target,omitempty"`
+	Neighborhood          []jsonBFSResult `json:"neighborhood,omitempty"`
+	NeighborhoodTotal     int             `json:"neighborhood_total"`
+	NeighborhoodReturned  int             `json:"neighborhood_returned"`
+	NeighborhoodTruncated bool            `json:"neighborhood_truncated"`
+	Matches               []bm25MatchJSON `json:"matches,omitempty"`
+}
+
+type callSiteJSON struct {
+	CallerIdentifier string   `json:"caller_identifier"`
+	CalleeIdentifier string   `json:"callee_identifier,omitempty"`
+	CalleeName       string   `json:"callee_name,omitempty"`
+	FilePath         string   `json:"file_path,omitempty"`
+	Line             int      `json:"line,omitempty"`
+	Call             jsonNode `json:"call"`
+}
+
+type callersJSON struct {
+	Query     string         `json:"query"`
+	CallSites []callSiteJSON `json:"call_sites"`
+}
+
+type impactJSON struct {
+	Query                 string          `json:"query"`
+	TypeFilter            string          `json:"type_filter,omitempty"`
+	Depth                 int             `json:"depth"`
+	Target                jsonNode        `json:"target"`
+	RelatedTests          []jsonBFSResult `json:"related_tests,omitempty"`
+	RecentCommits         []jsonBFSResult `json:"recent_commits,omitempty"`
+	Neighborhood          []jsonBFSResult `json:"neighborhood"`
+	NeighborhoodTotal     int             `json:"neighborhood_total"`
+	NeighborhoodReturned  int             `json:"neighborhood_returned"`
+	NeighborhoodTruncated bool            `json:"neighborhood_truncated"`
+}
+
+type statusJSON struct {
+	Repo          string         `json:"repo"`
+	DB            string         `json:"db"`
+	State         string         `json:"state"`
+	StaleSince    string         `json:"stale_since,omitempty"`
+	Marker        string         `json:"marker,omitempty"`
+	IndexBuilt    bool           `json:"index_built"`
+	NodesTotal    int            `json:"nodes_total"`
+	NodeCounts    map[string]int `json:"node_counts"`
+	BM25Rows      int            `json:"bm25_rows"`
+	EmbeddingRows int            `json:"embedding_rows"`
+}
+
+func writeJSON(v any) int {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		fmt.Fprintf(os.Stderr, "json: encode: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func nodeForJSON(n query.Node) jsonNode {
+	return jsonNode{
+		Type:       n.Type,
+		Identifier: n.Identifier,
+		Title:      titleFromProperties(n.Properties),
+		Properties: propertiesForJSON(n.Properties),
+	}
+}
+
+func propertiesForJSON(props map[string]any) map[string]any {
+	if len(props) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(props))
+	for k, v := range props {
+		s, ok := v.(string)
+		if !ok || len(s) <= jsonPropertyStringLimit {
+			out[k] = v
+			continue
+		}
+		out[k] = truncateJSONString(s, jsonPropertyStringLimit)
+		out[k+"_truncated"] = true
+		out[k+"_original_bytes"] = len(s)
+	}
+	return out
+}
+
+func truncateJSONString(s string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := 0
+	for i := range s {
+		if i > maxBytes {
+			break
+		}
+		cut = i
+	}
+	if cut == 0 {
+		return ""
+	}
+	return s[:cut]
+}
+
+func bfsForJSON(results []query.BFSResult, limit int) ([]jsonBFSResult, bool) {
+	truncated := limit > 0 && len(results) > limit
+	if truncated {
+		results = results[:limit]
+	}
+	out := make([]jsonBFSResult, 0, len(results))
+	for _, r := range results {
+		out = append(out, jsonBFSResult{
+			Distance: r.Distance,
+			Node:     nodeForJSON(r.Node),
+			Path:     r.Path,
+		})
+	}
+	return out, truncated
+}
+
+func bfsByTypeForJSON(results []query.BFSResult, typ string, limit int) []jsonBFSResult {
+	out := []jsonBFSResult{}
+	for _, r := range results {
+		if r.Node.Type != typ {
+			continue
+		}
+		out = append(out, jsonBFSResult{
+			Distance: r.Distance,
+			Node:     nodeForJSON(r.Node),
+			Path:     r.Path,
+		})
+		if limit > 0 && len(out) >= limit {
+			return out
+		}
+	}
+	return out
+}
+
+func bm25MatchesForJSON(db *storage.DB, eng *query.Engine, queryText, typeFilter string, topK int) ([]bm25MatchJSON, error) {
+	matches, err := db.QueryFTS5(buildFTS5Query(queryText), topK, typeFilter)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]bm25MatchJSON, 0, len(matches))
+	for _, m := range matches {
+		node := query.Node{
+			ID:         m.NodeID,
+			Type:       m.Type,
+			Identifier: m.Identifier,
+		}
+		if loaded, err := eng.GetByIdentifier(m.Type, m.Identifier); err == nil {
+			node = *loaded
+		}
+		neighbors, err := eng.LoadNeighbors(m.NodeID, 5)
+		if err != nil {
+			neighbors = nil
+		}
+		jsonNeighbors := make([]jsonNode, 0, len(neighbors))
+		for _, n := range neighbors {
+			jsonNeighbors = append(jsonNeighbors, nodeForJSON(n))
+		}
+		out = append(out, bm25MatchJSON{
+			// SQLite BM25 returns negative numbers; JSON follows the human CLI:
+			// higher positive score means a stronger lexical match.
+			Score:     -m.Score,
+			Node:      nodeForJSON(node),
+			Neighbors: jsonNeighbors,
+		})
+	}
+	return out, nil
 }
 
 func titleFromProperties(p map[string]any) string {
