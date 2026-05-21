@@ -442,7 +442,7 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph-stale.sh --from-hook bash` ignores `aihaus memory refresh ... --json` and does not recreate `.claude/audit/aih-graph.stale` after a refresh command.
 - `tools/smoke-test.sh` now includes an M048 contract check for memory lifecycle hooks in both settings templates and integrated `aihaus memory ... --json` commands in all packaged agents; targeted `rg`, JSON parsing, and `bash -n` validations passed under Git Bash.
 - The all-agent memory contract now asserts that packaged agents use `aihaus memory` as the integration surface and do not bypass it with direct role-level `aih-graph` calls.
-- `rg "aih-graph (status|query|context|impact|callers|gotchas|milestone)|query --semantic|query --hybrid|query --bfs|Memory Lookup \(M039\+" pkg/.aihaus/agents` returns no matches after the all-agent prompt migration.
+- A targeted `rg` for direct role-level `aih-graph` memory commands, legacy M039 query-mode examples, and the old M039 memory-lookup heading returns no matches after the all-agent prompt migration.
 - `CLAUDE.md`, `INSTALL-VIA-LLM.md`, `aih-graph/README.md`, `aih-graph/PRD.md`, and `impact` fallback guidance now point agents and humans at `query --json` rather than the legacy M039 prompt examples.
 - Windows Git Bash smoke portability now uses workspace-local `tmp/` scratch directories, manifest-local temp files, and per-check `GOTMPDIR`/`GOCACHE`, avoiding sandbox-blocked `/tmp`, `C:\tmp`, and `%LOCALAPPDATA%\Temp` paths.
 - `go test ./...` passes inside `aih-graph`.
