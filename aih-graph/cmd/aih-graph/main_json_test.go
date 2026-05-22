@@ -284,6 +284,7 @@ func TestRunStatusJSONIncludesEmbeddingModels(t *testing.T) {
 }
 
 func TestRunRefreshJSONReturnsStatusPayload(t *testing.T) {
+	t.Setenv("AIH_GRAPH_OLLAMA_URL", "http://127.0.0.1:9")
 	repoPath, dbPath := seedRefreshRepo(t)
 	code, stdout := captureStdout(t, func() int {
 		return runRefresh([]string{
@@ -301,7 +302,7 @@ func TestRunRefreshJSONReturnsStatusPayload(t *testing.T) {
 	}
 	var payload refreshJSON
 	decodeJSON(t, stdout, &payload)
-	if payload.Command != "refresh" || payload.Provider != "bm25" {
+	if payload.Command != "refresh" {
 		t.Fatalf("unexpected refresh metadata: %#v", payload)
 	}
 	if !payload.Status.IndexBuilt {
@@ -377,12 +378,12 @@ func seedJSONCommandDB(t *testing.T) (string, string) {
 	}
 	chunkID, err := db.UpsertNode("Chunk", "chunk:ollama", map[string]any{
 		"file_path": "embed.go",
-		"text":      "Ollama local embedding provider",
+		"text":      "Ollama local embedding backend",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SaveFTS(chunkID, "Ollama local embedding provider"); err != nil {
+	if err := db.SaveFTS(chunkID, "Ollama local embedding backend"); err != nil {
 		t.Fatal(err)
 	}
 	return dbPath, repoPath

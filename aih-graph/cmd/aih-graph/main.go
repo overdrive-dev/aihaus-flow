@@ -8,9 +8,9 @@
 // v0.1 forever-scope (per ADR-260515-B-amend-02 + C-amend-02 + E-amend-03,
 // embedding surface narrowed per ADR-260516-A):
 // Pure-Go (zero CGO) + markdown-only extraction for 6 aihaus typed nodes +
-// modernc.org/sqlite storage + BM25/FTS5 lexical search (default; pure-Go,
-// no API key) + optional opt-in external embedding providers + Go-native
-// KNN + 3-mode query (BFS / semantic / hybrid) + 6 typed accessor structs.
+// modernc.org/sqlite storage + BM25/FTS5 lexical search + local Ollama
+// nomic-embed-text embeddings + Go-native KNN + 3-mode query (BFS / semantic /
+// hybrid) + 6 typed accessor structs.
 // See PRD.md for full spec.
 package main
 
@@ -55,7 +55,6 @@ Usage:
 Commands:
   build <repo-path>       Extract aihaus graph from repo
     --dry-run             Print extraction summary without persisting
-    --embed-provider P    bm25 (default) | ollama | fake | none
     --accept-all-repos    Bypass consent gate (auto-creates marker)
   refresh [--repo PATH]   Rebuild repository memory index
     --json                Print stable machine-readable output
@@ -133,14 +132,13 @@ func runBuild(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
 	dbPath := fs.String("db", "", "path to SQLite database file (default: XDG state dir, per-repo isolated)")
-	embedProvider := fs.String("embed-provider", "bm25", "search provider: bm25|ollama|fake|none (default bm25 — pure-Go offline lexical via FTS5)")
 	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate (auto-creates .aih-graph-consent marker)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "build: <repo-path> required")
-		fmt.Fprintln(os.Stderr, "usage: aih-graph build [--db PATH] [--embed-provider P] [--accept-all-repos] [--dry-run] <repo-path>")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph build [--db PATH] [--accept-all-repos] [--dry-run] <repo-path>")
 		return 2
 	}
 
@@ -621,29 +619,13 @@ func runBuild(args []string) int {
 		}
 	}
 
-	// Search pipeline.
-	switch *embedProvider {
-	case "", "none":
-		// Skip — structural BFS still works without any search index.
-	case "bm25":
-		if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits); err != nil {
-			fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
-			return 1
-		}
-	case "voyage", "ollama", "fake":
-		provider, err := buildEmbedProvider(*embedProvider)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "build: embed provider: %v\n", err)
-			return 1
-		}
-		if err := runEmbedPipeline(db, provider, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits); err != nil {
-			fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
-			return 1
-		}
-	default:
-		fmt.Fprintf(os.Stderr, "build: unknown --embed-provider %q (want bm25|voyage|ollama|fake|none)\n", *embedProvider)
-		return 2
+	// Search pipeline: BM25 is always refreshed; Ollama/nomic embeddings are
+	// added when the local server is available.
+	if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits); err != nil {
+		fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
+		return 1
 	}
+	runOllamaEmbeddingPipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits)
 	clearStaleMarker(repoPath)
 	return 0
 }
@@ -652,7 +634,6 @@ func runRefresh(args []string) int {
 	fs := flag.NewFlagSet("refresh", flag.ExitOnError)
 	repoPath := fs.String("repo", ".", "repository path")
 	dbPath := fs.String("db", "", "path to SQLite database file")
-	embedProvider := fs.String("embed-provider", "bm25", "search provider: bm25|ollama|fake|none")
 	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate")
 	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
@@ -671,8 +652,7 @@ func runRefresh(args []string) int {
 		}
 		resolvedDB = p
 	}
-	buildArgs := []string{"--embed-provider", *embedProvider}
-	buildArgs = append(buildArgs, "--db", resolvedDB)
+	buildArgs := []string{"--db", resolvedDB}
 	if *acceptAll {
 		buildArgs = append(buildArgs, "--accept-all-repos")
 	}
@@ -692,14 +672,13 @@ func runRefresh(args []string) int {
 		return 1
 	}
 	return writeJSON(refreshJSON{
-		Command:  "refresh",
-		Provider: *embedProvider,
-		Status:   status,
+		Command: "refresh",
+		Status:  status,
 	})
 }
 
 // runBM25Pipeline writes one FTS5 row per node. Per-node text is the same
-// text used for vector embedding providers (same embedTextFor* helpers), so
+// text used for vector embeddings (same embedTextFor* helpers), so
 // the lexical search is over the same canonical content. SaveFTS is idempotent
 // (delete-then-insert by rowid) so re-runs are safe.
 func runBM25Pipeline(
@@ -782,20 +761,6 @@ func runBM25Pipeline(
 	return nil
 }
 
-// buildEmbedProvider returns a configured embed.Provider by name.
-func buildEmbedProvider(name string) (embed.Provider, error) {
-	switch name {
-	case "voyage":
-		return embed.NewVoyageProvider(embed.VoyageOptions{})
-	case "ollama":
-		return embed.NewOllamaProvider(embed.OllamaOptions{})
-	case "fake":
-		return embed.NewFakeProvider(1024), nil
-	default:
-		return nil, fmt.Errorf("unknown provider %q (want voyage|ollama|fake|none)", name)
-	}
-}
-
 // embedTextForDecision returns the text aih-graph embeds for each Decision
 // node. We include the title + status + body so vector queries can match
 // against the actual decision narrative.
@@ -855,12 +820,42 @@ func embedInputText(text string) string {
 	return truncateJSONString(text, embedInputStringLimit)
 }
 
+func runOllamaEmbeddingPipeline(
+	db *storage.DB,
+	decisions []types.Decision,
+	agents []types.Agent,
+	skills []types.Skill,
+	hooks []types.Hook,
+	milestones []types.Milestone,
+	stories []types.Story,
+	repoFiles []types.RepoFile,
+	repoChunks []types.RepoChunk,
+	repoSymbols []types.RepoSymbol,
+	repoCalls []types.RepoCall,
+	repoTests []types.RepoTest,
+	memories []types.MarkdownMemory,
+	commits []types.RepoCommit,
+) {
+	embedder, err := embed.NewOllamaEmbedder(embed.OllamaOptions{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: Ollama embeddings skipped: %v\n", err)
+		return
+	}
+	if _, err := embedder.Embed("aih-graph readiness check"); err != nil {
+		fmt.Fprintf(os.Stderr, "build: Ollama embeddings skipped: %v\n", err)
+		return
+	}
+	if err := runEmbedPipeline(db, embedder, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits); err != nil {
+		fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
+	}
+}
+
 // runEmbedPipeline iterates extracted nodes and writes embeddings + content
 // SHAs onto the persisted rows. SHA-based change detection skips nodes whose
 // stored content_sha already matches the current text.
 func runEmbedPipeline(
 	db *storage.DB,
-	provider embed.Provider,
+	embedder embed.Embedder,
 	decisions []types.Decision,
 	agents []types.Agent,
 	skills []types.Skill,
@@ -938,20 +933,20 @@ func runEmbedPipeline(
 			skipped++
 			continue
 		}
-		vec, err := provider.Embed(embedInputText(u.text))
+		vec, err := embedder.Embed(embedInputText(u.text))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  embed: skip %s %s: %v\n", u.typ, u.identifier, err)
 			errs++
 			continue
 		}
-		if err := db.UpdateEmbedding(nodeID, embed.EncodeVector(vec), provider.Model(), sha); err != nil {
+		if err := db.UpdateEmbedding(nodeID, embed.EncodeVector(vec), embedder.Model(), sha); err != nil {
 			errs++
 			continue
 		}
 		embedded++
 	}
 	fmt.Printf("Embedded %d nodes (%s; %d skipped — SHA match; %d errors)\n",
-		embedded, provider.Model(), skipped, errs)
+		embedded, embedder.Model(), skipped, errs)
 	return nil
 }
 
@@ -968,7 +963,6 @@ func runQuery(args []string) int {
 	depth := fs.Int("depth", 1, "BFS depth (hops outward from root)")
 	typ := fs.String("type", "", "restrict root match (BFS) or candidate type (semantic/hybrid) to a node type")
 	topK := fs.Int("top", 10, "semantic/hybrid: number of top matches to return")
-	provider := fs.String("embed-provider", "", "semantic/hybrid: embedding provider (voyage|ollama|fake; default: derive from stored embedding_model)")
 	limit := fs.Int("limit", 80, "maximum JSON BFS result nodes (0 = no limit)")
 	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
@@ -996,15 +990,15 @@ func runQuery(args []string) int {
 
 	if *hybrid {
 		if *jsonOut {
-			return runQueryHybridJSON(db, fs.Arg(0), *typ, *topK, *provider, freshness)
+			return runQueryHybridJSON(db, fs.Arg(0), *typ, *topK, freshness)
 		}
-		return runHybrid(db, fs.Arg(0), *typ, *topK, *provider)
+		return runHybrid(db, fs.Arg(0), *typ, *topK)
 	}
 	if *semantic {
 		if *jsonOut {
-			return runQuerySemanticJSON(db, fs.Arg(0), *typ, *topK, *provider, freshness)
+			return runQuerySemanticJSON(db, fs.Arg(0), *typ, *topK, freshness)
 		}
-		return runSemantic(db, fs.Arg(0), *typ, *topK, *provider)
+		return runSemantic(db, fs.Arg(0), *typ, *topK)
 	}
 
 	// BFS mode.
@@ -1046,63 +1040,27 @@ func runQuery(args []string) int {
 	return 0
 }
 
-// runSemantic executes a --semantic query: routes to BM25/FTS5 lexical
-// search when provider=bm25 (or auto-detected as default); otherwise embeds
-// the query and KNN-ranks stored vector embeddings by cosine similarity.
-func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, providerName string) int {
-	// Auto-detect: prefer BM25 if FTS5 has rows; else fall back to vector providers.
-	if providerName == "" {
-		if n, _ := db.CountFTS(); n > 0 {
-			providerName = "bm25"
-		}
-	}
-	if providerName == "bm25" {
-		return runSemanticBM25(db, queryText, typeFilter, topK)
-	}
-	// Determine provider. If --embed-provider not passed, detect from stored
-	// rows (first row's embedding_model). Falls back to "fake" if nothing stored.
-	if providerName == "" {
-		rows, err := db.IterateEmbeddings("")
-		if err == nil && len(rows) > 0 {
-			// Re-look up the model name (IterateEmbeddings doesn't return it
-			// in the row struct; query directly).
-			var model sql.NullString
-			_ = db.SQL().QueryRow(
-				"SELECT embedding_model FROM nodes WHERE id = ?", rows[0].NodeID,
-			).Scan(&model)
-			if model.String == "fake-sha256" {
-				providerName = "fake"
-			} else if strings.HasPrefix(model.String, "ollama:") {
-				providerName = "ollama"
-			} else if model.String != "" {
-				providerName = "voyage"
-			} else {
-				providerName = "fake"
-			}
-		} else {
-			providerName = "fake"
-		}
-	}
-	provider, err := buildEmbedProvider(providerName)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "query: %v\n", err)
-		return 1
-	}
-
-	queryVec, err := provider.Embed(embedInputText(queryText))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "query: embed query: %v\n", err)
-		return 1
-	}
-
+// runSemantic executes a --semantic query. It uses stored Ollama embeddings
+// when available, otherwise falls back to BM25/FTS5 lexical ranking.
+func runSemantic(db *storage.DB, queryText, typeFilter string, topK int) int {
 	rows, err := db.IterateEmbeddings(typeFilter)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
 		return 1
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(os.Stderr, "query: no embeddings stored (run `aih-graph build --embed-provider ollama|fake|voyage` first)")
-		return 1
+		return runSemanticBM25(db, queryText, typeFilter, topK)
+	}
+	embedder, err := resolveEmbedder()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: %v\n", err)
+		return runSemanticBM25(db, queryText, typeFilter, topK)
+	}
+
+	queryVec, err := embedder.Embed(embedInputText(queryText))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: embed query: %v\n", err)
+		return runSemanticBM25(db, queryText, typeFilter, topK)
 	}
 
 	candidates := make([]embed.Candidate, 0, len(rows))
@@ -1138,27 +1096,28 @@ func runSemantic(db *storage.DB, queryText, typeFilter string, topK int, provide
 	return 0
 }
 
-func runQuerySemanticJSON(db *storage.DB, queryText, typeFilter string, topK int, providerName string, freshness memoryFreshness) int {
-	if providerName == "" {
-		if n, _ := db.CountFTS(); n > 0 {
-			providerName = "bm25"
-		}
+func runQuerySemanticJSON(db *storage.DB, queryText, typeFilter string, topK int, freshness memoryFreshness) int {
+	rows, err := db.IterateEmbeddings(typeFilter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
+		return 1
 	}
-	if providerName == "bm25" {
+	if len(rows) == 0 {
 		return runQueryBM25JSON(db, "semantic_bm25", queryText, typeFilter, topK, freshness)
 	}
-	return runQueryVectorJSON(db, "semantic_vector", queryText, typeFilter, topK, providerName, false, freshness)
+	return runQueryVectorJSON(db, "semantic_vector", queryText, typeFilter, topK, false, freshness)
 }
 
-func runQueryHybridJSON(db *storage.DB, queryText, typeFilter string, topK int, providerName string, freshness memoryFreshness) int {
-	if providerName == "" || providerName == "bm25" {
-		ftsRows, _ := db.CountFTS()
-		embRows, _ := db.IterateEmbeddings("")
-		if ftsRows > 0 && (providerName == "bm25" || len(embRows) == 0) {
-			return runQueryBM25JSON(db, "hybrid_bm25", queryText, typeFilter, topK, freshness)
-		}
+func runQueryHybridJSON(db *storage.DB, queryText, typeFilter string, topK int, freshness memoryFreshness) int {
+	embRows, err := db.IterateEmbeddings(typeFilter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
+		return 1
 	}
-	return runQueryVectorJSON(db, "hybrid_vector", queryText, typeFilter, topK, providerName, true, freshness)
+	if len(embRows) == 0 {
+		return runQueryBM25JSON(db, "hybrid_bm25", queryText, typeFilter, topK, freshness)
+	}
+	return runQueryVectorJSON(db, "hybrid_vector", queryText, typeFilter, topK, true, freshness)
 }
 
 func runQueryBM25JSON(db *storage.DB, mode, queryText, typeFilter string, topK int, freshness memoryFreshness) int {
@@ -1183,16 +1142,16 @@ func runQueryBM25JSON(db *storage.DB, mode, queryText, typeFilter string, topK i
 	})
 }
 
-func runQueryVectorJSON(db *storage.DB, mode, queryText, typeFilter string, topK int, providerName string, includeNeighbors bool, freshness memoryFreshness) int {
-	provider, err := resolveProvider(db, providerName)
+func runQueryVectorJSON(db *storage.DB, mode, queryText, typeFilter string, topK int, includeNeighbors bool, freshness memoryFreshness) int {
+	embedder, err := resolveEmbedder()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: %v\n", err)
-		return 1
+		return runQueryBM25JSON(db, vectorFallbackMode(mode), queryText, typeFilter, topK, freshness)
 	}
-	queryVec, err := provider.Embed(embedInputText(queryText))
+	queryVec, err := embedder.Embed(embedInputText(queryText))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: embed query: %v\n", err)
-		return 1
+		return runQueryBM25JSON(db, vectorFallbackMode(mode), queryText, typeFilter, topK, freshness)
 	}
 	rows, err := db.IterateEmbeddings(typeFilter)
 	if err != nil {
@@ -1200,7 +1159,7 @@ func runQueryVectorJSON(db *storage.DB, mode, queryText, typeFilter string, topK
 		return 1
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(os.Stderr, "query: no embeddings stored (run `aih-graph build --embed-provider ollama|fake|voyage` first)")
+		fmt.Fprintln(os.Stderr, "query: no Ollama embeddings stored (run `aih-graph refresh` with local Ollama available)")
 		return 1
 	}
 
@@ -1254,11 +1213,17 @@ func runQueryVectorJSON(db *storage.DB, mode, queryText, typeFilter string, topK
 		Query:       queryText,
 		Mode:        mode,
 		TypeFilter:  typeFilter,
-		Provider:    provider.Model(),
 		Freshness:   freshness,
 		ResultCount: len(out),
 		Matches:     out,
 	})
+}
+
+func vectorFallbackMode(mode string) string {
+	if strings.HasPrefix(mode, "semantic") {
+		return "semantic_bm25"
+	}
+	return "hybrid_bm25"
 }
 
 func runContext(args []string) int {
@@ -1310,7 +1275,7 @@ func runContext(args []string) int {
 		}
 		printFreshnessWarning(freshness)
 		fmt.Printf("No exact node for %q; showing hybrid memory matches.\n", target)
-		return runHybrid(db, target, *typ, *topK, "bm25")
+		return runHybrid(db, target, *typ, *topK)
 	}
 	results, err := eng.BFS(node.Type, node.Identifier, *depth)
 	if err != nil {
@@ -1666,7 +1631,7 @@ func runGotchas(args []string) int {
 	if *jsonOut {
 		return runBM25SearchJSON(db, "gotchas", queryText, "Memory", *topK)
 	}
-	return runHybrid(db, queryText, "Memory", *topK, "bm25")
+	return runHybrid(db, queryText, "Memory", *topK)
 }
 
 func runMilestone(args []string) int {
@@ -1691,7 +1656,7 @@ func runMilestone(args []string) int {
 	if *jsonOut {
 		return runBM25SearchJSON(db, "milestone", queryText, "", *topK)
 	}
-	return runHybrid(db, queryText, "", *topK, "bm25")
+	return runHybrid(db, queryText, "", *topK)
 }
 
 func runStatus(args []string) int {
@@ -1892,7 +1857,7 @@ func runSemanticBM25(db *storage.DB, queryText, typeFilter string, topK int) int
 		return 1
 	}
 	if len(matches) == 0 {
-		fmt.Fprintln(os.Stderr, "query: no BM25 matches (try less specific terms or --bfs/--semantic with vector provider)")
+		fmt.Fprintln(os.Stderr, "query: no BM25 matches (try less specific terms or --bfs)")
 		return 1
 	}
 	eng := query.New(db.SQL())
@@ -1955,37 +1920,27 @@ func buildFTS5Query(raw string) string {
 	return result
 }
 
-// runHybrid executes a --hybrid query: rank top-K by similarity, then expand
-// 1-hop edges per match. Routes to BM25 (FTS5) when no vector embeddings are
-// stored but FTS5 has rows (default post-M041); otherwise vector KNN path.
-func runHybrid(db *storage.DB, queryText, typeFilter string, topK int, providerName string) int {
-	// Auto-route to BM25 hybrid when FTS5 has rows and (a) no provider
-	// specified, or (b) provider explicitly bm25, or (c) no embeddings stored.
-	if providerName == "" || providerName == "bm25" {
-		ftsRows, _ := db.CountFTS()
-		embRows, _ := db.IterateEmbeddings("")
-		if ftsRows > 0 && (providerName == "bm25" || len(embRows) == 0) {
-			return runHybridBM25(db, queryText, typeFilter, topK)
-		}
-	}
-	provider, err := resolveProvider(db, providerName)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "query: %v\n", err)
-		return 1
-	}
-	queryVec, err := provider.Embed(embedInputText(queryText))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "query: embed: %v\n", err)
-		return 1
-	}
+// runHybrid executes a --hybrid query: rank top-K by stored Ollama embeddings,
+// then expand 1-hop edges per match. It falls back to BM25 when no embeddings
+// are stored yet.
+func runHybrid(db *storage.DB, queryText, typeFilter string, topK int) int {
 	rows, err := db.IterateEmbeddings(typeFilter)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
 		return 1
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(os.Stderr, "query: no embeddings stored (run `aih-graph build --embed-provider P` first)")
-		return 1
+		return runHybridBM25(db, queryText, typeFilter, topK)
+	}
+	embedder, err := resolveEmbedder()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: %v\n", err)
+		return runHybridBM25(db, queryText, typeFilter, topK)
+	}
+	queryVec, err := embedder.Embed(embedInputText(queryText))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: embed: %v\n", err)
+		return runHybridBM25(db, queryText, typeFilter, topK)
 	}
 	candidates := make([]embed.Candidate, 0, len(rows))
 	idMap := map[int64]struct{ typ, identifier string }{}
@@ -2028,30 +1983,8 @@ func runHybrid(db *storage.DB, queryText, typeFilter string, topK int, providerN
 	return 0
 }
 
-// resolveProvider picks an embed.Provider: explicit name wins; else detect
-// from stored embedding_model (first non-empty row); else default to fake.
-func resolveProvider(db *storage.DB, providerName string) (embed.Provider, error) {
-	if providerName == "" {
-		rows, err := db.IterateEmbeddings("")
-		if err == nil && len(rows) > 0 {
-			var model sql.NullString
-			_ = db.SQL().QueryRow(
-				"SELECT embedding_model FROM nodes WHERE id = ?", rows[0].NodeID,
-			).Scan(&model)
-			if model.String == "fake-sha256" {
-				providerName = "fake"
-			} else if strings.HasPrefix(model.String, "ollama:") {
-				providerName = "ollama"
-			} else if model.String != "" {
-				providerName = "voyage"
-			} else {
-				providerName = "fake"
-			}
-		} else {
-			providerName = "fake"
-		}
-	}
-	return buildEmbedProvider(providerName)
+func resolveEmbedder() (embed.Embedder, error) {
+	return embed.NewOllamaEmbedder(embed.OllamaOptions{})
 }
 
 type jsonNode struct {
@@ -2122,7 +2055,6 @@ type queryJSON struct {
 	Mode             string          `json:"mode"`
 	TypeFilter       string          `json:"type_filter,omitempty"`
 	Depth            int             `json:"depth,omitempty"`
-	Provider         string          `json:"provider,omitempty"`
 	Freshness        memoryFreshness `json:"freshness"`
 	ResultCount      int             `json:"result_count"`
 	Results          []jsonBFSResult `json:"results,omitempty"`
@@ -2161,9 +2093,8 @@ type statusJSON struct {
 }
 
 type refreshJSON struct {
-	Command  string     `json:"command"`
-	Provider string     `json:"provider"`
-	Status   statusJSON `json:"status"`
+	Command string     `json:"command"`
+	Status  statusJSON `json:"status"`
 }
 
 func writeJSON(v any) int {

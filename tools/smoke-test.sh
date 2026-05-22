@@ -4924,7 +4924,7 @@ check_aih_graph_integration_round_trip() {
   local marker_pre_existed=0
   [[ -f "${consent_marker}" ]] && marker_pre_existed=1
   local out
-  out="$("${bin}" build --accept-all-repos --db "${db}" "${repo_root}" 2>&1)"
+  out="$(AIH_GRAPH_OLLAMA_URL=http://127.0.0.1:9 "${bin}" build --accept-all-repos --db "${db}" "${repo_root}" 2>&1)"
   if [[ ${marker_pre_existed} -eq 0 ]]; then
     rm -f "${consent_marker}"
   fi
@@ -4975,6 +4975,8 @@ check_m048_memory_integration_contract() {
   local tpl
   local context_hook="${PACKAGE_ROOT}/.aihaus/hooks/context-inject.sh"
   local refresh_hook="${PACKAGE_ROOT}/.aihaus/hooks/aih-graph-refresh.sh"
+  local graph_main="${PACKAGE_ROOT}/../aih-graph/cmd/aih-graph/main.go"
+  local embed_go="${PACKAGE_ROOT}/../aih-graph/internal/embed/embed.go"
 
   for tpl in \
     "${PACKAGE_ROOT}/templates/settings.local.json" \
@@ -5020,8 +5022,25 @@ check_m048_memory_integration_contract() {
     if ! grep -Fq 'AIHAUS_OLLAMA_AUTO' "${refresh_hook}"; then
       issues+=("aih-graph-refresh.sh: missing Ollama auto-start control")
     fi
-    if ! grep -Fq 'provider="ollama"' "${refresh_hook}"; then
-      issues+=("aih-graph-refresh.sh: missing automatic Ollama provider selection")
+    if grep -Fq 'AIH_GRAPH_PROVIDER' "${refresh_hook}" || grep -Fq -- '--embed-provider' "${refresh_hook}"; then
+      issues+=("aih-graph-refresh.sh: embedding backend selection should be removed")
+    fi
+    if ! grep -Fq 'ollama_model="nomic-embed-text"' "${refresh_hook}"; then
+      issues+=("aih-graph-refresh.sh: missing fixed nomic-embed-text model")
+    fi
+  fi
+
+  if [[ ! -f "${graph_main}" || ! -f "${embed_go}" ]]; then
+    issues+=("aih-graph source missing for M048 contract check")
+  else
+    if grep -Fq -- '--embed-provider' "${graph_main}" || grep -Fq 'buildEmbedProvider' "${graph_main}"; then
+      issues+=("aih-graph CLI should not expose provider selection")
+    fi
+    if grep -Fq 'NewFakeProvider' "${embed_go}" || grep -Fq 'NewVoyageProvider' "${embed_go}"; then
+      issues+=("aih-graph embed package should keep only Ollama embeddings")
+    fi
+    if ! grep -Eq 'ollamaDefaultModel[[:space:]]*=[[:space:]]*"nomic-embed-text"' "${embed_go}"; then
+      issues+=("aih-graph embed package must fix the model to nomic-embed-text")
     fi
   fi
 

@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     identifier      TEXT NOT NULL,
     properties      TEXT NOT NULL,            -- JSON object
     embedding       BLOB,                     -- []float32 LE; NULL until M035 pipeline
-    embedding_model TEXT,                     -- 'voyage-3' | 'local-minilm' | NULL
+    embedding_model TEXT,                     -- 'ollama:nomic-embed-text' | NULL
     content_sha     TEXT,                     -- SHA-256 hex of source content
     created_at      INTEGER NOT NULL,         -- unix epoch seconds
     updated_at      INTEGER NOT NULL,

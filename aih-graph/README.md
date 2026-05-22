@@ -15,9 +15,7 @@ M048 adds a local repository-brain slice:
 - `Memory` nodes from markdown memory and `Commit` nodes from recent git history
 - `context`, `callers`, `impact`, `gotchas`, `milestone`, `status`, and `mark-stale` commands
 - `refresh` as the agent-facing rebuild command (`build` remains the lower-level primitive)
-- `--embed-provider ollama` for local semantic embeddings through Ollama `/api/embed`
-  - default model: `nomic-embed-text`
-  - override with `AIH_GRAPH_OLLAMA_MODEL`
+- local semantic embeddings through Ollama `/api/embed` with fixed `nomic-embed-text`
 
 The installed `aihaus` shim exposes these as `aihaus memory <subcommand> ...`.
 
@@ -26,7 +24,7 @@ The installed `aihaus` shim exposes these as `aihaus memory <subcommand> ...`.
 The human text output remains the default. Agents should prefer `--json` for stable payloads:
 
 ```bash
-aihaus memory query --json "Ollama embedding provider"
+aihaus memory query --json "Ollama embedding backend"
 aihaus memory status --json
 aihaus memory context --type Symbol --depth 1 --json aih-graph/internal/extract/repository.go:ParseRepositoryText
 aihaus memory impact --type File --depth 1 --limit 40 --json aih-graph/cmd/aih-graph/main.go
@@ -40,7 +38,7 @@ aihaus memory milestone --json Ollama
 This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
 - **Markdown-only extraction** for 6 aihaus typed nodes (Decision/Milestone/Story/Agent/Hook/Skill) — per ADR-260515-C-amend-02
 - **modernc.org/sqlite storage** (pure-Go, no CGO) — per ADR-260515-B-amend-02
-- **Lexical search via BM25/FTS5** (pure-Go offline, zero API keys, zero model downloads) — default per ADR-260515-B-amend-02 + ADR-260516-A. Optional vector providers include local Ollama (`--embed-provider ollama`) and test-only fake embeddings.
+- **Lexical search via BM25/FTS5** (pure-Go offline, zero API keys) plus local Ollama `nomic-embed-text` embeddings when Ollama is available.
 - **Three query modes:** structural BFS, vector similarity (`--semantic`), hybrid
 - **Pure-Go single binary** — zero CGO requirement, works on any platform Go supports
 
@@ -50,7 +48,7 @@ Out of scope for the current native memory slice:
 - Clustering (Leiden community detection)
 - HNSW/IVF vector indexes (brute-force only; sufficient for target repos up to ~500k nodes)
 - LLM re-ranking (`--rerank` deferred to v0.2+)
-- Local-ONNX embedding provider — deferred indefinitely (would re-introduce CGO; pure-Go transformer inference not production-grade today)
+- Local-ONNX embeddings — deferred indefinitely (would re-introduce CGO; pure-Go transformer inference not production-grade today)
 
 ## Status
 
@@ -67,9 +65,9 @@ Shipped milestone chain:
 - M040: Smoke checks + aihaus v0.35.0 release
 - M041: BM25/FTS5 lexical search default; one-shot install; tag v0.1.1
 - M041 dogfood: query --db default + hybrid BM25 routing + var-version ldflag fix; tag v0.1.2
-- M042: Voyage demotion from advertised surfaces; CLI/PRD/README reconciliation; tag v0.1.3
+- M042: legacy cloud-embedding demotion from advertised surfaces; CLI/PRD/README reconciliation; tag v0.1.3
 - M046: Agent memory indexing — `.claude/agent-memory/<name>/MEMORY.md` excerpts (200 lines / 25KB cap matching native CC) injected into Agent node properties; tag v0.1.4
-- M048: Native repository memory for real code, tests, markdown memory, recent commits, local Ollama embeddings, JSON command payloads, lifecycle refresh/stale hooks, and all-agent memory consultation.
+- M048: Native repository memory for real code, tests, markdown memory, recent commits, fixed local Ollama `nomic-embed-text` embeddings, JSON command payloads, lifecycle refresh/stale hooks, and all-agent memory consultation.
 
 ## Verifying the memory engine
 
@@ -101,7 +99,7 @@ A healthy index returns at least one `[s=N.NN]` line, for example:
 [s=4.72] Hook       aih-graph-refresh.sh    aih-graph-refresh.sh — refresh...
 ```
 
-Use `--semantic` (vector-only, when an embedding provider is configured) or `--bfs <exact-identifier>` (structural lookup) instead of the default hybrid mode for narrower queries.
+Use `--semantic` (vector-first when Ollama embeddings exist, BM25 fallback otherwise) or `--bfs <exact-identifier>` (structural lookup) instead of the default hybrid mode for narrower queries.
 
 ### Troubleshooting
 

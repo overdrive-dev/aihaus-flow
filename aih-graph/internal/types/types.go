@@ -18,7 +18,7 @@ type Node struct {
 	Identifier     string // e.g. "ADR-260514-B", "M030", "aih-milestone"
 	Properties     map[string]any
 	Embedding      []float32 // optional; nil if not yet embedded
-	EmbeddingModel string    // e.g. "voyage-3" | "local-minilm" | ""
+	EmbeddingModel string    // e.g. "ollama:nomic-embed-text" | ""
 	ContentSHA     string    // SHA-256 of content used for embedding (change detection)
 	CreatedAt      time.Time
 	UpdatedAt      time.Time

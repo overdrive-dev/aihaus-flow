@@ -15,15 +15,11 @@
 #
 # Env vars:
 #   AIH_GRAPH_BIN       Explicit binary path (skip discovery)
-#   AIH_GRAPH_PROVIDER  Search/embedding provider. Default unset -> uses
-#                       binary default (bm25, pure-Go offline FTS5). Pass
-#                       ollama for local semantic embeddings, fake for tests,
-#                       or none to skip the search index.
 #   AIH_GRAPH_DB        Override .db path (default: aih-graph manages via XDG)
 #   AIH_GRAPH_QUIET     If set non-empty, suppress per-line output.
-#   AIHAUS_OLLAMA_AUTO  Default 1. When AIH_GRAPH_PROVIDER is unset, start a
-#                       local Ollama server if `ollama` is installed and use
-#                       --embed-provider ollama when the embedding model exists.
+#   AIH_GRAPH_OLLAMA_URL Override Ollama base URL (or use OLLAMA_HOST).
+#   AIHAUS_OLLAMA_AUTO  Default 1. Start local Ollama when installed so
+#                       aih-graph can use nomic-embed-text embeddings.
 
 set -euo pipefail
 
@@ -45,7 +41,7 @@ case "$ollama_base_url" in
   *) ollama_base_url="http://${ollama_base_url}" ;;
 esac
 ollama_base_url="${ollama_base_url%/}"
-ollama_model="${AIH_GRAPH_OLLAMA_MODEL:-nomic-embed-text}"
+ollama_model="nomic-embed-text"
 ollama_bin="${AIHAUS_OLLAMA_BIN:-}"
 if [[ -z "$ollama_bin" ]] && command -v ollama >/dev/null 2>&1; then
   ollama_bin="$(command -v ollama)"
@@ -116,22 +112,15 @@ if [[ -n "${AIH_GRAPH_DB:-}" ]]; then
   args+=(--db "$AIH_GRAPH_DB")
 fi
 
-provider="${AIH_GRAPH_PROVIDER:-}"
-if [[ -z "$provider" ]]; then
-  if ensure_ollama_ready; then
-    if ollama_model_available; then
-      provider="ollama"
-      log "provider: ollama (${ollama_model})"
-    else
-      warn "Ollama is available but model '${ollama_model}' is missing; using default BM25"
-      warn "install model manually with: ollama pull ${ollama_model}"
-    fi
+if ensure_ollama_ready; then
+  if ollama_model_available; then
+    log "ollama: ready (${ollama_model})"
   else
-    log "provider: default bm25"
+    warn "Ollama is available but model '${ollama_model}' is missing; semantic embeddings will be skipped"
+    warn "install model manually with: ollama pull ${ollama_model}"
   fi
-fi
-if [[ -n "$provider" ]]; then
-  args+=(--embed-provider "$provider")
+else
+  log "ollama: unavailable; refreshing BM25 index only"
 fi
 
 # Run. Failures are non-fatal — aih-graph is supplemental.

@@ -59,7 +59,7 @@ The milestone is accepted when all of these scenarios pass in the real repositor
 3. A user can query a file, function, hook, skill, or topic and receive relevant code, memory, and decision context.
 4. A user can ask where a known function or symbol is called and receive call-site evidence where static extraction supports it.
 5. A user can ask what changing a file or symbol may impact and receive affected files, tests, runtime hooks, skills, decisions, and gotchas where evidence exists.
-6. Ollama embeddings work as a local semantic provider when Ollama is available.
+6. Ollama embeddings work as a local semantic backend when Ollama is available.
 7. BM25 or another deterministic local fallback works when Ollama is unavailable.
 8. Agent memory remains markdown-backed and is indexed into the repository brain.
 9. At least planner, implementer, code-reviewer, and verifier protocols require memory consultation at the appropriate points.
@@ -115,13 +115,13 @@ Alternatives considered:
 - Vector-only RAG. Rejected because it cannot reliably answer call-site and impact questions.
 - Full GitNexus clone. Rejected for M048; GitNexus is inspiration, not the implementation target.
 
-### Ollama Is the Local Semantic Provider
+### Ollama Is the Local Semantic Backend
 
-M048 should add Ollama as the primary local embedding provider, using BM25 or equivalent local lexical search as fallback.
+M048 should use Ollama with `nomic-embed-text` as the only semantic embedding backend, using BM25 or equivalent local lexical search as fallback.
 
 Rationale:
 - The user wants local intelligence without external embedding APIs.
-- Ollama's embedding API is simple enough to integrate behind the existing provider interface.
+- Ollama's embedding API is simple enough to integrate without exposing provider selection to users or agents.
 - Local embeddings preserve privacy and reduce recurring cost.
 
 Alternatives considered:
@@ -154,7 +154,7 @@ Expected behavior:
 
 - Static call graph quality may vary by language and dynamic patterns.
 - Tree-sitter or parser dependency choices may affect Windows setup and install friction.
-- Ollama model choice affects embedding quality, latency, and dimensionality.
+- The fixed `nomic-embed-text` model affects embedding quality, latency, and dimensionality.
 - Incremental indexing can become complicated if it tries to be perfect too early.
 - Automatic agent memory consultation can become noisy if every agent receives too much context.
 - Some "belongs to milestone" answers may be inferential unless commit, manifest, or decision evidence exists.
@@ -166,7 +166,7 @@ Expected behavior:
 - `pkg/.aihaus/agents` contains the specialist agent definitions whose protocols will need memory integration.
 - `pkg/.aihaus/skills` contains user-facing aihaus commands and orchestration protocols.
 - `pkg/.aihaus/hooks` contains lifecycle hooks, audit hooks, task hooks, context injection, manifest mutation, and refresh seams.
-- `aih-graph` is the closest existing memory engine. It already has SQLite storage, typed aihaus nodes, BM25/FTS5 search, an embedding provider interface, and query modes.
+- `aih-graph` is the closest existing memory engine. It already has SQLite storage, typed aihaus nodes, BM25/FTS5 search, a local embedding client, and query modes.
 - Existing markdown memory includes decisions, knowledge templates, global gotchas, review memory, and per-agent memory conventions.
 - GitNexus is external inspiration for code graph, impact, MCP, and agent-facing repository intelligence, but M048 should build aihaus-native behavior rather than clone GitNexus wholesale.
 
@@ -178,7 +178,7 @@ R2. Memory must answer codebase questions about functions, files, calls, impact,
 
 R3. The system must index real code, not only aihaus markdown artifacts.
 
-R4. Ollama must be supported as a local semantic embedding provider.
+R4. Ollama with `nomic-embed-text` must be supported as the local semantic embedding backend.
 
 R5. Agent memory must remain in markdown files, with hooks ensuring usage and re-indexing.
 
@@ -196,7 +196,7 @@ R8. The system must remain usable by a human operating Codex or Claude.
 - Repository memory engine evolution from the existing graph/memory substrate.
 - Code indexing for aihaus-flow's own primary languages and artifact types.
 - File, chunk, symbol, import, call, test, commit, milestone, decision, gotcha, and agent-memory indexing.
-- Ollama embedding provider.
+- Ollama `nomic-embed-text` embeddings.
 - Local lexical fallback.
 - Query, context, callers, impact, milestone, gotchas, refresh, and status commands.
 - Hook integration for refresh and stale marking.
@@ -241,7 +241,7 @@ R8. The system must remain usable by a human operating Codex or Claude.
 - aihaus hooks: refresh or stale-mark memory after workflow events.
 - git: commits and diffs feed temporal and impact memory.
 - markdown memory: decisions, knowledge, gotchas, reviews, milestone summaries, and agent memory feed the index.
-- Ollama: local embedding provider through HTTP API.
+- Ollama: local embedding backend through HTTP API.
 - SQLite or successor local store: derived memory graph, search index, and embeddings.
 - Codex/Claude human workflows: CLI commands must be easy for agents and humans to invoke.
 
@@ -285,14 +285,14 @@ Acceptance:
 - Basic call relationships are captured where static extraction supports them.
 - Unsupported files still receive file/chunk indexing.
 
-### S05 - Ollama Semantic Provider
+### S05 - Ollama Semantic Backend
 
-Add Ollama as a local embedding provider and wire it into build and query flows.
+Add Ollama as the local embedding backend and wire it into build and query flows.
 
 Acceptance:
-- User can configure Ollama URL and model.
+- User can configure the Ollama URL; model remains fixed to `nomic-embed-text`.
 - Build can embed indexed chunks through Ollama.
-- Query can embed the user query through the same provider.
+- Query can embed the user query through the same Ollama backend.
 - If Ollama is unavailable, commands report fallback behavior clearly.
 
 ### S06 - Hybrid Query and Context Commands
@@ -344,7 +344,7 @@ Acceptance:
 Use M048's memory system to review and verify M048 itself.
 
 Acceptance:
-- Tests cover storage, parser, embedding provider behavior, query behavior, refresh behavior, and key command output.
+- Tests cover storage, parser, Ollama embedding behavior, query behavior, refresh behavior, and key command output.
 - Dogfood evidence shows memory commands used against the M048 diff.
 - Final verification demonstrates planner, implementer, reviewer, and verifier integration.
 - Documentation explains setup, fallback behavior, and operational usage.
@@ -387,7 +387,7 @@ The milestone is reviewed and verified using its own repository memory layer.
 
 - Unit tests for parser/extractor behavior by language or artifact type.
 - Unit tests for storage schema migration and node/edge upsert behavior.
-- Unit tests for embedding provider request/response handling using a fake Ollama server.
+- Unit tests for Ollama request/response handling using a fake Ollama server.
 - Unit tests for query ranking and bounded output behavior.
 - Integration tests for build, refresh, status, query, context, callers, impact, milestone, and gotchas commands.
 - Hook tests for stale marking and refresh behavior.
@@ -412,12 +412,12 @@ Implemented in this branch:
 
 - S03: repository walker and chunk indexing now persist `File` and `Chunk` nodes, with skip rules for generated/vendor/runtime directories and binary/oversized files.
 - S04: code symbol extraction now persists `Symbol` and `Call` nodes for Go functions/methods plus shell and PowerShell functions; Go call sites include file/line evidence and resolved symbol edges where static resolution is unique.
-- S05: `--embed-provider ollama` is wired as a local semantic provider through Ollama's `/api/embed` endpoint; model defaults to `nomic-embed-text`, with `AIH_GRAPH_OLLAMA_MODEL`, `AIH_GRAPH_OLLAMA_URL`, and `OLLAMA_HOST` overrides.
+- S05: local semantic embeddings are wired through Ollama's `/api/embed` endpoint with fixed `nomic-embed-text`; `AIH_GRAPH_OLLAMA_URL` and `OLLAMA_HOST` may point at a non-default endpoint.
 - S06: `query`, `context`, `callers`, `impact`, `gotchas`, and `milestone` commands expose repository-brain queries over exact graph nodes and BM25 fallback; `query`, `context`, `callers`, `impact`, `gotchas`, `milestone`, `status`, and `refresh` also expose stable `--json` payloads for agent consumption.
 - S07: markdown memory sections now persist as `Memory` nodes, tests persist as `Test` nodes, and the latest 200 git commits persist as `Commit` nodes with `touches` edges to indexed files.
 - S08/S09 first slice: `status` and `mark-stale` commands plus hooks mark memory stale after writes/git history changes and refresh after startup, task completion, and session end; both settings templates carry the memory lifecycle hooks, and all packaged agents now require JSON-backed memory consultation when available.
 - S09 automation hardening: `context-inject.sh` auto-loads a bounded native repository memory packet into every subagent start, so ordinary users do not have to call memory commands manually; agents use targeted `aihaus memory ... --json` commands only when they need deeper context.
-- S05 automation hardening: `aih-graph-refresh.sh` opportunistically starts local Ollama when installed and uses `--embed-provider ollama` if `nomic-embed-text` is already available, with a non-blocking BM25 fallback when Ollama or the model is absent.
+- S05 automation hardening: `aih-graph-refresh.sh` opportunistically starts local Ollama when installed; `aih-graph` always refreshes BM25 and enriches with `nomic-embed-text` embeddings when Ollama is available.
 - CLI ergonomics: `aihaus memory <subcommand>` delegates to the current source `aih-graph` engine, including `refresh`, with Windows `.cmd` preferring Git Bash over the WSL stub.
 
 Dogfood evidence from aihaus-flow:
@@ -430,17 +430,17 @@ Dogfood evidence from aihaus-flow:
 - `aih-graph milestone Ollama` returned M048 docs, Ollama code chunks, the M048 commit, and ADR-260521-A.
 - `aih-graph status --json` returned a machine-readable fresh index state with node counts, BM25/embedding row counts, and embedding model counts.
 - `aih-graph query --json Ollama` defaults to hybrid BM25 and returned a structured query payload with match nodes and neighbor context; `--semantic --json` also returned structured BM25-backed query results.
-- Real local Ollama validation with `nomic-embed-text` embedded 3400 nodes with 0 errors after capping embedding input text, and `query --semantic --embed-provider ollama --json "Ollama embedding provider"` returned `semantic_vector` results.
+- Real local Ollama validation with `nomic-embed-text` embedded 3400 nodes with 0 errors after capping embedding input text, and `query --semantic --json "Ollama embedding backend"` returned `semantic_vector` results.
 - `aih-graph context --json --type Symbol --depth 1 aih-graph/internal/extract/repository.go:ParseRepositoryText` returned exact symbol context as JSON, including related helper symbols, call nodes, and test evidence.
 - `aih-graph impact --json --type File --depth 1 --limit 80 aih-graph/cmd/aih-graph/main.go` returned bounded JSON impact context with `freshness`, `neighborhood_total`, `neighborhood_returned`, `neighborhood_truncated`, and truncated long string properties.
 - `aih-graph callers --json ParseRepositoryText` returned call-site evidence as structured JSON.
 - `aih-graph gotchas --json git checkout` and `aih-graph milestone --json Ollama` returned BM25 match payloads with node summaries and neighbor context.
-- `aih-graph refresh --json --repo .. --db C:\tmp\aih-graph-m048-refresh-json.db --accept-all-repos` returned a machine-readable refresh payload with `provider`, nested `status`, node counts, BM25 rows, and embedding model counts.
+- `aih-graph refresh --json --repo .. --db C:\tmp\aih-graph-m048-refresh-json.db --accept-all-repos` returned a machine-readable refresh payload with nested `status`, node counts, BM25 rows, and embedding model counts.
 - `aih-graph query --json "refresh json output"` returned commit `3eb7b1b` plus the changed code, test, and M048 doc files; `context --json --type Symbol aih-graph/cmd/aih-graph/main.go:runRefresh` showed `collectStatusJSON`, `runBuild`, `runWithStdoutDiscard`, and `writeJSON` as first-hop context; `impact --json --type File aih-graph/cmd/aih-graph/main.go` surfaced the recent memory commits touching the CLI.
 - `aihaus memory version` and `aihaus memory status --repo . --db ...` work through the PowerShell wrapper.
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-memory-alias-refresh.db --accept-all-repos` works through the Windows `.cmd` wrapper and preserves the caller repository path.
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-wrapper-refresh-json.db --accept-all-repos --json` works through the PowerShell wrapper and returns the same structured refresh payload.
-- `aih-graph-refresh.sh` now delegates to `aih-graph refresh --repo ...`, opportunistically selects local Ollama when available, honors explicit provider overrides such as `AIH_GRAPH_PROVIDER=bm25|none`, and reports the real non-zero refresh exit code on failure; hook validation with `AIH_GRAPH_PROVIDER=bm25` produced a fresh BM25 index through the refresh hook.
+- `aih-graph-refresh.sh` now delegates to `aih-graph refresh --repo ...`, opportunistically starts local Ollama, and reports the real non-zero refresh exit code on failure; hook validation produced a fresh BM25 index through the refresh hook.
 - `aih-graph-stale.sh --from-hook bash` ignores `aihaus memory refresh ... --json` and does not recreate `.claude/audit/aih-graph.stale` after a refresh command.
 - `tools/smoke-test.sh` now includes an M048 contract check for memory lifecycle hooks in both settings templates, automatic memory injection in `context-inject.sh`, Ollama auto-start selection in `aih-graph-refresh.sh`, and integrated `aihaus memory ... --json` commands in all packaged agents; targeted `rg`, JSON parsing, and `bash -n` validations passed under Git Bash.
 - The all-agent memory contract now asserts that packaged agents use `aihaus memory` as the integration surface and do not bypass it with direct role-level `aih-graph` calls.
