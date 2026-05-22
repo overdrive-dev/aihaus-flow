@@ -91,6 +91,11 @@ manual_review() {
   else
     printf -- '- mode: `report-only`\n\n'
   fi
+  case "$(printf '%s' "$ROOT" | tr '\\' '/')" in
+    *OneDrive*|*Dropbox*|*"Google Drive"*|*iCloudDrive*|*"/Box/"*)
+      printf -- '- synced-path-warning: target is on a synced path; worktree cleanup may be slow or lock-prone.\n\n'
+      ;;
+  esac
   printf '## Safe Disposable Artifacts\n\n'
 } > "$REPORT"
 
@@ -132,6 +137,11 @@ done
 append ""
 append "## Git Worktrees"
 append ""
+AGENT_WORKTREE_DIRS=0
+if [ -d ".claude/worktrees" ]; then
+  AGENT_WORKTREE_DIRS="$(find ".claude/worktrees" -mindepth 1 -maxdepth 1 -type d -name 'agent-*' 2>/dev/null | wc -l | tr -d ' ')"
+fi
+append "- local .claude/worktrees/agent-* dirs: ${AGENT_WORKTREE_DIRS}"
 WT_TMP=".aihaus/runtime/legacy-preflight-worktrees.$$"
 mkdir -p ".aihaus/runtime"
 if git worktree list --porcelain >"$WT_TMP" 2>/dev/null; then
@@ -146,6 +156,22 @@ if git worktree list --porcelain >"$WT_TMP" 2>/dev/null; then
 else
   append "- git worktree list failed or unavailable"
   rm -f "$WT_TMP"
+fi
+if [ "${AGENT_WORKTREE_DIRS}" -gt 0 ]; then
+  append ""
+  append "Manual stale-agent-worktree pattern after preserving branches and reviewing pending merges:"
+  append ""
+  append '```bash'
+  append 'backup="$(pwd)/.aihaus/backups/orphaned-worktrees-$(date -u +%Y%m%dT%H%M%SZ)"'
+  append 'mkdir -p "$backup"'
+  append 'for wt in .claude/worktrees/agent-*; do'
+  append '  [ -d "$wt" ] || continue'
+  append '  git worktree remove --force "$wt" 2>/dev/null || true'
+  append '  [ ! -e "$wt" ] || mv "$wt" "$backup/$(basename "$wt")"'
+  append 'done'
+  append '```'
+  append ""
+  append "On Windows synced folders, pause sync first; if remove de-registers but cannot delete a locked directory, the same-volume move above preserves the leftover for inspection."
 fi
 
 append ""

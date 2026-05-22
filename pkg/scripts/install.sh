@@ -179,6 +179,23 @@ is_dogfood_cwd() {
   [[ -f "${PWD}/pkg/scripts/install.sh" ]] && [[ -d "${PWD}/pkg/.aihaus/skills" ]]
 }
 
+warn_if_synced_target() {
+  local target_path="$1"
+  local normalized
+  normalized="$(printf '%s' "$target_path" | tr '\\' '/')"
+  case "$normalized" in
+    *OneDrive*|*Dropbox*|*"Google Drive"*|*iCloudDrive*|*"/Box/"*)
+      echo "  warn: target is on a synced path; worktree churn may be slow/lock-prone. Pause sync before cleanup if needed."
+      ;;
+  esac
+}
+
+warn_if_copy_mode() {
+  if [[ "${MODE}" == "copy" ]]; then
+    echo "  warn: copy mode overwrites package-managed .aihaus/.claude files on update; keep custom edits in project memory/workflows, not managed skills/agents/hooks."
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # V5 (M022/Z3): User-global skill install loop — ADR-260504-A FR-01/FR-06
 # Installs symlinks for every pkg/.aihaus/skills/aih-* directory
@@ -336,6 +353,8 @@ fi
 echo "  package:  ${PKG_ROOT}"
 echo "  target:   ${TARGET}"
 echo "  mode:     ${MODE}"
+warn_if_synced_target "${TARGET}"
+warn_if_copy_mode
 
 # Step 2: require a git repo
 if [[ ! -d "${TARGET}/.git" ]] && ! git -C "${TARGET}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -365,11 +384,13 @@ if [[ "${UPDATE}" == "1" ]]; then
       echo "  skip: ${name} not found in package"
       continue
     fi
+    # Remove old managed contents before copying. This is copy-mode orphan
+    # pruning: the shipped package tree is the manifest for managed files.
     if [[ -e "${dst}" ]]; then
       rm -rf "${dst}"
     fi
     cp -R "${src}" "${dst}"
-    echo "  refreshed: .aihaus/${name}"
+    echo "  refreshed: .aihaus/${name} (managed copy pruned)"
   done
   # Restore per-agent effort from sidecar after agents/ wipe -- pinned
   # between the refresh loop above and the .claude/ link_or_copy loop below,
@@ -448,7 +469,7 @@ link_or_copy() {
     MODE="copy"
   fi
   cp -R "${src}" "${dst}"
-  echo "  copy: .claude/${name}"
+  echo "  copy: .claude/${name} (managed copy pruned)"
 }
 
 mkdir -p "${TARGET}/.claude"

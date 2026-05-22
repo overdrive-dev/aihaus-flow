@@ -43,6 +43,23 @@ is_dogfood_cwd() {
   [[ -f "${PWD}/pkg/scripts/install.sh" ]] && [[ -d "${PWD}/pkg/.aihaus/skills" ]]
 }
 
+warn_if_synced_target() {
+  local target_path="$1"
+  local normalized
+  normalized="$(printf '%s' "$target_path" | tr '\\' '/')"
+  case "$normalized" in
+    *OneDrive*|*Dropbox*|*"Google Drive"*|*iCloudDrive*|*"/Box/"*)
+      echo "  warn: target is on a synced path; worktree churn may be slow/lock-prone. Pause sync before cleanup if needed."
+      ;;
+  esac
+}
+
+warn_if_copy_mode() {
+  if [[ "${MODE}" == "copy" ]]; then
+    echo "  warn: copy mode overwrites package-managed .aihaus/.claude files on update; keep custom edits in project memory/workflows, not managed skills/agents/hooks."
+  fi
+}
+
 # Resolve package root (the directory containing this script's parent)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -137,6 +154,8 @@ echo "aihaus updater"
 echo "  package: ${PKG_ROOT}"
 echo "  target:  ${TARGET}"
 echo "  mode:    ${MODE}"
+warn_if_synced_target "${TARGET}"
+warn_if_copy_mode
 
 # ---- Counters for summary ----------------------------------------------------
 count_skills=0
@@ -158,12 +177,13 @@ update_aihaus_dir() {
     return 0
   fi
 
-  # Remove old directory contents and replace with fresh copy from package
+  # Remove old managed contents before copying. This is copy-mode orphan
+  # pruning: the shipped package tree is the manifest for managed files.
   if [[ -e "${dst}" ]]; then
     rm -rf "${dst}"
   fi
   cp -R "${src}" "${dst}"
-  echo "  refreshed: .aihaus/${name}"
+  echo "  refreshed: .aihaus/${name} (managed copy pruned)"
 }
 
 for name in skills agents hooks templates; do
@@ -265,7 +285,7 @@ link_or_copy() {
     MODE="copy"
   fi
   cp -R "${src}" "${dst}"
-  echo "  copy: .claude/${name}"
+  echo "  copy: .claude/${name} (managed copy pruned)"
 }
 
 mkdir -p "${CLAUDE}"

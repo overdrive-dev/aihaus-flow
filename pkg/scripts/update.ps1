@@ -55,6 +55,20 @@ function Test-DogfoodCwd {
            (Test-Path (Join-Path $cwd 'pkg\.aihaus\skills'))
 }
 
+function Write-SyncedTargetWarning {
+    param([string]$TargetPath)
+    $normalized = $TargetPath -replace '\\', '/'
+    if ($normalized -match '(?i)(OneDrive|Dropbox|Google Drive|iCloudDrive|/Box/)') {
+        Write-Host "  warn: target is on a synced path; worktree churn may be slow/lock-prone. Pause sync before cleanup if needed." -ForegroundColor Yellow
+    }
+}
+
+function Write-CopyModeWarning {
+    if ($script:Mode -eq 'copy') {
+        Write-Host "  warn: copy mode overwrites package-managed .aihaus/.claude files on update; keep custom edits in project memory/workflows, not managed skills/agents/hooks." -ForegroundColor Yellow
+    }
+}
+
 # Resolve package root (the directory containing this script's parent)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $PkgRoot = (Resolve-Path (Join-Path $ScriptDir '..')).Path
@@ -115,6 +129,8 @@ Write-Host "aihaus updater"
 Write-Host "  package: $PkgRoot"
 Write-Host "  target:  $Target"
 Write-Host "  mode:    $Mode"
+Write-SyncedTargetWarning -TargetPath $Target
+Write-CopyModeWarning
 
 # ---- Update package directories in .aihaus/ ---------------------------------
 # These are the package-owned directories that get refreshed.
@@ -132,12 +148,13 @@ function Update-AihausDir {
         return
     }
 
-    # Remove old directory contents and replace with fresh copy from package
+    # Remove old managed contents before copying. This is copy-mode orphan
+    # pruning: the shipped package tree is the manifest for managed files.
     if (Test-Path $dst) {
         Remove-Item -Recurse -Force $dst
     }
     Copy-Item -Path $src -Destination $dst -Recurse -Force
-    Write-Host "  refreshed: .aihaus\$Name"
+    Write-Host "  refreshed: .aihaus\$Name (managed copy pruned)"
 }
 
 foreach ($name in @('skills', 'agents', 'hooks', 'templates')) {
@@ -506,7 +523,7 @@ function Link-Or-Copy {
         }
     }
     Copy-Item -Path $src -Destination $dst -Recurse -Force
-    Write-Host "  copy: .claude\$Name"
+    Write-Host "  copy: .claude\$Name (managed copy pruned)"
 }
 
 New-Item -ItemType Directory -Path $Claude -Force | Out-Null

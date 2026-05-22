@@ -27,6 +27,16 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PACKAGE_ROOT="$(cd "$SCRIPT_DIR/../pkg" && pwd)"
 SELF_NAME="$(basename "$0")"
+ALLOWLIST_REL=(
+  ".aihaus/skills/aih-init/scripts/legacy-preflight.sh"
+  ".aihaus/skills/aih-init/SKILL.md"
+  ".aihaus/skills/_shared/enforcement-audit.md"
+  "CHANGELOG.md"
+  "scripts/install.sh"
+  "scripts/update.sh"
+  "scripts/install.ps1"
+  "scripts/update.ps1"
+)
 
 # ---- Build the regex -------------------------------------------------------
 # Escape regex metacharacters. Only "-" matters in our list.
@@ -62,8 +72,24 @@ printf "Forbidden terms: %s\n\n" "${FORBIDDEN_TERMS[*]}"
 # -i case-insensitive.
 # -n prints line numbers.
 # -H prints filenames even for single-file matches.
-TMP_OUT=$(mktemp 2>/dev/null || mktemp -t purity)
-trap 'rm -f "$TMP_OUT"' EXIT
+TMP_BASE="${TMPDIR:-}"
+if [[ -z "$TMP_BASE" || ! -d "$TMP_BASE" || ! -w "$TMP_BASE" ]]; then
+  TMP_BASE="$(cd "$SCRIPT_DIR/.." && pwd)/tmp"
+  mkdir -p "$TMP_BASE" 2>/dev/null || {
+    printf "ERROR: cannot create temp directory for purity check: %s\n" "$TMP_BASE" >&2
+    exit 2
+  }
+fi
+TMP_OUT=$(mktemp "${TMP_BASE%/}/purity.XXXXXX" 2>/dev/null) || {
+  printf "ERROR: cannot create temp file for purity check under %s\n" "$TMP_BASE" >&2
+  exit 2
+}
+TMP_FILTERED=$(mktemp "${TMP_BASE%/}/purity-filtered.XXXXXX" 2>/dev/null) || {
+  printf "ERROR: cannot create filtered temp file for purity check under %s\n" "$TMP_BASE" >&2
+  rm -f "$TMP_OUT"
+  exit 2
+}
+trap 'rm -f "$TMP_OUT" "$TMP_FILTERED"' EXIT
 
 grep -rIEHin \
   --include='*.md' \
@@ -84,6 +110,21 @@ grep -rIEHin \
 
 # Exit status of grep: 0=match, 1=no match, 2=error. We ignore errors above
 # because they usually mean "no files matched the include globs".
+while IFS= read -r hit; do
+  [[ -n "$hit" ]] || continue
+  hit_file="${hit%%:*}"
+  rel="${hit_file#${PACKAGE_ROOT}/}"
+  allow=0
+  for allowed in "${ALLOWLIST_REL[@]}"; do
+    if [[ "$rel" == "$allowed" ]]; then
+      allow=1
+      break
+    fi
+  done
+  [[ "$allow" -eq 1 ]] && continue
+  printf '%s\n' "$hit" >> "$TMP_FILTERED"
+done < "$TMP_OUT"
+mv "$TMP_FILTERED" "$TMP_OUT"
 
 MATCH_COUNT=$(wc -l < "$TMP_OUT" | tr -d ' ')
 

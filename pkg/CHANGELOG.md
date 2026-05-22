@@ -5,6 +5,25 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.7] - 2026-05-22 - legacy cleanup diagnostics
+
+### Fixed
+
+- `purity-check.sh` now creates temp files reliably on Windows Git Bash and
+  allowlists legacy-migration files that must name old harness artifacts.
+- `/aih-update` now captures full smoke output and prints failing checks instead
+  of tailing away the diagnosis; framework-purity failures auto-run the delegated
+  `purity-check.sh` output.
+
+### Added
+
+- Install/update scripts now warn when the target is under a synced folder and
+  when copy mode will overwrite package-managed `.aihaus`/`.claude` files.
+- Legacy preflight reports `.claude/worktrees/agent-*` counts and documents the
+  manual de-register-plus-move cleanup pattern for stale agent worktrees.
+- Managed copy refresh output now states that package-owned copies are
+  orphan-pruned against the shipped package tree.
+
 ## [0.38.6] - 2026-05-22 - legacy repo hygiene
 
 ### Added

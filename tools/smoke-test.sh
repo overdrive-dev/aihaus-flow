@@ -5151,12 +5151,27 @@ check_legacy_hygiene_regressions() {
   local init_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-init/SKILL.md"
   local preflight="${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/legacy-preflight.sh"
   local fragment="${PACKAGE_ROOT}/.aihaus/templates/gitignore-fragment"
+  local purity="${PACKAGE_ROOT}/../tools/purity-check.sh"
 
   if [[ ! -f "$preflight" ]] || ! bash -n "$preflight" >/dev/null 2>&1; then
     issues+=("aih-init legacy-preflight.sh missing or not parseable")
   fi
+  for rel in '.aihaus/skills/aih-init/scripts/legacy-preflight.sh' '.aihaus/skills/aih-init/SKILL.md' '.aihaus/skills/_shared/enforcement-audit.md' 'scripts/install.sh' 'scripts/update.ps1'; do
+    if ! grep -Fq "$rel" "$purity"; then
+      issues+=("purity-check allowlist missing ${rel}")
+    fi
+  done
   if ! grep -Fq 'legacy-preflight.sh --fix-safe' "$init_skill"; then
     issues+=("aih-init does not invoke legacy-preflight.sh --fix-safe")
+  fi
+  if ! grep -Fq 'local .claude/worktrees/agent-* dirs' "$preflight"; then
+    issues+=("legacy-preflight does not report stale agent worktree dirs")
+  fi
+  if ! grep -Fq 'target is on a synced path' "${PACKAGE_ROOT}/../pkg/scripts/update.sh"; then
+    issues+=("update.sh missing synced-path warning")
+  fi
+  if ! grep -Fq 'copy mode overwrites package-managed' "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
+    issues+=("update.ps1 missing copy-mode overwrite warning")
   fi
   for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
     if ! grep -Fxq "$needle" "$fragment"; then
@@ -5187,12 +5202,13 @@ check_legacy_hygiene_regressions() {
     _fail "$label" "failed to create temp dir"
     return
   }
-  mkdir -p "$tmp_root/.aihaus/state/.claude/audit" "$tmp_root/.gsd" "$tmp_root/.hermes"
+  mkdir -p "$tmp_root/.aihaus/state/.claude/audit" "$tmp_root/.gsd" "$tmp_root/.hermes" "$tmp_root/.claude/worktrees/agent-old"
   git -C "$tmp_root" init >/dev/null 2>&1 || issues+=("git init failed for legacy-preflight fixture")
   printf 'old hook\n' > "$tmp_root/.aihaus/state/.claude/audit/hook.jsonl"
   printf 'old schema\n' > "$tmp_root/.aihaus/state/schema.sql"
   printf 'legacy gsd\n' > "$tmp_root/.gsd/PROJECT.md"
   printf 'legacy hermes\n' > "$tmp_root/.hermes/report.md"
+  printf 'agent worktree\n' > "$tmp_root/.claude/worktrees/agent-old/README.md"
   (
     cd "$tmp_root" || exit 1
     bash "$preflight" --fix-safe >/dev/null 2>&1
@@ -5211,6 +5227,15 @@ check_legacy_hygiene_regressions() {
   fi
   if ! compgen -G "$tmp_root/.aihaus/audit/legacy-preflight-*.md" >/dev/null; then
     issues+=("legacy-preflight report missing")
+  else
+    local report_file
+    report_file="$(ls "$tmp_root"/.aihaus/audit/legacy-preflight-*.md 2>/dev/null | head -1)"
+    if ! grep -Fq 'local .claude/worktrees/agent-* dirs: 1' "$report_file"; then
+      issues+=("legacy-preflight report missing agent worktree count")
+    fi
+    if ! grep -Fq 'git worktree remove --force "$wt"' "$report_file"; then
+      issues+=("legacy-preflight report missing manual worktree cleanup pattern")
+    fi
   fi
 
   if [[ ${#issues[@]} -eq 0 ]]; then

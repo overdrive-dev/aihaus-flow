@@ -8,9 +8,7 @@ argument-hint: "[--check | --force]"
 
 ## Task
 
-Update the local aihaus installation by pulling the latest package from the
-remote git repository. Fully autonomous — fetches, compares versions, applies
-changes, re-links, and reports what changed.
+Update the local aihaus installation by pulling the latest package from the remote git repository. Fully autonomous — fetches, compares versions, applies changes, re-links, and reports what changed.
 
 $ARGUMENTS
 
@@ -27,23 +25,11 @@ $ARGUMENTS
 
 ### 1. Find the aihaus package repository
 
-Check these locations in order:
-
-1. If `.aihaus/.install-source` exists, read the remote URL from it.
-2. If `.aihaus/` is a symlink, resolve it to find the package root, then
-   check `git -C <pkg-root> remote get-url origin`.
-3. If a `pkg/` directory exists in the current repo (dogfooding mode),
-   use the current repo's remote: `git remote get-url origin`.
-4. If none found, ask the user: "Where is the aihaus package repo?
-   Provide a git URL or local path."
-
-Store as `PKG_REMOTE` and `PKG_LOCAL` (local clone path).
+Resolve `PKG_REMOTE`/`PKG_LOCAL` in order: `.aihaus/.install-source`; symlinked `.aihaus/` target's git remote; dogfooding `pkg/` repo remote; otherwise ask for a git URL or local path.
 
 ### 2. Check if package repo is cloned locally
 
-If `PKG_LOCAL` exists and is a git repo, use it.
-If not, check for a cached clone at `~/.aihaus-pkg/` or `/tmp/aihaus-pkg/`.
-If no local clone exists, clone to `~/.aihaus-pkg/`:
+Use existing `PKG_LOCAL` when it is a git repo; otherwise use `~/.aihaus-pkg/` or `/tmp/aihaus-pkg/`; otherwise clone:
 
 ```bash
 git clone --depth 1 "$PKG_REMOTE" ~/.aihaus-pkg
@@ -97,7 +83,7 @@ git -C "$PKG_LOCAL" pull origin main
 
 ### 7. Run the package update script
 
-Route by platform — Windows uses junctions (created via PowerShell); Git Bash's `rm -rf` follows them and `ln -s` cannot recreate them. The bash path **must not** run on Windows:
+Route by platform — Windows must use PowerShell. `.aihaus/` is a managed copy; `.claude/{skills,agents,hooks}` may be junctions or copies. Git Bash's `rm -rf` can follow junctions and `ln -s` cannot recreate them, so the bash path **must not** run on Windows:
 
 ```bash
 case "$OSTYPE" in
@@ -130,7 +116,15 @@ echo "$PKG_REMOTE" > .aihaus/.install-source
 
 ```bash
 [[ -f "$PKG_LOCAL/tools/smoke-test.sh" ]] || { echo "tools/smoke-test.sh missing in $PKG_LOCAL — migration notice: older clone layout. Re-run /aih-update after a clean clone."; return 0; }
-bash "$PKG_LOCAL/tools/smoke-test.sh" 2>/dev/null
+SMOKE_OUT="$(mktemp 2>/dev/null || printf '.aihaus-smoke-%s.log' "$$")"
+if bash "$PKG_LOCAL/tools/smoke-test.sh" >"$SMOKE_OUT" 2>&1; then
+  tail -5 "$SMOKE_OUT"
+else
+  echo "WARNING: aihaus smoke test failed. Failing checks:"
+  grep -E '^\[FAIL\]' "$SMOKE_OUT" || tail -40 "$SMOKE_OUT"
+  grep -Eq 'framework purity|Check 15' "$SMOKE_OUT" && [[ -f "$PKG_LOCAL/tools/purity-check.sh" ]] && { echo "--- delegated purity-check.sh output ---"; bash "$PKG_LOCAL/tools/purity-check.sh" || true; }
+fi
+rm -f "$SMOKE_OUT"
 ```
 
 If it fails, warn but don't rollback — the user can investigate.
@@ -139,11 +133,7 @@ If it fails, warn but don't rollback — the user can investigate.
 
 Before reporting, surface any migration-relevant state:
 
-- **In-flight milestones** — mirror `aih-resume` Phase 1 detection so warnings match what `/aih-resume` would pick up.
-  1. Skip `.aihaus/milestones/drafts/` — it is the draft container, not a run.
-  2. **Primary:** `Glob` `.aihaus/milestones/*/RUN-MANIFEST.md`. For each, read `Status:` (and `Phase:`). Warn iff `Status` is not `completed`.
-  3. **Legacy fallback:** for milestone dirs with no `RUN-MANIFEST.md` and no `execution/MILESTONE-SUMMARY.md`, warn only when execution visibly started — i.e., `stories/*.md` exists OR `execution/` contains `analysis-brief.md`, `PRD.md`, or `architecture.md`. Bare log files (`DECISIONS-LOG.md`, `KNOWLEDGE-LOG.md`) and empty `stories/` + `execution/reviews/` scaffolds do not qualify — skip silently.
-  4. **Message:** `In-flight milestone detected: <slug> (phase: <phase-or-unknown>). Post-update, run /aih-resume to continue.` Omit the parenthetical for legacy dirs where phase is unavailable.
+- **In-flight milestones** — mirror `aih-resume` Phase 1: skip `drafts/`; warn on `RUN-MANIFEST.md` whose `Status:` is not `completed`; legacy fallback warns only when execution visibly started (`stories/*.md` or `execution/{analysis-brief,PRD,architecture}.md`). Message: `In-flight milestone detected: <slug> (phase: <phase>). Post-update, run /aih-resume to continue.`
 - **Legacy `aihaus:` prefix installs** — if `.claude/commands/aihaus:*.md` exists, warn: "Pre-rename installation detected — legacy `aihaus:` commands will be replaced by `aih-*`."
 
 ### 12. Migration Notice (version-gated)
@@ -176,14 +166,7 @@ If new skills appeared in the update diff, append: "⚠️  Restart Claude Code 
 
 ## Dogfooding Mode
 
-When running inside the aihaus-flow repo itself (detected by `pkg/` existing):
-
-1. Skip cloning — use `pkg/` directly (`PKG_LOCAL=.`).
-2. `git pull origin main` to update the repo itself.
-3. Re-link via the same OS-aware case from Step 7 (PowerShell on
-   Windows, bash on Unix). **Do not call `bash install.sh --update`
-   unconditionally** — it wipes junctions on Windows.
-4. Report what changed.
+When running inside aihaus-flow (`pkg/` exists): use `PKG_LOCAL=.`; pull `origin main`; re-link via the same OS-aware case from Step 7; never call `bash install.sh --update` unconditionally on Windows; report what changed.
 
 ---
 

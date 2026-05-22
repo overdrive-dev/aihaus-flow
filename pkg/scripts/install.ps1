@@ -559,6 +559,20 @@ function Test-DogfoodCwd {
     return ((Test-Path $installSh) -and (Test-Path $skillsDir))
 }
 
+function Write-SyncedTargetWarning {
+    param([string]$TargetPath)
+    $normalized = $TargetPath -replace '\\', '/'
+    if ($normalized -match '(?i)(OneDrive|Dropbox|Google Drive|iCloudDrive|/Box/)') {
+        Write-Host "  warn: target is on a synced path; worktree churn may be slow/lock-prone. Pause sync before cleanup if needed." -ForegroundColor Yellow
+    }
+}
+
+function Write-CopyModeWarning {
+    if ($script:Mode -eq 'copy') {
+        Write-Host "  warn: copy mode overwrites package-managed .aihaus/.claude files on update; keep custom edits in project memory/workflows, not managed skills/agents/hooks." -ForegroundColor Yellow
+    }
+}
+
 # ============================================================================
 # Install-UserGlobalSkills -- V5 (M022/Z4): User-global skill install loop
 # ADR-260504-A FR-01/FR-06 (Windows mirror of install_user_global_skills() in Z3).
@@ -735,6 +749,8 @@ if ($Update) {
 Write-Host "  package:  $PkgRoot"
 Write-Host "  target:   $Target"
 Write-Host "  mode:     $Mode"
+Write-SyncedTargetWarning -TargetPath $Target
+Write-CopyModeWarning
 
 # Step 2: require a git repo
 $gitDir = Join-Path $Target '.git'
@@ -774,11 +790,13 @@ if ($Update) {
             Write-Host "  skip: $name not found in package"
             continue
         }
+        # Remove old managed contents before copying. This is copy-mode orphan
+        # pruning: the shipped package tree is the manifest for managed files.
         if (Test-Path $dst) {
             Remove-Item -Recurse -Force $dst
         }
         Copy-Item -Path $src -Destination $dst -Recurse -Force
-        Write-Host "  refreshed: .aihaus\$name"
+        Write-Host "  refreshed: .aihaus\$name (managed copy pruned)"
     }
 
     # Restore per-agent effort from sidecar.
@@ -892,7 +910,7 @@ function Link-Or-Copy {
         }
     }
     Copy-Item -Path $src -Destination $dst -Recurse -Force
-    Write-Host "  copy: .claude\$Name"
+    Write-Host "  copy: .claude\$Name (managed copy pruned)"
 }
 
 # M024/S02: Skill-junction conditional (Concern C) -- ADR-260507-A #5
