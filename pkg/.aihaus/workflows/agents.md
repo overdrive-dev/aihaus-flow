@@ -18,9 +18,10 @@ profile data live here.
 | workflow-execution-review | review-execucao | Review implementation readiness before broad tests and deployment. |
 | workflow-test-gate | testes | Run or coordinate automated tests, identify breakage, and propose test improvements. |
 | workflow-cicd | testes, subida-dev | Prepare repeatable CI/CD commands, deployment checks, and environment evidence. |
-| workflow-dev-review | review-dev | Validate the published dev result; use Playwright/headless browser for UI and flow work. |
+| workflow-dev-reviewer | review-dev | Validate the published dev result; use Playwright/headless browser for UI and flow work. |
 | workflow-human-review | human-review | Summarize evidence for the human and route accepted/rejected decisions. |
 | workflow-designer | any | Create or adjust repo workflow profiles and workflow-agent rules when the project changes. |
+| aih-goal | any | Skill-level coordinator that imports tasks, evaluates gates, and drives work until the target stage. |
 
 ## Memory Contract
 
@@ -41,3 +42,10 @@ After acting, workflow agents write durable lessons only when they are reusable:
 
 Workflow agents should write blockers in business language first. Technical
 details may be included as evidence, not as the main explanation.
+
+## Gate Evaluation Contract
+
+Every workflow gate must produce `PASS`, `SKIPPED`, `BLOCKED-TO-PLANNING`, or
+`BLOCKED`. Skips are allowed only after evaluation and must include a reason.
+Task-specific `BLOCKED-TO-PLANNING` results should not stop a larger `/aih-goal`
+run; they create source questions and allow other ready tasks to continue.

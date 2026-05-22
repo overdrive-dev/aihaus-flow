@@ -38,6 +38,11 @@ Ask Socratic questions when the business rule, expected user behavior, data
 assumption, edge case, acceptance criterion, or validation method is unclear.
 Do not ask implementation trivia unless it changes business behavior.
 
+If the task came from Linear, Jira, Trello, Notion, GitHub Issues, or another
+source, read the task description, comments, links, and attachments first. Treat
+answers already present there as answered planning questions. Do not ask the
+human to repeat information already documented in the source.
+
 ## Output
 
 Return:
@@ -59,6 +64,10 @@ Return:
 ## Return Path
 [If blocked, keep in planejamento and explain what answer is needed.]
 ```
+
+For source-backed tasks, include the exact question that should be synced back
+to the source item. For ready tasks, cite the source evidence that made each
+acceptance criterion testable.
 
 ## Memory Writes
 

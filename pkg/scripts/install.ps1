@@ -834,6 +834,7 @@ foreach ($dir in @(
     (Join-Path $TargetAihaus 'runtime'),
     (Join-Path $TargetAihaus 'backups'),
     (Join-Path $TargetAihaus 'workflows'),
+    (Join-Path $TargetAihaus 'workflows\runs'),
     (Join-Path $TargetAihaus 'memory\workflows')
 )) {
     New-Item -ItemType Directory -Path $dir -Force | Out-Null

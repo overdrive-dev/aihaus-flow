@@ -36,6 +36,25 @@ are unclear.
 The planning gate must ask Socratic questions when needed. Good questions are
 about business meaning and expected behavior, not implementation trivia.
 
+If a task came from an external source such as Linear, the planning gate must
+read the issue description, comments, links, and attached context before asking
+anything. Do not ask the human to repeat answers already present in the source.
+
+## Gate Evaluation Contract
+
+Every workflow gate is mandatory to evaluate, but not every gate is mandatory to
+run. A gate may pass, skip, or block:
+
+- `PASS` means the stage evidence is sufficient.
+- `SKIPPED` means the agent evaluated the gate and found it not applicable; the
+  skip reason must name why.
+- `BLOCKED-TO-PLANNING` means a business expectation, rule, criterion, or
+  validation method is missing or failed.
+- `BLOCKED` means a true operational blocker prevents progress.
+
+Task-specific blockers should not stop a larger goal run. Mark that task and
+continue with other ready tasks.
+
 ## Dev Review Gate
 
 `review-dev` uses Playwright/headless browser validation whenever the task has
@@ -61,6 +80,19 @@ CI/CD workflow agents may act in `testes`, `subida-dev`, `review-dev`, and later
 environment stages. Their job is to optimize repeatable checks, deployments,
 rollback notes, smoke tests, and environment evidence while preserving the gates
 above.
+
+## Goal Runs
+
+`/aih-goal` may import many tasks from Linear or a local source and run them
+autonomously until a target stage such as `human-review`.
+
+The goal runner must:
+
+- create local state under `.aihaus/workflows/runs/`,
+- evaluate planning before TDD for every task,
+- continue ready tasks when other tasks are blocked,
+- attach evidence before moving work to `human-review`,
+- sync questions and evidence back to the external source when available.
 
 ## Customization
 

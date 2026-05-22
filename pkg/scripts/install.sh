@@ -408,6 +408,7 @@ mkdir -p \
   "${TARGET}/.aihaus/runtime" \
   "${TARGET}/.aihaus/backups" \
   "${TARGET}/.aihaus/workflows" \
+  "${TARGET}/.aihaus/workflows/runs" \
   "${TARGET}/.aihaus/memory/workflows"
 if [[ ! -f "${TARGET}/.aihaus/workflows/default.md" && -f "${PKG_AIHAUS}/workflows/default.md" ]]; then
   cp "${PKG_AIHAUS}/workflows/default.md" "${TARGET}/.aihaus/workflows/default.md"

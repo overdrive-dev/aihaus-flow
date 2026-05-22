@@ -17,7 +17,7 @@
 **This package is archived. See the main aihaus-flow repository for successor project guidance.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.37.0-181717?style=for-the-badge&logo=github)](VERSION)
+[![Version](https://img.shields.io/badge/version-0.38.0-181717?style=for-the-badge&logo=github)](VERSION)
 [![Built for Claude Code](https://img.shields.io/badge/built%20for-Claude%20Code-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -49,7 +49,7 @@ Most of your time with ai-assisted coding gets spent describing *how* instead of
 
 aihaus inverts that loop. **Front-load the thinking once; the system runs the rest.**
 
-After a single approval, a coordinated team of 52 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
+After a single approval, a coordinated team of 57 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
 
 ---
 
@@ -260,7 +260,7 @@ Nothing is fine-tuned and no weights move. What changes is the markdown that gui
 
 ## Commands
 
-aihaus ships 14 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**.
+aihaus ships 15 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**.
 
 ### Core workflow
 
@@ -269,6 +269,7 @@ aihaus ships 14 intent-based skills. Every command follows the same pattern: **a
 | `/aih-init` | Bootstrap — scans codebase, writes `project.md`, seeds memory |
 | `/aih-brainstorm` | Multi-specialist exploratory panel for fuzzy topics — outputs `BRIEF.md` |
 | `/aih-plan` | Research and plan a concrete change — outputs `PLAN.md` |
+| `/aih-goal` | Import source-backed tasks and run workflow gates autonomously until a target stage |
 | `/aih-feature` | Plan → branch → implement → review → commit (single feature) |
 | `/aih-bugfix` | Triage → branch → fix → test → commit |
 | `/aih-milestone` | Conversational gathering for milestone-sized work — drafts to `STATUS.md` |
@@ -279,6 +280,7 @@ aihaus ships 14 intent-based skills. Every command follows the same pattern: **a
 | Command | What it does |
 |---------|--------------|
 | `/aih-milestone [slug]` + start-intent / `--execute` | Execute a ready milestone draft — full agent team (via `annexes/execution.md`) |
+| `/aih-goal --from-linear <selector> --until human-review` | Execute a Linear-backed goal until each task reaches human review or has a planning blocker |
 | `/aih-feature --plan [slug]` | Execute a small plan inline on a single `feature/[slug]` branch |
 | `/aih-resume [slug]` | Pick up an interrupted run from `RUN-MANIFEST.md` |
 | `/aih-milestone --plan [slug]` | Promote a plan to a milestone draft for conversational refinement (absorbs retired `/aih-plan-to-milestone`) |
@@ -323,7 +325,7 @@ aihaus ships 14 intent-based skills. Every command follows the same pattern: **a
 | **UI** | ux-designer, ui-researcher, ui-checker, ui-auditor | Design contracts and visual audits |
 | **AI/ML** | eval-planner, eval-auditor | Evaluation strategy and coverage |
 | **Product** | analyst, product-manager | Analysis briefs and structured PRDs |
-| **Coordination** | reviewer, notion-sync | QA lead + optional Kanban sync |
+| **Coordination** | reviewer, notion-sync, workflow-* agents | QA lead, optional Kanban sync, workflow gate evaluation |
 
 ---
 
@@ -332,8 +334,8 @@ aihaus ships 14 intent-based skills. Every command follows the same pattern: **a
 ```
 your-project/
 ├── .aihaus/                     # aihaus workspace (git-tracked or gitignored — your call)
-│   ├── skills/                  # 14 intent-based commands
-│   ├── agents/                  # 48 specialized agent definitions
+│   ├── skills/                  # 15 intent-based commands
+│   ├── agents/                  # 57 specialized agent definitions
 │   ├── hooks/                   # 34 lifecycle hook scripts
 │   ├── templates/               # project.md + settings templates
 │   ├── memory/                  # Persistent agent memory (grows over time)

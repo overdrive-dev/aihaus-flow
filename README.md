@@ -12,12 +12,12 @@
 
 **You think. ai builds.**
 
-**An autonomous developer workflow for Claude Code. One approval gate, then 52 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
+**An autonomous developer workflow for Claude Code. One approval gate, then 57 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
 
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.37.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.38.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -57,7 +57,7 @@ Most of your time with ai-assisted coding gets spent describing *how* instead of
 
 aihaus inverts that loop. **Front-load the thinking once; the system runs the rest.**
 
-After a single approval, a coordinated team of 52 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
+After a single approval, a coordinated team of 57 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
 
 ---
 
@@ -250,7 +250,7 @@ Nothing is fine-tuned and no weights move. What changes is the markdown that gui
 
 ## Commands
 
-aihaus ships 14 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**. Since v0.9.0 the autonomy contract is codified in a shared annex (`pkg/.aihaus/skills/_shared/autonomy-protocol.md`) that every skill references — no mid-execution option menus, no honest checkpoints, no delegated typing. Since v0.27.0 (M023) `phase-advance.sh --to paused` requires `--class <4-enum>` and `autonomy-guard.sh` blocks GSP-DS prose at the Stop hook. Since v0.28.0 (M024) `/aih-milestone --plan <slug>` short-circuits the planning pipeline when the upstream plan is committed (consumer-self-validating CHECK.md SHA gate); skill prose drops Wave/Group nouns while runtime regex preserves the block.
+aihaus ships 15 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**. Since v0.9.0 the autonomy contract is codified in a shared annex (`pkg/.aihaus/skills/_shared/autonomy-protocol.md`) that every skill references — no mid-execution option menus, no honest checkpoints, no delegated typing. Since v0.27.0 (M023) `phase-advance.sh --to paused` requires `--class <4-enum>` and `autonomy-guard.sh` blocks GSP-DS prose at the Stop hook. Since v0.28.0 (M024) `/aih-milestone --plan <slug>` short-circuits the planning pipeline when the upstream plan is committed (consumer-self-validating CHECK.md SHA gate); skill prose drops Wave/Group nouns while runtime regex preserves the block. Since v0.38.0 (M049), `/aih-goal` imports source-backed tasks, evaluates workflow gates, and runs ready work until a target stage such as `human-review`.
 
 ### Core workflow
 
@@ -260,6 +260,7 @@ aihaus ships 14 intent-based skills. Every command follows the same pattern: **a
 | `/aih-install` | Install/refresh per-repo overlay in cwd; resolves `AIHAUS_HOME` via 8-tier priority chain. Model-invokable (M022 / v0.26.0+) |
 | `/aih-brainstorm` | Multi-specialist exploratory panel for fuzzy topics — outputs `BRIEF.md` |
 | `/aih-plan` | Research and plan a concrete change — outputs `PLAN.md` |
+| `/aih-goal` | Import source-backed tasks and run workflow gates autonomously until a target stage |
 | `/aih-feature` | Plan → branch → implement → review → commit (single feature) |
 | `/aih-bugfix` | Triage → branch → fix → test → commit |
 | `/aih-milestone` | Conversational gathering for milestone-sized work — drafts to `STATUS.md` |
@@ -271,6 +272,7 @@ aihaus ships 14 intent-based skills. Every command follows the same pattern: **a
 | Command | What it does |
 |---------|--------------|
 | `/aih-milestone [slug]` + start-intent / `--execute` | Execute a ready milestone draft — full agent team (via `annexes/execution.md`) |
+| `/aih-goal --from-linear <selector> --until human-review` | Execute a Linear-backed goal until each task reaches human review or has a planning blocker |
 | `/aih-feature --plan [slug]` | Execute a small plan inline on a single `feature/[slug]` branch |
 | `/aih-resume [slug]` | Pick up an interrupted run from `RUN-MANIFEST.md` |
 | `/aih-milestone --plan [slug]` | Promote a plan to a milestone draft for conversational refinement (absorbs retired `/aih-plan-to-milestone`) |
@@ -316,7 +318,7 @@ aihaus ships 14 intent-based skills. Every command follows the same pattern: **a
 | **UI** | ux-designer, ui-researcher, ui-checker, ui-auditor | Design contracts and visual audits |
 | **AI/ML** | eval-planner, eval-auditor | Evaluation strategy and coverage |
 | **Product** | analyst, product-manager | Analysis briefs and structured PRDs |
-| **Coordination** | reviewer, notion-sync | QA lead + optional Kanban sync |
+| **Coordination** | reviewer, notion-sync, workflow-* agents | QA lead, optional Kanban sync, workflow gate evaluation |
 
 ---
 
@@ -325,10 +327,10 @@ aihaus ships 14 intent-based skills. Every command follows the same pattern: **a
 ```
 your-project/
 ├── .aihaus/                          # aihaus workspace (gitignored by default — your call)
-│   ├── skills/                       # 14 intent-based commands
+│   ├── skills/                       # 15 intent-based commands
 │   │   └── _shared/
 │   │       └── autonomy-protocol.md  # Binding execution-autonomy rules (M005)
-│   ├── agents/                       # 48 specialized agent definitions
+│   ├── agents/                       # 57 specialized agent definitions
 │   ├── hooks/                        # 34 lifecycle + protocol-enforcement hook scripts
 │   ├── templates/                    # project.md + settings templates
 │   ├── memory/                       # Persistent agent memory (grows over time)

@@ -5,6 +5,27 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.0] - 2026-05-22 - M049 goal runner workflow orchestration
+
+### Added
+
+- `/aih-goal`, an autonomous goal runner that can import source-backed tasks,
+  evaluate workflow gates, and run ready work until a target stage such as
+  `human-review`.
+- Goal run artifacts under `.aihaus/workflows/runs/`, including task files,
+  manifest state, and evidence packages.
+- Five workflow agents for TDD gates, execution review, test gates, human-review
+  packaging, and workflow design, bringing the packaged agent set to 57 agents.
+- Linear intake and sync guidance for source-backed planning questions and
+  human-review evidence comments.
+
+### Changed
+
+- Workflow gates now have an explicit evaluation contract: `PASS`, `SKIPPED`,
+  `BLOCKED-TO-PLANNING`, or `BLOCKED`.
+- The planning gate now reads source issue descriptions/comments before asking
+  Socratic questions, so answers already captured in Linear are not re-asked.
+
 ## [0.37.0] - 2026-05-22 - M048 native repository memory + workflow agents
 
 ### Added

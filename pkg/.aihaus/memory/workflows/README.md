@@ -9,6 +9,7 @@ Use it for:
 - CI/CD and environment notes,
 - recurring workflow gotchas,
 - business-language reasons a task returned to planning.
+- source-system preferences, such as how Linear issues encode planning answers.
 
 Do not use it for:
 

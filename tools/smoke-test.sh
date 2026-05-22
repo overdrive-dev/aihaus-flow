@@ -58,11 +58,11 @@ _mktemp_dir() {
   return 1
 }
 
-# ---- Check 1: 14 expected SKILL.md files in expected subdirectories ---------
+# ---- Check 1: 15 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 14 expected SKILL.md files"
-  local expected=(aih-brainstorm aih-bugfix aih-close aih-effort aih-feature aih-help aih-init aih-install aih-milestone aih-plan aih-quick aih-resume aih-sync-notion aih-update)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 15 expected SKILL.md files"
+  local expected=(aih-brainstorm aih-bugfix aih-close aih-effort aih-feature aih-goal aih-help aih-init aih-install aih-milestone aih-plan aih-quick aih-resume aih-sync-notion aih-update)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -77,10 +77,10 @@ check_skills() {
   fi
 }
 
-# ---- Check 2: .aihaus/agents/ has 52 .md files (M048 adds workflow agents) --
+# ---- Check 2: .aihaus/agents/ has 57 .md files (M049 completes workflow agents) --
 check_agents() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 52 .md files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 57 .md files"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   if [[ ! -d "$agents_root" ]]; then
     _fail "$label" "directory not found: $agents_root"
@@ -88,10 +88,10 @@ check_agents() {
   fi
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 52 ]]; then
+  if [[ "$count" -eq 57 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 52 .md files, found $count"
+    _fail "$label" "expected 57 .md files, found $count"
   fi
 }
 
@@ -1052,25 +1052,25 @@ check_purity() {
   fi
 }
 
-# ---- Check 27: skill directory count = 14 (M022/Z6 adds aih-install) --------
-# Verifies that exactly 14 aih-* skill directories exist under .aihaus/skills/.
-# Note: Check 1 verifies the NAMED SKILL.md files (14 expected names including
+# ---- Check 27: skill directory count = 15 (M049 adds aih-goal) --------------
+# Verifies that exactly 15 aih-* skill directories exist under .aihaus/skills/.
+# Note: Check 1 verifies the NAMED SKILL.md files (15 expected names including
 # aih-close (M020/S10), aih-effort, and aih-install (M022/Z6); aih-automode
 # deleted in M014/S03). Check 27 independently verifies the directory count so
 # that unexpected directories (stale renames, extra skill dirs) also cause CI
-# failure. If the count exceeds 14, a stale directory likely remains from a
+# failure. If the count exceeds 15, a stale directory likely remains from a
 # prior rename.
 check_skill_count_and_staleness() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: exactly 14 aih-* skill dirs exist (M022/Z6)"
+  local label="Check ${CHECK_NUMBER}: exactly 15 aih-* skill dirs exist (M049)"
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   local problems=()
 
   # Count aih-* directories (exclude _shared and any non-aih prefixed dirs).
   local actual_count
   actual_count=$(find "$skills_root" -maxdepth 1 -type d -name 'aih-*' | wc -l | tr -d ' ')
-  if [[ "$actual_count" -ne 14 ]]; then
-    problems+=("expected 14 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
+  if [[ "$actual_count" -ne 15 ]]; then
+    problems+=("expected 15 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -1082,9 +1082,9 @@ check_skill_count_and_staleness() {
 
 # ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M027/S10) --
 # Seven sub-assertions covering the 5-cohort taxonomy in cohorts.md (post-M027/S10 fork):
-#   C1 each of the 52 agents appears under exactly one cohort
-#   C2 cohort counts match: planner-binding=4, planner=14, doer=19, verifier=9,
-#      adversarial=6 (total=52); :adversarial-scout + :adversarial-review merged per ADR-260509-Y
+#   C1 each of the 57 agents appears under exactly one cohort
+#   C2 cohort counts match: planner-binding=4, planner=14, doer=24, verifier=9,
+#      adversarial=6 (total=57); :adversarial-scout + :adversarial-review merged per ADR-260509-Y
 #   C3 no :verifier-rich or :investigator or legacy :adversarial-scout or :adversarial-review
 #      cohort name appears in the table (deprecated names forbidden post-M027/S10)
 #   C4 F-006 parse contract: every data row yields NF=7 (awk -F'|' | sort -u == "7")
@@ -1158,15 +1158,15 @@ check_cohort_membership_roundtrip() {
   done
 
   local total_agents="${#_seen_agents[@]}"
-  if [[ "$total_agents" -ne 52 ]]; then
-    problems+=("C1: expected 52 agents in membership table; found ${total_agents}")
+  if [[ "$total_agents" -ne 57 ]]; then
+    problems+=("C1: expected 57 agents in membership table; found ${total_agents}")
   fi
 
   # C2: expected cohort counts (5-cohort post-M027/S10 fork, ADR-260509-Y).
   local -A _expected_counts=(
     [":planner-binding"]=4
     [":planner"]=14
-    [":doer"]=19
+    [":doer"]=24
     [":verifier"]=9
     [":adversarial"]=6
   )
@@ -1770,7 +1770,7 @@ check_context_curator() {
 #   (c) learning-advisor model is haiku (cohort :verifier default)
 #   (d) learning-advisor tools are Read, Grep, Glob (no Write/Edit per ADR-001)
 #   (e) templates/settings.local.json references learning-advisor.sh under SubagentStop
-#   (f) agent count at 52 (workflow agents added in M048)
+#   (f) agent count at 57 (workflow agents completed in M049)
 # Note: COMPAT-MATRIX check removed in M015/ADR-M015-A (Cursor support dropped).
 check_learning_advisor() {
   _start_check
@@ -1829,12 +1829,12 @@ check_learning_advisor() {
     fi
   fi
 
-  # (f) agent count at 52 (workflow agents added in M048)
+  # (f) agent count at 57 (workflow agents completed in M049)
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -ne 52 ]]; then
-    problems+=("expected 52 agents total (workflow agents added in M048); found ${count}")
+  if [[ "$count" -ne 57 ]]; then
+    problems+=("expected 57 agents total (workflow agents completed in M049); found ${count}")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -4937,11 +4937,11 @@ check_aih_graph_integration_round_trip() {
   if ! echo "${out}" | grep -qE "Decisions: [0-9]+ \([0-9]+ are amendments"; then
     issues+=("build output missing Decisions line")
   fi
-  if ! echo "${out}" | grep -qE "Agents:    52 "; then
-    issues+=("expected Agents: 52 (Smoke Check 2)")
+  if ! echo "${out}" | grep -qE "Agents:    57 "; then
+    issues+=("expected Agents: 57 (Smoke Check 2)")
   fi
-  if ! echo "${out}" | grep -qE "Skills:    14"; then
-    issues+=("expected Skills: 14 (Smoke Check 1)")
+  if ! echo "${out}" | grep -qE "Skills:    15"; then
+    issues+=("expected Skills: 15 (Smoke Check 1)")
   fi
   if ! echo "${out}" | grep -qE "Hooks: +[0-9]+ "; then
     issues+=("build output missing Hooks line")

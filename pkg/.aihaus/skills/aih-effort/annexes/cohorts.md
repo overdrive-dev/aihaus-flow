@@ -1,4 +1,4 @@
-# Cohort Taxonomy — 52 Agents → 5 Uniform Cohorts
+# Cohort Taxonomy — 57 Agents → 5 Uniform Cohorts
 
 This annex is the single source of truth for cohort membership, consumed by
 `/aih-effort` (preset filter, sidecar write) and by the restore path in
@@ -105,11 +105,16 @@ Members (alphabetical):
 - test-writer
 - user-profiler
 - workflow-cicd
+- workflow-designer
 - workflow-dev-reviewer
+- workflow-execution-review
+- workflow-human-review
 - workflow-intake
 - workflow-planning-gate
+- workflow-tdd-gate
+- workflow-test-gate
 
-**Count: 19**
+**Count: 24**
 
 ---
 
@@ -186,7 +191,7 @@ Members (alphabetical):
 
 ---
 
-## Membership table (52 agents)
+## Membership table (57 agents)
 
 **Parse contract (F-006 — binding per ADR-M012-A).** This table has exactly
 5 data columns. The header is `| # | Agent | Cohort | Model | Effort |`.
@@ -252,11 +257,16 @@ cohort (or per-agent override for `:adversarial` max-tier members).
 | 47 | ux-designer              | :planner          | opus   | high  |
 | 48 | verifier                 | :verifier         | haiku  | high  |
 | 49 | workflow-cicd            | :doer             | sonnet | high  |
-| 50 | workflow-dev-reviewer    | :doer             | sonnet | high  |
-| 51 | workflow-intake          | :doer             | sonnet | high  |
-| 52 | workflow-planning-gate   | :doer             | sonnet | high  |
+| 50 | workflow-designer        | :doer             | sonnet | high  |
+| 51 | workflow-dev-reviewer    | :doer             | sonnet | high  |
+| 52 | workflow-execution-review | :doer             | sonnet | high  |
+| 53 | workflow-human-review    | :doer             | sonnet | high  |
+| 54 | workflow-intake          | :doer             | sonnet | high  |
+| 55 | workflow-planning-gate   | :doer             | sonnet | high  |
+| 56 | workflow-tdd-gate        | :doer             | sonnet | high  |
+| 57 | workflow-test-gate       | :doer             | sonnet | high  |
 
-**Totals:** :planner-binding=4 · :planner=14 · :doer=19 · :verifier=9 · :adversarial=6 · Sum=52
+**Totals:** :planner-binding=4 · :planner=14 · :doer=24 · :verifier=9 · :adversarial=6 · Sum=57
 
 ---
 
