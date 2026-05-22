@@ -27,6 +27,10 @@
 #   rotation), ADR-001 (orchestrator-only writes), ADR-M013-A (memory-ownership).
 set -uo pipefail
 
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
 # ---------------------------------------------------------------------------
 # 0. Recursion guard
 # ---------------------------------------------------------------------------
@@ -56,8 +60,8 @@ fi
 # ---------------------------------------------------------------------------
 # 3. Config
 # ---------------------------------------------------------------------------
-WARNINGS_LOG="${AIHAUS_LEARNING_WARNINGS_LOG:-.claude/audit/LEARNING-WARNINGS.jsonl}"
-RECURRENCE_LOG="${AIHAUS_WARNING_RECURRENCE_LOG:-.claude/audit/warning-recurrence.jsonl}"
+WARNINGS_LOG="$(aihaus_project_path "${AIHAUS_LEARNING_WARNINGS_LOG:-.claude/audit/LEARNING-WARNINGS.jsonl}")"
+RECURRENCE_LOG="$(aihaus_project_path "${AIHAUS_WARNING_RECURRENCE_LOG:-.claude/audit/warning-recurrence.jsonl}")"
 
 ts_iso() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
 
@@ -122,7 +126,7 @@ fi
 # 8. Once-per-milestone guard
 #    Prevents re-firing on every SubagentStop inside the same milestone.
 # ---------------------------------------------------------------------------
-MILESTONE_GUARD=".claude/audit/.warning-recurrence-${MILESTONE_ID}.done"
+MILESTONE_GUARD="$(aihaus_project_path ".claude/audit/.warning-recurrence-${MILESTONE_ID}.done")"
 if [ -f "$MILESTONE_GUARD" ]; then
   exit 0
 fi

@@ -37,7 +37,11 @@ set -euo pipefail
 if [ "${AIHAUS_RELEASE_L1:-}" = "0" ]; then exit 0; fi
 
 # ---- config -----------------------------------------------------------------
-AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
 
 ts_iso() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
 
@@ -159,7 +163,7 @@ case "${CATEGORY}" in
         mkdir -p "${exec_dir}" 2>/dev/null || true
         pending_file="${exec_dir}/PENDING-MERGE.md"
       else
-        pending_file=".claude/audit/PENDING-MERGE.md"
+        pending_file="$(aihaus_project_path ".claude/audit/PENDING-MERGE.md")"
         mkdir -p "$(dirname "${pending_file}")" 2>/dev/null || true
       fi
 

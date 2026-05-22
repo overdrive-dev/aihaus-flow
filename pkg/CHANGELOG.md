@@ -5,6 +5,27 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.5] - 2026-05-22 - goal aftermath hardening
+
+### Fixed
+
+- Hook audit/cache defaults are now anchored to the project root, preventing
+  nested `.claude/audit/` folders when hooks fire from `.aihaus/state/`,
+  `.aihaus/plans/`, or other subdirectories.
+- `manifest-auto-close.sh` no longer migrates skipped/refused historical
+  manifests during session-start sweeps; schema migration is deferred until all
+  close conditions hold and a manifest will actually be updated.
+- `/aih-goal` now documents DB-to-markdown projection requirements so task files
+  keep `Stage:` and per-task gate rows aligned with `aih-goal.db`.
+
+### Added
+
+- Packaged `/aih-goal` SQLite initializer and schema under
+  `skills/aih-goal/scripts/`, avoiding ad hoc `schema.sql` or import helper
+  files in consumer `.aihaus/state/` directories.
+- Smoke-test regression coverage for project-root audit writes, no auto-close
+  manifest churn, and packaged goal DB schema.
+
 ## [0.38.4] - 2026-05-22 - settings hook array migration
 
 ### Fixed

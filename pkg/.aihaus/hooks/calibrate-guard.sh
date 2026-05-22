@@ -36,13 +36,17 @@
 
 set -uo pipefail
 
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
 # ---- M029 first-commit timestamp (Decision E ctime exemption) ----------------
 # 2026-05-12T00:00:00Z epoch — CHECK.md files older than this are legacy artifacts.
 M029_EPOCH="1747008000"
 
 # ---- env bypass (Decision B — aih-quick/bugfix lifecycle + rollback opt-out) -
 if [ "${AIHAUS_CALIBRATE_GUARD:-1}" = "0" ]; then
-  AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+  AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
   mkdir -p "$(dirname "${AUDIT_LOG}")" 2>/dev/null || true
   printf '{"ts":"%s","hook":"calibrate-guard","event":"calibrate-guard","decision":"bypass","reason":"AIHAUS_CALIBRATE_GUARD=0","slug":"","command":""}\n' \
     "$(date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z")" \
@@ -51,7 +55,7 @@ if [ "${AIHAUS_CALIBRATE_GUARD:-1}" = "0" ]; then
 fi
 
 # ---- config ------------------------------------------------------------------
-AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
 
 ts_iso() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
 

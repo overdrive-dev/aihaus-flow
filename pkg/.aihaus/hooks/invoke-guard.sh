@@ -8,7 +8,11 @@ set -euo pipefail
 ALLOWLIST="aih-quick aih-bugfix aih-feature aih-plan aih-milestone"
 MAX_LEN=200
 MAX_DEPTH=3
-AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/invoke.jsonl}"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/invoke.jsonl}")"
 
 # --- helpers ---
 

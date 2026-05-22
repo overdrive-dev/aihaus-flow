@@ -49,6 +49,10 @@
 # Architecture ref: M016 architecture.md §2.1, §7 S04 entry.
 set -uo pipefail
 
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
 # ---------------------------------------------------------------------------
 # 0. Opt-out guard
 # ---------------------------------------------------------------------------
@@ -71,8 +75,8 @@ fi
 # ---------------------------------------------------------------------------
 # 2. Config — all paths env-overridable for portability
 # ---------------------------------------------------------------------------
-SCORES_LOG="${AIHAUS_MEMORY_SCORES_LOG:-.claude/audit/memory-scores.jsonl}"
-RECURRENCE_LOG="${AIHAUS_WARNING_RECURRENCE_LOG:-.claude/audit/warning-recurrence.jsonl}"
+SCORES_LOG="$(aihaus_project_path "${AIHAUS_MEMORY_SCORES_LOG:-.claude/audit/memory-scores.jsonl}")"
+RECURRENCE_LOG="$(aihaus_project_path "${AIHAUS_WARNING_RECURRENCE_LOG:-.claude/audit/warning-recurrence.jsonl}")"
 
 # τ (tau) for recency exponential decay: exp(-Δm / τ); half-life ≈ 4 milestones
 RECENCY_TAU="${AIHAUS_RECENCY_TAU:-6}"

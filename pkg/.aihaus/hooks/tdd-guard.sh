@@ -23,10 +23,14 @@
 
 set -uo pipefail
 
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
 # ---- env bypass (Decision B — aih-quick lifecycle + rollback opt-out) --------
 if [ "${AIHAUS_TDD_GUARD:-1}" = "0" ]; then
   # Audit the bypass silently (fail-open on audit write)
-  AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+  AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
   mkdir -p "$(dirname "${AUDIT_LOG}")" 2>/dev/null || true
   printf '{"ts":"%s","hook":"tdd-guard","event":"tdd-guard","decision":"bypass","reason":"AIHAUS_TDD_GUARD=0","file_path":"","testing_discipline":""}\n' \
     "$(date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z")" \
@@ -35,8 +39,8 @@ if [ "${AIHAUS_TDD_GUARD:-1}" = "0" ]; then
 fi
 
 # ---- config ------------------------------------------------------------------
-AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
-SESSION_MARKER_DIR="${AIHAUS_SESSION_MARKER_DIR:-.claude/audit}"
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
+SESSION_MARKER_DIR="$(aihaus_project_path "${AIHAUS_SESSION_MARKER_DIR:-.claude/audit}")"
 SESSION_TTL_MINUTES="${TDD_SESSION_TTL_MINUTES:-120}"
 
 ts_iso() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }

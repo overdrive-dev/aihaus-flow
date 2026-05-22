@@ -5078,10 +5078,77 @@ check_m048_memory_integration_contract() {
   fi
 }
 
+check_goal_aftermath_regressions() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: goal aftermath regressions (audit root, no auto-close churn, packaged DB schema)"
+  local issues=()
+  local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
+  local helper="${hooks_root}/lib/path-helpers.sh"
+  local git_add_guard="${hooks_root}/git-add-guard.sh"
+  local auto_close="${hooks_root}/manifest-auto-close.sh"
+  local goal_schema="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/scripts/schema.sql"
+  local goal_init="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/scripts/init-goal-db.sh"
+
+  if [[ ! -f "$helper" ]] || ! bash -n "$helper" >/dev/null 2>&1; then
+    issues+=("path-helpers.sh missing or not parseable")
+  fi
+  if [[ ! -f "$goal_schema" ]]; then
+    issues+=("aih-goal packaged schema.sql missing")
+  fi
+  if [[ ! -f "$goal_init" ]] || ! bash -n "$goal_init" >/dev/null 2>&1; then
+    issues+=("aih-goal init-goal-db.sh missing or not parseable")
+  fi
+
+  local tmp_root
+  tmp_root="$(_mktemp_dir aih-aftermath-root)" || {
+    _fail "$label" "failed to create temp dir"
+    return
+  }
+  mkdir -p "$tmp_root/.aihaus/state" "$tmp_root/.claude/audit"
+  git -C "$tmp_root" init >/dev/null 2>&1 || issues+=("git init failed for audit-root fixture")
+  (
+    cd "$tmp_root/.aihaus/state" || exit 1
+    printf '{"tool_name":"Bash","tool_input":{"command":"echo ok"}}' \
+      | CLAUDE_PROJECT_DIR="$tmp_root" bash "$git_add_guard" >/dev/null 2>&1
+  ) || issues+=("git-add-guard audit-root fixture failed")
+  if [[ ! -f "$tmp_root/.claude/audit/hook.jsonl" ]]; then
+    issues+=("git-add-guard did not write audit under project root")
+  fi
+  if [[ -e "$tmp_root/.aihaus/state/.claude" ]]; then
+    issues+=("git-add-guard wrote nested .claude/audit under cwd")
+  fi
+
+  local tmp_manifest
+  tmp_manifest="$(_mktemp_dir aih-aftermath-autoclose)" || {
+    _fail "$label" "failed to create temp dir"
+    return
+  }
+  mkdir -p "$tmp_manifest/.aihaus/features/old" "$tmp_manifest/.claude/audit"
+  git -C "$tmp_manifest" init >/dev/null 2>&1 || issues+=("git init failed for auto-close fixture")
+  cat > "$tmp_manifest/.aihaus/features/old/RUN-MANIFEST.md" <<'EOF_MANIFEST'
+---
+schema: v3
+status: completed
+branch: feature/old
+---
+EOF_MANIFEST
+  CLAUDE_PROJECT_DIR="$tmp_manifest" bash "$auto_close" >/dev/null 2>&1 || true
+  if ! grep -q '^schema: v3$' "$tmp_manifest/.aihaus/features/old/RUN-MANIFEST.md"; then
+    issues+=("manifest-auto-close migrated a skipped completed manifest")
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
 check_m048_memory_integration_contract
+check_goal_aftermath_regressions
 check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
 

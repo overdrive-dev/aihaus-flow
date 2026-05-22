@@ -58,7 +58,7 @@ Each task gets `tasks/<id>.md`:
 # [ID] [Title]
 
 Source: [Linear URL or local source]
-Stage: planejamento
+Stage: [current stage from tasks.stage]
 Target: human-review
 Priority: [local/external priority when known]
 Related: [linked task ids or none]
@@ -98,6 +98,19 @@ last_updated: [ISO timestamp]
 ### Progress Log
 - [ISO] Imported 22 tasks from Linear.
 ```
+
+### Projection rules
+
+After every gate or stage transition, rewrite the readable projection from the
+DB:
+
+- `TASKS.md` stage/planning/open-question counts match `tasks`,
+  `planning_questions`, and `gate_events`.
+- `tasks/<id>.md` `Stage:` matches `tasks.stage`.
+- `tasks/<id>.md` `Gate Log` has one row for every evaluated stage, including
+  `SKIPPED: <reason>`.
+- Batch gates such as full-suite test, deploy, or dev-review may reuse a shared
+  evidence file, but every affected task still gets its own gate row.
 
 ### Status vocabulary
 

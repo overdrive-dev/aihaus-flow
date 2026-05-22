@@ -45,9 +45,13 @@
 # Story 7 of plan 260414-exec-auto-approve; extended by M011/S05, M027/S7.
 set -uo pipefail
 
-AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/autonomy-violations.jsonl}"
-AUDIT_GATE_LOG="${AIHAUS_AUDIT_GATE_LOG:-.claude/audit/autonomy-gate.jsonl}"
-GATE_CACHE="${AIHAUS_AUDIT_GATE_CACHE:-.claude/audit/autonomy-gate.cache}"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/autonomy-violations.jsonl}")"
+AUDIT_GATE_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_GATE_LOG:-.claude/audit/autonomy-gate.jsonl}")"
+GATE_CACHE="$(aihaus_project_path "${AIHAUS_AUDIT_GATE_CACHE:-.claude/audit/autonomy-gate.cache}")"
 
 INPUT="$(cat)"
 
@@ -675,7 +679,7 @@ if [ -n "${MANIFEST_PATH:-}" ] && [ -f "${MANIFEST_PATH}" ] \
     printf 'advisory: Step 7/9 — manifest shows substantive work (%s progress entries) but 0 implementer/frontend-dev/code-fixer agent rows. See pkg/.aihaus/skills/aih-feature/annexes/agent-routing.md for delegation contract.\n' \
       "${_s7_log_rows}" >&2
     # Also log to audit (non-fatal)
-    _S7_AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+    _S7_AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
     mkdir -p "$(dirname "$_S7_AUDIT_LOG")" 2>/dev/null || true
     printf '{"ts":"%s","hook":"autonomy-guard","advisory":"step7-inline-drift","manifest_path":"%s","log_rows":%s,"agent_rows":0}\n' \
       "$(date -u +%FT%TZ)" "${MANIFEST_PATH}" "${_s7_log_rows}" \

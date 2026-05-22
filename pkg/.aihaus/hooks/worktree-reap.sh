@@ -21,7 +21,11 @@ set -euo pipefail
 if [ "${AIHAUS_REAP_DISABLED:-}" = "1" ]; then exit 0; fi
 
 # ---- config -------------------------------------------------------------------
-AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
 AGE_DAYS="${AIHAUS_REAP_AGE_DAYS:-14}"
 EXECUTE=0
 

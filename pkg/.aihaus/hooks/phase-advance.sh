@@ -28,11 +28,14 @@
 #             14 terminal-state-rejected.
 set -euo pipefail
 
-AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
 
 # --- source shared helpers (F-01 extraction; see architecture § 2.0) ---
 # shellcheck source=lib/manifest-helpers.sh
 . "$(dirname "$0")/lib/manifest-helpers.sh"
+# shellcheck source=lib/path-helpers.sh
+. "$(dirname "$0")/lib/path-helpers.sh"
+
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
 
 # --- runtime platform detect (M011/S02; F-03 no-persistence) ---
 # Probes `command -v flock` at invocation. POSIX → flock -w 2; Windows → mkdir

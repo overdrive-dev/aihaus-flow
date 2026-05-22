@@ -30,7 +30,11 @@ if [ "${AIHAUS_MERGE_BACK_GUARD:-}" = "0" ]; then
   exit 0
 fi
 
-AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
 START_MS=$(date +%s%3N 2>/dev/null || echo "0")
 
 # --- argument parsing ---
@@ -211,7 +215,7 @@ fi
 # --- --drop path: move unexpected file to rejected/ before proceeding ---
 if [ -n "$DROP_FILE" ]; then
   REJECT_TS=$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || date -u +%Y%m%dT%H%M%SZ)
-  REJECT_DIR=".claude/audit/rejected/${STORY}-${REJECT_TS}"
+  REJECT_DIR="$(aihaus_project_path ".claude/audit/rejected/${STORY}-${REJECT_TS}")"
   mkdir -p "$REJECT_DIR" 2>/dev/null || true
   if [ -f "$WORKTREE/$DROP_FILE" ]; then
     mv "$WORKTREE/$DROP_FILE" "$REJECT_DIR/$DROP_FILE" 2>/dev/null || true

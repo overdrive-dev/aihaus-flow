@@ -52,16 +52,15 @@ fi
 # ---------------------------------------------------------------------------
 # 3. Config
 # ---------------------------------------------------------------------------
-AUDIT_LOG="${AIHAUS_CONTEXT_INJECT_LOG:-.claude/audit/context-inject.jsonl}"
-INJECT_CACHE=".claude/audit/context-inject.cache"
 SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo ".")"
+# shellcheck source=lib/path-helpers.sh
+. "${SCRIPT_DIR}/lib/path-helpers.sh"
+PROJECT_ROOT="$(aihaus_project_root)"
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_CONTEXT_INJECT_LOG:-.claude/audit/context-inject.jsonl}")"
+INJECT_CACHE="$(aihaus_project_path "${AIHAUS_CONTEXT_INJECT_CACHE:-.claude/audit/context-inject.cache}")"
 ROLE_DEFAULTS_JSON="${SCRIPT_DIR}/lib/role-defaults.json"
 COHORTS_MD_REL=".aihaus/skills/aih-effort/annexes/cohorts.md"
 BUDGET_CONF="${SCRIPT_DIR}/context-budget.conf"
-PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-}"
-if [ -z "$PROJECT_ROOT" ]; then
-  PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-fi
 AIHAUS_MEMORY_INJECT="${AIHAUS_MEMORY_INJECT:-1}"
 AIHAUS_MEMORY_CONTEXT_MAX_BYTES="${AIHAUS_MEMORY_CONTEXT_MAX_BYTES:-6000}"
 AIHAUS_MEMORY_QUERY_TOP="${AIHAUS_MEMORY_QUERY_TOP:-3}"
@@ -523,7 +522,7 @@ novel_task="0"
 #     Graceful degradation: file absent / empty / jq missing → skip silently.
 #     No new audit write — preserves ADR-M013-A single-writer discipline.
 # ---------------------------------------------------------------------------
-RECURRENCE_LOG=".claude/audit/warning-recurrence.jsonl"
+RECURRENCE_LOG="$(aihaus_project_path ".claude/audit/warning-recurrence.jsonl")"
 recurring_warnings_section=""
 if [ -f "$RECURRENCE_LOG" ] && command -v jq >/dev/null 2>&1; then
   # Build bullets: one per qualifying row, grouped by source_agent annotation.

@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
 # DANGEROUS_PATTERNS: sole carrier since M014/S04 (PermissionRequest layer deleted).
 # Pattern set migrated from M007 baseline; extended with M014/S02 additions.
 # See ADR-008, ADR-009, ADR-M014-A, K-003.
@@ -125,7 +129,8 @@ _bsw_ts() { date -u +%FT%TZ 2>/dev/null || echo ""; }
 
 _bsw_audit() {
   local from_branch="$1" target_ref="$2" manifest_path="$3" manifest_status="$4"
-  local audit_log="${AIHAUS_BRANCH_SWITCH_LOG:-.claude/audit/branch-switch-warn.jsonl}"
+  local audit_log
+  audit_log="$(aihaus_project_path "${AIHAUS_BRANCH_SWITCH_LOG:-.claude/audit/branch-switch-warn.jsonl}")"
   mkdir -p "$(dirname "$audit_log")" 2>/dev/null || return 0
   local cmd_hash
   cmd_hash="$(printf '%s' "$COMMAND" | sha256sum 2>/dev/null | cut -c1-12 || printf 'nohash')"

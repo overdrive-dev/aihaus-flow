@@ -25,11 +25,15 @@
 
 set -euo pipefail
 
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
 # ---- env bypass (Rollback matrix §AIHAUS_GIT_ADD_GUARD=0) -------------------
 if [ "${AIHAUS_GIT_ADD_GUARD:-}" = "0" ]; then
   echo "git-add-guard.sh: DISABLED via AIHAUS_GIT_ADD_GUARD=0 — allowing all git add/commit" >&2
   # audit skipped-opt-out
-  AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+  AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
   mkdir -p "$(dirname "${AUDIT_LOG}")" 2>/dev/null || true
   printf '{"ts":"%s","hook":"git-add-guard","event":"git-add-guard","result":"skipped-opt-out","branch":"","command":""}\n' \
     "$(date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z")" \
@@ -38,7 +42,7 @@ if [ "${AIHAUS_GIT_ADD_GUARD:-}" = "0" ]; then
 fi
 
 # ---- config ------------------------------------------------------------------
-AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
 
 ts_iso() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
 

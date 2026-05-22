@@ -34,9 +34,18 @@ explicitly requested that mutation.
 
 ### Required tables
 
-The agent may create the DB with `sqlite3` when available. If a SQLite client is
-unavailable, keep the markdown run artifacts and record `db-unavailable` as a
-sync blocker before making source mutations.
+Prefer the packaged initializer; do not generate ad hoc `schema.sql` or
+`import_tasks.py` under `.aihaus/state/`:
+
+```bash
+bash .claude/skills/aih-goal/scripts/init-goal-db.sh .aihaus/state/aih-goal.db
+```
+
+If the installed skill path is unavailable, create the DB with `sqlite3` from
+the canonical schema below and write temporary import helpers under the current
+run directory or OS temp, not `.aihaus/state/`. If SQLite is unavailable, keep
+the markdown run artifacts and record `db-unavailable` as a sync blocker before
+making source mutations.
 
 ```sql
 CREATE TABLE IF NOT EXISTS goals (
@@ -160,6 +169,11 @@ Create the new planning and relation tables with `CREATE TABLE IF NOT EXISTS`.
 - Register every task locally before planning.
 - Record planning questions before asking them.
 - Record planning answers before moving a task out of `planejamento`.
+- Record one `gate_events` row per task per evaluated stage, including
+  `SKIPPED: reason` gates. Batch deploy/test evidence may be shared, but each
+  task must have its own event pointing to that evidence.
+- After every stage transition, project DB state back into `TASKS.md` and
+  `tasks/<task-id>.md`; the task file `Stage:` line must match `tasks.stage`.
 - Search and link related local tasks before creating duplicates.
 - Compare `source_updated_at` before writing back.
 - If the source changed after import, create a `sync_conflict` event instead of

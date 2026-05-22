@@ -28,6 +28,10 @@
 # Architecture ref: M013 architecture.md §2.2, §4.1, §9.
 set -uo pipefail
 
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
+
 # ---------------------------------------------------------------------------
 # 0. Recursion guard
 # ---------------------------------------------------------------------------
@@ -57,9 +61,9 @@ fi
 # ---------------------------------------------------------------------------
 # 3. Config
 # ---------------------------------------------------------------------------
-WARNINGS_LOG="${AIHAUS_LEARNING_WARNINGS_LOG:-.claude/audit/LEARNING-WARNINGS.jsonl}"
-AUDIT_LOG="${AIHAUS_LEARNING_ADVISOR_AUDIT_LOG:-.claude/audit/learning-advisor-audit.jsonl}"
-ADVISOR_CACHE="${AIHAUS_LEARNING_ADVISOR_CACHE:-.claude/audit/learning-advisor.cache}"
+WARNINGS_LOG="$(aihaus_project_path "${AIHAUS_LEARNING_WARNINGS_LOG:-.claude/audit/LEARNING-WARNINGS.jsonl}")"
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_LEARNING_ADVISOR_AUDIT_LOG:-.claude/audit/learning-advisor-audit.jsonl}")"
+ADVISOR_CACHE="$(aihaus_project_path "${AIHAUS_LEARNING_ADVISOR_CACHE:-.claude/audit/learning-advisor.cache}")"
 
 ts_iso() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
 

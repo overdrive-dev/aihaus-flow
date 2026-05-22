@@ -14,7 +14,6 @@ attach evidence, and continue without user input until the target stage is
 reached or every remaining task has a true blocker.
 
 $ARGUMENTS
-
 ## Inputs
 
 - `--source <selector>` - preferred kanban/source selector. Optional; default is
@@ -97,7 +96,8 @@ kanban source of truth when an external kanban exists; when no external kanban
 exists, it is the local kanban source for aihaus workflow state. Use
 `annexes/goal-db.md` for the schema contract, `annexes/local-kanban.md` for
 local task and planning contracts, and `annexes/run-state.md` for readable file
-shapes. At minimum write:
+shapes. Use the packaged DB init script; avoid state-local schema/import scripts.
+At minimum write:
 
 - `GOAL.md`
 - `TASKS.md`
@@ -153,6 +153,9 @@ Every stage must produce one of:
 - `SKIPPED: <why not applicable>`
 - `BLOCKED-TO-PLANNING: <business question>`
 - `BLOCKED: <true blocker>`
+
+After every evaluated stage, update `aih-goal.db`, `TASKS.md`, and task files
+together; each task gets a gate event and `Stage:` must match the DB.
 
 ## Phase 5: Sync Evidence
 

@@ -36,13 +36,15 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ---- source shared library ---------------------------------------------------
 # shellcheck source=lib/manifest-helpers.sh
 . "${HOOK_DIR}/lib/manifest-helpers.sh"
+# shellcheck source=lib/path-helpers.sh
+. "${HOOK_DIR}/lib/path-helpers.sh"
 
 # ---- source integration-ref helper (S01) -------------------------------------
 # shellcheck source=lib/integration-refs.sh
 . "${HOOK_DIR}/lib/integration-refs.sh"
 
 # ---- configuration -----------------------------------------------------------
-AUDIT_LOG="${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}"
+AUDIT_LOG="$(aihaus_project_path "${AIHAUS_AUDIT_LOG:-.claude/audit/hook.jsonl}")"
 
 # ---- argument parsing --------------------------------------------------------
 DRY_RUN=0
@@ -117,6 +119,30 @@ read_metadata_kv() {
       sub(/^[^:]*:[[:space:]]*/,"")
       gsub(/[[:space:]]*$/,"")
       print; exit
+    }
+  ' "$f" 2>/dev/null || true
+}
+
+# Read either v3/v4 "## Metadata" blocks or legacy YAML frontmatter without
+# mutating the manifest. Session-start sweeps must inspect stale files without
+# bumping schemas as a side effect.
+read_manifest_kv() {
+  local k="$1" f="$2" val
+  val="$(read_metadata_kv "$k" "$f")"
+  if [[ -n "$val" ]]; then
+    printf '%s\n' "$val"
+    return 0
+  fi
+  awk -v k="$k" '
+    BEGIN { want = tolower(k) ":" }
+    {
+      key = tolower($1)
+      if (key == want) {
+        sub(/^[^:]*:[[:space:]]*/, "")
+        gsub(/[[:space:]]*$/, "")
+        print
+        exit
+      }
     }
   ' "$f" 2>/dev/null || true
 }
@@ -327,21 +353,10 @@ check_crash_resume_guard() {
 process_manifest() {
   local manifest="$1"
 
-  # --- Step 1: Migration-before-parse (I-02 / AC-04) -------------------------
-  # Run manifest-migrate.sh first. Ignore its output; failure is non-fatal
-  # (migrate might fail on v1 backup issues but we still try to proceed).
-  if ! MANIFEST_PATH="$manifest" bash "${HOOK_DIR}/manifest-migrate.sh" >/dev/null 2>&1; then
-    # Migration failed — log as refused and skip
-    local mp_disp="$manifest"
-    [[ -n "$GIT_ROOT" ]] && mp_disp="${manifest#${GIT_ROOT}/}"
-    [[ $DRY_RUN -eq 0 ]] && emit_audit "$mp_disp" "" "" "refused" "migration-failed"
-    return 3
-  fi
-
-  # --- Step 2: Parse metadata -------------------------------------------------
+  # --- Step 1: Parse metadata without mutation -------------------------------
   local status branch
-  status="$(read_metadata_kv "status" "$manifest")"
-  branch="$(read_metadata_kv "branch" "$manifest")"
+  status="$(read_manifest_kv "status" "$manifest")"
+  branch="$(read_manifest_kv "branch" "$manifest")"
 
   local mp_disp="$manifest"
   [[ -n "$GIT_ROOT" ]] && mp_disp="${manifest#${GIT_ROOT}/}"
@@ -411,6 +426,15 @@ process_manifest() {
     return 0
   fi
 
+  # Only migrate after every close condition holds. Session-start sweeps must
+  # not churn skipped/refused historical manifests just to inspect them.
+  if ! MANIFEST_PATH="$manifest" bash "${HOOK_DIR}/manifest-migrate.sh" >/dev/null 2>&1; then
+    emit_audit "$mp_disp" "$branch" "$matched_ref" "refused" "migration-failed"
+    return 3
+  fi
+  status="$(read_manifest_kv "status" "$manifest")"
+  branch="$(read_manifest_kv "branch" "$manifest")"
+
   # Determine reason text based on source status
   local close_reason
   case "$status" in
@@ -466,7 +490,7 @@ if [[ $DRY_RUN -eq 1 ]]; then
   count=0
   for m in "${MANIFESTS[@]+"${MANIFESTS[@]}"}"; do
     # Quick status check (no migration in dry-run)
-    s="$(read_metadata_kv "status" "$m")"
+    s="$(read_manifest_kv "status" "$m")"
     check_status_eligible "$s" && count=$((count + 1)) || true
   done
   printf 'manifest-auto-close: %d candidate(s) eligible for auto-close\n' "$count"
