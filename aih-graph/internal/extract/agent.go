@@ -51,7 +51,7 @@ func readAgentMemory(repoRoot, agentName string) (string, string) {
 // pkg/.aihaus/agents/*.md. Smoke Check 6 enforces all 8 fields are present.
 type agentFrontmatter struct {
 	Name                  string `yaml:"name"`
-	Tools                 any    `yaml:"tools"`                  // can be CSV string OR YAML list
+	Tools                 any    `yaml:"tools"` // can be CSV string OR YAML list
 	Model                 string `yaml:"model"`
 	Effort                string `yaml:"effort"`
 	Color                 string `yaml:"color"`
@@ -65,12 +65,13 @@ type agentFrontmatter struct {
 // Files without YAML frontmatter are skipped (with a non-fatal warning to the
 // caller via the returned errs slice — but only when fatally malformed).
 func ParseAgentsDir(repoRoot string) ([]types.Agent, error) {
-	pattern := filepath.Join(repoRoot, "pkg", ".aihaus", "agents", "*.md")
-	matches, err := filepath.Glob(pattern)
+	matches, err := globUnique(filepath.Join(repoRoot, ".aihaus", "agents", "*.md"))
+	if err == nil && len(matches) == 0 {
+		matches, err = globUnique(filepath.Join(repoRoot, "pkg", ".aihaus", "agents", "*.md"))
+	}
 	if err != nil {
 		return nil, fmt.Errorf("glob agents: %w", err)
 	}
-	sort.Strings(matches)
 
 	agents := make([]types.Agent, 0, len(matches))
 	for _, path := range matches {
@@ -109,6 +110,27 @@ func ParseAgentsDir(repoRoot string) ([]types.Agent, error) {
 		agents = append(agents, a)
 	}
 	return agents, nil
+}
+
+func globUnique(patterns ...string) ([]string, error) {
+	seen := map[string]struct{}{}
+	var matches []string
+	for _, pattern := range patterns {
+		items, err := filepath.Glob(pattern)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			clean := filepath.Clean(item)
+			if _, ok := seen[clean]; ok {
+				continue
+			}
+			seen[clean] = struct{}{}
+			matches = append(matches, clean)
+		}
+	}
+	sort.Strings(matches)
+	return matches, nil
 }
 
 // toolsToSlice normalizes agent.Tools (which may be a YAML list or a

@@ -404,7 +404,13 @@ _build_memory_context() {
 
   local query_text status_json query_json section
   local db_args=()
-  [[ -n "${AIH_GRAPH_DB:-}" ]] && db_args+=(--db "$AIH_GRAPH_DB")
+  if [[ -n "${AIH_GRAPH_DB:-}" ]]; then
+    db_args+=(--db "$AIH_GRAPH_DB")
+  else
+    local default_db="$PROJECT_ROOT/.aihaus/state/aih-graph.db"
+    mkdir -p "$(dirname "$default_db")" 2>/dev/null || true
+    db_args+=(--db "$default_db")
+  fi
   query_text="${task_description:-${target_agent_name:-repository context}}"
   query_text="$(printf '%s' "$query_text" | tr '\n' ' ' | head -c 600)"
 

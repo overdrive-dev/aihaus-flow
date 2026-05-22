@@ -7,15 +7,16 @@
 #
 # Discovery (in order):
 #   1. AIH_GRAPH_BIN env var (explicit override)
-#   2. $HOME/.aihaus/bin/aih-graph[.exe]   (canonical install location)
-#   3. $PWD/aih-graph/bin/aih-graph[.exe]  (in-tree dogfood build)
-#   4. PATH lookup via `command -v aih-graph`
+#   2. $CLAUDE_PROJECT_DIR/.aihaus/bin/aih-graph[.exe] (repo-local runtime)
+#   3. $HOME/.aihaus/bin/aih-graph[.exe] (global fallback)
+#   4. $PWD/aih-graph/bin/aih-graph[.exe] (contributor dogfood build)
+#   5. PATH lookup via `command -v aih-graph`
 # If none resolves, emit a non-fatal warning and exit 0 — aih-graph is
 # optional; missing binary should never block the aihaus session.
 #
 # Env vars:
 #   AIH_GRAPH_BIN       Explicit binary path (skip discovery)
-#   AIH_GRAPH_DB        Override .db path (default: aih-graph manages via XDG)
+#   AIH_GRAPH_DB        Override .db path (default: .aihaus/state/aih-graph.db)
 #   AIH_GRAPH_QUIET     If set non-empty, suppress per-line output.
 #   AIH_GRAPH_OLLAMA_URL Override Ollama base URL (or use OLLAMA_HOST).
 #   AIHAUS_OLLAMA_AUTO  Default 1. Start local Ollama when installed so
@@ -34,6 +35,8 @@ warn() {
 
 # Repo root: prefer CLAUDE_PROJECT_DIR set by Claude Code; fall back to PWD.
 repo_root="${CLAUDE_PROJECT_DIR:-$PWD}"
+state_dir="$repo_root/.aihaus/state"
+graph_db="${AIH_GRAPH_DB:-$state_dir/aih-graph.db}"
 
 ollama_base_url="${AIH_GRAPH_OLLAMA_URL:-${OLLAMA_HOST:-http://127.0.0.1:11434}}"
 case "$ollama_base_url" in
@@ -56,6 +59,7 @@ esac
 # Locate binary via discovery chain.
 candidates=()
 [[ -n "${AIH_GRAPH_BIN:-}" ]] && candidates+=("$AIH_GRAPH_BIN")
+candidates+=("$repo_root/.aihaus/bin/aih-graph${ext}")
 candidates+=("$HOME/.aihaus/bin/aih-graph${ext}")
 candidates+=("$repo_root/aih-graph/bin/aih-graph${ext}")
 
@@ -103,14 +107,14 @@ ensure_ollama_ready() {
   return 1
 }
 
+mkdir -p "$state_dir" 2>/dev/null || true
+
 log "binary: $bin"
 log "repo:   $repo_root"
+log "db:     $graph_db"
 
 # Refresh invocation.
-args=(refresh --repo "$repo_root" --accept-all-repos)
-if [[ -n "${AIH_GRAPH_DB:-}" ]]; then
-  args+=(--db "$AIH_GRAPH_DB")
-fi
+args=(refresh --repo "$repo_root" --db "$graph_db" --accept-all-repos)
 
 if ensure_ollama_ready; then
   if ollama_model_available; then
@@ -125,6 +129,7 @@ fi
 
 # Run. Failures are non-fatal — aih-graph is supplemental.
 if "$bin" "${args[@]}"; then
+  rm -f "$repo_root/.aihaus/state/aih-graph.stale" 2>/dev/null || true
   rm -f "$repo_root/.claude/audit/aih-graph.stale" 2>/dev/null || true
   log "refresh complete"
 else

@@ -400,6 +400,27 @@ else
   cp -R "${PKG_AIHAUS}/." "${TARGET}/.aihaus/"
 fi
 
+# Repo-local runtime layout. Package-owned source stays in AIHAUS_HOME; target
+# repos receive only runtime/state defaults and editable workflow profiles.
+mkdir -p \
+  "${TARGET}/.aihaus/bin" \
+  "${TARGET}/.aihaus/state" \
+  "${TARGET}/.aihaus/runtime" \
+  "${TARGET}/.aihaus/backups" \
+  "${TARGET}/.aihaus/workflows" \
+  "${TARGET}/.aihaus/memory/workflows"
+if [[ ! -f "${TARGET}/.aihaus/workflows/default.md" && -f "${PKG_AIHAUS}/workflows/default.md" ]]; then
+  cp "${PKG_AIHAUS}/workflows/default.md" "${TARGET}/.aihaus/workflows/default.md"
+  echo "  workflow: created .aihaus/workflows/default.md"
+fi
+if [[ ! -f "${TARGET}/.aihaus/workflows/agents.md" && -f "${PKG_AIHAUS}/workflows/agents.md" ]]; then
+  cp "${PKG_AIHAUS}/workflows/agents.md" "${TARGET}/.aihaus/workflows/agents.md"
+  echo "  workflow: created .aihaus/workflows/agents.md"
+fi
+if [[ ! -f "${TARGET}/.aihaus/memory/workflows/README.md" && -f "${PKG_AIHAUS}/memory/workflows/README.md" ]]; then
+  cp "${PKG_AIHAUS}/memory/workflows/README.md" "${TARGET}/.aihaus/memory/workflows/README.md"
+fi
+
 # Step 5+6: create .claude/{skills,agents,hooks} as links or copies (Claude Code target)
 # shellcheck source=lib/junction-safe.sh
 source "$(dirname "$0")/lib/junction-safe.sh"
@@ -544,6 +565,10 @@ _inject_gitignore() {
     printf '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers\n'
     printf '/.aihaus/audit/\n'
     printf '/.claude/audit/\n'
+    printf '/.aihaus/bin/\n'
+    printf '/.aihaus/state/\n'
+    printf '/.aihaus/runtime/\n'
+    printf '/.aihaus/backups/\n'
     printf '/.aihaus/.context-budgets\n'
     printf '/.aihaus/.effort\n'
     printf '/.aihaus/.calibration\n'
@@ -564,13 +589,13 @@ _inject_gitignore() {
 _inject_gitignore "${TARGET}"
 
 # Step 13: aih-graph memory engine binary bootstrap (M041/S3)
-# Downloads the aih-graph binary to ~/.aihaus/bin/ if not already present.
+# Downloads the aih-graph binary to .aihaus/bin/ if not already present.
 # Non-fatal — install completes even if download fails (e.g. offline,
 # rate-limited, platform not in v0.1 matrix). /aih-init Phase 3 retries
 # the same download on its own if the binary is still missing at run time.
 # Opt-out: AIHAUS_SKIP_GRAPH_BINARY=1.
 if [[ -z "${AIHAUS_SKIP_GRAPH_BINARY:-}" ]] && [[ "${UPDATE}" != "1" ]]; then
-  _aih_graph_bin="$HOME/.aihaus/bin/aih-graph"
+  _aih_graph_bin="${TARGET}/.aihaus/bin/aih-graph"
   case "$(uname -s 2>/dev/null)" in
     MINGW*|MSYS*|CYGWIN*) _aih_graph_bin="${_aih_graph_bin}.exe" ;;
   esac
@@ -579,7 +604,7 @@ if [[ -z "${AIHAUS_SKIP_GRAPH_BINARY:-}" ]] && [[ "${UPDATE}" != "1" ]]; then
     if [[ -f "${_aih_graph_installer}" ]]; then
       echo ""
       echo "  installing aih-graph memory engine..."
-      if bash "${_aih_graph_installer}" >/dev/null 2>&1; then
+      if bash "${_aih_graph_installer}" --bin "${_aih_graph_bin}" >/dev/null 2>&1; then
         echo "  ok: aih-graph at ${_aih_graph_bin}"
       else
         echo "  warn: aih-graph download failed (memory engine optional; /aih-init retries)"

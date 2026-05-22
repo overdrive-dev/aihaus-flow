@@ -53,8 +53,45 @@ _memory() {
   case "$(uname -s 2>/dev/null)" in
     MINGW*|MSYS*|CYGWIN*) ext=".exe" ;;
   esac
+  local graph_args=("$@")
+  if [[ $# -gt 0 ]]; then
+    local cmd="$1"
+    shift
+    case "$cmd" in
+      build|refresh|status|query|context|callers|impact|gotchas|milestone)
+        local has_db=0 arg repo_root db_path
+        for arg in "$@"; do
+          [[ "$arg" == "--db" || "$arg" == "-db" || "$arg" == --db=* || "$arg" == -db=* ]] && has_db=1
+        done
+        if [[ "$has_db" == "0" ]]; then
+          repo_root="${AIH_GRAPH_REPO:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+          local expect_repo=0
+          for arg in "$@"; do
+            if [[ "$expect_repo" == "1" ]]; then
+              repo_root="$arg"
+              expect_repo=0
+              continue
+            fi
+            case "$arg" in
+              --repo) expect_repo=1 ;;
+              --repo=*) repo_root="${arg#--repo=}" ;;
+            esac
+          done
+          db_path="${repo_root}/.aihaus/state/aih-graph.db"
+          mkdir -p "$(dirname "$db_path")" 2>/dev/null || true
+          graph_args=("$cmd" --db "$db_path" "$@")
+        else
+          graph_args=("$cmd" "$@")
+        fi
+        ;;
+      *)
+        graph_args=("$cmd" "$@")
+        ;;
+    esac
+  fi
   local candidates=()
   [[ -n "${AIH_GRAPH_BIN:-}" ]] && candidates+=("${AIH_GRAPH_BIN}")
+  candidates+=("$PWD/.aihaus/bin/aih-graph${ext}")
   for c in "${candidates[@]}"; do
     if [[ -x "${c}" ]]; then
       bin="${c}"
@@ -62,7 +99,7 @@ _memory() {
     fi
   done
   if [[ -n "${bin}" ]]; then
-    exec "${bin}" "$@"
+    exec "${bin}" "${graph_args[@]}"
   fi
   if [[ -f "${AIHAUS_HOME}/aih-graph/go.mod" ]] && command -v go >/dev/null 2>&1; then
     local go_tmp_root="${AIH_GRAPH_GO_TMP:-${AIHAUS_HOME}/tmp/aih-graph-go}"
@@ -70,16 +107,16 @@ _memory() {
     AIH_GRAPH_CALLER_CWD="${PWD}" \
       GOTMPDIR="${go_tmp_root}/tmp" \
       GOCACHE="${go_tmp_root}/cache" \
-      exec go -C "${AIHAUS_HOME}/aih-graph" run ./cmd/aih-graph "$@"
+      exec go -C "${AIHAUS_HOME}/aih-graph" run ./cmd/aih-graph "${graph_args[@]}"
   fi
   if [[ -x "${AIHAUS_HOME}/aih-graph/bin/aih-graph${ext}" ]]; then
-    exec "${AIHAUS_HOME}/aih-graph/bin/aih-graph${ext}" "$@"
+    exec "${AIHAUS_HOME}/aih-graph/bin/aih-graph${ext}" "${graph_args[@]}"
   fi
   if [[ -x "$HOME/.aihaus/bin/aih-graph${ext}" ]]; then
-    exec "$HOME/.aihaus/bin/aih-graph${ext}" "$@"
+    exec "$HOME/.aihaus/bin/aih-graph${ext}" "${graph_args[@]}"
   fi
   if command -v aih-graph >/dev/null 2>&1; then
-    exec aih-graph "$@"
+    exec aih-graph "${graph_args[@]}"
   fi
   echo "aihaus memory: aih-graph not found. Install it with: bash pkg/scripts/install-aih-graph-binary.sh" >&2
   exit 1

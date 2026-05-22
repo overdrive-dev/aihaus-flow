@@ -2,7 +2,7 @@
 
 Standalone Go binary memory engine for [aihaus](https://github.com/overdrive-dev/aihaus-flow).
 
-**Status:** v0.1.4 baseline plus M048 native repository memory: files, chunks, symbols, calls, tests, markdown memory, commits, local Ollama embeddings, JSON agent output, lifecycle refresh hooks, and context/callers/impact/gotchas/milestone commands.
+**Status:** v0.1.5 baseline plus M048 native repository memory: files, chunks, symbols, calls, tests, markdown memory, commits, local Ollama embeddings, JSON agent output, lifecycle refresh hooks, and context/callers/impact/gotchas/milestone commands.
 
 ## What this is
 
@@ -67,7 +67,7 @@ Shipped milestone chain:
 - M041 dogfood: query --db default + hybrid BM25 routing + var-version ldflag fix; tag v0.1.2
 - M042: legacy cloud-embedding demotion from advertised surfaces; CLI/PRD/README reconciliation; tag v0.1.3
 - M046: Agent memory indexing — `.claude/agent-memory/<name>/MEMORY.md` excerpts (200 lines / 25KB cap matching native CC) injected into Agent node properties; tag v0.1.4
-- M048: Native repository memory for real code, tests, markdown memory, recent commits, fixed local Ollama `nomic-embed-text` embeddings, JSON command payloads, lifecycle refresh/stale hooks, and all-agent memory consultation.
+- M048: Native repository memory for real code, tests, markdown memory, recent commits, fixed local Ollama `nomic-embed-text` embeddings, JSON command payloads, lifecycle refresh/stale hooks, repo-local `.aihaus/state` runtime, workflow memory agents, and all-agent memory consultation; tag v0.1.5
 
 ## Verifying the memory engine
 
@@ -77,17 +77,17 @@ After `/aih-init` has built the index for at least one project, you can verify t
 ```
 aih-graph version
 ```
-Should print `v0.1.4` (or higher). If the binary is absent: `bash pkg/scripts/install-aih-graph-binary.sh` re-downloads it from GitHub Releases.
+Should print `v0.1.5` (or higher). In installed repositories, aihaus keeps the runtime binary at `.aihaus/bin/aih-graph[.exe]`. If the binary is absent, re-run `aihaus update` or use `bash pkg/scripts/install-aih-graph-binary.sh --bin .aihaus/bin/aih-graph`.
 
-**2. DB file exists on disk** (per-repo isolated, XDG-scoped):
+**2. DB file exists on disk**:
 
-| Platform | Path |
-|----------|------|
-| Linux | `$XDG_STATE_HOME/aih-graph/<sha256-hex-16>/graph.db` (default: `~/.local/state/aih-graph/...`) |
-| macOS | `~/Library/Application Support/aih-graph/<sha256-hex-16>/graph.db` |
-| Windows | `%LOCALAPPDATA%\aih-graph\<sha256-hex-16>\graph.db` |
+For aihaus-installed repositories, wrappers and hooks use repo-local state:
 
-The 16-hex subfolder is the SHA-256 prefix of the absolute repo path — one subfolder per repo. Override the location with the `AIH_GRAPH_HOME` env var.
+```
+.aihaus/state/aih-graph.db
+```
+
+Raw `aih-graph` calls without `--db` still use the engine's XDG per-repo fallback. Prefer `aihaus memory ...` inside installed repositories so agents and humans use the same repo-local state layout.
 
 **3. Query returns scored results:**
 ```
@@ -106,10 +106,10 @@ Use `--semantic` (vector-first when Ollama embeddings exist, BM25 fallback other
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `no node matches identifier "..."` | Used `--bfs` with free-text input | Pass an exact identifier, or omit `--bfs` for default hybrid retrieval |
-| `consent gate: missing .aih-graph-consent` | Repo not opted-in to indexing | `aih-graph build --accept-all-repos .` or run `/aih-init` |
+| `consent gate: missing .aih-graph-consent` | Raw `aih-graph build` was run without consent | Use `aihaus memory refresh --repo .` or pass `--accept-all-repos` for that run |
 | `database is locked` | Another process writing to the DB | Wait a few seconds and retry |
-| Build prints `0 nodes` | `pkg/.aihaus/decisions.md` empty or repo has no aihaus typed nodes | Verify the repo is an aihaus-managed project (has `pkg/.aihaus/` or `.aihaus/`) |
-| `aih-graph: command not found` | Binary not on PATH and discovery chain failed | Re-run install: `bash pkg/scripts/install-aih-graph-binary.sh` |
+| Build prints `0 nodes` | Repo has no indexed files or aihaus memory artifacts | Verify the repo is an aihaus-managed project (has `.aihaus/`) |
+| `aih-graph: command not found` | Binary not on PATH and discovery chain failed | Re-run `aihaus update` or install to `.aihaus/bin/` |
 
 ## Specs
 

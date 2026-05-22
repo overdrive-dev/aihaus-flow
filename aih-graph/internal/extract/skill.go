@@ -3,7 +3,6 @@ package extract
 import (
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/types"
@@ -22,12 +21,13 @@ type skillFrontmatter struct {
 // ParseSkillsDir walks pkg/.aihaus/skills/aih-*/SKILL.md and returns one Skill
 // per file. Files without YAML frontmatter or without a name are skipped.
 func ParseSkillsDir(repoRoot string) ([]types.Skill, error) {
-	pattern := filepath.Join(repoRoot, "pkg", ".aihaus", "skills", "aih-*", "SKILL.md")
-	matches, err := filepath.Glob(pattern)
+	matches, err := globUnique(filepath.Join(repoRoot, ".aihaus", "skills", "aih-*", "SKILL.md"))
+	if err == nil && len(matches) == 0 {
+		matches, err = globUnique(filepath.Join(repoRoot, "pkg", ".aihaus", "skills", "aih-*", "SKILL.md"))
+	}
 	if err != nil {
 		return nil, fmt.Errorf("glob skills: %w", err)
 	}
-	sort.Strings(matches)
 
 	skills := make([]types.Skill, 0, len(matches))
 	for _, path := range matches {

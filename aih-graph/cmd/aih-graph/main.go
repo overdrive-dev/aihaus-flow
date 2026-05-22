@@ -40,7 +40,7 @@ import (
 //
 // (Go's -X only works on string vars, not consts — keeping this as var is
 // load-bearing for release pipeline correctness.)
-var version = "0.1.4-dev"
+var version = "0.1.5-dev"
 
 const jsonPropertyStringLimit = 4000
 const embedInputStringLimit = 4000
@@ -55,7 +55,7 @@ Usage:
 Commands:
   build <repo-path>       Extract aihaus graph from repo
     --dry-run             Print extraction summary without persisting
-    --accept-all-repos    Bypass consent gate (auto-creates marker)
+    --accept-all-repos    Bypass consent gate for this run
   refresh [--repo PATH]   Rebuild repository memory index
     --json                Print stable machine-readable output
   query "<question>"      Query the graph (default: hybrid)
@@ -107,6 +107,15 @@ func openQueryDBForRepo(dbPath, repoPath string) (*storage.DB, error) {
 	return storage.Open(dbPath)
 }
 
+func firstExistingPath(paths ...string) string {
+	for _, path := range paths {
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return path
+		}
+	}
+	return ""
+}
+
 func resetDerivedIndex(db *storage.DB) error {
 	_, err := db.SQL().Exec(`
 		DELETE FROM edges;
@@ -132,7 +141,7 @@ func runBuild(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
 	dbPath := fs.String("db", "", "path to SQLite database file (default: XDG state dir, per-repo isolated)")
-	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate (auto-creates .aih-graph-consent marker)")
+	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate for this run")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -143,11 +152,10 @@ func runBuild(args []string) int {
 	}
 
 	repoPath := resolveRepoPath(fs.Arg(0))
-	decisionsPath := filepath.Join(repoPath, "pkg", ".aihaus", "decisions.md")
-	if _, err := os.Stat(decisionsPath); err != nil {
-		fmt.Fprintf(os.Stderr, "build: %s not found\n", decisionsPath)
-		return 1
-	}
+	decisionsPath := firstExistingPath(
+		filepath.Join(repoPath, ".aihaus", "decisions.md"),
+		filepath.Join(repoPath, "pkg", ".aihaus", "decisions.md"),
+	)
 
 	// Consent gate (ADR-260515-A privacy contract).
 	consented, err := privacy.HasConsent(repoPath)
@@ -162,11 +170,7 @@ func runBuild(args []string) int {
 			fmt.Fprintln(os.Stderr, "       create the marker (`touch .aih-graph-consent` at repo root) OR pass --accept-all-repos")
 			return 2
 		}
-		if err := privacy.CreateConsent(repoPath); err != nil {
-			fmt.Fprintf(os.Stderr, "build: create consent marker: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(os.Stderr, "build: created consent marker (--accept-all-repos)\n")
+		fmt.Fprintf(os.Stderr, "build: consent accepted for this run (--accept-all-repos)\n")
 	}
 
 	// Resolve DB path (XDG isolation if not explicitly set).
@@ -183,10 +187,15 @@ func runBuild(args []string) int {
 	fmt.Printf("  db: %s\n", *dbPath)
 
 	// Decision (ADR) extraction.
-	decisions, err := extract.ParseDecisionsFile(decisionsPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "build: parse decisions.md: %v\n", err)
-		return 1
+	var decisions []types.Decision
+	if decisionsPath != "" {
+		decisions, err = extract.ParseDecisionsFile(decisionsPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "build: parse decisions.md: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprintln(os.Stderr, "build: decisions.md not found in .aihaus/ or pkg/.aihaus/; continuing without Decision nodes")
 	}
 	statusCounts := map[string]int{}
 	amendCount := 0
@@ -769,7 +778,7 @@ func embedTextForDecision(d types.Decision) string {
 }
 
 func embedTextForAgent(a types.Agent) string {
-	return a.Name + "\n" + a.Description
+	return a.Name + "\n" + a.Description + "\n" + a.MemoryPath + "\n" + a.MemoryExcerpt
 }
 
 func embedTextForSkill(s types.Skill) string {
@@ -1506,9 +1515,8 @@ func collectStatusJSON(repoPath, dbPath string) (statusJSON, error) {
 		NodeCounts:      map[string]int{},
 		EmbeddingModels: map[string]int{},
 	}
-	stalePath, staleErr := staleMarkerPath(repoPath)
-	staleInfo, staleStatErr := os.Stat(stalePath)
-	if staleErr == nil && staleStatErr == nil {
+	stalePath, staleInfo, staleFound := firstExistingStaleMarker(repoPath)
+	if staleFound {
 		status.State = "stale"
 		status.StaleSince = staleInfo.ModTime().Format(time.RFC3339)
 		status.Marker = stalePath
@@ -1593,9 +1601,8 @@ func loadMemoryFreshness(repoPath string) memoryFreshness {
 		Repo:  repoPath,
 		State: "fresh",
 	}
-	stalePath, staleErr := staleMarkerPath(repoPath)
-	staleInfo, staleStatErr := os.Stat(stalePath)
-	if staleErr == nil && staleStatErr == nil {
+	stalePath, staleInfo, staleFound := firstExistingStaleMarker(repoPath)
+	if staleFound {
 		freshness.State = "stale"
 		freshness.StaleSince = staleInfo.ModTime().Format(time.RFC3339)
 		freshness.Marker = stalePath
@@ -1741,15 +1748,42 @@ func staleMarkerPath(repoPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(abs, ".claude", "audit", "aih-graph.stale"), nil
+	return filepath.Join(abs, ".aihaus", "state", "aih-graph.stale"), nil
+}
+
+func staleMarkerPaths(repoPath string) ([]string, error) {
+	abs, err := filepath.Abs(repoPath)
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		filepath.Join(abs, ".aihaus", "state", "aih-graph.stale"),
+		filepath.Join(abs, ".claude", "audit", "aih-graph.stale"),
+	}, nil
+}
+
+func firstExistingStaleMarker(repoPath string) (string, os.FileInfo, bool) {
+	paths, err := staleMarkerPaths(repoPath)
+	if err != nil {
+		return "", nil, false
+	}
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err == nil {
+			return path, info, true
+		}
+	}
+	return "", nil, false
 }
 
 func clearStaleMarker(repoPath string) {
-	path, err := staleMarkerPath(repoPath)
+	paths, err := staleMarkerPaths(repoPath)
 	if err != nil {
 		return
 	}
-	_ = os.Remove(path)
+	for _, path := range paths {
+		_ = os.Remove(path)
+	}
 }
 
 // runUninstall implements the M036 uninstall subcommand. Modes:

@@ -8,7 +8,7 @@ argument-hint: "[no arguments needed]"
 
 ## Task
 
-Bootstrap or refresh `.aihaus/project.md` by analyzing the current repository, then initialize the aih-graph memory index (Phase 3, M041). Fully autonomous; zero clarifying questions. Makes NO commits, NO branch changes, NO writes outside `.aihaus/` + `.aih-graph-consent`.
+Bootstrap or refresh `.aihaus/project.md` by analyzing the current repository, then initialize the aih-graph memory index (Phase 3, M041). Fully autonomous; zero clarifying questions. Makes NO commits, NO branch changes, NO writes outside `.aihaus/` except `.claude/settings.local.json` in Phase 0.
 
 ---
 
@@ -186,7 +186,7 @@ Initializes the aih-graph structural+semantic memory index (BM25/FTS5 default; p
 
 ## Guardrails
 - NO commits, NO `git add`, NO `git checkout`, NO branch creation.
-- Writes limited to `.aihaus/` (scratch file, `project.md`, `project.md.bak`)
+- Writes limited to `.aihaus/` (scratch file, `project.md`, `project.md.bak`, workflow defaults, and memory runtime state)
   and `.claude/settings.local.json` (Phase 0 only).
 - If anything fails, surface the error and leave `.aihaus/project.md`
   untouched (first-run mode) or restore from `.aihaus/project.md.bak`

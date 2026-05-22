@@ -160,6 +160,27 @@ Expected behavior:
 - Some "belongs to milestone" answers may be inferential unless commit, manifest, or decision evidence exists.
 - The current repository has conflicting archival signals around `pkg`; M048 must clarify what is active and what is historical.
 
+## Open TODOs From Target-Repository Dogfood
+
+### T01 - Bootstrap, Doctor, and Runtime Layout for Client Repositories
+
+- [ ] Make `aih-init` target-repository-aware: scan the full repository first, classify current aihaus/Claude/Codex artifacts, then install or repair only what aihaus-flow needs.
+- [ ] Add a user-facing `aihaus doctor` / `aihaus init --repair` path that verifies OS, shell, Git, Ollama reachability, `nomic-embed-text`, package/runtime versions, hooks, settings, and memory index health.
+- [ ] Keep `aih-graph` source code out of client repository roots. The package source remains in aihaus-flow; target repositories receive only runtime artifacts.
+- [ ] Define the target runtime layout: repo-local binaries under `.aihaus/bin/`, derived graph state under `.aihaus/state/`, runtime metadata under `.aihaus/runtime/`, and conflict archives under `.aihaus/backups/bootstrap-<timestamp>/`.
+- [ ] Support a global binary fallback under `~/.aihaus/bin/` while keeping repository-specific databases and stale markers in the target repo's `.aihaus/state/`.
+- [ ] Ensure `.claude/hooks`, `.claude/agents`, and `.claude/skills` can link to or mirror `.aihaus/hooks`, `.aihaus/agents`, and `.aihaus/skills` without duplicating ownership or leaving missing hook references.
+- [ ] Archive old or conflicting aihaus-flow artifacts instead of deleting them, and produce a clear report of what was ignored, kept, replaced, or backed up.
+- [ ] Update memory extraction to understand target repository layouts such as `.aihaus/decisions.md`, `.aihaus/knowledge.md`, `.aihaus/memory/**`, and `.claude/agent-memory/**`, not only package-local `pkg/.aihaus/**` paths.
+- [ ] Make initialization refresh repository memory automatically after install and leave the repo usable in lexical fallback mode even when Ollama is missing or the model has not been pulled yet.
+- [ ] Dogfood this flow against `domus-nora-app` before release because it has old aihaus artifacts, rich markdown memory, missing hook references, and real package history.
+
+### T02 - Workflow and Agent Spawn Audit
+
+- [ ] Map every `/aih-*` workflow command to the agents it calls or spawns, the required memory it should read, and the memory files or audit events it must write.
+- [ ] Decide which workflow steps should inject memory through hooks, which should call `aihaus memory context/query` directly, and which should only mark the memory index stale.
+- [ ] Preserve existing aihaus agent behavior while making memory read/write automatic for humans operating Codex or Claude.
+
 ## Existing Codebase / Prior Art
 
 - `pkg` contains the existing aihaus agent, skill, hook, template, install, update, and runtime distribution machinery.
@@ -441,7 +462,7 @@ Dogfood evidence from aihaus-flow:
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-memory-alias-refresh.db --accept-all-repos` works through the Windows `.cmd` wrapper and preserves the caller repository path.
 - `aihaus memory refresh --repo . --db C:\tmp\aih-graph-m048-wrapper-refresh-json.db --accept-all-repos --json` works through the PowerShell wrapper and returns the same structured refresh payload.
 - `aih-graph-refresh.sh` now delegates to `aih-graph refresh --repo ...`, opportunistically starts local Ollama, and reports the real non-zero refresh exit code on failure; hook validation produced a fresh BM25 index through the refresh hook.
-- `aih-graph-stale.sh --from-hook bash` ignores `aihaus memory refresh ... --json` and does not recreate `.claude/audit/aih-graph.stale` after a refresh command.
+- `aih-graph-stale.sh --from-hook bash` ignores `aihaus memory refresh ... --json` and does not recreate `.aihaus/state/aih-graph.stale` after a refresh command.
 - `tools/smoke-test.sh` now includes an M048 contract check for memory lifecycle hooks in both settings templates, automatic memory injection in `context-inject.sh`, Ollama auto-start selection in `aih-graph-refresh.sh`, and integrated `aihaus memory ... --json` commands in all packaged agents; targeted `rg`, JSON parsing, and `bash -n` validations passed under Git Bash.
 - The all-agent memory contract now asserts that packaged agents use `aihaus memory` as the integration surface and do not bypass it with direct role-level `aih-graph` calls.
 - A targeted `rg` for direct role-level `aih-graph` memory commands, legacy M039 query-mode examples, and the old M039 memory-lookup heading returns no matches after the all-agent prompt migration.
@@ -449,6 +470,16 @@ Dogfood evidence from aihaus-flow:
 - Windows Git Bash smoke portability now uses workspace-local `tmp/` scratch directories, manifest-local temp files, and per-check `GOTMPDIR`/`GOCACHE`, avoiding sandbox-blocked `/tmp`, `C:\tmp`, and `%LOCALAPPDATA%\Temp` paths.
 - `go test ./...` passes inside `aih-graph`.
 - Full `tools/smoke-test.sh` under Windows Git Bash passes: `aihaus package smoke test PASSED [OK] (87/87)`.
+- Target-repo runtime layout slice:
+  - `aihaus memory` wrappers and hooks now default to repo-local `.aihaus/state/aih-graph.db`.
+  - install/update seed `.aihaus/bin`, `.aihaus/state`, `.aihaus/runtime`, `.aihaus/backups`, `.aihaus/workflows`, and `.aihaus/memory/workflows`.
+  - `aih-graph` extraction now understands installed target layouts such as `.aihaus/agents`, `.aihaus/skills`, `.aihaus/hooks`, `.aihaus/knowledge.md`, `.aihaus/decisions.md`, `.aihaus/memory/**`, and `.claude/agent-memory/**`.
+  - The target repo does not need a root `aih-graph/` source directory; source remains in the aihaus-flow package repo.
+- Workflow-agent slice:
+  - Added repo-local workflow profile defaults under `.aihaus/workflows/`.
+  - Added workflow memory seed under `.aihaus/memory/workflows/`.
+  - Added initial workflow agents for backlog intake, planning gate, CI/CD, and dev review.
+  - Agent/cohort contracts now account for 52 packaged agents.
 
 ## Resolved M048 Implementation Decisions
 

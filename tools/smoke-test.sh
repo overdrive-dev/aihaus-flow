@@ -77,10 +77,10 @@ check_skills() {
   fi
 }
 
-# ---- Check 2: .aihaus/agents/ has 48 .md files (M027/S5 adds plan-calibrator) --
+# ---- Check 2: .aihaus/agents/ has 52 .md files (M048 adds workflow agents) --
 check_agents() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 48 .md files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 52 .md files"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   if [[ ! -d "$agents_root" ]]; then
     _fail "$label" "directory not found: $agents_root"
@@ -88,10 +88,10 @@ check_agents() {
   fi
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 48 ]]; then
+  if [[ "$count" -eq 52 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 48 .md files, found $count"
+    _fail "$label" "expected 52 .md files, found $count"
   fi
 }
 
@@ -1082,9 +1082,9 @@ check_skill_count_and_staleness() {
 
 # ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M027/S10) --
 # Seven sub-assertions covering the 5-cohort taxonomy in cohorts.md (post-M027/S10 fork):
-#   C1 each of the 48 agents appears under exactly one cohort
-#   C2 cohort counts match: planner-binding=4, planner=14, doer=15, verifier=9,
-#      adversarial=6 (total=48); :adversarial-scout + :adversarial-review merged per ADR-260509-Y
+#   C1 each of the 52 agents appears under exactly one cohort
+#   C2 cohort counts match: planner-binding=4, planner=14, doer=19, verifier=9,
+#      adversarial=6 (total=52); :adversarial-scout + :adversarial-review merged per ADR-260509-Y
 #   C3 no :verifier-rich or :investigator or legacy :adversarial-scout or :adversarial-review
 #      cohort name appears in the table (deprecated names forbidden post-M027/S10)
 #   C4 F-006 parse contract: every data row yields NF=7 (awk -F'|' | sort -u == "7")
@@ -1158,15 +1158,15 @@ check_cohort_membership_roundtrip() {
   done
 
   local total_agents="${#_seen_agents[@]}"
-  if [[ "$total_agents" -ne 48 ]]; then
-    problems+=("C1: expected 48 agents in membership table; found ${total_agents}")
+  if [[ "$total_agents" -ne 52 ]]; then
+    problems+=("C1: expected 52 agents in membership table; found ${total_agents}")
   fi
 
   # C2: expected cohort counts (5-cohort post-M027/S10 fork, ADR-260509-Y).
   local -A _expected_counts=(
     [":planner-binding"]=4
     [":planner"]=14
-    [":doer"]=15
+    [":doer"]=19
     [":verifier"]=9
     [":adversarial"]=6
   )
@@ -1770,7 +1770,7 @@ check_context_curator() {
 #   (c) learning-advisor model is haiku (cohort :verifier default)
 #   (d) learning-advisor tools are Read, Grep, Glob (no Write/Edit per ADR-001)
 #   (e) templates/settings.local.json references learning-advisor.sh under SubagentStop
-#   (f) agent count at 48 (plan-calibrator added in M027/S5)
+#   (f) agent count at 52 (workflow agents added in M048)
 # Note: COMPAT-MATRIX check removed in M015/ADR-M015-A (Cursor support dropped).
 check_learning_advisor() {
   _start_check
@@ -1829,12 +1829,12 @@ check_learning_advisor() {
     fi
   fi
 
-  # (f) agent count at 48 (plan-calibrator added in M027/S5)
+  # (f) agent count at 52 (workflow agents added in M048)
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -ne 48 ]]; then
-    problems+=("expected 48 agents total (plan-calibrator bumps from 47); found ${count}")
+  if [[ "$count" -ne 52 ]]; then
+    problems+=("expected 52 agents total (workflow agents added in M048); found ${count}")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -4937,8 +4937,8 @@ check_aih_graph_integration_round_trip() {
   if ! echo "${out}" | grep -qE "Decisions: [0-9]+ \([0-9]+ are amendments"; then
     issues+=("build output missing Decisions line")
   fi
-  if ! echo "${out}" | grep -qE "Agents:    48 "; then
-    issues+=("expected Agents: 48 (Smoke Check 2)")
+  if ! echo "${out}" | grep -qE "Agents:    52 "; then
+    issues+=("expected Agents: 52 (Smoke Check 2)")
   fi
   if ! echo "${out}" | grep -qE "Skills:    14"; then
     issues+=("expected Skills: 14 (Smoke Check 1)")

@@ -144,6 +144,36 @@ foreach ($name in @('skills', 'agents', 'hooks', 'templates')) {
     Update-AihausDir -Name $name
 }
 
+# Repo-local runtime layout. Do not overwrite workflow profiles on update; only
+# seed missing defaults for existing installs.
+foreach ($dir in @(
+    (Join-Path $Aihaus 'bin'),
+    (Join-Path $Aihaus 'state'),
+    (Join-Path $Aihaus 'runtime'),
+    (Join-Path $Aihaus 'backups'),
+    (Join-Path $Aihaus 'workflows'),
+    (Join-Path $Aihaus 'memory\workflows')
+)) {
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+}
+$workflowDefaultSrc = Join-Path $PkgAihaus 'workflows\default.md'
+$workflowDefaultDst = Join-Path $Aihaus 'workflows\default.md'
+if (-not (Test-Path $workflowDefaultDst) -and (Test-Path $workflowDefaultSrc)) {
+    Copy-Item -LiteralPath $workflowDefaultSrc -Destination $workflowDefaultDst
+    Write-Host "  workflow: created .aihaus\workflows\default.md"
+}
+$workflowAgentsSrc = Join-Path $PkgAihaus 'workflows\agents.md'
+$workflowAgentsDst = Join-Path $Aihaus 'workflows\agents.md'
+if (-not (Test-Path $workflowAgentsDst) -and (Test-Path $workflowAgentsSrc)) {
+    Copy-Item -LiteralPath $workflowAgentsSrc -Destination $workflowAgentsDst
+    Write-Host "  workflow: created .aihaus\workflows\agents.md"
+}
+$workflowMemorySrc = Join-Path $PkgAihaus 'memory\workflows\README.md'
+$workflowMemoryDst = Join-Path $Aihaus 'memory\workflows\README.md'
+if (-not (Test-Path $workflowMemoryDst) -and (Test-Path $workflowMemorySrc)) {
+    Copy-Item -LiteralPath $workflowMemorySrc -Destination $workflowMemoryDst
+}
+
 # ---- Refresh auto.ps1 from launch-aihaus.ps1 on hash change (M019/S02 F-C3 fix) --
 # Closes the same gap as update.sh: existing installs receive CLI-005 env defaults
 # and any future launch-aihaus.ps1 edits via update.ps1 automatically.
@@ -696,6 +726,10 @@ function Invoke-BackfillGitignore {
             '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers',
             '/.aihaus/audit/',
             '/.claude/audit/',
+            '/.aihaus/bin/',
+            '/.aihaus/state/',
+            '/.aihaus/runtime/',
+            '/.aihaus/backups/',
             '/.aihaus/.context-budgets',
             '/.aihaus/.effort',
             '/.aihaus/.calibration',
@@ -721,6 +755,26 @@ function Invoke-BackfillGitignore {
     Write-Host "  Skipped -- re-run with -NoGitignore to suppress this prompt next time, or rerun update.ps1 and answer y to add later."
 }
 Invoke-BackfillGitignore -TargetDir $Target
+
+# ---- aih-graph binary refresh ------------------------------------------------
+# Ensure repo-local .aihaus\bin\aih-graph.exe exists. Non-fatal.
+if (-not $env:AIHAUS_SKIP_GRAPH_BINARY) {
+    $graphBin = Join-Path $Aihaus 'bin\aih-graph.exe'
+    if (-not (Test-Path $graphBin)) {
+        $graphInstaller = Join-Path $ScriptDir 'install-aih-graph-binary.sh'
+        $bashCmd = Get-Command bash -ErrorAction SilentlyContinue
+        if ((Test-Path $graphInstaller) -and $bashCmd) {
+            Write-Host ""
+            Write-Host "  installing aih-graph memory engine..."
+            & bash $graphInstaller --bin $graphBin *> $null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  ok: aih-graph at $graphBin"
+            } else {
+                Write-Host "  warn: aih-graph download failed (memory engine optional; /aih-init retries)" -ForegroundColor Yellow
+            }
+        }
+    }
+}
 
 # ---- Summary -----------------------------------------------------------------
 Write-Host ""

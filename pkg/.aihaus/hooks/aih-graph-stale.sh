@@ -2,7 +2,7 @@
 # aih-graph-stale.sh - mark derived repository memory stale after changes.
 #
 # This hook is intentionally cheap: it only writes a marker under
-# .claude/audit/. The next successful aih-graph refresh clears the marker.
+# .aihaus/state/. The next successful aih-graph refresh clears the marker.
 
 set -euo pipefail
 
@@ -50,7 +50,7 @@ if [[ "${hook_kind:-}" == "bash" ]]; then
   esac
 fi
 
-marker_dir="$repo_root/.claude/audit"
+marker_dir="$repo_root/.aihaus/state"
 marker="$marker_dir/aih-graph.stale"
 mkdir -p "$marker_dir"
 {

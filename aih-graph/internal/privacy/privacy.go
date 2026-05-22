@@ -8,7 +8,7 @@
 //     XDG-resolved path keyed by a hash of the repo's absolute path.
 //  2. Explicit consent: `aih-graph build` refuses on any repo that does not
 //     contain a `.aih-graph-consent` marker, unless the user passes
-//     --accept-all-repos.
+//     --accept-all-repos for the current run.
 //  3. Surgical removal: `aih-graph uninstall --purge` deletes ALL aih-graph
 //     state (single file delete in the canonical layout; per-repo .db files
 //     under the XDG state root removed wholesale).
@@ -129,7 +129,8 @@ func HasConsent(repoPath string) (bool, error) {
 }
 
 // CreateConsent writes a `.aih-graph-consent` marker at the repo root with a
-// short documentation comment.
+// short documentation comment. The normal aihaus install/init flow avoids
+// creating this repo-root file and uses --accept-all-repos for one run instead.
 func CreateConsent(repoPath string) error {
 	p, err := ConsentMarkerPath(repoPath)
 	if err != nil {

@@ -5,6 +5,10 @@
 # AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers
 /.aihaus/audit/
 /.claude/audit/
+/.aihaus/bin/
+/.aihaus/state/
+/.aihaus/runtime/
+/.aihaus/backups/
 /.aihaus/.context-budgets
 /.aihaus/.effort
 /.aihaus/.calibration

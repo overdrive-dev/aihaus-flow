@@ -170,6 +170,27 @@ for name in skills agents hooks templates; do
   update_aihaus_dir "${name}"
 done
 
+# Repo-local runtime layout. Do not overwrite workflow profiles on update; only
+# seed missing defaults for existing installs.
+mkdir -p \
+  "${AIHAUS}/bin" \
+  "${AIHAUS}/state" \
+  "${AIHAUS}/runtime" \
+  "${AIHAUS}/backups" \
+  "${AIHAUS}/workflows" \
+  "${AIHAUS}/memory/workflows"
+if [[ ! -f "${AIHAUS}/workflows/default.md" && -f "${PKG_AIHAUS}/workflows/default.md" ]]; then
+  cp "${PKG_AIHAUS}/workflows/default.md" "${AIHAUS}/workflows/default.md"
+  echo "  workflow: created .aihaus/workflows/default.md"
+fi
+if [[ ! -f "${AIHAUS}/workflows/agents.md" && -f "${PKG_AIHAUS}/workflows/agents.md" ]]; then
+  cp "${PKG_AIHAUS}/workflows/agents.md" "${AIHAUS}/workflows/agents.md"
+  echo "  workflow: created .aihaus/workflows/agents.md"
+fi
+if [[ ! -f "${AIHAUS}/memory/workflows/README.md" && -f "${PKG_AIHAUS}/memory/workflows/README.md" ]]; then
+  cp "${PKG_AIHAUS}/memory/workflows/README.md" "${AIHAUS}/memory/workflows/README.md"
+fi
+
 # ---- Refresh auto.sh from launch-aihaus.sh on hash change (M019/S02 F-C3 fix) --
 # Previously update.sh only refreshed skills/agents/hooks/templates; this block
 # closes the gap so CLI-005 env defaults (and any future launch-aihaus.sh edits)
@@ -577,6 +598,10 @@ _backfill_gitignore() {
       printf '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers\n'
       printf '/.aihaus/audit/\n'
       printf '/.claude/audit/\n'
+      printf '/.aihaus/bin/\n'
+      printf '/.aihaus/state/\n'
+      printf '/.aihaus/runtime/\n'
+      printf '/.aihaus/backups/\n'
       printf '/.aihaus/.context-budgets\n'
       printf '/.aihaus/.effort\n'
       printf '/.aihaus/.calibration\n'
@@ -602,11 +627,11 @@ _backfill_gitignore() {
 _backfill_gitignore "${TARGET}"
 
 # ---- aih-graph binary refresh (M041/S4) --------------------------------------
-# Mirror of install.sh Step 13: ensure $HOME/.aihaus/bin/aih-graph exists.
+# Mirror of install.sh Step 13: ensure .aihaus/bin/aih-graph exists.
 # Non-fatal — update completes even if download fails. Idempotent when binary
 # already present (silent skip). Opt-out: AIHAUS_SKIP_GRAPH_BINARY=1.
 if [[ -z "${AIHAUS_SKIP_GRAPH_BINARY:-}" ]]; then
-  _aih_graph_bin="$HOME/.aihaus/bin/aih-graph"
+  _aih_graph_bin="${AIHAUS}/bin/aih-graph"
   case "$(uname -s 2>/dev/null)" in
     MINGW*|MSYS*|CYGWIN*) _aih_graph_bin="${_aih_graph_bin}.exe" ;;
   esac
@@ -615,7 +640,7 @@ if [[ -z "${AIHAUS_SKIP_GRAPH_BINARY:-}" ]]; then
     if [[ -f "${_aih_graph_installer}" ]]; then
       echo ""
       echo "  installing aih-graph memory engine..."
-      if bash "${_aih_graph_installer}" >/dev/null 2>&1; then
+      if bash "${_aih_graph_installer}" --bin "${_aih_graph_bin}" >/dev/null 2>&1; then
         echo "  ok: aih-graph at ${_aih_graph_bin}"
       else
         echo "  warn: aih-graph download failed (memory engine optional; /aih-init retries)"

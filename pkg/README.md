@@ -17,7 +17,7 @@
 **This package is archived. See the main aihaus-flow repository for successor project guidance.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.36.1-181717?style=for-the-badge&logo=github)](VERSION)
+[![Version](https://img.shields.io/badge/version-0.37.0-181717?style=for-the-badge&logo=github)](VERSION)
 [![Built for Claude Code](https://img.shields.io/badge/built%20for-Claude%20Code-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -49,7 +49,7 @@ Most of your time with ai-assisted coding gets spent describing *how* instead of
 
 aihaus inverts that loop. **Front-load the thinking once; the system runs the rest.**
 
-After a single approval, a coordinated team of 48 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
+After a single approval, a coordinated team of 52 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
 
 ---
 

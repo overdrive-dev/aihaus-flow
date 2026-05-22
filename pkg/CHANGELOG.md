@@ -5,6 +5,26 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.0] - 2026-05-22 - M048 native repository memory + workflow agents
+
+### Added
+
+- Native repository memory defaults for installed projects: `aihaus memory ...` now uses repo-local `.aihaus/state/aih-graph.db`, with `.aihaus/bin/aih-graph[.exe]` as the preferred runtime binary location.
+- Four workflow agents for intake, planning gates, CI/CD support, and development review, bringing the packaged agent set to 52 agents.
+- Repo-local workflow profile and workflow memory scaffolding under `.aihaus/workflows/` and `.aihaus/memory/workflows/`.
+- Installed-layout extraction coverage for `.aihaus/{agents,skills,hooks}` with package-layout fallback, plus indexing for project markdown memory and recent commits.
+
+### Changed
+
+- `aih-graph` now fixes local semantic embeddings to Ollama `nomic-embed-text`; provider selection surfaces were removed from the package flow.
+- Lifecycle hooks, context injection, install, and update scripts now prefer repo-local `.aihaus/state`, `.aihaus/runtime`, `.aihaus/backups`, and `.aihaus/bin` paths instead of placing graph state at repository root.
+- Workflow guidance now encodes the user-facing chain from backlog through planning, TDD, review, tests, development publication, Playwright-backed development review, human review, and box-dev handoff.
+
+### Verification
+
+- `go test ./...` and `go build ./cmd/aih-graph` pass for the memory engine.
+- `tools/smoke-test.sh` passes with 87/87 package checks.
+
 ## [0.20.0] - 2026-04-24 — M016: agent memory + context passing + self-recycling evolution
 
 Operationalizes M013's substrate end-to-end across data-plane (recurrence + composite scoring + per-cohort budgets + cache + telemetry) and file-plane (EVOLVING blocks in `project.md` + `CLAUDE.md`, per-agent memory pattern, SKILL-EVOLUTION ledger, unconditional curator cadence). Mid-milestone gate caught two BLOCKERs in flight (ADR-M015-A ID collision → renumbered M015→M016; telemetry single-writer violation → refactored stdout-only).

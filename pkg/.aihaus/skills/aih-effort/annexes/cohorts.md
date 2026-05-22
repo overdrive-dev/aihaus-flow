@@ -1,4 +1,4 @@
-# Cohort Taxonomy — 48 Agents → 5 Uniform Cohorts
+# Cohort Taxonomy — 52 Agents → 5 Uniform Cohorts
 
 This annex is the single source of truth for cohort membership, consumed by
 `/aih-effort` (preset filter, sidecar write) and by the restore path in
@@ -104,8 +104,12 @@ Members (alphabetical):
 - project-analyst
 - test-writer
 - user-profiler
+- workflow-cicd
+- workflow-dev-reviewer
+- workflow-intake
+- workflow-planning-gate
 
-**Count: 15**
+**Count: 19**
 
 ---
 
@@ -182,7 +186,7 @@ Members (alphabetical):
 
 ---
 
-## Membership table (48 agents)
+## Membership table (52 agents)
 
 **Parse contract (F-006 — binding per ADR-M012-A).** This table has exactly
 5 data columns. The header is `| # | Agent | Cohort | Model | Effort |`.
@@ -247,8 +251,12 @@ cohort (or per-agent override for `:adversarial` max-tier members).
 | 46 | user-profiler            | :doer             | sonnet | high  |
 | 47 | ux-designer              | :planner          | opus   | high  |
 | 48 | verifier                 | :verifier         | haiku  | high  |
+| 49 | workflow-cicd            | :doer             | sonnet | high  |
+| 50 | workflow-dev-reviewer    | :doer             | sonnet | high  |
+| 51 | workflow-intake          | :doer             | sonnet | high  |
+| 52 | workflow-planning-gate   | :doer             | sonnet | high  |
 
-**Totals:** :planner-binding=4 · :planner=14 · :doer=15 · :verifier=9 · :adversarial=6 · Sum=48
+**Totals:** :planner-binding=4 · :planner=14 · :doer=19 · :verifier=9 · :adversarial=6 · Sum=52
 
 ---
 

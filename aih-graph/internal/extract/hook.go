@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/overdrive-dev/aihaus-flow/aih-graph/internal/types"
@@ -27,12 +26,13 @@ var bashFuncRe = regexp.MustCompile(`^(?:function\s+)?([A-Za-z_][A-Za-z0-9_]*)\s
 //   - Functions: every line matching bashFuncRe.
 //   - SizeBytes: file size from stat.
 func ParseHooksDir(repoRoot string) ([]types.Hook, error) {
-	pattern := filepath.Join(repoRoot, "pkg", ".aihaus", "hooks", "*.sh")
-	matches, err := filepath.Glob(pattern)
+	matches, err := globUnique(filepath.Join(repoRoot, ".aihaus", "hooks", "*.sh"))
+	if err == nil && len(matches) == 0 {
+		matches, err = globUnique(filepath.Join(repoRoot, "pkg", ".aihaus", "hooks", "*.sh"))
+	}
 	if err != nil {
 		return nil, fmt.Errorf("glob hooks: %w", err)
 	}
-	sort.Strings(matches)
 
 	hooks := make([]types.Hook, 0, len(matches))
 	for _, path := range matches {
@@ -70,11 +70,11 @@ func parseHookFile(repoRoot, path string) (types.Hook, error) {
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	var (
-		seenShebang    bool
-		inHeaderBlock  = true
-		headerBuf      strings.Builder
-		functions      []string
-		seenFuncs      = map[string]struct{}{}
+		seenShebang   bool
+		inHeaderBlock = true
+		headerBuf     strings.Builder
+		functions     []string
+		seenFuncs     = map[string]struct{}{}
 	)
 
 	for scanner.Scan() {

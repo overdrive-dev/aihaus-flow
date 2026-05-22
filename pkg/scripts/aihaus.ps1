@@ -46,8 +46,11 @@ function Invoke-Sh([string]$sh,[string]$ps1,[string[]]$xa) {
 
 function Invoke-Memory([string]$HomePath,[string[]]$GraphArgs) {
     $GraphArgs = Repair-GraphArgs $GraphArgs
+    $GraphArgs = Add-DefaultGraphDbArgs $GraphArgs
     $candidates=@()
     if ($env:AIH_GRAPH_BIN) { $candidates += $env:AIH_GRAPH_BIN }
+    $candidates += (Join-Path (Get-Location).Path ".aihaus\bin\aih-graph.exe")
+    $candidates += (Join-Path (Get-Location).Path ".aihaus\bin\aih-graph")
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path -LiteralPath $candidate)) {
             & $candidate @GraphArgs
@@ -73,7 +76,7 @@ function Invoke-Memory([string]$HomePath,[string[]]$GraphArgs) {
     }
     foreach ($candidate in @((Join-Path $env:USERPROFILE ".aihaus\bin\aih-graph.exe"), (Join-Path $env:USERPROFILE ".aihaus\bin\aih-graph"))) {
         if (Test-Path -LiteralPath $candidate) {
-            & $candidate @Args
+            & $candidate @GraphArgs
             exit $LASTEXITCODE
         }
     }
@@ -100,6 +103,27 @@ function Repair-GraphArgs([string[]]$GraphArgs) {
         }
     }
     return @($cmd) + $flags + $positional
+}
+
+function Add-DefaultGraphDbArgs([string[]]$GraphArgs) {
+    if (-not $GraphArgs -or $GraphArgs.Count -lt 1) { return $GraphArgs }
+    $cmd=$GraphArgs[0]
+    if ($cmd -notin @("build","refresh","status","query","context","callers","impact","gotchas","milestone")) { return $GraphArgs }
+    foreach ($arg in $GraphArgs) {
+        if ($arg -eq "--db" -or $arg -eq "-db" -or $arg -like "--db=*" -or $arg -like "-db=*") { return $GraphArgs }
+    }
+    $repoRoot = if ($env:AIH_GRAPH_REPO) { $env:AIH_GRAPH_REPO } elseif ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
+    for ($i = 0; $i -lt $GraphArgs.Count; $i++) {
+        if ($GraphArgs[$i] -eq "--repo" -and ($i + 1) -lt $GraphArgs.Count) {
+            $repoRoot = $GraphArgs[$i + 1]
+        } elseif ($GraphArgs[$i] -like "--repo=*") {
+            $repoRoot = $GraphArgs[$i].Substring(7)
+        }
+    }
+    $dbPath = Join-Path $repoRoot ".aihaus\state\aih-graph.db"
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dbPath) | Out-Null
+    if ($GraphArgs.Count -eq 1) { return @($cmd, "--db", $dbPath) }
+    return @($cmd, "--db", $dbPath) + $GraphArgs[1..($GraphArgs.Count-1)]
 }
 
 if ($Verb -in @("--help","-h","")) { Show-Help; exit 0 }

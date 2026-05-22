@@ -826,6 +826,36 @@ if ($Update) {
     Copy-Item -Path (Join-Path $PkgAihaus '*') -Destination $TargetAihaus -Recurse -Force
 }
 
+# Repo-local runtime layout. Package-owned source stays in AIHAUS_HOME; target
+# repos receive only runtime/state defaults and editable workflow profiles.
+foreach ($dir in @(
+    (Join-Path $TargetAihaus 'bin'),
+    (Join-Path $TargetAihaus 'state'),
+    (Join-Path $TargetAihaus 'runtime'),
+    (Join-Path $TargetAihaus 'backups'),
+    (Join-Path $TargetAihaus 'workflows'),
+    (Join-Path $TargetAihaus 'memory\workflows')
+)) {
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+}
+$workflowDefaultSrc = Join-Path $PkgAihaus 'workflows\default.md'
+$workflowDefaultDst = Join-Path $TargetAihaus 'workflows\default.md'
+if (-not (Test-Path $workflowDefaultDst) -and (Test-Path $workflowDefaultSrc)) {
+    Copy-Item -LiteralPath $workflowDefaultSrc -Destination $workflowDefaultDst
+    Write-Host "  workflow: created .aihaus\workflows\default.md"
+}
+$workflowAgentsSrc = Join-Path $PkgAihaus 'workflows\agents.md'
+$workflowAgentsDst = Join-Path $TargetAihaus 'workflows\agents.md'
+if (-not (Test-Path $workflowAgentsDst) -and (Test-Path $workflowAgentsSrc)) {
+    Copy-Item -LiteralPath $workflowAgentsSrc -Destination $workflowAgentsDst
+    Write-Host "  workflow: created .aihaus\workflows\agents.md"
+}
+$workflowMemorySrc = Join-Path $PkgAihaus 'memory\workflows\README.md'
+$workflowMemoryDst = Join-Path $TargetAihaus 'memory\workflows\README.md'
+if (-not (Test-Path $workflowMemoryDst) -and (Test-Path $workflowMemorySrc)) {
+    Copy-Item -LiteralPath $workflowMemorySrc -Destination $workflowMemoryDst
+}
+
 # Step 5+6: create .claude/{skills,agents,hooks} as junctions or copies
 $TargetClaude = Join-Path $Target '.claude'
 New-Item -ItemType Directory -Path $TargetClaude -Force | Out-Null
@@ -1093,8 +1123,8 @@ if (-not (Test-Path $SettingsSrc)) {
             Write-Host "  drift-detect: recompute skipped (sentinel present)" -ForegroundColor DarkGray
         } else {
             try {
-                $tmplHooks = ($srcJson.PSObject.Properties.Name -contains 'hooks') ? $srcJson.hooks : $null
-                $userHooks = ($merged.PSObject.Properties.Name -contains 'hooks') ? $merged.hooks : $null
+                $tmplHooks = if ($srcJson.PSObject.Properties.Name -contains 'hooks') { $srcJson.hooks } else { $null }
+                $userHooks = if ($merged.PSObject.Properties.Name -contains 'hooks') { $merged.hooks } else { $null }
                 $maxDelta = 0; $maxEvent = ''
                 if ($tmplHooks -is [psobject]) {
                     foreach ($evProp in $tmplHooks.PSObject.Properties) {
@@ -1208,6 +1238,10 @@ function Invoke-InjectGitignore {
         '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers',
         '/.aihaus/audit/',
         '/.claude/audit/',
+        '/.aihaus/bin/',
+        '/.aihaus/state/',
+        '/.aihaus/runtime/',
+        '/.aihaus/backups/',
         '/.aihaus/.context-budgets',
         '/.aihaus/.effort',
         '/.aihaus/.calibration',
@@ -1231,7 +1265,30 @@ function Invoke-InjectGitignore {
 }
 Invoke-InjectGitignore -TargetDir $Target
 
-# Step 13: success message
+# Step 13: aih-graph memory engine binary bootstrap
+# Downloads the aih-graph binary to .aihaus\bin\ if not already present.
+# Non-fatal: /aih-init and hooks degrade to lexical/no-memory behavior if absent.
+if (-not $env:AIHAUS_SKIP_GRAPH_BINARY -and -not $Update) {
+    $graphBin = Join-Path $TargetAihaus 'bin\aih-graph.exe'
+    if (-not (Test-Path $graphBin)) {
+        $graphInstaller = Join-Path $ScriptDir 'install-aih-graph-binary.sh'
+        $bashCmd = Get-Command bash -ErrorAction SilentlyContinue
+        if ((Test-Path $graphInstaller) -and $bashCmd) {
+            Write-Host ""
+            Write-Host "  installing aih-graph memory engine..."
+            & bash $graphInstaller --bin $graphBin *> $null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  ok: aih-graph at $graphBin"
+            } else {
+                Write-Host "  warn: aih-graph download failed (memory engine optional; /aih-init retries)" -ForegroundColor Yellow
+            }
+        }
+    } else {
+        Write-Host "  aih-graph: already installed at $graphBin"
+    }
+}
+
+# Step 14: success message
 Write-Host ""
 if ($Update) {
     Write-Host "aihaus updated ($Mode mode)."
