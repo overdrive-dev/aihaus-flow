@@ -1,23 +1,29 @@
 ---
 name: aih-goal
-description: Execute a multi-task goal autonomously through aihaus workflow gates, optionally importing tasks from Linear, until a target stage such as human-review.
+description: Execute a planned kanban goal autonomously through aihaus workflow gates until a target stage such as human-review.
 allowed-tools: Read Write Edit Grep Glob Bash Agent TaskCreate TaskUpdate Skill
-argument-hint: "[goal description] [--from-linear <selector>] [--from-file <path>] [--until human-review]"
+argument-hint: "[goal description] [--until human-review] [--source <selector>] [--from-linear <selector>] [--from-file <path>]"
 ---
 
 ## Task
 
-Run a goal as an autonomous workflow. Import tasks, evaluate every workflow gate,
-execute ready work, attach evidence, and continue without user input until the
-target stage is reached or every remaining task has a true blocker.
+Run a goal as an autonomous workflow over a planned kanban/backlog. Discover or
+resume the work source, import tasks into the local operational goal DB,
+evaluate every workflow gate, execute ready work, attach evidence, and continue
+without user input until the target stage is reached or every remaining task has
+a true blocker.
 
 $ARGUMENTS
 
 ## Inputs
 
-- `--from-linear <selector>` - import candidate tasks from Linear. The selector
-  can be an issue id, project/view/team/search phrase, or copied Linear URL.
-- `--from-file <path>` - import tasks from a local markdown/json/text file.
+- `--source <selector>` - preferred kanban/source selector. Optional; default is
+  discovery from repo workflow memory, configured connectors, existing goal DB
+  state, and source links in project/workflow files.
+- `--from-linear <selector>` - override discovery and import candidate tasks
+  from Linear.
+- `--from-file <path>` - override discovery and import tasks from a local
+  markdown/json/text file.
 - `--until <stage>` - target workflow stage. Default: `human-review`.
 - `--max-active <n>` - maximum implementation tasks in flight. Default: 1.
 
@@ -39,7 +45,7 @@ sync/comment it to the source when available, and continue other ready tasks.
 
 Stop the whole goal only on true blockers:
 
-- source system unavailable and no task source was imported,
+- no external source, local goal DB, or local task source can be discovered,
 - unsafe git state that cannot be stashed or isolated safely,
 - missing credentials or dev environment required for all remaining tasks,
 - destructive or irreversible action requiring explicit human approval.
@@ -62,23 +68,33 @@ insufficient and `aihaus memory` is available, run:
 
 ## Phase 1: Resolve Source
 
-If `--from-linear` is present, use the connected Linear capability when
-available. Read issue title, id, URL, description, comments, labels/status,
-attachments/links, and acceptance criteria. Do not create Linear labels, views,
-or workflow states unless explicitly requested by the user.
+Default behavior is source discovery. Do not require `--from-linear`,
+`--from-notion`, or similar flags for normal operation. `/aih-goal` assumes the
+repo already has a planned kanban/backlog and should find it.
 
-If Linear is unavailable, this is a source blocker only when no local task list
-was also provided. Report the missing integration and stop before making code
-changes.
+Discovery order:
 
-If `--from-file` is present, parse that file into task records. If neither flag
-is present, parse `$ARGUMENTS` as the goal brief and create one task from it.
+1. explicit override flags: `--from-linear`, `--from-file`, or `--source`,
+2. existing `.aihaus/state/aih-goal.db` tasks not yet at `--until`,
+3. source hints in `.aihaus/memory/workflows/*.md`,
+4. source hints in `.aihaus/workflows/default.md` and `.aihaus/project.md`,
+5. available connected kanban systems such as Linear, Notion, Jira, Trello, or
+   GitHub Issues,
+6. a local task list under `.aihaus/workflows/` if present,
+7. `$ARGUMENTS` as a single goal brief only when no planned source exists.
+
+See `annexes/source-discovery.md`. If an external system is unavailable but
+`aih-goal.db` already has imported tasks, continue locally and record sync debt.
+Stop before code changes only when no recoverable task source exists.
 
 ## Phase 2: Create Goal Run
 
 Create `.aihaus/workflows/runs/[YYMMDD]-[slug]/`.
 
-Use `annexes/run-state.md` for file shapes. At minimum write:
+Use `.aihaus/state/aih-goal.db` as the local operational cache + append-only
+journal. It does not replace Linear/Notion/Jira/Trello/GitHub as the human
+kanban source of truth. Use `annexes/goal-db.md` for the schema contract and
+`annexes/run-state.md` for readable file shapes. At minimum write:
 
 - `GOAL.md`
 - `TASKS.md`
@@ -89,6 +105,9 @@ Use `annexes/run-state.md` for file shapes. At minimum write:
 TaskCreate only the current coordination rows: import source, evaluate planning,
 execute ready tasks, package human review. Keep the full task list in `TASKS.md`
 so the UI does not become noisy for large Linear backlogs.
+
+Save raw source snapshots in the DB before summarizing. Never overwrite source
+descriptions, priorities, or external status fields unless explicitly requested.
 
 ## Phase 3: Planning Sweep
 
@@ -137,8 +156,9 @@ For every task that reaches `human-review`, write:
 - Playwright screenshots/traces when browser validation applied,
 - why any gate was skipped.
 
-Sync evidence to Linear comments when the source is Linear. If sync is
-unavailable, write it under the task artifact and note the sync blocker.
+Sync evidence back to the task source as comments or equivalent append-only
+updates. If sync is unavailable, write it under the task artifact, add an
+unsynced event to `aih-goal.db`, and continue local execution.
 
 ## Phase 6: Finish
 
@@ -154,6 +174,8 @@ Update `RUN-MANIFEST.md`, summarize counts by final state, and point to
 ## Annexes
 
 - `annexes/run-state.md` - run artifact format and task status vocabulary.
+- `annexes/source-discovery.md` - default source discovery and connector order.
+- `annexes/goal-db.md` - SQLite cache/journal schema and sync safety rules.
 - `annexes/linear-intake.md` - Linear import/sync behavior.
 
 ## Autonomy

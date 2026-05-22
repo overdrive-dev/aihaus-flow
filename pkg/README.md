@@ -17,7 +17,7 @@
 **This package is archived. See the main aihaus-flow repository for successor project guidance.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.38.0-181717?style=for-the-badge&logo=github)](VERSION)
+[![Version](https://img.shields.io/badge/version-0.38.1-181717?style=for-the-badge&logo=github)](VERSION)
 [![Built for Claude Code](https://img.shields.io/badge/built%20for-Claude%20Code-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -269,7 +269,7 @@ aihaus ships 15 intent-based skills. Every command follows the same pattern: **a
 | `/aih-init` | Bootstrap — scans codebase, writes `project.md`, seeds memory |
 | `/aih-brainstorm` | Multi-specialist exploratory panel for fuzzy topics — outputs `BRIEF.md` |
 | `/aih-plan` | Research and plan a concrete change — outputs `PLAN.md` |
-| `/aih-goal` | Import source-backed tasks and run workflow gates autonomously until a target stage |
+| `/aih-goal` | Discover planned kanban tasks and run workflow gates autonomously until a target stage |
 | `/aih-feature` | Plan → branch → implement → review → commit (single feature) |
 | `/aih-bugfix` | Triage → branch → fix → test → commit |
 | `/aih-milestone` | Conversational gathering for milestone-sized work — drafts to `STATUS.md` |
@@ -280,7 +280,7 @@ aihaus ships 15 intent-based skills. Every command follows the same pattern: **a
 | Command | What it does |
 |---------|--------------|
 | `/aih-milestone [slug]` + start-intent / `--execute` | Execute a ready milestone draft — full agent team (via `annexes/execution.md`) |
-| `/aih-goal --from-linear <selector> --until human-review` | Execute a Linear-backed goal until each task reaches human review or has a planning blocker |
+| `/aih-goal --until human-review` | Execute the discovered planned backlog until each task reaches human review or has a planning blocker |
 | `/aih-feature --plan [slug]` | Execute a small plan inline on a single `feature/[slug]` branch |
 | `/aih-resume [slug]` | Pick up an interrupted run from `RUN-MANIFEST.md` |
 | `/aih-milestone --plan [slug]` | Promote a plan to a milestone draft for conversational refinement (absorbs retired `/aih-plan-to-milestone`) |

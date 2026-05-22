@@ -88,11 +88,16 @@ autonomously until a target stage such as `human-review`.
 
 The goal runner must:
 
-- create local state under `.aihaus/workflows/runs/`,
+- discover a planned kanban/backlog by default, without requiring source flags,
+- use `.aihaus/state/aih-goal.db` as the local operational cache and journal,
+- create readable evidence packages under `.aihaus/workflows/runs/`,
 - evaluate planning before TDD for every task,
 - continue ready tasks when other tasks are blocked,
 - attach evidence before moving work to `human-review`,
 - sync questions and evidence back to the external source when available.
+
+The external kanban remains the source of truth for user-owned task fields.
+`aih-goal.db` stores workflow state, snapshots, gate events, and sync debt.
 
 ## Customization
 

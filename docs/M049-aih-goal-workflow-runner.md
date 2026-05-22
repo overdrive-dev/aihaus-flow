@@ -17,21 +17,28 @@ Default target:
 human-review
 ```
 
-Expected Linear-backed usage:
+Default usage:
 
 ```text
-/aih-goal --from-linear "Nora sprint atual" --until human-review
+/aih-goal --until human-review
 ```
+
+The command discovers the planned kanban/backlog from explicit flags, existing
+local goal DB state, workflow memory, project/workflow source hints, and
+connected systems such as Linear or Notion. Source flags remain overrides.
 
 ## Scope
 
 - Add `/aih-goal` skill.
-- Store goal state in `.aihaus/workflows/runs/`.
-- Treat Linear as a source/sync target, with local aihaus artifacts as the
-  recoverable source of truth.
+- Store operational goal state in `.aihaus/state/aih-goal.db`.
+- Store readable evidence packages in `.aihaus/workflows/runs/`.
+- Treat Linear and other kanban systems as source/sync targets, with local
+  aihaus artifacts as the recoverable execution record.
 - Add workflow agents for TDD, execution review, tests, human-review packaging,
   and workflow design.
 - Make gates mandatory to evaluate, not mandatory to run when not applicable.
+- Treat the DB as a cache + append-only journal, not as a competing task source
+  of truth.
 
 ## Gate Contract
 

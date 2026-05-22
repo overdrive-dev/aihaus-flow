@@ -10,6 +10,8 @@ Use it for:
 - recurring workflow gotchas,
 - business-language reasons a task returned to planning.
 - source-system preferences, such as how Linear issues encode planning answers.
+- kanban source hints, such as the default Linear project/view or Notion database
+  used by `/aih-goal`.
 
 Do not use it for:
 

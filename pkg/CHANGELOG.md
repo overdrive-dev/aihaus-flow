@@ -5,6 +5,25 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.1] - 2026-05-22 - aih-goal source discovery and SQLite journal
+
+### Changed
+
+- `/aih-goal` now discovers the planned kanban/backlog by default instead of
+  requiring source flags such as `--from-linear`.
+- Source flags now act as overrides; the default discovery path checks existing
+  goal DB state, workflow memory, project/workflow hints, connected kanban
+  systems, and local workflow task files.
+- Goal state now distinguishes the local SQLite operational cache/journal from
+  the external kanban source of truth for task descriptions, priority, status,
+  assignee, and board membership.
+
+### Added
+
+- `aih-goal` source discovery annex.
+- `aih-goal` SQLite state annex for `.aihaus/state/aih-goal.db`, including
+  snapshot, gate-event, and sync-event contracts.
+
 ## [0.38.0] - 2026-05-22 - M049 goal runner workflow orchestration
 
 ### Added

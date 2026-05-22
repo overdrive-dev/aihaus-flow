@@ -1,13 +1,14 @@
 # aih-goal run state
 
-`/aih-goal` stores durable workflow state under:
+`/aih-goal` stores readable run artifacts under:
 
 ```text
 .aihaus/workflows/runs/[YYMMDD]-[slug]/
 ```
 
-The run directory is the source of truth for resume, audit, and evidence. It is
-local-first. External systems such as Linear are sync targets.
+The operational task cache and journal live in `.aihaus/state/aih-goal.db`.
+The run directory is the readable evidence package for resume, audit, and human
+review. External systems such as Linear remain the human kanban source of truth.
 
 ### Required files
 

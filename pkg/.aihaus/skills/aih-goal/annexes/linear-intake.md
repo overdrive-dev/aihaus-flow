@@ -1,17 +1,21 @@
 # aih-goal Linear intake
 
 Linear is a source and sync target for `/aih-goal`. Local aihaus artifacts remain
-the recoverable source of truth during execution.
+the recoverable execution record during autonomous work.
 
 ### Import
 
-When `--from-linear <selector>` is present:
+Linear may be selected by explicit `--from-linear`, by `--source`, by workflow
+memory, or by connector discovery. A flag is not required for normal operation.
+
+When Linear is selected:
 
 1. Resolve the selector to issues. Accept issue ids, URLs, project/view/team
    names, labels, or search text supported by the connected Linear capability.
 2. For each issue, read title, identifier, URL, description, status, labels,
    assignee if available, comments, attachments, and linked resources.
-3. Preserve raw source text in `tasks/<id>.md` before summarizing.
+3. Preserve raw source text in `source_snapshots` and `tasks/<id>.md` before
+   summarizing.
 4. Do not create labels, projects, custom views, or statuses unless the user
    explicitly asked for Linear workspace mutation.
 
@@ -45,6 +49,7 @@ task file and add a sync blocker to the run manifest.
 
 ### Failure handling
 
-Linear unavailable before import is a true blocker unless another source was
-provided. Linear unavailable after local import is not a run blocker; continue
-locally and record pending sync work.
+Linear unavailable before import is a true blocker only when no local
+`aih-goal.db`, local task file, or alternate connected source can be used.
+Linear unavailable after local import is not a run blocker; continue locally and
+record pending sync work.
