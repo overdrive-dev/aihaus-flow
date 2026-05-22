@@ -40,6 +40,11 @@ If a task came from an external source such as Linear, the planning gate must
 read the issue description, comments, links, and attached context before asking
 anything. Do not ask the human to repeat answers already present in the source.
 
+Every task that enters `planejamento` must be registered in the local kanban
+under `.aihaus/state/aih-goal.db`. Planning questions and answers are workflow
+contracts: record the question before asking it, record the answer before using
+it, and keep the task in `planejamento` while any planning question is open.
+
 ## Gate Evaluation Contract
 
 Every workflow gate is mandatory to evaluate, but not every gate is mandatory to
@@ -90,14 +95,21 @@ The goal runner must:
 
 - discover a planned kanban/backlog by default, without requiring source flags,
 - use `.aihaus/state/aih-goal.db` as the local operational cache and journal,
+- register every discovered or imported task in the local kanban before
+  planning,
+- search the local kanban for related tasks before creating new local tasks,
 - create readable evidence packages under `.aihaus/workflows/runs/`,
 - evaluate planning before TDD for every task,
+- persist planning questions and answers as structured contracts,
 - continue ready tasks when other tasks are blocked,
 - attach evidence before moving work to `human-review`,
 - sync questions and evidence back to the external source when available.
 
 The external kanban remains the source of truth for user-owned task fields.
-`aih-goal.db` stores workflow state, snapshots, gate events, and sync debt.
+When no external kanban is connected, the local kanban owns task title,
+description, priority, status, planning contracts, and related-task links.
+`aih-goal.db` stores workflow state, snapshots, planning contracts, gate events,
+task links, and sync debt.
 
 ## Customization
 

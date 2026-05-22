@@ -39,6 +39,9 @@ connected systems such as Linear or Notion. Source flags remain overrides.
 - Make gates mandatory to evaluate, not mandatory to run when not applicable.
 - Treat the DB as a cache + append-only journal, not as a competing task source
   of truth.
+- Register every task that enters `planejamento` in the local kanban.
+- Store planning questions, planning answers, and related-task links as
+  structured contracts.
 
 ## Gate Contract
 
@@ -51,6 +54,17 @@ Every gate returns one of:
 
 Task-specific planning blockers do not stop the goal run; they create source
 questions and allow other ready tasks to continue.
+
+## Local Kanban Contract
+
+When no external kanban is connected, `.aihaus/state/aih-goal.db` is the local
+kanban for aihaus. When an external kanban is connected, the DB is still the
+local workflow mirror and journal.
+
+Every task entering `planejamento` must exist in the local kanban. Every missing
+business rule or expectation becomes a planning question row. Every accepted
+answer becomes a planning answer row. Agents must search the local kanban for
+related tasks before creating or importing a new planning task.
 
 ## Validation
 

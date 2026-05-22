@@ -44,6 +44,16 @@ Prefer the source with the strongest repo-specific signal:
 If multiple plausible sources exist, pick the one with the clearest repo match
 and record the reason in `RUN-MANIFEST.md`; do not stop for a menu.
 
+### Local kanban lookup
+
+Before creating or importing a task into `planejamento`, query the local kanban
+for related tasks using source ids, URLs, titles, module/file names, source
+snapshots, planning questions, and planning answers.
+
+If a related task exists, link it in `task_links` and mention it in the task
+file. Do not silently collapse two tasks into one unless they share the same
+source id or the user explicitly asked for deduplication.
+
 ### No source found
 
 If no external source, local DB, or local task file can be found, stop before

@@ -5,6 +5,23 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.2] - 2026-05-22 - local kanban planning contracts
+
+### Added
+
+- `aih-goal` local kanban annex defining task registration, planning
+  question/answer contracts, related-task links, and local-only mode.
+- SQLite schema for `planning_questions`, `planning_answers`, and `task_links`.
+
+### Changed
+
+- `/aih-goal` now requires every task entering `planejamento` to be registered in
+  the local kanban before planning runs.
+- Planning questions and answers are now structured contracts: agents must
+  record questions before asking them and answers before moving work to `tdd`.
+- Goal discovery now searches the local kanban for related tasks before creating
+  or importing new planning work.
+
 ## [0.38.1] - 2026-05-22 - aih-goal source discovery and SQLite journal
 
 ### Changed

@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.38.1-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.38.2-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -250,7 +250,7 @@ Nothing is fine-tuned and no weights move. What changes is the markdown that gui
 
 ## Commands
 
-aihaus ships 15 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**. Since v0.9.0 the autonomy contract is codified in a shared annex (`pkg/.aihaus/skills/_shared/autonomy-protocol.md`) that every skill references — no mid-execution option menus, no honest checkpoints, no delegated typing. Since v0.27.0 (M023) `phase-advance.sh --to paused` requires `--class <4-enum>` and `autonomy-guard.sh` blocks GSP-DS prose at the Stop hook. Since v0.28.0 (M024) `/aih-milestone --plan <slug>` short-circuits the planning pipeline when the upstream plan is committed (consumer-self-validating CHECK.md SHA gate); skill prose drops Wave/Group nouns while runtime regex preserves the block. Since v0.38.1 (M049), `/aih-goal` discovers the planned kanban/backlog, journals workflow state in SQLite, evaluates gates, and runs ready work until a target stage such as `human-review`.
+aihaus ships 15 intent-based skills. Every command follows the same pattern: **ask scoping questions → one approval → fully autonomous**. Since v0.9.0 the autonomy contract is codified in a shared annex (`pkg/.aihaus/skills/_shared/autonomy-protocol.md`) that every skill references — no mid-execution option menus, no honest checkpoints, no delegated typing. Since v0.27.0 (M023) `phase-advance.sh --to paused` requires `--class <4-enum>` and `autonomy-guard.sh` blocks GSP-DS prose at the Stop hook. Since v0.28.0 (M024) `/aih-milestone --plan <slug>` short-circuits the planning pipeline when the upstream plan is committed (consumer-self-validating CHECK.md SHA gate); skill prose drops Wave/Group nouns while runtime regex preserves the block. Since v0.38.2 (M049), `/aih-goal` discovers the planned kanban/backlog, journals workflow state in SQLite, evaluates gates, and stores local planning Q/A contracts before work leaves `planejamento`.
 
 ### Core workflow
 
@@ -260,7 +260,7 @@ aihaus ships 15 intent-based skills. Every command follows the same pattern: **a
 | `/aih-install` | Install/refresh per-repo overlay in cwd; resolves `AIHAUS_HOME` via 8-tier priority chain. Model-invokable (M022 / v0.26.0+) |
 | `/aih-brainstorm` | Multi-specialist exploratory panel for fuzzy topics — outputs `BRIEF.md` |
 | `/aih-plan` | Research and plan a concrete change — outputs `PLAN.md` |
-| `/aih-goal` | Discover planned kanban tasks and run workflow gates autonomously until a target stage |
+| `/aih-goal` | Discover planned kanban tasks, register local planning contracts, and run workflow gates autonomously until a target stage |
 | `/aih-feature` | Plan → branch → implement → review → commit (single feature) |
 | `/aih-bugfix` | Triage → branch → fix → test → commit |
 | `/aih-milestone` | Conversational gathering for milestone-sized work — drafts to `STATUS.md` |

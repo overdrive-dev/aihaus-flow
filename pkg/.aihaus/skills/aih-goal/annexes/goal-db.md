@@ -1,22 +1,27 @@
 # aih-goal SQLite state
 
 `/aih-goal` uses `.aihaus/state/aih-goal.db` as an operational cache and
-append-only journal. It is not the human source of truth. Linear, Notion, Jira,
-Trello, GitHub Issues, or local task files remain the task source.
+append-only journal. When an external kanban exists, the DB is not the human
+source of truth. Linear, Notion, Jira, Trello, or GitHub Issues remain the task
+source. When no external kanban exists, the DB plus readable run artifacts are
+the local kanban source.
 
 ### Ownership rule
 
 The DB owns:
 
+- local-only task title, description, priority, visible status, and owner,
 - current aihaus workflow stage,
 - gate verdicts,
 - local locks,
+- planning questions and answers,
+- related-task links,
 - source snapshots,
 - source sync cursors,
 - evidence pending sync,
 - append-only run events.
 
-The external source owns:
+When `source_kind` is not `local`, the external source owns:
 
 - task title and primary description,
 - business priority,
@@ -50,11 +55,17 @@ CREATE TABLE IF NOT EXISTS tasks (
   source_id TEXT,
   source_url TEXT,
   title TEXT NOT NULL,
+  description TEXT,
+  priority TEXT,
+  owner TEXT,
+  kanban_status TEXT NOT NULL DEFAULT 'backlog',
   stage TEXT NOT NULL,
   planning_status TEXT NOT NULL DEFAULT 'pending',
   source_updated_at TEXT,
   last_synced_at TEXT,
-  sync_state TEXT NOT NULL DEFAULT 'pending'
+  sync_state TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS source_snapshots (
@@ -75,6 +86,36 @@ CREATE TABLE IF NOT EXISTS gate_events (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS planning_questions (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  source_kind TEXT NOT NULL DEFAULT 'local',
+  source_ref TEXT,
+  asked_at TEXT NOT NULL,
+  answered_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS planning_answers (
+  id TEXT PRIMARY KEY,
+  question_id TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  source_kind TEXT NOT NULL DEFAULT 'local',
+  source_ref TEXT,
+  answered_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_links (
+  id TEXT PRIMARY KEY,
+  from_task_id TEXT NOT NULL,
+  to_task_id TEXT NOT NULL,
+  relation TEXT NOT NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sync_events (
   id TEXT PRIMARY KEY,
   task_id TEXT NOT NULL,
@@ -85,11 +126,41 @@ CREATE TABLE IF NOT EXISTS sync_events (
   created_at TEXT NOT NULL,
   synced_at TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_tasks_goal_stage ON tasks(goal_id, stage);
+CREATE INDEX IF NOT EXISTS idx_tasks_source ON tasks(source_kind, source_id);
+CREATE INDEX IF NOT EXISTS idx_questions_task_status
+  ON planning_questions(task_id, status);
+CREATE INDEX IF NOT EXISTS idx_answers_question
+  ON planning_answers(question_id);
+CREATE INDEX IF NOT EXISTS idx_task_links_from
+  ON task_links(from_task_id, relation);
 ```
+
+### Schema evolution
+
+If `tasks` already exists from an older aihaus version, add missing columns
+before running a goal. Check table metadata first and ignore duplicate-column
+errors only after confirming the column exists.
+
+```sql
+ALTER TABLE tasks ADD COLUMN description TEXT;
+ALTER TABLE tasks ADD COLUMN priority TEXT;
+ALTER TABLE tasks ADD COLUMN owner TEXT;
+ALTER TABLE tasks ADD COLUMN kanban_status TEXT NOT NULL DEFAULT 'backlog';
+ALTER TABLE tasks ADD COLUMN created_at TEXT;
+ALTER TABLE tasks ADD COLUMN updated_at TEXT;
+```
+
+Create the new planning and relation tables with `CREATE TABLE IF NOT EXISTS`.
 
 ### Sync safety
 
 - Save a raw source snapshot before summarizing or changing local stage.
+- Register every task locally before planning.
+- Record planning questions before asking them.
+- Record planning answers before moving a task out of `planejamento`.
+- Search and link related local tasks before creating duplicates.
 - Compare `source_updated_at` before writing back.
 - If the source changed after import, create a `sync_conflict` event instead of
   overwriting.

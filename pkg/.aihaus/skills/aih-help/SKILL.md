@@ -36,7 +36,7 @@ aihaus is a four-pillar intent-based workflow package. **Scope** the work, optio
 |---------|-------------|----------|
 | `/aih-init` | Bootstrap aihaus in a project — creates `.aihaus/` layout and seeds project memory | First time using aihaus in a repo |
 | `/aih-plan [description]` | Research and write a concrete, implementable plan without changing code — produces `PLAN.md` | You have a concrete task and want to think before building |
-| `/aih-goal [description] [--until human-review] [--source <selector>]` | Discover planned kanban tasks, evaluate workflow gates, and execute ready work without mid-run input | You have a batch of planned tasks and want them advanced until a target workflow stage |
+| `/aih-goal [description] [--until human-review] [--source <selector>]` | Discover planned kanban tasks, register planning Q/A contracts, and execute ready work without mid-run input | You have a batch of planned tasks and want them advanced until a target workflow stage |
 | `/aih-brainstorm "<topic>" [--panel <roles>] [--deep] [--research]` | Multi-specialist exploratory panel for fuzzy "how should we think about X" questions — produces `BRIEF.md` that feeds `/aih-plan --from-brainstorm` or `/aih-milestone --from-brainstorm` | The problem is open-ended and you want diverse perspectives before committing to an approach |
 | `/aih-milestone [description]` | Conversational gathering, plan-promotion (`--plan [slug]`), or direct execution (`--execute` or start-intent on a ready draft). Absorbs the retired `/aih-run` + `/aih-plan-to-milestone` | You want to scope, promote, or execute a multi-story milestone |
 | `/aih-resume [slug]` | Resume an interrupted run — detects in-progress work via RUN-MANIFEST.md | Session crashed, context reset, or you paused execution |
@@ -83,7 +83,7 @@ aihaus is a four-pillar intent-based workflow package. **Scope** the work, optio
 
 ```
 /aih-goal --until human-review
-  -> discovers the planned source, evaluates planning/TDD/test/dev-review gates, syncs blockers/evidence
+  -> discovers the planned source, records planning Q/A contracts, evaluates gates, syncs blockers/evidence
 ```
 
 ### Resume after interruption

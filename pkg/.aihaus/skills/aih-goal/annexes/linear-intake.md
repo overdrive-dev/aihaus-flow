@@ -22,15 +22,17 @@ When Linear is selected:
 ### Planning gate behavior
 
 The planning gate must use Linear issue content and comments as answers. If the
-business rule, acceptance criteria, or validation method is already documented in
-Linear, mark the gate `READY-FOR-TDD`; do not ask the human to repeat it.
+business rule, acceptance criteria, or validation method is already documented
+in Linear, record it in `planning_answers`, mark the gate `READY-FOR-TDD`, and
+do not ask the human to repeat it.
 
 If information is missing:
 
-1. Write the missing question in business language.
-2. Comment it on the Linear issue when the integration can write comments.
-3. Set only that task to `blocked-to-planejamento`.
-4. Continue other ready tasks.
+1. Create a `planning_questions` row.
+2. Write the missing question in business language.
+3. Comment it on the Linear issue when the integration can write comments.
+4. Set only that task to `blocked-to-planejamento`.
+5. Continue other ready tasks.
 
 ### Evidence sync
 

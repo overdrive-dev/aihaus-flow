@@ -9,9 +9,9 @@ argument-hint: "[goal description] [--until human-review] [--source <selector>] 
 
 Run a goal as an autonomous workflow over a planned kanban/backlog. Discover or
 resume the work source, import tasks into the local operational goal DB,
-evaluate every workflow gate, execute ready work, attach evidence, and continue
-without user input until the target stage is reached or every remaining task has
-a true blocker.
+register planning contracts, evaluate every workflow gate, execute ready work,
+attach evidence, and continue without user input until the target stage is
+reached or every remaining task has a true blocker.
 
 $ARGUMENTS
 
@@ -93,8 +93,11 @@ Create `.aihaus/workflows/runs/[YYMMDD]-[slug]/`.
 
 Use `.aihaus/state/aih-goal.db` as the local operational cache + append-only
 journal. It does not replace Linear/Notion/Jira/Trello/GitHub as the human
-kanban source of truth. Use `annexes/goal-db.md` for the schema contract and
-`annexes/run-state.md` for readable file shapes. At minimum write:
+kanban source of truth when an external kanban exists; when no external kanban
+exists, it is the local kanban source for aihaus workflow state. Use
+`annexes/goal-db.md` for the schema contract, `annexes/local-kanban.md` for
+local task and planning contracts, and `annexes/run-state.md` for readable file
+shapes. At minimum write:
 
 - `GOAL.md`
 - `TASKS.md`
@@ -108,18 +111,24 @@ so the UI does not become noisy for large Linear backlogs.
 
 Save raw source snapshots in the DB before summarizing. Never overwrite source
 descriptions, priorities, or external status fields unless explicitly requested.
+Every task that enters `planejamento` must have a local kanban row before the
+planning gate runs.
 
 ## Phase 3: Planning Sweep
 
 For every imported task:
 
-1. Spawn `workflow-intake` when the source item is raw or underspecified.
-2. Spawn `workflow-planning-gate`.
-3. Record verdict: `READY-FOR-TDD`, `BLOCKED`, or `SKIPPED` with reason.
+1. Search the local kanban for related tasks and record `task_links` when found.
+2. Spawn `workflow-intake` when the source item is raw or underspecified.
+3. Spawn `workflow-planning-gate`.
+4. Record verdict: `READY-FOR-TDD`, `BLOCKED`, or `SKIPPED` with reason.
 
 The planning gate must use source content first. If Linear already contains the
-answers, do not ask again. If something is missing, write the exact business
-question back to the source when possible and keep the task in `planejamento`.
+answers, record them as `planning_answers` and do not ask again. If something is
+missing, create a `planning_questions` row, write the exact business question
+back to the source when possible, and keep the task in `planejamento`. A task
+must not move to `tdd` while it has open planning questions unless the question
+is explicitly waived.
 
 ## Phase 4: Execute Ready Tasks
 
@@ -176,6 +185,8 @@ Update `RUN-MANIFEST.md`, summarize counts by final state, and point to
 - `annexes/run-state.md` - run artifact format and task status vocabulary.
 - `annexes/source-discovery.md` - default source discovery and connector order.
 - `annexes/goal-db.md` - SQLite cache/journal schema and sync safety rules.
+- `annexes/local-kanban.md` - local task, related-task, and planning Q/A
+  contract.
 - `annexes/linear-intake.md` - Linear import/sync behavior.
 
 ## Autonomy

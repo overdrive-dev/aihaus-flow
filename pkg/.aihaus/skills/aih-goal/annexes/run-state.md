@@ -45,9 +45,9 @@ Source: linear | file | prompt
 Keep one row per source task:
 
 ```markdown
-| ID | Source | Title | Stage | Planning | Evidence |
-|---|---|---|---|---|---|
-| NORACAR-123 | Linear | Fix billing filter | planejamento | pending | tasks/NORACAR-123.md |
+| ID | Source | Title | Stage | Planning | Open Q | Evidence |
+|---|---|---|---|---|---|---|
+| NORACAR-123 | Linear | Fix billing filter | planejamento | pending | 1 | tasks/NORACAR-123.md |
 ```
 
 ### Task file
@@ -60,6 +60,8 @@ Each task gets `tasks/<id>.md`:
 Source: [Linear URL or local source]
 Stage: planejamento
 Target: human-review
+Priority: [local/external priority when known]
+Related: [linked task ids or none]
 
 ### Source Context
 [Description, comments, acceptance criteria, copied links.]
@@ -69,7 +71,14 @@ Target: human-review
 |---|---|---|---|
 
 ### Business Questions
-- [Question sent back to source, if blocked.]
+| ID | Question | Status | Answer Source | Answer |
+|---|---|---|---|---|
+| pq-001 | [Question sent back to source, if blocked.] | open | | |
+
+### Related Tasks
+| Task | Relation | Reason |
+|---|---|---|
+| [id] | related | [why this matters] |
 
 ### Human Review Package
 [Summary written after review-dev passes.]
