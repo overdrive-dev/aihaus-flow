@@ -52,7 +52,7 @@ if ($Help) { Show-Usage; exit 0 }
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $PkgRoot = (Resolve-Path (Join-Path $ScriptDir '..')).Path
 $PkgAihaus = Join-Path $PkgRoot '.aihaus'
-$PkgTemplates = Join-Path $PkgRoot 'templates'
+$PkgTemplates = Join-Path $PkgAihaus 'templates'
 
 # Resolve -Package flag immediately (tier 1 of discovery chain)
 $PackageFlag = ""
@@ -943,6 +943,23 @@ if (Test-Path $WrapperSrc) {
 $SettingsSrc = Join-Path $PkgTemplates 'settings.local.json'
 $SettingsOut = Join-Path $TargetClaude 'settings.local.json'
 
+function Normalize-HooksShape {
+    param($Settings)
+    if (-not ($Settings -is [psobject])) { return $Settings }
+    if (-not ($Settings.PSObject.Properties.Name -contains 'hooks')) { return $Settings }
+    if (-not ($Settings.hooks -is [psobject])) { return $Settings }
+
+    foreach ($eventProp in @($Settings.hooks.PSObject.Properties)) {
+        $eventValue = $eventProp.Value
+        if ($eventValue -is [array]) {
+            $Settings.hooks.$($eventProp.Name) = @($eventValue)
+        } elseif ($eventValue -is [psobject]) {
+            $Settings.hooks.$($eventProp.Name) = @($eventValue)
+        }
+    }
+    return $Settings
+}
+
 if (-not (Test-Path $SettingsSrc)) {
     Write-Host "  warn: settings template missing at $SettingsSrc, skipping merge"
 } elseif (-not (Test-Path $SettingsOut)) {
@@ -1054,6 +1071,7 @@ if (-not (Test-Path $SettingsSrc)) {
     }
 
     $merged = Merge-Object $dstJson $srcJson
+    $merged = Normalize-HooksShape $merged
     $merged | ConvertTo-Json -Depth 20 | Set-Content -Path $SettingsOut -Encoding UTF8
     Write-Host "  settings: merged"
 
@@ -1146,6 +1164,7 @@ if (-not (Test-Path $SettingsSrc)) {
                         $srcJsonFresh = Get-Content $SettingsSrc -Raw | ConvertFrom-Json
                         $dstJsonFresh = Get-Content $SettingsOut -Raw | ConvertFrom-Json
                         $remerged = Merge-Object $dstJsonFresh $srcJsonFresh
+                        $remerged = Normalize-HooksShape $remerged
                         $remerged | ConvertTo-Json -Depth 20 | Set-Content -Path $SettingsOut -Encoding UTF8
                         $env:AIHAUS_RECOMPUTE_MERGE = $null
                         Write-Host "  settings: recomputed (drift-corrected)"

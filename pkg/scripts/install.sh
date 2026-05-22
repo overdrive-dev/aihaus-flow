@@ -41,7 +41,7 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PKG_AIHAUS="${PKG_ROOT}/.aihaus"
-PKG_TEMPLATES="${PKG_ROOT}/templates"
+PKG_TEMPLATES="${PKG_AIHAUS}/templates"
 
 TARGET="${PWD}"
 MODE="link"

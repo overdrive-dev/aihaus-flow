@@ -5,6 +5,20 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.4] - 2026-05-22 - settings hook array migration
+
+### Fixed
+
+- Windows `install.ps1` and `update.ps1` now normalize every
+  `.claude/settings.local.json` `hooks.<Event>` value to an array of matchers
+  after merge, repairing older installs that stored single hook matchers as
+  objects.
+- Bash/Python settings merge fallback now performs the same legacy hook-event
+  normalization as the jq path.
+- Install/update scripts now merge settings from the canonical
+  `pkg/.aihaus/templates/settings.local.json` template, so newer hook events are
+  not missed by stale root-level template files.
+
 ## [0.38.3] - 2026-05-22 - Windows aih-graph installer fix
 
 ### Fixed

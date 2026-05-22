@@ -59,7 +59,7 @@ function Test-DogfoodCwd {
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $PkgRoot = (Resolve-Path (Join-Path $ScriptDir '..')).Path
 $PkgAihaus = Join-Path $PkgRoot '.aihaus'
-$PkgTemplates = Join-Path $PkgRoot 'templates'
+$PkgTemplates = Join-Path $PkgAihaus 'templates'
 
 if (-not (Test-Path $Target)) {
     Write-Error "target directory does not exist: $Target"
@@ -87,7 +87,7 @@ if (Test-DogfoodCwd) {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         # After git pull, PkgRoot may have shifted; recalculate derived paths.
         $PkgAihaus = Join-Path $PkgRoot '.aihaus'
-        $PkgTemplates = Join-Path $PkgRoot 'templates'
+        $PkgTemplates = Join-Path $PkgAihaus 'templates'
     } else {
         # R3: dogfood cwd without -Self -- skip git pull, continue with skill refresh
         Write-Host "  dogfood mode -- git pull skipped; commit local changes before self-update"
@@ -518,6 +518,23 @@ foreach ($name in @('skills', 'agents', 'hooks')) {
 $SettingsSrc = Join-Path $PkgTemplates 'settings.local.json'
 $SettingsOut = Join-Path $Claude 'settings.local.json'
 
+function Normalize-HooksShape {
+    param($Settings)
+    if (-not ($Settings -is [psobject])) { return $Settings }
+    if (-not ($Settings.PSObject.Properties.Name -contains 'hooks')) { return $Settings }
+    if (-not ($Settings.hooks -is [psobject])) { return $Settings }
+
+    foreach ($eventProp in @($Settings.hooks.PSObject.Properties)) {
+        $eventValue = $eventProp.Value
+        if ($eventValue -is [array]) {
+            $Settings.hooks.$($eventProp.Name) = @($eventValue)
+        } elseif ($eventValue -is [psobject]) {
+            $Settings.hooks.$($eventProp.Name) = @($eventValue)
+        }
+    }
+    return $Settings
+}
+
 if (-not (Test-Path $SettingsSrc)) {
     Write-Host "  warn: settings template missing at $SettingsSrc, skipping merge"
 } elseif (-not (Test-Path $SettingsOut)) {
@@ -543,6 +560,7 @@ if (-not (Test-Path $SettingsSrc)) {
     }
 
     $merged = Merge-Object $dstJson $srcJson
+    $merged = Normalize-HooksShape $merged
     $merged | ConvertTo-Json -Depth 20 | Set-Content -Path $SettingsOut -Encoding UTF8
     Write-Host "  settings: merged"
 }

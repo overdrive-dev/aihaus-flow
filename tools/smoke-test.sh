@@ -409,11 +409,10 @@ check_project_template() {
 check_settings_template() {
   _start_check
   local label="Check ${CHECK_NUMBER}: templates/settings.local.json is valid JSON with required keys"
-  local settings_file="${PACKAGE_ROOT}/templates/settings.local.json"
-  if [[ ! -f "$settings_file" ]]; then
-    _fail "$label" "file not found: $settings_file"
-    return
-  fi
+  local -a settings_files=(
+    "${PACKAGE_ROOT}/templates/settings.local.json"
+    "${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
+  )
   local parser=""
   if command -v jq >/dev/null 2>&1; then
     parser="jq"
@@ -428,20 +427,26 @@ check_settings_template() {
     _fail "$label" "no jq or python available to validate JSON"
     return
   fi
-  case "$parser" in
-    jq)
-      if ! jq -e '.hooks and .env' "$settings_file" >/dev/null 2>&1; then
-        _fail "$label" "invalid JSON or missing hooks/env keys"
-        return
-      fi
-      ;;
-    python3|python|py)
-      if ! "$parser" -c "import json,sys; d=json.load(open(sys.argv[1], encoding='utf-8')); sys.exit(0 if all(k in d for k in ('hooks','env')) else 1)" "$settings_file" >/dev/null 2>&1; then
-        _fail "$label" "invalid JSON or missing hooks/env keys"
-        return
-      fi
-      ;;
-  esac
+  for settings_file in "${settings_files[@]}"; do
+    if [[ ! -f "$settings_file" ]]; then
+      _fail "$label" "file not found: $settings_file"
+      return
+    fi
+    case "$parser" in
+      jq)
+        if ! jq -e '.hooks and .env and (.hooks | to_entries | all(.value | type == "array"))' "$settings_file" >/dev/null 2>&1; then
+          _fail "$label" "invalid JSON, missing hooks/env keys, or hook event is not array: $settings_file"
+          return
+        fi
+        ;;
+      python3|python|py)
+        if ! "$parser" -c "import json,sys; d=json.load(open(sys.argv[1], encoding='utf-8')); ok=all(k in d for k in ('hooks','env')) and isinstance(d.get('hooks'),dict) and all(isinstance(v,list) for v in d['hooks'].values()); sys.exit(0 if ok else 1)" "$settings_file" >/dev/null 2>&1; then
+          _fail "$label" "invalid JSON, missing hooks/env keys, or hook event is not array: $settings_file"
+          return
+        fi
+        ;;
+    esac
+  done
   _pass "$label"
 }
 

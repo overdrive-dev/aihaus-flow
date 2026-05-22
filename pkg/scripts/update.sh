@@ -47,7 +47,7 @@ is_dogfood_cwd() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PKG_AIHAUS="${PKG_ROOT}/.aihaus"
-PKG_TEMPLATES="${PKG_ROOT}/templates"
+PKG_TEMPLATES="${PKG_AIHAUS}/templates"
 
 TARGET="${PWD}"
 MIGRATE_MEMORY=0
@@ -108,7 +108,7 @@ if is_dogfood_cwd; then
     git -C "${PWD}" pull
     # After git pull, PKG_ROOT may have shifted; recalculate derived paths.
     PKG_AIHAUS="${PKG_ROOT}/.aihaus"
-    PKG_TEMPLATES="${PKG_ROOT}/templates"
+    PKG_TEMPLATES="${PKG_AIHAUS}/templates"
   else
     # R3: dogfood cwd without --self — skip git pull, continue with skill refresh
     echo "  dogfood mode — git pull skipped; commit local changes before self-update"

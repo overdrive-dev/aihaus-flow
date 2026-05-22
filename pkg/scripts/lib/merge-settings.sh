@@ -189,6 +189,17 @@ with open(dst_path, "r", encoding="utf-8") as fh:
 with open(src_path, "r", encoding="utf-8") as fh:
     src = json.load(fh)
 
+def normalize_root(root):
+    if not isinstance(root, dict) or not isinstance(root.get("hooks"), dict):
+        return root
+    out = dict(root)
+    hooks = dict(root["hooks"])
+    for event, value in list(hooks.items()):
+        if isinstance(value, dict) and ("matcher" in value or "hooks" in value):
+            hooks[event] = [value]
+    out["hooks"] = hooks
+    return out
+
 def has_matcher_hooks(lst):
     return bool(lst and all(
         isinstance(e, dict) and "matcher" in e and "hooks" in e
@@ -268,7 +279,7 @@ def deep_merge(base, overlay):
         return out
     return overlay if overlay is not None else base
 
-merged = deep_merge(dst, src)
+merged = deep_merge(normalize_root(dst), normalize_root(src))
 # jq-compatible byte layout: explicit separators (no trailing space before
 # comma) + trailing newline so successive jq/python invocations on the same
 # file produce identical bytes. See M009 QA-REVIEW M-001.
