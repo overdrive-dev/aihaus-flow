@@ -5144,11 +5144,88 @@ EOF_MANIFEST
   fi
 }
 
+check_legacy_hygiene_regressions() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: legacy hygiene preflight and gitignore normalization"
+  local issues=()
+  local init_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-init/SKILL.md"
+  local preflight="${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/legacy-preflight.sh"
+  local fragment="${PACKAGE_ROOT}/.aihaus/templates/gitignore-fragment"
+
+  if [[ ! -f "$preflight" ]] || ! bash -n "$preflight" >/dev/null 2>&1; then
+    issues+=("aih-init legacy-preflight.sh missing or not parseable")
+  fi
+  if ! grep -Fq 'legacy-preflight.sh --fix-safe' "$init_skill"; then
+    issues+=("aih-init does not invoke legacy-preflight.sh --fix-safe")
+  fi
+  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
+    if ! grep -Fxq "$needle" "$fragment"; then
+      issues+=("gitignore fragment missing ${needle}")
+    fi
+    if ! grep -Fq "$needle" "${PACKAGE_ROOT}/../pkg/scripts/install.sh"; then
+      issues+=("install.sh missing ${needle}")
+    fi
+    if ! grep -Fq "$needle" "${PACKAGE_ROOT}/../pkg/scripts/update.sh"; then
+      issues+=("update.sh missing ${needle}")
+    fi
+    if ! grep -Fq "$needle" "${PACKAGE_ROOT}/../pkg/scripts/install.ps1"; then
+      issues+=("install.ps1 missing ${needle}")
+    fi
+    if ! grep -Fq "$needle" "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
+      issues+=("update.ps1 missing ${needle}")
+    fi
+  done
+  if ! grep -Fq 'aihaus block updated' "${PACKAGE_ROOT}/../pkg/scripts/update.sh"; then
+    issues+=("update.sh does not patch existing AIHAUS:GITIGNORE block")
+  fi
+  if ! grep -Fq 'aihaus block updated' "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
+    issues+=("update.ps1 does not patch existing AIHAUS:GITIGNORE block")
+  fi
+
+  local tmp_root
+  tmp_root="$(_mktemp_dir aih-legacy-preflight)" || {
+    _fail "$label" "failed to create temp dir"
+    return
+  }
+  mkdir -p "$tmp_root/.aihaus/state/.claude/audit" "$tmp_root/.gsd" "$tmp_root/.hermes"
+  git -C "$tmp_root" init >/dev/null 2>&1 || issues+=("git init failed for legacy-preflight fixture")
+  printf 'old hook\n' > "$tmp_root/.aihaus/state/.claude/audit/hook.jsonl"
+  printf 'old schema\n' > "$tmp_root/.aihaus/state/schema.sql"
+  printf 'legacy gsd\n' > "$tmp_root/.gsd/PROJECT.md"
+  printf 'legacy hermes\n' > "$tmp_root/.hermes/report.md"
+  (
+    cd "$tmp_root" || exit 1
+    bash "$preflight" --fix-safe >/dev/null 2>&1
+  ) || issues+=("legacy-preflight fixture failed")
+  if [[ -e "$tmp_root/.aihaus/state/.claude" ]]; then
+    issues+=("legacy-preflight did not archive nested .aihaus/state/.claude")
+  fi
+  if [[ -e "$tmp_root/.aihaus/state/schema.sql" ]]; then
+    issues+=("legacy-preflight did not archive old .aihaus/state/schema.sql")
+  fi
+  if ! compgen -G "$tmp_root/.aihaus/backups/legacy-cleanup/*/.aihaus/state/schema.sql" >/dev/null; then
+    issues+=("legacy-preflight backup copy for schema.sql missing")
+  fi
+  if [[ ! -e "$tmp_root/.gsd/PROJECT.md" || ! -e "$tmp_root/.hermes/report.md" ]]; then
+    issues+=("legacy-preflight moved manual-review legacy directories")
+  fi
+  if ! compgen -G "$tmp_root/.aihaus/audit/legacy-preflight-*.md" >/dev/null; then
+    issues+=("legacy-preflight report missing")
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
 check_m048_memory_integration_contract
 check_goal_aftermath_regressions
+check_legacy_hygiene_regressions
 check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
 

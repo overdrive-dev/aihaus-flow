@@ -1236,12 +1236,60 @@ function Invoke-InjectGitignore {
     param([string]$TargetDir)
 
     $gitignore = Join-Path $TargetDir '.gitignore'
+    $entries = @(
+        '/.aihaus/audit/',
+        '/.claude/audit/',
+        '/.aihaus/agents/',
+        '/.aihaus/skills/',
+        '/.aihaus/hooks/',
+        '/.aihaus/templates/',
+        '/.aihaus/bin/',
+        '/.aihaus/state/',
+        '/.aihaus/runtime/',
+        '/.aihaus/backups/',
+        '/.claude/agents/',
+        '/.claude/hooks/',
+        '/.claude/skills/',
+        '/.claude/worktrees/',
+        '/.claude/settings.local.json',
+        '/.claude/backups/',
+        '/.claude/agent-memory/',
+        '/.claude/agent-memory-local/',
+        '/.bg-shell/',
+        '/.worktrees/',
+        '/.gsd/',
+        '/.gsd-id',
+        '/.hermes/',
+        '/.aihaus/.context-budgets',
+        '/.aihaus/.effort',
+        '/.aihaus/.calibration',
+        '/.aihaus/.install-mode',
+        '/.aihaus/.install-source',
+        '/.aihaus/.install-platform',
+        '/.aihaus/.version',
+        '/.aihaus/.enforcement',
+        '/.aihaus/.automode'
+    )
 
     # Primary idempotency check -- guard-comment anchor already present?
     if (Test-Path $gitignore) {
         $guardHit = Select-String -LiteralPath $gitignore -Pattern '^# AIHAUS:GITIGNORE-START' -Quiet
         if ($guardHit) {
-            Write-Host "  .gitignore: aihaus block already present (no-op)"
+            $content = @(Get-Content -LiteralPath $gitignore)
+            $missing = @($entries | Where-Object { $content -notcontains $_ })
+            if ($missing.Count -eq 0) {
+                Write-Host "  .gitignore: aihaus block already present (no-op)"
+                return
+            }
+            $endIndex = [Array]::IndexOf($content, '# AIHAUS:GITIGNORE-END')
+            if ($endIndex -lt 0) {
+                Add-Content -LiteralPath $gitignore -Value $missing -Encoding UTF8
+            } else {
+                $before = if ($endIndex -gt 0) { $content[0..($endIndex - 1)] } else { @() }
+                $after = $content[$endIndex..($content.Count - 1)]
+                Set-Content -LiteralPath $gitignore -Value @($before + $missing + $after) -Encoding UTF8
+            }
+            Write-Host "  .gitignore: aihaus block updated"
             return
         }
         # Secondary idempotency check -- hand-edited variant without full guard comment?
@@ -1255,24 +1303,8 @@ function Invoke-InjectGitignore {
     # Build the guard block (LF line endings -- universal .gitignore convention)
     $block = @(
         '',
-        '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers',
-        '/.aihaus/audit/',
-        '/.claude/audit/',
-        '/.aihaus/bin/',
-        '/.aihaus/state/',
-        '/.aihaus/runtime/',
-        '/.aihaus/backups/',
-        '/.aihaus/.context-budgets',
-        '/.aihaus/.effort',
-        '/.aihaus/.calibration',
-        '/.aihaus/.install-mode',
-        '/.aihaus/.install-source',
-        '/.aihaus/.install-platform',
-        '/.aihaus/.version',
-        '/.aihaus/.enforcement',
-        '/.aihaus/.automode',
-        '# AIHAUS:GITIGNORE-END'
-    )
+        '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers'
+    ) + $entries + @('# AIHAUS:GITIGNORE-END')
 
     try {
         # Add-Content appends; creates file if absent. -Encoding UTF8 = UTF-8 with BOM (K-004).

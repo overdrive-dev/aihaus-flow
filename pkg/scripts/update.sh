@@ -570,10 +570,71 @@ fi
 _backfill_gitignore() {
   local target="$1"
   local gitignore="${target}/.gitignore"
+  local entries=(
+    '/.aihaus/audit/'
+    '/.claude/audit/'
+    '/.aihaus/agents/'
+    '/.aihaus/skills/'
+    '/.aihaus/hooks/'
+    '/.aihaus/templates/'
+    '/.aihaus/bin/'
+    '/.aihaus/state/'
+    '/.aihaus/runtime/'
+    '/.aihaus/backups/'
+    '/.claude/agents/'
+    '/.claude/hooks/'
+    '/.claude/skills/'
+    '/.claude/worktrees/'
+    '/.claude/settings.local.json'
+    '/.claude/backups/'
+    '/.claude/agent-memory/'
+    '/.claude/agent-memory-local/'
+    '/.bg-shell/'
+    '/.worktrees/'
+    '/.gsd/'
+    '/.gsd-id'
+    '/.hermes/'
+    '/.aihaus/.context-budgets'
+    '/.aihaus/.effort'
+    '/.aihaus/.calibration'
+    '/.aihaus/.install-mode'
+    '/.aihaus/.install-source'
+    '/.aihaus/.install-platform'
+    '/.aihaus/.version'
+    '/.aihaus/.enforcement'
+    '/.aihaus/.automode'
+  )
+  _patch_guard_block() {
+    local tmp missing
+    tmp="$(mktemp)" || return 0
+    missing="$(mktemp)" || { rm -f "$tmp"; return 0; }
+    local entry
+    for entry in "${entries[@]}"; do
+      grep -Fxq "$entry" "${gitignore}" 2>/dev/null || printf '%s\n' "$entry" >> "$missing"
+    done
+    if [[ ! -s "$missing" ]]; then
+      rm -f "$tmp" "$missing"
+      return 0
+    fi
+    if ! grep -q '^# AIHAUS:GITIGNORE-END' "$gitignore" 2>/dev/null; then
+      cat "$missing" >> "$gitignore"
+      rm -f "$tmp" "$missing"
+      echo "  .gitignore: aihaus block updated"
+      return 0
+    fi
+    awk -v missing_file="$missing" '
+      BEGIN { while ((getline line < missing_file) > 0) miss[++n] = line }
+      /^# AIHAUS:GITIGNORE-END/ { for (i = 1; i <= n; i++) print miss[i] }
+      { print }
+    ' "$gitignore" > "$tmp" && mv "$tmp" "$gitignore"
+    rm -f "$missing"
+    echo "  .gitignore: aihaus block updated"
+  }
 
   # Step 1: idempotency — guard-comment block already present?
   if grep -q "^# AIHAUS:GITIGNORE-START" "${gitignore}" 2>/dev/null; then
     # Already present — no prompt, no write.
+    _patch_guard_block
     return 0
   fi
   # Secondary idempotency: hand-edited variant without the full guard comment?
@@ -597,21 +658,10 @@ _backfill_gitignore() {
     {
       printf '\n'
       printf '# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers\n'
-      printf '/.aihaus/audit/\n'
-      printf '/.claude/audit/\n'
-      printf '/.aihaus/bin/\n'
-      printf '/.aihaus/state/\n'
-      printf '/.aihaus/runtime/\n'
-      printf '/.aihaus/backups/\n'
-      printf '/.aihaus/.context-budgets\n'
-      printf '/.aihaus/.effort\n'
-      printf '/.aihaus/.calibration\n'
-      printf '/.aihaus/.install-mode\n'
-      printf '/.aihaus/.install-source\n'
-      printf '/.aihaus/.install-platform\n'
-      printf '/.aihaus/.version\n'
-      printf '/.aihaus/.enforcement\n'
-      printf '/.aihaus/.automode\n'
+      local entry
+      for entry in "${entries[@]}"; do
+        printf '%s\n' "$entry"
+      done
       printf '# AIHAUS:GITIGNORE-END\n'
     } >> "${gitignore}" 2>/dev/null || {
       echo "  !! WARNING: could not write .gitignore at ${gitignore}" >&2

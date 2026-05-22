@@ -8,7 +8,7 @@ argument-hint: "[no arguments needed]"
 
 ## Task
 
-Bootstrap or refresh `.aihaus/project.md` by analyzing the current repository, then initialize the aih-graph memory index (Phase 3, M041). Fully autonomous; zero clarifying questions. Makes NO commits, NO branch changes, NO writes outside `.aihaus/` except `.claude/settings.local.json` in Phase 0.
+Bootstrap or refresh `.aihaus/project.md` by analyzing the current repository, then initialize the aih-graph memory index (Phase 3, M041). Fully autonomous; zero clarifying questions. Makes NO commits, NO branch changes. Writes are limited to `.aihaus/`, `.claude/settings.local.json`, and reversible archive moves of known legacy harness leftovers during Phase 2.6.
 
 ---
 
@@ -18,28 +18,11 @@ Bootstrap or refresh `.aihaus/project.md` by analyzing the current repository, t
 Merge the aihaus settings template into `.claude/settings.local.json` so
 all subsequent commands and agent teams run without permission prompts.
 
-1. Read `.aihaus/templates/settings.local.json` (the template with
-   permissions, hooks, and env for autonomous operation).
-2. If `.claude/settings.local.json` does not exist, copy the template.
-3. If it exists, deep-merge: template keys win (permissions, hooks, env),
-   user-only keys are preserved. Use the same Python merge from `install.sh`:
-   ```bash
-   PY_BIN="$(command -v py || command -v python3 || command -v python)"
-   "$PY_BIN" - .claude/settings.local.json .aihaus/templates/settings.local.json <<'PY'
-   import json, sys
-   def deep_merge(b, o):
-       if isinstance(b, dict) and isinstance(o, dict):
-           out = dict(b)
-           for k, v in o.items(): out[k] = deep_merge(b.get(k), v) if k in b else v
-           return out
-       return o if o is not None else b
-   d, s = sys.argv[1], sys.argv[2]
-   with open(d) as f: dst = json.load(f)
-   with open(s) as f: src = json.load(f)
-   with open(d, "w") as f: json.dump(deep_merge(dst, src), f, indent=2); f.write("\n")
-   PY
-   ```
-4. If no Python available, copy the template directly (warn user).
+1. Read `.aihaus/templates/settings.local.json`.
+2. If `.claude/settings.local.json` is absent, copy the template.
+3. If it exists, deep-merge JSON: template keys win, user-only keys remain.
+   Normalize every `hooks.<Event>` value to an array, matching `update.*`.
+4. If no JSON-capable runtime is available, copy the template and warn.
 5. Print: "Claude Code settings configured for autonomous operation."
 
 ---
@@ -67,6 +50,16 @@ Check whether `.aihaus/project.md` already exists.
 
 ### 2.5. Migrate older project.md files
 If top-level AUTO/MANUAL markers exist but newer sub-markers (`ACTIVE-MILESTONES-START/END`, `RECENT-DECISIONS-START/END`, `RECENT-KNOWLEDGE-START/END`) are absent, inject them: within MANUAL, wrap the body of `## Active Milestones`, `## Decisions`, and `## Knowledge` headings with the corresponding start/end markers. Preserve existing user content — markers just demarcate the auto-populated region. Back up to `project.md.bak` first. Skip if already present.
+
+### 2.6. Legacy hygiene preflight
+If `.aihaus/skills/aih-init/scripts/legacy-preflight.sh` exists, run:
+```bash
+bash .aihaus/skills/aih-init/scripts/legacy-preflight.sh --fix-safe
+```
+This writes `.aihaus/audit/legacy-preflight-*.md`, archives only untracked
+known-disposable leftovers into `.aihaus/backups/legacy-cleanup/`, and never
+modifies Git worktrees, `.gsd`, `.hermes`, `.mcp.json`, or tracked files.
+Continue if the script is missing or fails, but print the warning/report path.
 
 ### 2.7. Offer .gitattributes on Windows (suppress CRLF warnings)
 If `uname -s` contains `MINGW`/`MSYS`/`CYGWIN` AND no `.gitattributes` at repo root, ask: *"Windows detected, no .gitattributes. Git prints 'LF will be replaced by CRLF' warnings during milestone execution. Create a minimal .gitattributes to suppress? [y/N]"*. If yes, write:
@@ -187,7 +180,8 @@ Initializes the aih-graph structural+semantic memory index (BM25/FTS5 default; p
 ## Guardrails
 - NO commits, NO `git add`, NO `git checkout`, NO branch creation.
 - Writes limited to `.aihaus/` (scratch file, `project.md`, `project.md.bak`, workflow defaults, and memory runtime state)
-  and `.claude/settings.local.json` (Phase 0 only).
+  and `.claude/settings.local.json` (Phase 0 only), except Phase 2.6 may move
+  untracked known-disposable legacy harness leftovers into `.aihaus/backups/`.
 - If anything fails, surface the error and leave `.aihaus/project.md`
   untouched (first-run mode) or restore from `.aihaus/project.md.bak`
   (re-run mode) before exiting.

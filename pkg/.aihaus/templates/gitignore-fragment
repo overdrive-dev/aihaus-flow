@@ -5,10 +5,27 @@
 # AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers
 /.aihaus/audit/
 /.claude/audit/
+/.aihaus/agents/
+/.aihaus/skills/
+/.aihaus/hooks/
+/.aihaus/templates/
 /.aihaus/bin/
 /.aihaus/state/
 /.aihaus/runtime/
 /.aihaus/backups/
+/.claude/agents/
+/.claude/hooks/
+/.claude/skills/
+/.claude/worktrees/
+/.claude/settings.local.json
+/.claude/backups/
+/.claude/agent-memory/
+/.claude/agent-memory-local/
+/.bg-shell/
+/.worktrees/
+/.gsd/
+/.gsd-id
+/.hermes/
 /.aihaus/.context-budgets
 /.aihaus/.effort
 /.aihaus/.calibration

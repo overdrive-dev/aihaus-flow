@@ -5,6 +5,27 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.6] - 2026-05-22 - legacy repo hygiene
+
+### Added
+
+- `/aih-init` now runs a legacy hygiene preflight that writes
+  `.aihaus/audit/legacy-preflight-*.md`, archives untracked known-disposable
+  nested hook leftovers into `.aihaus/backups/legacy-cleanup/`, and leaves Git
+  worktrees, `.gsd`, `.hermes`, `.mcp.json`, and tracked files untouched for
+  manual review.
+- Smoke-test coverage for the legacy preflight, safe archive behavior, and
+  expanded gitignore fragment entries.
+
+### Fixed
+
+- Install/update gitignore management now normalizes existing
+  `AIHAUS:GITIGNORE` blocks instead of treating old blocks as complete.
+- The managed gitignore block now ignores package-owned `.aihaus` and `.claude`
+  mirrors plus legacy harness runtime directories (`.bg-shell`, `.worktrees`,
+  `.gsd`, `.hermes`) so older repos stop showing framework files as product
+  changes.
+
 ## [0.38.5] - 2026-05-22 - goal aftermath hardening
 
 ### Fixed
