@@ -762,12 +762,22 @@ Invoke-BackfillGitignore -TargetDir $Target
 if (-not $env:AIHAUS_SKIP_GRAPH_BINARY) {
     $graphBin = Join-Path $Aihaus 'bin\aih-graph.exe'
     if (-not (Test-Path $graphBin)) {
-        $graphInstaller = Join-Path $ScriptDir 'install-aih-graph-binary.sh'
+        $graphInstallerPs1 = Join-Path $ScriptDir 'install-aih-graph-binary.ps1'
+        $graphInstallerSh = Join-Path $ScriptDir 'install-aih-graph-binary.sh'
         $bashCmd = Get-Command bash -ErrorAction SilentlyContinue
-        if ((Test-Path $graphInstaller) -and $bashCmd) {
+        if (Test-Path $graphInstallerPs1) {
             Write-Host ""
             Write-Host "  installing aih-graph memory engine..."
-            & bash $graphInstaller --bin $graphBin *> $null
+            & powershell -NoProfile -ExecutionPolicy Bypass -File $graphInstallerPs1 -Bin $graphBin *> $null
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $graphBin)) {
+                Write-Host "  ok: aih-graph at $graphBin"
+            } else {
+                Write-Host "  warn: aih-graph download failed (memory engine optional; /aih-init retries)" -ForegroundColor Yellow
+            }
+        } elseif ((Test-Path $graphInstallerSh) -and $bashCmd) {
+            Write-Host ""
+            Write-Host "  installing aih-graph memory engine..."
+            & bash $graphInstallerSh --bin $graphBin *> $null
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ok: aih-graph at $graphBin"
             } else {

@@ -5,6 +5,17 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.3] - 2026-05-22 - Windows aih-graph installer fix
+
+### Fixed
+
+- Windows `install.ps1` and `update.ps1` now use a native PowerShell
+  `install-aih-graph-binary.ps1` helper before falling back to Git Bash, avoiding
+  MSYS path conversion failures that left `aih-graph.exe.tmp.*` files without
+  promoting them to `.aihaus/bin/aih-graph.exe`.
+- The native helper removes stale `aih-graph.exe.tmp.*` files before retrying
+  the binary install.
+
 ## [0.38.2] - 2026-05-22 - local kanban planning contracts
 
 ### Added
