@@ -39,11 +39,16 @@ Every stage produces one of these outcomes:
 
 - `PASS`: the evidence is sufficient to move forward.
 - `SKIPPED`: the gate was evaluated and is not applicable; the reason is written.
-- `BLOCKED-TO-PLANNING`: a business rule, expectation, or validation method is missing or failed.
+- `BLOCKED-TO-PLANNING`: a task-specific business rule, expectation, or validation method is missing or failed.
 - `BLOCKED`: an operational dependency prevents progress.
 
 Task-specific blockers should not stop the whole run. The blocked task returns
 to planning while other ready tasks continue.
+
+Planning blockers synced to Linear or a local kanban should read like missing
+business rules, not TUI questions. Keep one blocker per task. If a batch run
+finds the same gap in several tasks, duplicate the task-specific blocker and
+link related tasks instead of writing one mixed question.
 
 ## Playwright Rule
 

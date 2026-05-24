@@ -13,7 +13,7 @@ profile data live here.
 | Role | Stage Ownership | Responsibility |
 |---|---|---|
 | workflow-intake | backlog | Keep backlog items meaningful enough to revisit later. |
-| workflow-planning-gate | planejamento | Run Socratic clarification, identify missing business rules, and block unclear tasks. |
+| workflow-planning-gate | planejamento | Record task-specific business-rule gaps, identify missing business rules, and block unclear tasks. |
 | workflow-tdd-gate | tdd | Ensure acceptance criteria become failing tests or explicit verification contracts. |
 | workflow-execution-review | review-execucao | Review implementation readiness before broad tests and deployment. |
 | workflow-test-gate | testes | Run or coordinate automated tests, identify breakage, and require a Playwright dev-review plan for UI/flow work. |
@@ -48,7 +48,8 @@ details may be included as evidence, not as the main explanation.
 Every workflow gate must produce `PASS`, `SKIPPED`, `BLOCKED-TO-PLANNING`, or
 `BLOCKED`. Skips are allowed only after evaluation and must include a reason.
 Task-specific `BLOCKED-TO-PLANNING` results should not stop a larger `/aih-goal`
-run; they create source questions and allow other ready tasks to continue.
+run; they create one source-facing business-rule gap for the affected task and
+allow other ready tasks to continue.
 
 For UI or user-flow work, `review-dev` cannot pass without Playwright/headless
 browser evidence. Backend-only skips must say why there is no frontend,

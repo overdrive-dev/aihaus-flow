@@ -5,6 +5,19 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.9] - 2026-05-24 - task-specific planning blockers
+
+### Added
+
+- Smoke-test regression coverage for `/aih-goal` business-rule gap wording and
+  per-task Linear/local-kanban blocker sync.
+
+### Fixed
+
+- `/aih-goal` planning blockers now require task-specific business-rule gaps
+  instead of TUI-style or mixed batch questions when syncing to Linear, local
+  kanban, memory, and run artifacts.
+
 ## [0.38.8] - 2026-05-24 - goal workflow memory and dev review gates
 
 ### Added
@@ -166,8 +179,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Workflow gates now have an explicit evaluation contract: `PASS`, `SKIPPED`,
   `BLOCKED-TO-PLANNING`, or `BLOCKED`.
-- The planning gate now reads source issue descriptions/comments before asking
-  Socratic questions, so answers already captured in Linear are not re-asked.
+- The planning gate now reads source issue descriptions/comments before
+  recording missing planning questions, so answers already captured in Linear
+  are not re-asked.
 
 ## [0.37.0] - 2026-05-22 - M048 native repository memory + workflow agents
 

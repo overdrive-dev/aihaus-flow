@@ -29,10 +29,26 @@ do not ask the human to repeat it.
 If information is missing:
 
 1. Create a `planning_questions` row.
-2. Write the missing question in business language.
-3. Comment it on the Linear issue when the integration can write comments.
+2. Write the missing item as a task-specific business-rule gap, not as a TUI
+   prompt or batch questionnaire.
+3. Comment it on that Linear issue when the integration can write comments.
 4. Set only that task to `blocked-to-planejamento`.
 5. Continue other ready tasks.
+
+Linear comments for planning blockers must be one issue at a time. Do not write
+a combined comment such as "Questions for tasks A, B, and C" unless the source
+issue itself is the parent coordination task and child task links are already
+recorded. Prefer this shape:
+
+```text
+Planning blocker for NORACAR-123
+
+Business rule gap: define whether archived billing records should appear in the
+doctor financial filter results.
+
+Reply with the rule or acceptance criterion; this task stays in planejamento
+until the rule is answered or explicitly waived.
+```
 
 ### Evidence sync
 
@@ -48,8 +64,8 @@ After every evaluated stage for a Linear-backed task:
    `review-execucao`, `testes`, `subida-dev`, `review-dev`, `human-review`,
    and `box-dev`.
 3. Add an append-only comment when the stage produces evidence, asks a business
-   question, skips a gate, or blocks. Keep routine comments short: stage,
-   verdict, evidence pointer, next stage or blocker.
+   business-rule gap, skips a gate, or blocks. Keep routine comments short:
+   stage, verdict, evidence pointer, next stage or blocker.
    For `review-dev`, include Playwright command/result and screenshot/trace/URL
    evidence when UI or user-flow behavior is affected. If skipped, state the
    backend-only reason.

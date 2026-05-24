@@ -41,7 +41,8 @@ connected systems such as Linear or Notion. Source flags remain overrides.
   of truth.
 - Register every task that enters `planejamento` in the local kanban.
 - Store planning questions, planning answers, and related-task links as
-  structured contracts.
+  structured contracts. Planning question rows are task-specific business-rule
+  gaps, not TUI prompts or mixed batch questionnaires.
 
 ## Gate Contract
 
@@ -49,11 +50,12 @@ Every gate returns one of:
 
 - `PASS`
 - `SKIPPED: <reason>`
-- `BLOCKED-TO-PLANNING: <business question>`
+- `BLOCKED-TO-PLANNING: <task-specific business-rule gap>`
 - `BLOCKED: <true blocker>`
 
-Task-specific planning blockers do not stop the goal run; they create source
-questions and allow other ready tasks to continue.
+Task-specific planning blockers do not stop the goal run; they create one
+source-facing business-rule gap per affected task and allow other ready tasks
+to continue.
 
 ## Local Kanban Contract
 
@@ -62,9 +64,11 @@ kanban for aihaus. When an external kanban is connected, the DB is still the
 local workflow mirror and journal.
 
 Every task entering `planejamento` must exist in the local kanban. Every missing
-business rule or expectation becomes a planning question row. Every accepted
-answer becomes a planning answer row. Agents must search the local kanban for
-related tasks before creating or importing a new planning task.
+business rule or expectation becomes a planning question row scoped to that
+task. Every accepted answer becomes a planning answer row for that task's
+question. Agents must search the local kanban for related tasks before creating
+or importing a new planning task, but related tasks are linked, not merged into
+one planning question.
 
 ## Validation
 

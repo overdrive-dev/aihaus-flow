@@ -18,7 +18,7 @@ moving tasks between stages.
 | Stage | Purpose | Exit Gate |
 |---|---|---|
 | backlog | Capture tasks that make sense to pick up later, even without detail. | Task has a clear enough title and short intent. |
-| planejamento | Clarify scope, business rules, user expectations, risks, and acceptance criteria. | Socratic questions are answered or explicitly waived; acceptance criteria are testable. |
+| planejamento | Clarify scope, business rules, user expectations, risks, and acceptance criteria. | Task-specific business-rule gaps are answered or explicitly waived; acceptance criteria are testable. |
 | tdd | Turn acceptance criteria into failing tests or equivalent verification contracts. | Tests/contracts fail for the expected reason or the repo records why strict TDD does not apply. |
 | review-execucao | Review implementation before broader test and deploy work. | Code changes satisfy the TDD contract and obvious quality issues are resolved. |
 | testes | Capture breakage, regression risk, and test improvements before environment promotion. | Relevant automated checks pass. UI/flow work records the required Playwright dev-review plan or blocks. |
@@ -33,8 +33,9 @@ moving tasks between stages.
 expected behavior, acceptance criteria, data assumptions, or user-facing outcomes
 are unclear.
 
-The planning gate must ask Socratic questions when needed. Good questions are
-about business meaning and expected behavior, not implementation trivia.
+The planning gate must record task-specific business-rule gaps when needed.
+Good blockers describe missing business meaning and expected behavior, not
+implementation trivia or TUI option prompts.
 
 If a task came from an external source such as Linear, the planning gate must
 read the issue description, comments, links, and attached context before asking
@@ -42,8 +43,13 @@ anything. Do not ask the human to repeat answers already present in the source.
 
 Every task that enters `planejamento` must be registered in the local kanban
 under `.aihaus/state/aih-goal.db`. Planning questions and answers are workflow
-contracts: record the question before asking it, record the answer before using
-it, and keep the task in `planejamento` while any planning question is open.
+contracts: record the task-specific business-rule gap before syncing it, record
+the answer before using it, and keep the task in `planejamento` while any
+planning question is open.
+
+Do not merge blockers from several tasks into one planning question, Linear
+comment, memory event, or kanban note. When a batch run discovers related gaps,
+write one blocker per task and link related tasks explicitly.
 
 ## Gate Evaluation Contract
 
@@ -53,8 +59,8 @@ run. A gate may pass, skip, or block:
 - `PASS` means the stage evidence is sufficient.
 - `SKIPPED` means the agent evaluated the gate and found it not applicable; the
   skip reason must name why.
-- `BLOCKED-TO-PLANNING` means a business expectation, rule, criterion, or
-  validation method is missing or failed.
+- `BLOCKED-TO-PLANNING` means a task-specific business expectation, rule,
+  criterion, or validation method is missing or failed.
 - `BLOCKED` means a true operational blocker prevents progress.
 
 Task-specific blockers should not stop a larger goal run. Mark that task and
@@ -82,7 +88,7 @@ If `review-dev` finds a blocker, the task returns to `planejamento` with:
 
 - the business expectation that failed,
 - the observed behavior,
-- the question or decision needed from the human,
+- the task-specific business-rule gap or decision needed from the human,
 - links to evidence when available.
 
 Avoid technical implementation language in the workflow handoff unless it is
@@ -109,7 +115,7 @@ The goal runner must:
 - search the local kanban for related tasks before creating new local tasks,
 - create readable evidence packages under `.aihaus/workflows/runs/`,
 - evaluate planning before TDD for every task,
-- persist planning questions and answers as structured contracts,
+- persist task-specific planning questions and answers as structured contracts,
 - continue ready tasks when other tasks are blocked,
 - attach evidence before moving work to `human-review`,
 - require Playwright evidence before `human-review` for UI or user-flow work,

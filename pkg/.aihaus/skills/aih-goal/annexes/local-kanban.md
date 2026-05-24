@@ -25,6 +25,32 @@ Every missing business rule, acceptance criterion, validation expectation, or
 scope decision must be recorded as a `planning_questions` row before the agent
 asks or syncs it.
 
+Although the table is named `planning_questions`, each row is a durable
+business-rule gap for one task, not a conversational TUI prompt. The `question`
+text must be written so it can live in Linear, local kanban, memory, and run
+artifacts without sounding like an option menu.
+
+Required format:
+
+- name the affected task or source id,
+- state the missing business rule, acceptance criterion, validation expectation,
+  or scope decision,
+- avoid implementation choices unless they change user-visible behavior,
+- avoid "Should I/we..." phrasing and multi-option TUI language,
+- keep one missing rule per row.
+
+Examples:
+
+- Bad: `Should I update the kanban now or at the end?`
+- Good: `Business rule gap for NORACAR-123: define which stage change must be visible in Linear after review-dev passes, including the required evidence comment.`
+- Bad: `For tasks A, B, and C, what should happen with billing filters and exports?`
+- Good: `Business rule gap for NORACAR-124: define whether archived billing records appear in the doctor financial filter results.`
+
+When a batch planning sweep finds the same missing rule in several tasks,
+create one row per task. Reuse the same `reason` or `source_ref` if helpful,
+and add `task_links` for related work, but do not create a shared batch
+question that blocks or advances multiple tasks at once.
+
 Question status values:
 
 - `open` - waiting for an answer,
@@ -33,6 +59,10 @@ Question status values:
 - `superseded` - replaced by a newer clearer question.
 
 A task cannot leave `planejamento` while it has `open` planning questions.
+
+Answering or waiving a question advances only the task referenced by that row.
+If the same answer applies to related tasks, record separate `planning_answers`
+rows for each task-specific question.
 
 ### Planning answers
 

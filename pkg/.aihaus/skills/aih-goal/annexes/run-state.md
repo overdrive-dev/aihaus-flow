@@ -76,10 +76,10 @@ Result: pass/skipped/blocked/pending
 Reason: [Playwright evidence, backend-only skip, or blocker]
 Evidence: [screenshot, trace, command, URL, or none]
 
-### Business Questions
-| ID | Question | Status | Answer Source | Answer |
+### Business Rule Gaps
+| ID | Business Rule Gap | Status | Answer Source | Answer |
 |---|---|---|---|---|
-| pq-001 | [Question sent back to source, if blocked.] | open | | |
+| pq-001 | [Task-specific missing rule synced back to source, if blocked.] | open | | |
 
 ### Related Tasks
 | Task | Relation | Reason |
@@ -124,6 +124,9 @@ DB:
   gates cannot move to `human-review`.
 - Batch gates such as full-suite test, deploy, or dev-review may reuse a shared
   evidence file, but every affected task still gets its own gate row.
+- Batch planning sweeps may reuse the same source evidence, but every missing
+  business rule gets a task-specific `planning_questions` row and source
+  comment. Do not store a mixed TUI-style question for multiple tasks.
 - For external kanban tasks, projection is incomplete until there is a matching
   outbound `sync_events` row for the same task/stage/verdict. If the external
   update failed or was deferred, show the sync debt in `TASKS.md` and the task
@@ -154,7 +157,7 @@ Every stage writes exactly one of:
 
 - `PASS`
 - `SKIPPED: <reason>`
-- `BLOCKED-TO-PLANNING: <business question>`
+- `BLOCKED-TO-PLANNING: <task-specific business-rule gap>`
 - `BLOCKED: <true blocker>`
 
 Skipping a gate is allowed only after evaluation. The reason must say why the

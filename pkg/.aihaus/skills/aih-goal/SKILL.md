@@ -33,9 +33,8 @@ Do not ask the user to choose between normal execution paths. Evaluate the gate,
 pick the safest applicable path, write the reason to the run artifacts, and
 continue.
 
-If one task lacks business information, do not stop the whole goal. Mark that
-task `blocked-to-planejamento`, write the missing question in business language,
-sync/comment it to the source when available, and continue other ready tasks.
+If one task lacks business information, mark it `blocked-to-planejamento` and sync one task-specific business-rule gap to that task's source item.
+Continue ready tasks. Do not batch unrelated task gaps into one comment, TUI prompt, memory event, or kanban note.
 
 When the source is Linear or another writable kanban, stage sync is part of the
 gate. Do not wait until final closeout to move cards or comment evidence. After
@@ -117,10 +116,11 @@ For every imported task:
 
 The planning gate must use source content first. If Linear already contains the
 answers, record them as `planning_answers` and do not ask again. If something is
-missing, create a `planning_questions` row, write the exact business question
-back to the source when possible, and keep the task in `planejamento`. A task
-must not move to `tdd` while it has open planning questions unless the question
-is explicitly waived.
+missing, create one `planning_questions` row for the affected task, sync the
+task-specific business-rule gap when possible, and keep only that task in
+`planejamento`. Follow `annexes/local-kanban.md`: `question` is a durable
+business-rule contract, not a TUI prompt, and batch gaps are duplicated per task
+then linked with `task_links`.
 
 ## Phase 4: Execute Ready Tasks
 
@@ -146,7 +146,7 @@ Every stage must produce one of:
 
 - `PASS`
 - `SKIPPED: <why not applicable>`
-- `BLOCKED-TO-PLANNING: <business question>`
+- `BLOCKED-TO-PLANNING: <task-specific business-rule gap>`
 - `BLOCKED: <true blocker>`
 
 After every evaluated stage, update `aih-goal.db`, `TASKS.md`, task files, and
@@ -176,7 +176,7 @@ knowledge, decisions, workflow memory, and agent memory; otherwise record
 The goal is complete when every task is either:
 
 - at or beyond `--until`,
-- `blocked-to-planejamento` with a business-facing question synced or recorded,
+- `blocked-to-planejamento` with a task-specific business-rule gap synced or recorded,
 - `blocked` by a true blocker with evidence.
 
 Update `RUN-MANIFEST.md`, summarize counts by final state, include the memory

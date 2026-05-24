@@ -14,7 +14,7 @@ The DB owns:
 - current aihaus workflow stage,
 - gate verdicts,
 - local locks,
-- planning questions and answers,
+- task-specific planning questions and answers,
 - related-task links,
 - source snapshots,
 - source sync cursors,
@@ -183,8 +183,12 @@ Create the new planning, relation, sync, and memory-event tables with
 - On resume, refresh source-backed tasks from the external source before using
   cached `kanban_status` or `source_updated_at` for execution decisions.
 - Register every task locally before planning.
-- Record planning questions before asking them.
+- Record task-specific business-rule gaps in `planning_questions` before
+  syncing or asking them.
 - Record planning answers before moving a task out of `planejamento`.
+- A `planning_questions` row must describe one missing rule for one `task_id`.
+  Batch runs may share evidence but must not share one planning question across
+  multiple tasks.
 - Record one `gate_events` row per task per evaluated stage, including
   `SKIPPED: reason` gates. Batch deploy/test evidence may be shared, but each
   task must have its own event pointing to that evidence.

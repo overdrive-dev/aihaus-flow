@@ -8,7 +8,7 @@ Good entries include:
 - stale source-status assumptions,
 - missing per-stage sync that caused final-only kanban updates,
 - environment or CI delays that make evidence misleading,
-- repeated ambiguity in business planning questions,
+- repeated ambiguity from TUI-style or batched business planning questions,
 - local artifact drift between Markdown projections and external kanban state.
 
 Each entry should explain the symptom, cause, and the next-run behavior that

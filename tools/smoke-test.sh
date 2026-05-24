@@ -5274,12 +5274,56 @@ check_legacy_hygiene_regressions() {
   fi
 }
 
+check_goal_business_rule_gap_contract() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aih-goal business-rule gap contract"
+  local issues=()
+  local goal_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/SKILL.md"
+  local local_kanban="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/local-kanban.md"
+  local linear_intake="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/linear-intake.md"
+  local run_state="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/run-state.md"
+  local planning_agent="${PACKAGE_ROOT}/.aihaus/agents/workflow-planning-gate.md"
+  local workflow_default="${PACKAGE_ROOT}/.aihaus/workflows/default.md"
+
+  if ! grep -Fq 'Do not batch unrelated task gaps' "$goal_skill"; then
+    issues+=("aih-goal skill missing no-batch task-gap rule")
+  fi
+  if ! grep -Fq 'business-rule gap for one task' "$local_kanban"; then
+    issues+=("local-kanban annex missing one-task business-rule gap rule")
+  fi
+  if ! grep -Fq 'one row per task' "$local_kanban"; then
+    issues+=("local-kanban annex missing per-task row rule")
+  fi
+  if ! grep -Fq 'one issue at a time' "$linear_intake"; then
+    issues+=("linear intake missing one-issue-at-a-time sync rule")
+  fi
+  if ! grep -Fq 'Business Rule Gaps' "$run_state"; then
+    issues+=("run-state artifact still lacks Business Rule Gaps section")
+  fi
+  if ! grep -Fq 'not TUI prompts' "$planning_agent"; then
+    issues+=("planning gate missing not-TUI prompt rule")
+  fi
+  if ! grep -Fq 'Do not merge blockers from several tasks' "$workflow_default"; then
+    issues+=("workflow default missing no-merged-blockers rule")
+  fi
+  if grep -R "Socratic" "$goal_skill" "$local_kanban" "$linear_intake" "$run_state" "$planning_agent" "$workflow_default" >/dev/null 2>&1; then
+    issues+=("aih-goal planning contract still contains Socratic wording")
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
 check_m048_memory_integration_contract
 check_goal_aftermath_regressions
 check_legacy_hygiene_regressions
+check_goal_business_rule_gap_contract
 check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
 

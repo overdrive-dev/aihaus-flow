@@ -36,6 +36,12 @@ Do not over-plan. Backlog items may be lightweight, but they must preserve:
 - obvious constraints,
 - why the item matters.
 
+If a raw source item contains several unrelated requests, do not mix their
+business questions into one artifact. Preserve one backlog item per source task
+when the external kanban already has separate issues. If a single source issue
+contains a true batch, identify child-sized task candidates and keep missing
+details scoped to the candidate they affect.
+
 ## Output
 
 ```markdown
