@@ -15,6 +15,13 @@ Use it for:
 - conventions for planning question/answer contracts and related-task links in
   the local kanban.
 
+Starter files:
+
+- `environment.md` - environment, CI/CD, deployment, and source-system defaults.
+- `user-preferences.md` - durable user preferences for workflow movement.
+- `rules.md` - repository-specific workflow rules that agents must follow.
+- `gotchas.md` - recurring workflow mistakes and how future runs avoid them.
+
 Do not use it for:
 
 - transient run logs,

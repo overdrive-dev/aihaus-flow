@@ -853,7 +853,12 @@ foreach ($dir in @(
     (Join-Path $TargetAihaus 'backups'),
     (Join-Path $TargetAihaus 'workflows'),
     (Join-Path $TargetAihaus 'workflows\runs'),
-    (Join-Path $TargetAihaus 'memory\workflows')
+    (Join-Path $TargetAihaus 'memory\workflows'),
+    (Join-Path $TargetAihaus 'memory\agents'),
+    (Join-Path $TargetAihaus 'memory\reviews'),
+    (Join-Path $TargetAihaus 'memory\global'),
+    (Join-Path $TargetAihaus 'memory\backend'),
+    (Join-Path $TargetAihaus 'memory\frontend')
 )) {
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
 }
@@ -869,10 +874,28 @@ if (-not (Test-Path $workflowAgentsDst) -and (Test-Path $workflowAgentsSrc)) {
     Copy-Item -LiteralPath $workflowAgentsSrc -Destination $workflowAgentsDst
     Write-Host "  workflow: created .aihaus\workflows\agents.md"
 }
-$workflowMemorySrc = Join-Path $PkgAihaus 'memory\workflows\README.md'
-$workflowMemoryDst = Join-Path $TargetAihaus 'memory\workflows\README.md'
-if (-not (Test-Path $workflowMemoryDst) -and (Test-Path $workflowMemorySrc)) {
-    Copy-Item -LiteralPath $workflowMemorySrc -Destination $workflowMemoryDst
+$memorySeedFiles = @(
+    'memory\MEMORY.md',
+    'memory\workflows\README.md',
+    'memory\workflows\environment.md',
+    'memory\workflows\user-preferences.md',
+    'memory\workflows\rules.md',
+    'memory\workflows\gotchas.md',
+    'memory\agents\README.md',
+    'memory\reviews\README.md',
+    'memory\reviews\common-findings.md',
+    'memory\global\README.md',
+    'memory\global\gotchas.md',
+    'memory\backend\README.md',
+    'memory\frontend\README.md'
+)
+foreach ($rel in $memorySeedFiles) {
+    $src = Join-Path $PkgAihaus $rel
+    $dst = Join-Path $TargetAihaus $rel
+    if (-not (Test-Path -LiteralPath $dst) -and (Test-Path -LiteralPath $src)) {
+        New-Item -ItemType Directory -Path (Split-Path -Parent $dst) -Force | Out-Null
+        Copy-Item -LiteralPath $src -Destination $dst
+    }
 }
 
 # Step 5+6: create .claude/{skills,agents,hooks} as junctions or copies
@@ -1250,6 +1273,89 @@ if (-not $Update) {
 
 # Step 12: idempotent .gitignore injection (soft-fail per LD-3)
 # Manual fallback: pkg\.aihaus\templates\gitignore-fragment
+function New-AihUtf8NoBomEncoding {
+    return New-Object System.Text.UTF8Encoding -ArgumentList $false
+}
+
+function Read-AihUtf8Text {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return ''
+    }
+
+    return [System.IO.File]::ReadAllText($Path, (New-AihUtf8NoBomEncoding))
+}
+
+function Get-AihNewline {
+    param([string]$Text)
+
+    if ($Text.Contains("`r`n")) { return "`r`n" }
+    if ($Text.Contains("`n")) { return "`n" }
+    if ($Text.Contains("`r")) { return "`r" }
+    return [Environment]::NewLine
+}
+
+function ConvertTo-AihLines {
+    param([string]$Text)
+
+    if ($Text.Length -eq 0) {
+        return @()
+    }
+
+    $normalized = $Text -replace "`r`n", "`n" -replace "`r", "`n"
+    if ($normalized.EndsWith("`n")) {
+        $normalized = $normalized.Substring(0, $normalized.Length - 1)
+    }
+    if ($normalized.Length -eq 0) {
+        return @()
+    }
+
+    return @($normalized -split "`n")
+}
+
+function Test-AihTrailingNewline {
+    param([string]$Text)
+
+    return ($Text.EndsWith("`n") -or $Text.EndsWith("`r"))
+}
+
+function Write-AihUtf8Lines {
+    param(
+        [string]$Path,
+        [string[]]$Lines,
+        [string]$Newline,
+        [bool]$TrailingNewline
+    )
+
+    $text = [string]::Join($Newline, $Lines)
+    if ($TrailingNewline -and $text.Length -gt 0) {
+        $text += $Newline
+    }
+
+    [System.IO.File]::WriteAllText($Path, $text, (New-AihUtf8NoBomEncoding))
+}
+
+function Add-AihUtf8Lines {
+    param(
+        [string]$Path,
+        [string[]]$Lines
+    )
+
+    $text = Read-AihUtf8Text -Path $Path
+    $newline = Get-AihNewline -Text $text
+    if ($text.Length -gt 0 -and -not (Test-AihTrailingNewline -Text $text)) {
+        $text += $newline
+    }
+
+    $append = [string]::Join($newline, $Lines)
+    if ($append.Length -gt 0) {
+        $text += $append + $newline
+    }
+
+    [System.IO.File]::WriteAllText($Path, $text, (New-AihUtf8NoBomEncoding))
+}
+
 function Invoke-InjectGitignore {
     param([string]$TargetDir)
 
@@ -1257,6 +1363,8 @@ function Invoke-InjectGitignore {
     $entries = @(
         '/.aihaus/audit/',
         '/.claude/audit/',
+        '*/.aihaus/',
+        '*/.claude/',
         '/.aihaus/agents/',
         '/.aihaus/skills/',
         '/.aihaus/hooks/',
@@ -1290,10 +1398,11 @@ function Invoke-InjectGitignore {
     )
 
     # Primary idempotency check -- guard-comment anchor already present?
-    if (Test-Path $gitignore) {
+    if (Test-Path -LiteralPath $gitignore) {
         $guardHit = Select-String -LiteralPath $gitignore -Pattern '^# AIHAUS:GITIGNORE-START' -Quiet
         if ($guardHit) {
-            $content = @(Get-Content -LiteralPath $gitignore)
+            $rawContent = Read-AihUtf8Text -Path $gitignore
+            $content = @(ConvertTo-AihLines -Text $rawContent)
             $missing = @($entries | Where-Object { $content -notcontains $_ })
             if ($missing.Count -eq 0) {
                 Write-Host "  .gitignore: aihaus block already present (no-op)"
@@ -1301,11 +1410,15 @@ function Invoke-InjectGitignore {
             }
             $endIndex = [Array]::IndexOf($content, '# AIHAUS:GITIGNORE-END')
             if ($endIndex -lt 0) {
-                Add-Content -LiteralPath $gitignore -Value $missing -Encoding UTF8
+                Add-AihUtf8Lines -Path $gitignore -Lines $missing
             } else {
                 $before = if ($endIndex -gt 0) { $content[0..($endIndex - 1)] } else { @() }
                 $after = $content[$endIndex..($content.Count - 1)]
-                Set-Content -LiteralPath $gitignore -Value @($before + $missing + $after) -Encoding UTF8
+                Write-AihUtf8Lines `
+                    -Path $gitignore `
+                    -Lines @($before + $missing + $after) `
+                    -Newline (Get-AihNewline -Text $rawContent) `
+                    -TrailingNewline (Test-AihTrailingNewline -Text $rawContent)
             }
             Write-Host "  .gitignore: aihaus block updated"
             return
@@ -1325,8 +1438,7 @@ function Invoke-InjectGitignore {
     ) + $entries + @('# AIHAUS:GITIGNORE-END')
 
     try {
-        # Add-Content appends; creates file if absent. -Encoding UTF8 = UTF-8 with BOM (K-004).
-        Add-Content -LiteralPath $gitignore -Value $block -Encoding UTF8
+        Add-AihUtf8Lines -Path $gitignore -Lines $block
         Write-Host "  .gitignore: aihaus block injected"
     } catch {
         Write-Host "  !! WARNING: could not write .gitignore at $gitignore" -ForegroundColor Yellow

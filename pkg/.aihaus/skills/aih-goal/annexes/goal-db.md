@@ -136,6 +136,17 @@ CREATE TABLE IF NOT EXISTS sync_events (
   synced_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS memory_events (
+  id TEXT PRIMARY KEY,
+  task_id TEXT,
+  event_kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  target_path TEXT,
+  payload TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  applied_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_goal_stage ON tasks(goal_id, stage);
 CREATE INDEX IF NOT EXISTS idx_tasks_source ON tasks(source_kind, source_id);
 CREATE INDEX IF NOT EXISTS idx_questions_task_status
@@ -144,6 +155,8 @@ CREATE INDEX IF NOT EXISTS idx_answers_question
   ON planning_answers(question_id);
 CREATE INDEX IF NOT EXISTS idx_task_links_from
   ON task_links(from_task_id, relation);
+CREATE INDEX IF NOT EXISTS idx_memory_events_task
+  ON memory_events(task_id, event_kind);
 ```
 
 ### Schema evolution
@@ -161,11 +174,14 @@ ALTER TABLE tasks ADD COLUMN created_at TEXT;
 ALTER TABLE tasks ADD COLUMN updated_at TEXT;
 ```
 
-Create the new planning and relation tables with `CREATE TABLE IF NOT EXISTS`.
+Create the new planning, relation, sync, and memory-event tables with
+`CREATE TABLE IF NOT EXISTS`.
 
 ### Sync safety
 
 - Save a raw source snapshot before summarizing or changing local stage.
+- On resume, refresh source-backed tasks from the external source before using
+  cached `kanban_status` or `source_updated_at` for execution decisions.
 - Register every task locally before planning.
 - Record planning questions before asking them.
 - Record planning answers before moving a task out of `planejamento`.
@@ -174,11 +190,32 @@ Create the new planning and relation tables with `CREATE TABLE IF NOT EXISTS`.
   task must have its own event pointing to that evidence.
 - After every stage transition, project DB state back into `TASKS.md` and
   `tasks/<task-id>.md`; the task file `Stage:` line must match `tasks.stage`.
+- For external kanban tasks, create one outbound `sync_events` row per evaluated
+  stage before writing status/comments to the source. The payload should include
+  task id, stage, verdict, evidence pointer, requested source status, and comment
+  body if any.
+- Do not advance a task to the next stage until the stage's outbound sync event
+  is either marked synced or explicitly recorded as pending sync debt.
 - Search and link related local tasks before creating duplicates.
 - Compare `source_updated_at` before writing back.
 - If the source changed after import, create a `sync_conflict` event instead of
   overwriting.
+- For successful source refreshes, create a `sync_events` row with
+  `direction='pull'`; for unavailable sources, record pending sync debt in DB
+  and readable artifacts.
 - Write evidence as comments/append-only updates whenever possible.
 - Include a stable `sync_event.id` in outbound comments to avoid duplicates.
 - If a source task disappears, mark local task `source_archived`; do not delete
   history.
+
+### Memory safety
+
+- Record a `memory_events` row for every durable-memory candidate, promotion,
+  skipped `no-signal` review, and deferred memory write.
+- `event_kind` is one of `candidate`, `promoted`, `no-signal`, `deferred`, or
+  `agent-memory`.
+- `target_path` must be under `.aihaus/decisions.md`, `.aihaus/knowledge.md`,
+  `.aihaus/project.md`, or `.aihaus/memory/**`.
+- Never treat `RUN-MANIFEST.md` alone as durable memory. It is evidence for the
+  current run; reusable facts must be promoted to a durable target or explicitly
+  recorded as `no-signal`/`deferred`.

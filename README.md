@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.38.4-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.38.8-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -43,7 +43,7 @@ Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and s
 
 <br>
 
-[The Problem](#the-problem) · [Install](#install) · [How It Works](#how-it-works) · [The Design](#the-design) · [Commands](#commands)
+[The Problem](#the-problem) · [Install](#install) · [Workflow Stages](docs/workflow-stages.md) · [How It Works](#how-it-works) · [The Design](#the-design) · [Commands](#commands)
 
 </div>
 

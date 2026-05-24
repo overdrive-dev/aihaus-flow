@@ -86,6 +86,17 @@ CREATE TABLE IF NOT EXISTS sync_events (
   synced_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS memory_events (
+  id TEXT PRIMARY KEY,
+  task_id TEXT,
+  event_kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  target_path TEXT,
+  payload TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  applied_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_goal_stage ON tasks(goal_id, stage);
 CREATE INDEX IF NOT EXISTS idx_tasks_source ON tasks(source_kind, source_id);
 CREATE INDEX IF NOT EXISTS idx_questions_task_status
@@ -94,3 +105,5 @@ CREATE INDEX IF NOT EXISTS idx_answers_question
   ON planning_answers(question_id);
 CREATE INDEX IF NOT EXISTS idx_task_links_from
   ON task_links(from_task_id, relation);
+CREATE INDEX IF NOT EXISTS idx_memory_events_task
+  ON memory_events(task_id, event_kind);

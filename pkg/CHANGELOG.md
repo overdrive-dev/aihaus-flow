@@ -5,6 +5,27 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.8] - 2026-05-24 - goal workflow memory and dev review gates
+
+### Added
+
+- Repository workflow-stage documentation for new users downloading aihaus-flow.
+- `/aih-goal` durable memory promotion contract, including workflow memory,
+  per-agent memory, `memory_events`, and run-manifest memory outcomes.
+- Workflow memory starter files for environment, user preferences, rules, and
+  gotchas; install/update seed missing files without overwriting local memory.
+- External-kanban reconciliation guidance so resumed goal runs refresh source
+  status before trusting cached DB state.
+
+### Fixed
+
+- `/aih-goal` now treats external stage sync as a per-stage gate instead of a
+  final-only closeout action.
+- `review-dev` now requires Playwright/headless-browser evidence for UI and
+  user-flow work, or an explicit backend-only skip/blocker.
+- Install/update gitignore normalization now ignores nested `.aihaus` and
+  `.claude` folders under sub-repositories.
+
 ## [0.38.7] - 2026-05-22 - legacy cleanup diagnostics
 
 ### Fixed

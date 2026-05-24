@@ -37,6 +37,12 @@ Run or coordinate relevant automated checks from project conventions. Capture
 failures as blockers, and identify missing test coverage that should be added
 before dev-environment promotion.
 
+For UI, navigation, form, interaction, console-observable, or user-flow work,
+also record a Playwright dev-review plan before leaving `testes`. The plan must
+name the dev URL or route to test, the user flow, required auth/data setup, and
+the expected evidence shape. If the task cannot be browser-validated, mark why
+it is backend-only or block with the missing validation method.
+
 ## Output
 
 ```markdown
@@ -51,6 +57,14 @@ before dev-environment promotion.
 ## Coverage Improvements
 - [test improvement or none]
 
+## Playwright Dev-Review Plan
+- Required: yes/no
+- Reason:
+- Dev route or URL:
+- Flow to validate:
+- Required auth/data:
+- Expected evidence:
+
 ## Blockers
 - [business-facing impact first, technical evidence second]
 ```
@@ -59,6 +73,10 @@ before dev-environment promotion.
 
 Skip only when there is no meaningful automated or scripted check for the task.
 The skip reason must name the evaluated alternatives.
+
+Do not skip the Playwright dev-review plan for UI or flow work. If the dev URL,
+auth, or data setup is unknown, return `BLOCKED-TO-PLANNING` with the missing
+business-facing validation detail.
 
 ## Memory Writes
 

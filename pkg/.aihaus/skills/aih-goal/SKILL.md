@@ -16,18 +16,13 @@ reached or every remaining task has a true blocker.
 $ARGUMENTS
 ## Inputs
 
-- `--source <selector>` - preferred kanban/source selector. Optional; default is
-  discovery from repo workflow memory, configured connectors, existing goal DB
-  state, and source links in project/workflow files.
-- `--from-linear <selector>` - override discovery and import candidate tasks
-  from Linear.
-- `--from-file <path>` - override discovery and import tasks from a local
-  markdown/json/text file.
+- `--source <selector>` - preferred kanban/source selector.
+- `--from-linear <selector>` - import candidate tasks from Linear.
+- `--from-file <path>` - import tasks from a local markdown/json/text file.
 - `--until <stage>` - target workflow stage. Default: `human-review`.
 - `--max-active <n>` - maximum implementation tasks in flight. Default: 1.
 
-Allowed stages: `planejamento`, `tdd`, `review-execucao`, `testes`,
-`subida-dev`, `review-dev`, `human-review`, `box-dev`.
+Allowed stages: `planejamento`, `tdd`, `review-execucao`, `testes`, `subida-dev`, `review-dev`, `human-review`, `box-dev`.
 
 ## Autonomy Contract
 
@@ -42,6 +37,11 @@ If one task lacks business information, do not stop the whole goal. Mark that
 task `blocked-to-planejamento`, write the missing question in business language,
 sync/comment it to the source when available, and continue other ready tasks.
 
+When the source is Linear or another writable kanban, stage sync is part of the
+gate. Do not wait until final closeout to move cards or comment evidence. After
+each evaluated stage, update the local state and immediately sync the matching
+external card stage/comment before starting the next stage for that task.
+
 Stop the whole goal only on true blockers:
 
 - no external source, local goal DB, or local task source can be discovered,
@@ -51,13 +51,8 @@ Stop the whole goal only on true blockers:
 
 ### Mandatory Reads
 
-Before acting, read:
-
-1. `.aihaus/workflows/default.md`
-2. `.aihaus/workflows/agents.md`
-3. `.aihaus/project.md`
-4. `.aihaus/memory/workflows/README.md`
-5. relevant `.aihaus/memory/workflows/*.md` files when present
+Before acting, read `.aihaus/workflows/default.md`, `.aihaus/workflows/agents.md`,
+`.aihaus/project.md`, `.aihaus/memory/workflows/README.md`, and workflow memory.
 
 Use auto-injected native repository memory first. If it is missing or
 insufficient and `aihaus memory` is available, run:
@@ -85,6 +80,8 @@ Discovery order:
 See `annexes/source-discovery.md`. If an external system is unavailable but
 `aih-goal.db` already has imported tasks, continue locally and record sync debt.
 Stop before code changes only when no recoverable task source exists.
+When resuming source-backed tasks from `aih-goal.db`, reconcile their external
+status/comments first; do not treat cached DB status as live kanban state.
 
 ## Phase 2: Create Goal Run
 
@@ -97,13 +94,8 @@ exists, it is the local kanban source for aihaus workflow state. Use
 `annexes/goal-db.md` for the schema contract, `annexes/local-kanban.md` for
 local task and planning contracts, and `annexes/run-state.md` for readable file
 shapes. Use the packaged DB init script; avoid state-local schema/import scripts.
-At minimum write:
-
-- `GOAL.md`
-- `TASKS.md`
-- `RUN-MANIFEST.md`
-- `tasks/<task-id>.md`
-- `evidence/`
+At minimum write `GOAL.md`, `TASKS.md`, `RUN-MANIFEST.md`,
+`tasks/<task-id>.md`, and `evidence/`.
 
 TaskCreate only the current coordination rows: import source, evaluate planning,
 execute ready tasks, package human review. Keep the full task list in `TASKS.md`
@@ -143,6 +135,9 @@ For each `READY-FOR-TDD` task, run stages in order until `--until`:
 6. `workflow-dev-reviewer`
 7. `workflow-human-review`
 
+For UI or user-flow work, `workflow-dev-reviewer` must run Playwright or record
+an explicit backend-only skip. Do not park tasks in `review-dev` with browser validation pending.
+
 Implementation tasks default to sequential execution. Use `--max-active` only
 when owned files and deploy/test environments are independent. Never run two
 tasks that may edit the same files in parallel.
@@ -154,25 +149,29 @@ Every stage must produce one of:
 - `BLOCKED-TO-PLANNING: <business question>`
 - `BLOCKED: <true blocker>`
 
-After every evaluated stage, update `aih-goal.db`, `TASKS.md`, and task files
-together; each task gets a gate event and `Stage:` must match the DB.
+After every evaluated stage, update `aih-goal.db`, `TASKS.md`, task files, and
+the external kanban checkpoint together. Record `gate_events` and `sync_events`;
+do not begin the next stage until external sync is done or recorded as sync debt.
 
-## Phase 5: Sync Evidence
+## Phase 5: Final Evidence Package
 
-For every task that reaches `human-review`, write:
+For every task that reaches `human-review`, write a final rollup: business
+summary, branch/commit/PR, test/build results, environment URL, browser
+evidence when used, and why any gate was skipped.
 
-- business summary,
-- commits/branch/PR if available,
-- test/build commands and results,
-- dev URL/environment,
-- Playwright screenshots/traces when browser validation applied,
-- why any gate was skipped.
+This final rollup supplements the per-stage sync checkpoints; it does not
+replace them. Sync the rollup back to the task source as a comment or
+equivalent append-only update. If sync is unavailable, write it under the task
+artifact, add an unsynced event to `aih-goal.db`, and continue local execution.
 
-Sync evidence back to the task source as comments or equivalent append-only
-updates. If sync is unavailable, write it under the task artifact, add an
-unsynced event to `aih-goal.db`, and continue local execution.
+## Phase 6: Promote Durable Memory
 
-## Phase 6: Finish
+Before declaring the goal complete or paused, run the memory review in
+`annexes/memory-promotion.md`. Promote reusable signal to project memory,
+knowledge, decisions, workflow memory, and agent memory; otherwise record
+`no-signal`. Always record the outcome in `RUN-MANIFEST.md` and `memory_events`.
+
+## Phase 7: Finish
 
 The goal is complete when every task is either:
 
@@ -180,17 +179,18 @@ The goal is complete when every task is either:
 - `blocked-to-planejamento` with a business-facing question synced or recorded,
 - `blocked` by a true blocker with evidence.
 
-Update `RUN-MANIFEST.md`, summarize counts by final state, and point to
-`.aihaus/workflows/runs/[slug]/`.
+Update `RUN-MANIFEST.md`, summarize counts by final state, include the memory
+promotion outcome, and point to `.aihaus/workflows/runs/[slug]/`.
 
 ## Annexes
 
 - `annexes/run-state.md` - run artifact format and task status vocabulary.
 - `annexes/source-discovery.md` - default source discovery and connector order.
 - `annexes/goal-db.md` - SQLite cache/journal schema and sync safety rules.
-- `annexes/local-kanban.md` - local task, related-task, and planning Q/A
-  contract.
+- `annexes/local-kanban.md` - local task, related-task, and planning Q/A contract.
 - `annexes/linear-intake.md` - Linear import/sync behavior.
+- `annexes/memory-promotion.md` - durable memory promotion and per-agent memory
+  application.
 
 ## Autonomy
 

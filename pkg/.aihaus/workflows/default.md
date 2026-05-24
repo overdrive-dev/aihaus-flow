@@ -21,9 +21,9 @@ moving tasks between stages.
 | planejamento | Clarify scope, business rules, user expectations, risks, and acceptance criteria. | Socratic questions are answered or explicitly waived; acceptance criteria are testable. |
 | tdd | Turn acceptance criteria into failing tests or equivalent verification contracts. | Tests/contracts fail for the expected reason or the repo records why strict TDD does not apply. |
 | review-execucao | Review implementation before broader test and deploy work. | Code changes satisfy the TDD contract and obvious quality issues are resolved. |
-| testes | Capture breakage, regression risk, and test improvements before environment promotion. | Relevant automated checks pass or failures are documented as blockers. |
+| testes | Capture breakage, regression risk, and test improvements before environment promotion. | Relevant automated checks pass. UI/flow work records the required Playwright dev-review plan or blocks. |
 | subida-dev | Promote to the development environment for stronger validation. | Dev environment has the task published or the deploy blocker is documented. |
-| review-dev | Validate the published dev result, usually with Playwright/headless browser when there is UI or user-flow impact. | Visual/flow evidence passes, or backend-only work is explicitly marked not browser-validatable. |
+| review-dev | Validate the published dev result with Playwright/headless browser whenever there is UI or user-flow impact. | Playwright evidence passes, or backend-only work is explicitly marked not browser-validatable. |
 | human-review | Human validates after dev review has passed and the work is already available in dev. | Human accepts or sends back with business-language feedback. |
 | box-dev | Holding box for accepted dev work before the next downstream process. | Project-specific. |
 
@@ -69,6 +69,15 @@ Backend-only tasks may skip browser validation only when there is no direct
 front-end, console, or environment-visible behavior to check. The reviewer must
 say why the browser gate was not applicable.
 
+`review-dev` is not a parking state. A task that needs browser validation must
+run Playwright immediately after the dev environment is available. It must not
+move to `human-review`, and should not remain sitting in `review-dev`, without
+one of:
+
+- Playwright command/result plus screenshot, trace, or URL evidence,
+- explicit backend-only skip reason,
+- blocker stating why the browser gate cannot run.
+
 If `review-dev` finds a blocker, the task returns to `planejamento` with:
 
 - the business expectation that failed,
@@ -103,6 +112,7 @@ The goal runner must:
 - persist planning questions and answers as structured contracts,
 - continue ready tasks when other tasks are blocked,
 - attach evidence before moving work to `human-review`,
+- require Playwright evidence before `human-review` for UI or user-flow work,
 - sync questions and evidence back to the external source when available.
 
 The external kanban remains the source of truth for user-owned task fields.

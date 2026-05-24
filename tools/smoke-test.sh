@@ -1593,15 +1593,15 @@ check_migration_fixtures() {
   fi
 }
 
-# ---- Check 31: memory README seeds exist and are non-empty (M013/S02) -------
-# Asserts that the four memory-bucket README files introduced in M013 are
-# present in the package source and have content (not zero-byte placeholders).
-# These files are seeded to user installs via `update.sh --migrate-memory`.
+# ---- Check 31: memory seeds exist and are non-empty (M013/S02 + goal memory) -
+# Asserts that memory-bucket README files and workflow starter files are present
+# in the package source and have content (not zero-byte placeholders).
 check_memory_readme_seeds() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: memory README seeds exist and non-empty (M013/S02)"
+  local label="Check ${CHECK_NUMBER}: memory seeds exist and non-empty"
   local memory_root="${PACKAGE_ROOT}/.aihaus/memory"
-  local subdirs=(global backend frontend reviews)
+  local subdirs=(global backend frontend reviews agents workflows)
+  local workflow_files=(README.md environment.md user-preferences.md rules.md gotchas.md)
   local problems=()
 
   for subdir in "${subdirs[@]}"; do
@@ -1610,6 +1610,14 @@ check_memory_readme_seeds() {
       problems+=("missing: memory/${subdir}/README.md")
     elif [[ ! -s "$f" ]]; then
       problems+=("empty: memory/${subdir}/README.md")
+    fi
+  done
+  for name in "${workflow_files[@]}"; do
+    local f="${memory_root}/workflows/${name}"
+    if [[ ! -f "$f" ]]; then
+      problems+=("missing: memory/workflows/${name}")
+    elif [[ ! -s "$f" ]]; then
+      problems+=("empty: memory/workflows/${name}")
     fi
   done
 
@@ -5088,6 +5096,10 @@ check_goal_aftermath_regressions() {
   local auto_close="${hooks_root}/manifest-auto-close.sh"
   local goal_schema="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/scripts/schema.sql"
   local goal_init="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/scripts/init-goal-db.sh"
+  local goal_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/SKILL.md"
+  local workflow_default="${PACKAGE_ROOT}/.aihaus/workflows/default.md"
+  local dev_reviewer="${PACKAGE_ROOT}/.aihaus/agents/workflow-dev-reviewer.md"
+  local human_review="${PACKAGE_ROOT}/.aihaus/agents/workflow-human-review.md"
 
   if [[ ! -f "$helper" ]] || ! bash -n "$helper" >/dev/null 2>&1; then
     issues+=("path-helpers.sh missing or not parseable")
@@ -5095,8 +5107,25 @@ check_goal_aftermath_regressions() {
   if [[ ! -f "$goal_schema" ]]; then
     issues+=("aih-goal packaged schema.sql missing")
   fi
+  for needle in 'CREATE TABLE IF NOT EXISTS memory_events' 'idx_memory_events_task'; do
+    if ! grep -Fq "$needle" "$goal_schema"; then
+      issues+=("aih-goal schema missing ${needle}")
+    fi
+  done
   if [[ ! -f "$goal_init" ]] || ! bash -n "$goal_init" >/dev/null 2>&1; then
     issues+=("aih-goal init-goal-db.sh missing or not parseable")
+  fi
+  if ! grep -Fq 'Do not park tasks in `review-dev` with browser validation pending.' "$goal_skill"; then
+    issues+=("aih-goal missing no-park review-dev Playwright rule")
+  fi
+  if ! grep -Fq 'Playwright evidence passes' "$workflow_default"; then
+    issues+=("workflow default missing Playwright evidence exit gate")
+  fi
+  if ! grep -Fq 'PASS requires a Playwright command result' "$dev_reviewer"; then
+    issues+=("workflow-dev-reviewer missing mandatory Playwright PASS rule")
+  fi
+  if ! grep -Fq 'Playwright was required but not run' "$human_review"; then
+    issues+=("workflow-human-review missing missing-Playwright blocker rule")
   fi
 
   local tmp_root
@@ -5173,7 +5202,7 @@ check_legacy_hygiene_regressions() {
   if ! grep -Fq 'copy mode overwrites package-managed' "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
     issues+=("update.ps1 missing copy-mode overwrite warning")
   fi
-  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
+  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '*/.aihaus/' '*/.claude/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
     if ! grep -Fxq "$needle" "$fragment"; then
       issues+=("gitignore fragment missing ${needle}")
     fi

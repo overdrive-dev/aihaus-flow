@@ -76,9 +76,11 @@ Guidance:
 
 ## Writer Discipline
 
-The orchestrator (completion-protocol Step 4.7b) is the **sole writer** of
-`.aihaus/memory/agents/**`. Agents emit the block as part of their return
-payload only; they never write files directly.
+The orchestrator (completion-protocol Step 4.7b, or `/aih-goal` memory
+promotion) is the **sole writer** of `.aihaus/memory/agents/**`. Agents emit the
+block as part of their return payload only; they never write files directly.
 
 See `pkg/.aihaus/skills/aih-milestone/completion-protocol.md` Step 4.7b for
-the application algorithm.
+the milestone application algorithm and
+`pkg/.aihaus/skills/aih-goal/annexes/memory-promotion.md` for the goal-run
+application algorithm.

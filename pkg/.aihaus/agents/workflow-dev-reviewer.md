@@ -47,6 +47,13 @@ Use Playwright/headless browser validation whenever the task affects:
 Skip browser validation only for backend-only work with no direct frontend,
 console, or environment-visible behavior. State why it was not applicable.
 
+Do not leave the task parked in `review-dev` with browser validation pending.
+For UI or user-flow work, PASS requires a Playwright command result plus at
+least one evidence pointer such as screenshot, trace, video, console log, or
+tested dev URL. If the browser gate cannot run because the dev URL, auth, data,
+or environment is missing, return `BLOCKED-TO-PLANNING` or `BLOCKED`; do not
+mark the task ready for human review.
+
 ## Verdicts
 
 - `PASS`: dev behavior is validated and the task may go to human review.
@@ -63,6 +70,9 @@ console, or environment-visible behavior. State why it was not applicable.
 ## Browser Gate
 Used: yes/no
 Reason: [why Playwright was used or skipped]
+Command:
+Result:
+Evidence:
 
 ## Business Expectation
 [Expected user/business behavior.]

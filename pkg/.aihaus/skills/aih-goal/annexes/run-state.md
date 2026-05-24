@@ -70,6 +70,12 @@ Related: [linked task ids or none]
 | Stage | Verdict | Reason | Evidence |
 |---|---|---|---|
 
+### Browser Gate
+Required: yes/no
+Result: pass/skipped/blocked/pending
+Reason: [Playwright evidence, backend-only skip, or blocker]
+Evidence: [screenshot, trace, command, URL, or none]
+
 ### Business Questions
 | ID | Question | Status | Answer Source | Answer |
 |---|---|---|---|---|
@@ -97,6 +103,10 @@ last_updated: [ISO timestamp]
 
 ### Progress Log
 - [ISO] Imported 22 tasks from Linear.
+
+### Memory Promotion
+- status: pending
+- targets: none yet
 ```
 
 ### Projection rules
@@ -109,8 +119,18 @@ DB:
 - `tasks/<id>.md` `Stage:` matches `tasks.stage`.
 - `tasks/<id>.md` `Gate Log` has one row for every evaluated stage, including
   `SKIPPED: <reason>`.
+- UI or user-flow tasks must have `Browser Gate` result `pass` before leaving
+  `review-dev`; backend-only skips must include a reason. `pending` browser
+  gates cannot move to `human-review`.
 - Batch gates such as full-suite test, deploy, or dev-review may reuse a shared
   evidence file, but every affected task still gets its own gate row.
+- For external kanban tasks, projection is incomplete until there is a matching
+  outbound `sync_events` row for the same task/stage/verdict. If the external
+  update failed or was deferred, show the sync debt in `TASKS.md` and the task
+  file before continuing to the next stage.
+- Before finish or long pause, `RUN-MANIFEST.md` has a `### Memory Promotion`
+  section with `promoted`, `no-signal`, or `deferred`; matching
+  `memory_events` rows exist for promoted or deferred items.
 
 ### Status vocabulary
 

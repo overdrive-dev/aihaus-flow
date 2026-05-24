@@ -16,10 +16,10 @@ profile data live here.
 | workflow-planning-gate | planejamento | Run Socratic clarification, identify missing business rules, and block unclear tasks. |
 | workflow-tdd-gate | tdd | Ensure acceptance criteria become failing tests or explicit verification contracts. |
 | workflow-execution-review | review-execucao | Review implementation readiness before broad tests and deployment. |
-| workflow-test-gate | testes | Run or coordinate automated tests, identify breakage, and propose test improvements. |
+| workflow-test-gate | testes | Run or coordinate automated tests, identify breakage, and require a Playwright dev-review plan for UI/flow work. |
 | workflow-cicd | testes, subida-dev | Prepare repeatable CI/CD commands, deployment checks, and environment evidence. |
-| workflow-dev-reviewer | review-dev | Validate the published dev result; use Playwright/headless browser for UI and flow work. |
-| workflow-human-review | human-review | Summarize evidence for the human and route accepted/rejected decisions. |
+| workflow-dev-reviewer | review-dev | Validate the published dev result; Playwright/headless browser is mandatory for UI and flow work. |
+| workflow-human-review | human-review | Summarize evidence for the human and reject handoff when required Playwright evidence is missing. |
 | workflow-designer | any | Create or adjust repo workflow profiles and workflow-agent rules when the project changes. |
 | aih-goal | any | Skill-level coordinator that imports tasks, evaluates gates, and drives work until the target stage. |
 
@@ -49,3 +49,7 @@ Every workflow gate must produce `PASS`, `SKIPPED`, `BLOCKED-TO-PLANNING`, or
 `BLOCKED`. Skips are allowed only after evaluation and must include a reason.
 Task-specific `BLOCKED-TO-PLANNING` results should not stop a larger `/aih-goal`
 run; they create source questions and allow other ready tasks to continue.
+
+For UI or user-flow work, `review-dev` cannot pass without Playwright/headless
+browser evidence. Backend-only skips must say why there is no frontend,
+console, or environment-visible behavior to validate.

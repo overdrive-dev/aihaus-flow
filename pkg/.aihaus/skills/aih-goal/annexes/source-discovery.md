@@ -44,6 +44,28 @@ Prefer the source with the strongest repo-specific signal:
 If multiple plausible sources exist, pick the one with the clearest repo match
 and record the reason in `RUN-MANIFEST.md`; do not stop for a menu.
 
+### External reconciliation
+
+When discovery finds existing `aih-goal.db` tasks with `source_kind != local`,
+refresh those tasks from the external source before using local stage/status for
+execution decisions.
+
+For each source-backed task:
+
+- fetch current source status, assignee/owner, comments, and `updatedAt` when the
+  connector exposes them,
+- save a new `source_snapshots` row with the raw payload,
+- update local source-owned projection fields such as `kanban_status`,
+  `source_updated_at`, and `sync_state`,
+- create a `sync_events` row with `direction='pull'` and status `done` when the
+  refresh succeeds,
+- if the source is unavailable, keep the cached row but mark the run artifacts
+  with sync debt before acting on that task.
+
+Never call the local DB "synced" merely because it was synced in a previous run.
+The DB is an operational cache; the external kanban remains authoritative for
+source-owned fields.
+
 ### Local kanban lookup
 
 Before creating or importing a task into `planejamento`, query the local kanban

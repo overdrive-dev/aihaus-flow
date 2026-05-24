@@ -36,13 +36,38 @@ If information is missing:
 
 ### Evidence sync
 
-When a task reaches `human-review`, write a Linear comment containing:
+Linear is the human kanban source of truth. Do not batch all issue moves and
+comments at the end of a goal run.
+
+After every evaluated stage for a Linear-backed task:
+
+1. Resolve the current Linear team statuses from the workspace, not from stale
+   local assumptions.
+2. Move the issue to the matching workflow status when a matching status exists.
+   Internal stages map semantically: `planejamento`, `tdd`,
+   `review-execucao`, `testes`, `subida-dev`, `review-dev`, `human-review`,
+   and `box-dev`.
+3. Add an append-only comment when the stage produces evidence, asks a business
+   question, skips a gate, or blocks. Keep routine comments short: stage,
+   verdict, evidence pointer, next stage or blocker.
+   For `review-dev`, include Playwright command/result and screenshot/trace/URL
+   evidence when UI or user-flow behavior is affected. If skipped, state the
+   backend-only reason.
+4. Record an outbound `sync_events` row with a stable id before writing, and
+   mark it synced only after the Linear update succeeds. Include that id in the
+   comment body to avoid duplicate comments on resume.
+5. If Linear write access is unavailable, keep executing locally only after
+   recording pending sync debt in `sync_events`, `TASKS.md`, and the task file.
+
+When a task reaches `human-review`, write a final Linear comment containing:
 
 - business summary,
 - branch/commit/PR,
 - commands run and results,
 - dev URL/environment,
-- browser evidence paths when Playwright was used,
+- browser evidence paths and Playwright command/result when UI or flow work was
+  validated,
+- backend-only browser-skip reason when Playwright was not applicable,
 - skipped gates with reasons,
 - remaining known risks or none.
 

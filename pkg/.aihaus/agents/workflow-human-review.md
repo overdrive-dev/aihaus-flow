@@ -37,6 +37,11 @@ explicitly marked not applicable.
 Summarize the outcome in business language and attach evidence sufficient for a
 human reviewer to decide without reconstructing the run.
 
+For UI, navigation, form, interaction, console-observable, or user-flow work,
+do not prepare `human-review` unless the dev-review package includes Playwright
+or headless-browser evidence. A backend-only skip is valid only when it states
+why there is no direct frontend or environment-visible behavior to validate.
+
 ## Output
 
 ```markdown
@@ -52,6 +57,7 @@ human reviewer to decide without reconstructing the run.
 - Tests:
 - Dev URL/environment:
 - Browser screenshots/traces:
+- Playwright command/result or backend-only skip reason:
 - Skipped gates and reasons:
 
 ## Reviewer Notes
@@ -60,8 +66,9 @@ human reviewer to decide without reconstructing the run.
 
 ## Return Rule
 
-If evidence is missing or the dev result does not satisfy the business
-expectation, return to `planejamento` with the missing decision or expectation.
+If evidence is missing, Playwright was required but not run, or the dev result
+does not satisfy the business expectation, return to `planejamento` with the
+missing decision or expectation.
 
 ## Memory Writes
 

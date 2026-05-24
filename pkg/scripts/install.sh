@@ -430,7 +430,12 @@ mkdir -p \
   "${TARGET}/.aihaus/backups" \
   "${TARGET}/.aihaus/workflows" \
   "${TARGET}/.aihaus/workflows/runs" \
-  "${TARGET}/.aihaus/memory/workflows"
+  "${TARGET}/.aihaus/memory/workflows" \
+  "${TARGET}/.aihaus/memory/agents" \
+  "${TARGET}/.aihaus/memory/reviews" \
+  "${TARGET}/.aihaus/memory/global" \
+  "${TARGET}/.aihaus/memory/backend" \
+  "${TARGET}/.aihaus/memory/frontend"
 if [[ ! -f "${TARGET}/.aihaus/workflows/default.md" && -f "${PKG_AIHAUS}/workflows/default.md" ]]; then
   cp "${PKG_AIHAUS}/workflows/default.md" "${TARGET}/.aihaus/workflows/default.md"
   echo "  workflow: created .aihaus/workflows/default.md"
@@ -439,9 +444,25 @@ if [[ ! -f "${TARGET}/.aihaus/workflows/agents.md" && -f "${PKG_AIHAUS}/workflow
   cp "${PKG_AIHAUS}/workflows/agents.md" "${TARGET}/.aihaus/workflows/agents.md"
   echo "  workflow: created .aihaus/workflows/agents.md"
 fi
-if [[ ! -f "${TARGET}/.aihaus/memory/workflows/README.md" && -f "${PKG_AIHAUS}/memory/workflows/README.md" ]]; then
-  cp "${PKG_AIHAUS}/memory/workflows/README.md" "${TARGET}/.aihaus/memory/workflows/README.md"
-fi
+for rel in \
+  "memory/MEMORY.md" \
+  "memory/workflows/README.md" \
+  "memory/workflows/environment.md" \
+  "memory/workflows/user-preferences.md" \
+  "memory/workflows/rules.md" \
+  "memory/workflows/gotchas.md" \
+  "memory/agents/README.md" \
+  "memory/reviews/README.md" \
+  "memory/reviews/common-findings.md" \
+  "memory/global/README.md" \
+  "memory/global/gotchas.md" \
+  "memory/backend/README.md" \
+  "memory/frontend/README.md"; do
+  if [[ ! -f "${TARGET}/.aihaus/${rel}" && -f "${PKG_AIHAUS}/${rel}" ]]; then
+    mkdir -p "$(dirname "${TARGET}/.aihaus/${rel}")"
+    cp "${PKG_AIHAUS}/${rel}" "${TARGET}/.aihaus/${rel}"
+  fi
+done
 
 # Step 5+6: create .claude/{skills,agents,hooks} as links or copies (Claude Code target)
 # shellcheck source=lib/junction-safe.sh
@@ -574,6 +595,8 @@ _inject_gitignore() {
   local entries=(
     '/.aihaus/audit/'
     '/.claude/audit/'
+    '*/.aihaus/'
+    '*/.claude/'
     '/.aihaus/agents/'
     '/.aihaus/skills/'
     '/.aihaus/hooks/'

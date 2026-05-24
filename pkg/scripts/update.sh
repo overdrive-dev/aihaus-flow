@@ -22,9 +22,8 @@ Local data (project.md, plans/, milestones/, memory/, etc.) is preserved.
 
 Options:
   --target <path>   Target directory (default: current working directory)
-  --migrate-memory  Seed missing memory/*/README.md files from package source.
-                    Existing files are NEVER overwritten (idempotent, opt-in).
-                    Does NOT run as part of the default refresh loop.
+  --migrate-memory  Legacy compatibility flag. Missing memory starter files are
+                    now seeded by the default refresh loop without overwrites.
   --no-gitignore    Skip the .gitignore backfill prompt entirely (non-interactive
                     CI runs, or users who have already declined and don't want
                     to be asked again).
@@ -199,7 +198,12 @@ mkdir -p \
   "${AIHAUS}/backups" \
   "${AIHAUS}/workflows" \
   "${AIHAUS}/workflows/runs" \
-  "${AIHAUS}/memory/workflows"
+  "${AIHAUS}/memory/workflows" \
+  "${AIHAUS}/memory/agents" \
+  "${AIHAUS}/memory/reviews" \
+  "${AIHAUS}/memory/global" \
+  "${AIHAUS}/memory/backend" \
+  "${AIHAUS}/memory/frontend"
 if [[ ! -f "${AIHAUS}/workflows/default.md" && -f "${PKG_AIHAUS}/workflows/default.md" ]]; then
   cp "${PKG_AIHAUS}/workflows/default.md" "${AIHAUS}/workflows/default.md"
   echo "  workflow: created .aihaus/workflows/default.md"
@@ -208,9 +212,25 @@ if [[ ! -f "${AIHAUS}/workflows/agents.md" && -f "${PKG_AIHAUS}/workflows/agents
   cp "${PKG_AIHAUS}/workflows/agents.md" "${AIHAUS}/workflows/agents.md"
   echo "  workflow: created .aihaus/workflows/agents.md"
 fi
-if [[ ! -f "${AIHAUS}/memory/workflows/README.md" && -f "${PKG_AIHAUS}/memory/workflows/README.md" ]]; then
-  cp "${PKG_AIHAUS}/memory/workflows/README.md" "${AIHAUS}/memory/workflows/README.md"
-fi
+for rel in \
+  "memory/MEMORY.md" \
+  "memory/workflows/README.md" \
+  "memory/workflows/environment.md" \
+  "memory/workflows/user-preferences.md" \
+  "memory/workflows/rules.md" \
+  "memory/workflows/gotchas.md" \
+  "memory/agents/README.md" \
+  "memory/reviews/README.md" \
+  "memory/reviews/common-findings.md" \
+  "memory/global/README.md" \
+  "memory/global/gotchas.md" \
+  "memory/backend/README.md" \
+  "memory/frontend/README.md"; do
+  if [[ ! -f "${AIHAUS}/${rel}" && -f "${PKG_AIHAUS}/${rel}" ]]; then
+    mkdir -p "$(dirname "${AIHAUS}/${rel}")"
+    cp "${PKG_AIHAUS}/${rel}" "${AIHAUS}/${rel}"
+  fi
+done
 
 # ---- Refresh auto.sh from launch-aihaus.sh on hash change (M019/S02 F-C3 fix) --
 # Previously update.sh only refreshed skills/agents/hooks/templates; this block
@@ -539,17 +559,16 @@ _refresh_user_global_skills() {
 
 _refresh_user_global_skills
 
-# ---- Migrate memory README seeds (opt-in, ADR-M009-A safe) ------------------
-# Only runs when --migrate-memory is passed. NEVER part of the default loop.
-# For each memory sub-bucket, copies the package README.md if and only if the
-# target file does not already exist. Existing content is never overwritten.
+# ---- Migrate memory README seeds (legacy compatibility) ----------------------
+# Default update now seeds memory starter files non-destructively. Keep this
+# flag as a narrow README-only alias for older workflows that still pass it.
 migrate_memory() {
   local count_created=0
   local count_skipped=0
-  local subdirs=(global backend frontend reviews)
+  local subdirs=(global backend frontend reviews agents workflows)
 
   echo ""
-  echo "[migrate-memory] seeding memory README files (opt-in, non-destructive)"
+  echo "[migrate-memory] seeding memory README files (legacy, non-destructive)"
 
   for subdir in "${subdirs[@]}"; do
     local src="${PKG_AIHAUS}/memory/${subdir}/README.md"
@@ -593,6 +612,8 @@ _backfill_gitignore() {
   local entries=(
     '/.aihaus/audit/'
     '/.claude/audit/'
+    '*/.aihaus/'
+    '*/.claude/'
     '/.aihaus/agents/'
     '/.aihaus/skills/'
     '/.aihaus/hooks/'
