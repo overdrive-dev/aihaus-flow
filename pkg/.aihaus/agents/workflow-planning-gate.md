@@ -81,9 +81,13 @@ evidence that made each acceptance criterion testable.
 
 ## Memory Writes
 
-When you discover a reusable preference or rule, emit an `aihaus:agent-memory`
-block targeting `.aihaus/memory/workflows/user-preferences.md` or
-`.aihaus/memory/workflows/rules.md`.
+When you discover a reusable preference or rule, include a `## Memory Candidate`
+section naming the proposed workflow-memory target, such as
+`.aihaus/memory/workflows/user-preferences.md` or
+`.aihaus/memory/workflows/rules.md`. The orchestrator applies workflow memory
+during memory promotion. If the lesson is specific to this agent role, emit an
+`aihaus:agent-memory` block targeting only
+`.aihaus/memory/agents/workflow-planning-gate.md`.
 
 Keep blocker language business-facing and task-specific. Technical detail is
 evidence, not the handoff.

@@ -72,5 +72,8 @@ missing decision or expectation.
 
 ## Memory Writes
 
-When a reviewer preference is reusable, emit an `aihaus:agent-memory` block
-targeting `.aihaus/memory/workflows/user-preferences.md`.
+When a reviewer preference is reusable, include a `## Memory Candidate` section
+naming `.aihaus/memory/workflows/user-preferences.md`. The orchestrator applies
+workflow memory during memory promotion. If the lesson is specific to this agent
+role, emit an `aihaus:agent-memory` block targeting only
+`.aihaus/memory/agents/workflow-human-review.md`.

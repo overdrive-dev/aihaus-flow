@@ -23,6 +23,11 @@ Also read existing durable memory before writing:
 - `.aihaus/memory/workflows/*.md`
 - `.aihaus/memory/agents/*.md`
 
+Do not write to Claude internal memory paths such as
+`~/.claude/projects/**/memory`. They are outside the repository boundary and are
+blocked by `file-guard.sh`. If a tool or agent suggests that path, mirror the
+durable fact into `.aihaus/memory/**` through this promotion phase instead.
+
 ### Durable outputs
 
 Promote only reusable signal. Do not copy transient run logs.
@@ -64,6 +69,12 @@ For every returned `aihaus:agent-memory` block:
 5. Record a `memory_events` row and audit entry when `.claude/audit/` exists.
 
 Empty blocks are no-ops. Agents never write memory files directly.
+
+Reject or defer any `aihaus:agent-memory` block whose `path:` targets
+`.aihaus/memory/workflows/**`, `.aihaus/memory/global/**`,
+`.aihaus/memory/frontend/**`, `.aihaus/memory/backend/**`,
+`.aihaus/memory/reviews/**`, `~/.claude/**`, or an absolute path. Those are not
+per-agent memory blocks.
 
 ### Project context refresh
 

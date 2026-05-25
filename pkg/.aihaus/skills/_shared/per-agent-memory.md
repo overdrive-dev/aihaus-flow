@@ -4,6 +4,10 @@ This annex documents the parse contract and emission threshold for the
 `aihaus:agent-memory` fenced block. Every agent definition references this file
 in its **Per-agent memory (optional)** section.
 
+This contract is repository-local. Do not write to `~/.claude/projects/**/memory`
+or any other Claude internal memory path from an aihaus run. Those paths are
+outside `$CLAUDE_PROJECT_DIR` and are intentionally blocked by `file-guard.sh`.
+
 ## Parse Contract (LOCKED — M016-S15a)
 
 ### Block delimiters
@@ -27,6 +31,10 @@ path: .aihaus/memory/agents/<agent-name>.md
 ```
 
 - Exactly one path per block (no multi-file `===` delimiters).
+- The only valid `path:` target is `.aihaus/memory/agents/<agent-name>.md`.
+  Workflow, global, frontend, backend, or review memory must be proposed in the
+  agent response for orchestrator promotion; do not target those paths from an
+  `aihaus:agent-memory` block.
 - `<agent-name>` must be hyphen-only (no underscores) — filename-prefix-guard
   precondition enforced at smoke-test and completion-protocol Step 4.7b.
 
@@ -79,6 +87,8 @@ Guidance:
 The orchestrator (completion-protocol Step 4.7b, or `/aih-goal` memory
 promotion) is the **sole writer** of `.aihaus/memory/agents/**`. Agents emit the
 block as part of their return payload only; they never write files directly.
+The same rule applies to broader `.aihaus/memory/**` surfaces: agents propose
+durable facts, and the orchestrator applies them during memory promotion.
 
 See `pkg/.aihaus/skills/aih-milestone/completion-protocol.md` Step 4.7b for
 the milestone application algorithm and

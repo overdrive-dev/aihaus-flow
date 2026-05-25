@@ -65,4 +65,10 @@ planejamento
 
 ## Memory Writes
 
-Only write workflow memory when a reusable user preference or intake rule appears.
+When a reusable user preference or intake rule appears, include a
+`## Memory Candidate` section naming the project-local workflow-memory target,
+such as `.aihaus/memory/workflows/user-preferences.md` or
+`.aihaus/memory/workflows/rules.md`. The orchestrator applies workflow memory
+during memory promotion. If the lesson is specific to this agent role, emit an
+`aihaus:agent-memory` block targeting only
+`.aihaus/memory/agents/workflow-intake.md`.

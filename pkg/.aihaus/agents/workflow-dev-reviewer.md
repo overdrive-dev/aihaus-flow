@@ -117,5 +117,10 @@ evidence.
 
 ## Memory Writes
 
-When a reusable workflow gotcha appears, emit an `aihaus:agent-memory` block
-targeting `.aihaus/memory/workflows/gotchas.md`.
+When reusable Playwright/dev-review facts appear, include a
+`## Memory Candidate` section naming the project-local workflow-memory target,
+such as `.aihaus/memory/workflows/environment.md` for toolkit URLs/commands or
+`.aihaus/memory/workflows/gotchas.md` for recurring failures. The orchestrator
+applies workflow memory during memory promotion. If the lesson is specific to
+this agent role, emit an `aihaus:agent-memory` block targeting only
+`.aihaus/memory/agents/workflow-dev-reviewer.md`.

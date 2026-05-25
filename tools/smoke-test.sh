@@ -4947,16 +4947,16 @@ check_aih_graph_integration_round_trip() {
     return
   fi
   # Assert expected per-type counts. Match smoke-test ground truth.
-  if ! echo "${out}" | grep -qE "Decisions: [0-9]+ \([0-9]+ are amendments"; then
+  if ! grep -qE "Decisions: [0-9]+ \([0-9]+ are amendments" <<< "${out}"; then
     issues+=("build output missing Decisions line")
   fi
-  if ! echo "${out}" | grep -qE "Agents:    57 "; then
+  if ! grep -qE "Agents:    57 " <<< "${out}"; then
     issues+=("expected Agents: 57 (Smoke Check 2)")
   fi
-  if ! echo "${out}" | grep -qE "Skills:    15"; then
+  if ! grep -qE "Skills:    15" <<< "${out}"; then
     issues+=("expected Skills: 15 (Smoke Check 1)")
   fi
-  if ! echo "${out}" | grep -qE "Hooks: +[0-9]+ "; then
+  if ! grep -qE "Hooks: +[0-9]+ " <<< "${out}"; then
     issues+=("build output missing Hooks line")
   fi
   # Privacy gate: rebuild without --accept-all-repos should refuse (exit 2).
@@ -5323,6 +5323,52 @@ check_goal_business_rule_gap_contract() {
   fi
 }
 
+check_memory_write_boundary_contract() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: memory writes stay inside project boundary"
+  local issues=()
+  local file_guard="${PACKAGE_ROOT}/.aihaus/hooks/file-guard.sh"
+  local per_agent="${PACKAGE_ROOT}/.aihaus/skills/_shared/per-agent-memory.md"
+  local goal_memory="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/memory-promotion.md"
+  local workflow_agents="${PACKAGE_ROOT}/.aihaus/agents/workflow-"'*.md'
+
+  if ! grep -Fq 'Do not whitelist ~/.claude/projects/**/memory' "$file_guard"; then
+    issues+=("file-guard missing Claude internal memory guidance")
+  fi
+  if ! grep -Fq 'The only valid `path:` target is `.aihaus/memory/agents/<agent-name>.md`.' "$per_agent"; then
+    issues+=("per-agent memory contract missing path restriction")
+  fi
+  if ! grep -Fq 'Reject or defer any `aihaus:agent-memory` block whose `path:` targets' "$goal_memory"; then
+    issues+=("aih-goal memory promotion missing invalid target rejection")
+  fi
+  if grep -R "targeting \`.aihaus/memory/workflows" $workflow_agents >/dev/null 2>&1; then
+    issues+=("workflow agent still targets workflow memory from aihaus:agent-memory")
+  fi
+
+  local tmp_root out rc
+  tmp_root="$(_mktemp_dir aih-memory-boundary)" || {
+    _fail "$label" "failed to create temp dir"
+    return
+  }
+  mkdir -p "$tmp_root"
+  set +e
+  out="$(printf '{"tool_input":{"file_path":"%s/.claude/projects/repo/memory/reference_playwright_dev_smoke_toolkit.md"}}' "$HOME" | CLAUDE_PROJECT_DIR="$tmp_root" bash "$file_guard" 2>&1)"
+  rc=$?
+  set +e
+  if [[ "$rc" -ne 2 ]]; then
+    issues+=("file-guard did not block ~/.claude/projects/**/memory write")
+  fi
+  if ! printf '%s\n' "$out" | grep -Fq 'mirror reusable facts into project memory'; then
+    issues+=("file-guard block output missing project-memory remediation")
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -5330,6 +5376,7 @@ check_m048_memory_integration_contract
 check_goal_aftermath_regressions
 check_legacy_hygiene_regressions
 check_goal_business_rule_gap_contract
+check_memory_write_boundary_contract
 check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
 

@@ -26,6 +26,11 @@ in their return payload; the orchestrator parses and applies it.
 verifier/planner cohorts; stateful agents in the :doer cohort must still route
 through Step 4.7b).
 
+Agents also never write to Claude internal project memory paths such as
+`~/.claude/projects/**/memory`. aihaus durable memory stays under
+`.aihaus/memory/**`; cross-session facts are promoted there by the orchestrator
+or emitted as `aihaus:agent-memory` blocks for `.aihaus/memory/agents/**`.
+
 ## Append Semantics
 
 Each file is **accumulating** — content is only appended, never overwritten.

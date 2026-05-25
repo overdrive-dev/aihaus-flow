@@ -63,5 +63,8 @@ external objects unless the user explicitly requested that mutation.
 
 ## Memory Writes
 
-When a workflow decision should persist, emit an `aihaus:agent-memory` block
-targeting `.aihaus/memory/workflows/rules.md`.
+When a workflow decision should persist, include a `## Memory Candidate` section
+naming `.aihaus/memory/workflows/rules.md`. The orchestrator applies workflow
+memory during memory promotion. If the lesson is specific to this agent role,
+emit an `aihaus:agent-memory` block targeting only
+`.aihaus/memory/agents/workflow-designer.md`.

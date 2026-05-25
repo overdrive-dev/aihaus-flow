@@ -50,6 +50,8 @@ if [[ -n "$FILE_PATH" ]]; then
       ;;
     *)
       echo "BLOCKED: write outside project dir (path: ${FILE_PATH})" >&2
+      echo "aihaus memory writes must stay under .aihaus/memory/** or be returned as aihaus:agent-memory blocks for the orchestrator to apply." >&2
+      echo "Do not whitelist ~/.claude/projects/**/memory from a repo hook; mirror reusable facts into project memory instead." >&2
       exit 2
       ;;
   esac

@@ -5,6 +5,22 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.11] - 2026-05-25 - repo-local memory write boundary
+
+### Fixed
+
+- Workflow agents now propose workflow memory through `## Memory Candidate`
+  sections and reserve `aihaus:agent-memory` for
+  `.aihaus/memory/agents/<agent>.md`, matching the single-writer contract.
+- `/aih-goal` memory promotion now rejects or defers agent-memory blocks that
+  target workflow/global/review/backend/frontend memory, absolute paths, or
+  Claude internal paths such as `~/.claude/**`.
+- `file-guard.sh` now explains that blocked writes to
+  `~/.claude/projects/**/memory` should be mirrored into project-local
+  `.aihaus/memory/**` instead of whitelisted.
+- Smoke-test coverage now verifies the repo-local memory boundary and the
+  `~/.claude/projects/**/memory` block/remediation path.
+
 ## [0.38.10] - 2026-05-24 - review-dev Playwright dispatch
 
 ### Fixed

@@ -84,6 +84,9 @@ business-facing validation detail.
 
 ## Memory Writes
 
-When you learn durable test behavior, emit an `aihaus:agent-memory` block
-targeting `.aihaus/memory/workflows/environment.md` or
-`.aihaus/memory/workflows/rules.md`.
+When you learn durable test behavior, include a `## Memory Candidate` section
+naming `.aihaus/memory/workflows/environment.md` or
+`.aihaus/memory/workflows/rules.md`. The orchestrator applies workflow memory
+during memory promotion. If the lesson is specific to this agent role, emit an
+`aihaus:agent-memory` block targeting only
+`.aihaus/memory/agents/workflow-test-gate.md`.

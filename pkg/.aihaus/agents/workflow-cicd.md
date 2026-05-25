@@ -71,5 +71,8 @@ task to human review unless `review-dev` validates the business behavior.
 
 ## Memory Writes
 
-When you learn durable environment behavior, emit an `aihaus:agent-memory` block
-targeting `.aihaus/memory/workflows/environment.md`.
+When you learn durable environment behavior, include a `## Memory Candidate`
+section naming `.aihaus/memory/workflows/environment.md`. The orchestrator
+applies workflow memory during memory promotion. If the lesson is specific to
+this agent role, emit an `aihaus:agent-memory` block targeting only
+`.aihaus/memory/agents/workflow-cicd.md`.

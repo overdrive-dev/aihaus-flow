@@ -63,5 +63,8 @@ quality, keep it in execution and state the fix needed.
 
 ## Memory Writes
 
-When a reusable execution gotcha appears, emit an `aihaus:agent-memory` block
-targeting `.aihaus/memory/workflows/gotchas.md`.
+When a reusable execution gotcha appears, include a `## Memory Candidate`
+section naming `.aihaus/memory/workflows/gotchas.md`. The orchestrator applies
+workflow memory during memory promotion. If the lesson is specific to this agent
+role, emit an `aihaus:agent-memory` block targeting only
+`.aihaus/memory/agents/workflow-execution-review.md`.

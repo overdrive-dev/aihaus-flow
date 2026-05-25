@@ -31,3 +31,8 @@ Do not use it for:
 
 Generated state belongs in `.aihaus/state/`. The workflow profile belongs in
 `.aihaus/workflows/`.
+
+Agents should not write this directory directly during a run. They should return
+candidate workflow-memory findings in their report, or emit per-agent memory to
+`.aihaus/memory/agents/<agent-name>.md`; `/aih-goal` promotes durable workflow
+facts during its memory-promotion phase.
