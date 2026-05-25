@@ -8,7 +8,7 @@ argument-hint: "[no arguments needed]"
 
 ## Task
 
-Bootstrap or refresh `.aihaus/project.md` by analyzing the current repository, then initialize the aih-graph memory index (Phase 3, M041). Fully autonomous; zero clarifying questions. Makes NO commits, NO branch changes. Writes are limited to `.aihaus/`, `.claude/settings.local.json`, `.claude/CLAUDE.md`, `.claude/rules/aihaus-project-memory.md`, and reversible archive moves of known legacy harness leftovers during Phase 2.6.
+Bootstrap or refresh `.aihaus/project.md`, operational environment memory, Claude context bridge verification, and the aih-graph index. Fully autonomous except for one optional business-rule follow-up. Makes NO commits, NO branch changes.
 
 ---
 
@@ -68,22 +68,9 @@ modifies Git worktrees, `.gsd`, `.hermes`, `.mcp.json`, or tracked files.
 Continue if the script is missing or fails, but print the warning/report path.
 
 ### 2.7. Offer .gitattributes on Windows (suppress CRLF warnings)
-If `uname -s` contains `MINGW`/`MSYS`/`CYGWIN` AND no `.gitattributes` at repo root, ask: *"Windows detected, no .gitattributes. Git prints 'LF will be replaced by CRLF' warnings during milestone execution. Create a minimal .gitattributes to suppress? [y/N]"*. If yes, write:
-```
-* text=auto eol=lf
-*.sh text eol=lf
-*.png binary
-*.jpg binary
-*.jpeg binary
-*.gif binary
-*.svg binary
-*.webp binary
-*.ico binary
-*.pdf binary
-*.woff binary
-*.woff2 binary
-```
-Report created; otherwise skip silently.
+If Windows Git Bash is detected and no `.gitattributes` exists, follow
+`annexes/windows-gitattributes.md`. This is the only pre-project optional
+prompt besides degraded-file recovery.
 
 ### 3. Validate marker order (re-run only)
 When both markers are present, verify `AUTO-GENERATED-START` appears BEFORE
@@ -101,9 +88,10 @@ Try these sources in order, using the first one that succeeds:
 
 Store as `PROJECT_NAME` for placeholder substitution in Phase 2.
 
-### 5. Default behavior: zero questions
+### 5. Default behavior: no blocking questions
 Do not prompt the user for anything beyond the degraded-file fallback in
-step 2. The entire run is autonomous.
+step 2 and the optional business-rule follow-up in step 12.5. The run must
+complete even when business questions remain unanswered.
 
 ---
 
@@ -180,14 +168,22 @@ Where N is the number of AUTO-GENERATED sections populated and M is the
 count of `[PLACEHOLDER]` tokens still present in the manual block (those are
 expected — they live inside the MANUAL region and are the user's to fill).
 
+### 12.5. Bootstrap operational and business context
+Follow `annexes/operational-context-bootstrap.md`: run the environment
+discovery and Claude context verifier scripts, then spawn
+`project-business-interviewer` to write
+`.aihaus/init/business-context-questions.md`. If interactive, ask only the top
+unanswered business-rule question; never block `/aih-init` on the answer.
+
 ## Phase 3 — aih-graph memory bootstrap (M041)
 Initializes the aih-graph structural+semantic memory index (BM25/FTS5 default; pure-Go, no API key). Non-fatal — any failure degrades silently. Full 5-step flow: `annexes/aih-graph-bootstrap.md`.
 
 ## Guardrails
 - NO commits, NO `git add`, NO `git checkout`, NO branch creation.
-- Writes limited to `.aihaus/` (scratch file, `project.md`, `project.md.bak`, workflow defaults, and memory runtime state), `.claude/settings.local.json`, `.claude/CLAUDE.md`, and `.claude/rules/aihaus-project-memory.md`
-  and `.claude/settings.local.json` (Phase 0 only), except Phase 2.6 may move
-  untracked known-disposable legacy harness leftovers into `.aihaus/backups/`.
+- Writes limited to `.aihaus/`, `.claude/settings.local.json`,
+  `.claude/CLAUDE.md`, and `.claude/rules/aihaus-project-memory.md`, except
+  Phase 2.6 may move untracked known-disposable legacy leftovers into
+  `.aihaus/backups/`.
 - If anything fails, surface the error and leave `.aihaus/project.md`
   untouched (first-run mode) or restore from `.aihaus/project.md.bak`
   (re-run mode) before exiting.

@@ -5,6 +5,23 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.14] - 2026-05-25 - init operational discovery
+
+### Added
+
+- `/aih-init` now runs an operational environment discovery pass that writes an
+  evidence-based `AIHAUS:ENV-DISCOVERY` block to
+  `.aihaus/memory/workflows/environment.md` and a report to
+  `.aihaus/init/environment-discovery.md`.
+- `/aih-init` now runs a Claude context verifier that writes
+  `.aihaus/audit/claude-context-verify.md`, making missing `.claude/CLAUDE.md`,
+  rule files, settings, or broken imports visible after init.
+- Added `project-business-interviewer`, a non-blocking init agent that writes
+  `.aihaus/init/business-context-questions.md` with one Socratic business-rule
+  question per gap. It does not sync TUI-style prompts to kanban or Linear.
+- Smoke-test coverage now exercises the environment discovery fixture, Claude
+  context verifier fixture, and business-interview artifact contract.
+
 ## [0.38.13] - 2026-05-25 - workflow environment prompt backfill
 
 ### Fixed

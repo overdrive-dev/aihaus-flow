@@ -1,4 +1,4 @@
-# Cohort Taxonomy — 57 Agents → 5 Uniform Cohorts
+# Cohort Taxonomy — 58 Agents → 5 Uniform Cohorts
 
 This annex is the single source of truth for cohort membership, consumed by
 `/aih-effort` (preset filter, sidecar write) and by the restore path in
@@ -102,6 +102,7 @@ Members (alphabetical):
 - nyquist-auditor
 - pattern-mapper
 - project-analyst
+- project-business-interviewer
 - test-writer
 - user-profiler
 - workflow-cicd
@@ -114,7 +115,7 @@ Members (alphabetical):
 - workflow-tdd-gate
 - workflow-test-gate
 
-**Count: 24**
+**Count: 25**
 
 ---
 
@@ -191,7 +192,7 @@ Members (alphabetical):
 
 ---
 
-## Membership table (57 agents)
+## Membership table (58 agents)
 
 **Parse contract (F-006 — binding per ADR-M012-A).** This table has exactly
 5 data columns. The header is `| # | Agent | Cohort | Model | Effort |`.
@@ -244,29 +245,30 @@ cohort (or per-agent override for `:adversarial` max-tier members).
 | 34 | planner                  | :planner-binding  | opus   | xhigh |
 | 35 | product-manager          | :planner-binding  | opus   | xhigh |
 | 36 | project-analyst          | :doer             | sonnet | high  |
-| 37 | project-researcher       | :planner          | opus   | high  |
-| 38 | research-synthesizer     | :planner          | opus   | high  |
-| 39 | reviewer                 | :adversarial      | opus   | high  |
-| 40 | roadmapper               | :planner-binding  | opus   | xhigh |
-| 41 | security-auditor         | :verifier         | haiku  | high  |
-| 42 | test-writer              | :doer             | sonnet | high  |
-| 43 | ui-auditor               | :verifier         | haiku  | high  |
-| 44 | ui-checker               | :verifier         | haiku  | high  |
-| 45 | ui-researcher            | :planner          | opus   | high  |
-| 46 | user-profiler            | :doer             | sonnet | high  |
-| 47 | ux-designer              | :planner          | opus   | high  |
-| 48 | verifier                 | :verifier         | haiku  | high  |
-| 49 | workflow-cicd            | :doer             | sonnet | high  |
-| 50 | workflow-designer        | :doer             | sonnet | high  |
-| 51 | workflow-dev-reviewer    | :doer             | sonnet | high  |
-| 52 | workflow-execution-review | :doer             | sonnet | high  |
-| 53 | workflow-human-review    | :doer             | sonnet | high  |
-| 54 | workflow-intake          | :doer             | sonnet | high  |
-| 55 | workflow-planning-gate   | :doer             | sonnet | high  |
-| 56 | workflow-tdd-gate        | :doer             | sonnet | high  |
-| 57 | workflow-test-gate       | :doer             | sonnet | high  |
+| 37 | project-business-interviewer | :doer        | sonnet | high  |
+| 38 | project-researcher       | :planner          | opus   | high  |
+| 39 | research-synthesizer     | :planner          | opus   | high  |
+| 40 | reviewer                 | :adversarial      | opus   | high  |
+| 41 | roadmapper               | :planner-binding  | opus   | xhigh |
+| 42 | security-auditor         | :verifier         | haiku  | high  |
+| 43 | test-writer              | :doer             | sonnet | high  |
+| 44 | ui-auditor               | :verifier         | haiku  | high  |
+| 45 | ui-checker               | :verifier         | haiku  | high  |
+| 46 | ui-researcher            | :planner          | opus   | high  |
+| 47 | user-profiler            | :doer             | sonnet | high  |
+| 48 | ux-designer              | :planner          | opus   | high  |
+| 49 | verifier                 | :verifier         | haiku  | high  |
+| 50 | workflow-cicd            | :doer             | sonnet | high  |
+| 51 | workflow-designer        | :doer             | sonnet | high  |
+| 52 | workflow-dev-reviewer    | :doer             | sonnet | high  |
+| 53 | workflow-execution-review | :doer             | sonnet | high  |
+| 54 | workflow-human-review    | :doer             | sonnet | high  |
+| 55 | workflow-intake          | :doer             | sonnet | high  |
+| 56 | workflow-planning-gate   | :doer             | sonnet | high  |
+| 57 | workflow-tdd-gate        | :doer             | sonnet | high  |
+| 58 | workflow-test-gate       | :doer             | sonnet | high  |
 
-**Totals:** :planner-binding=4 · :planner=14 · :doer=24 · :verifier=9 · :adversarial=6 · Sum=57
+**Totals:** :planner-binding=4 · :planner=14 · :doer=25 · :verifier=9 · :adversarial=6 · Sum=58
 
 ---
 

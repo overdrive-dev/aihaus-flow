@@ -77,10 +77,10 @@ check_skills() {
   fi
 }
 
-# ---- Check 2: .aihaus/agents/ has 57 .md files (M049 completes workflow agents) --
+# ---- Check 2: .aihaus/agents/ has 58 .md files (M050 adds init interview agent) --
 check_agents() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 57 .md files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 58 .md files"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   if [[ ! -d "$agents_root" ]]; then
     _fail "$label" "directory not found: $agents_root"
@@ -88,10 +88,10 @@ check_agents() {
   fi
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 57 ]]; then
+  if [[ "$count" -eq 58 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 57 .md files, found $count"
+    _fail "$label" "expected 58 .md files, found $count"
   fi
 }
 
@@ -1087,9 +1087,9 @@ check_skill_count_and_staleness() {
 
 # ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M027/S10) --
 # Seven sub-assertions covering the 5-cohort taxonomy in cohorts.md (post-M027/S10 fork):
-#   C1 each of the 57 agents appears under exactly one cohort
-#   C2 cohort counts match: planner-binding=4, planner=14, doer=24, verifier=9,
-#      adversarial=6 (total=57); :adversarial-scout + :adversarial-review merged per ADR-260509-Y
+#   C1 each of the 58 agents appears under exactly one cohort
+#   C2 cohort counts match: planner-binding=4, planner=14, doer=25, verifier=9,
+#      adversarial=6 (total=58); :adversarial-scout + :adversarial-review merged per ADR-260509-Y
 #   C3 no :verifier-rich or :investigator or legacy :adversarial-scout or :adversarial-review
 #      cohort name appears in the table (deprecated names forbidden post-M027/S10)
 #   C4 F-006 parse contract: every data row yields NF=7 (awk -F'|' | sort -u == "7")
@@ -1163,15 +1163,15 @@ check_cohort_membership_roundtrip() {
   done
 
   local total_agents="${#_seen_agents[@]}"
-  if [[ "$total_agents" -ne 57 ]]; then
-    problems+=("C1: expected 57 agents in membership table; found ${total_agents}")
+  if [[ "$total_agents" -ne 58 ]]; then
+    problems+=("C1: expected 58 agents in membership table; found ${total_agents}")
   fi
 
   # C2: expected cohort counts (5-cohort post-M027/S10 fork, ADR-260509-Y).
   local -A _expected_counts=(
     [":planner-binding"]=4
     [":planner"]=14
-    [":doer"]=24
+    [":doer"]=25
     [":verifier"]=9
     [":adversarial"]=6
   )
@@ -1783,7 +1783,7 @@ check_context_curator() {
 #   (c) learning-advisor model is haiku (cohort :verifier default)
 #   (d) learning-advisor tools are Read, Grep, Glob (no Write/Edit per ADR-001)
 #   (e) templates/settings.local.json references learning-advisor.sh under SubagentStop
-#   (f) agent count at 57 (workflow agents completed in M049)
+#   (f) agent count at 58 (init interview agent added after M049)
 # Note: COMPAT-MATRIX check removed in M015/ADR-M015-A (Cursor support dropped).
 check_learning_advisor() {
   _start_check
@@ -1842,12 +1842,12 @@ check_learning_advisor() {
     fi
   fi
 
-  # (f) agent count at 57 (workflow agents completed in M049)
+  # (f) agent count at 58 (init interview agent added after M049)
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -ne 57 ]]; then
-    problems+=("expected 57 agents total (workflow agents completed in M049); found ${count}")
+  if [[ "$count" -ne 58 ]]; then
+    problems+=("expected 58 agents total (init interview agent added after M049); found ${count}")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -4950,8 +4950,8 @@ check_aih_graph_integration_round_trip() {
   if ! grep -qE "Decisions: [0-9]+ \([0-9]+ are amendments" <<< "${out}"; then
     issues+=("build output missing Decisions line")
   fi
-  if ! grep -qE "Agents:    57 " <<< "${out}"; then
-    issues+=("expected Agents: 57 (Smoke Check 2)")
+  if ! grep -qE "Agents:    58 " <<< "${out}"; then
+    issues+=("expected Agents: 58 (Smoke Check 2)")
   fi
   if ! grep -qE "Skills:    15" <<< "${out}"; then
     issues+=("expected Skills: 15 (Smoke Check 1)")
@@ -5439,6 +5439,70 @@ check_claude_project_context_bridge() {
   fi
 }
 
+check_init_operational_context_discovery() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aih-init operational discovery and business interview"
+  local issues=()
+  local env_script="${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/environment-discovery.sh"
+  local verify_script="${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/claude-context-verify.sh"
+  local op_annex="${PACKAGE_ROOT}/.aihaus/skills/aih-init/annexes/operational-context-bootstrap.md"
+  local win_annex="${PACKAGE_ROOT}/.aihaus/skills/aih-init/annexes/windows-gitattributes.md"
+  local business_agent="${PACKAGE_ROOT}/.aihaus/agents/project-business-interviewer.md"
+  local init_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-init/SKILL.md"
+
+  for f in "${env_script}" "${verify_script}" "${op_annex}" "${win_annex}" "${business_agent}"; do
+    [[ -f "${f}" ]] || issues+=("missing: ${f}")
+  done
+  [[ -f "${env_script}" ]] && bash -n "${env_script}" 2>/dev/null || issues+=("environment-discovery.sh not parseable")
+  [[ -f "${verify_script}" ]] && bash -n "${verify_script}" 2>/dev/null || issues+=("claude-context-verify.sh not parseable")
+
+  grep -Fq 'operational-context-bootstrap.md' "${init_skill}" || issues+=("aih-init missing operational context phase")
+  grep -Fq 'project-business-interviewer' "${op_annex}" || issues+=("operational annex missing business interviewer dispatch")
+  grep -Fq 'environment-discovery.sh' "${op_annex}" || issues+=("operational annex missing environment discovery script")
+  grep -Fq 'claude-context-verify.sh' "${op_annex}" || issues+=("operational annex missing Claude verifier script")
+  grep -Fq 'One question per business rule gap' "${business_agent}" || issues+=("business interviewer missing one-question-per-gap rule")
+  grep -Fq '.aihaus/init/business-context-questions.md' "${business_agent}" || issues+=("business interviewer missing artifact target")
+  grep -Fq 'Socratic questioning' "${business_agent}" || issues+=("business interviewer missing Socratic questioning contract")
+
+  local tmp_root
+  tmp_root="$(_mktemp_dir aih-init-operational)" || {
+    _fail "$label" "failed to create temp dir"
+    return
+  }
+  mkdir -p "${tmp_root}/.aihaus/memory/workflows" "${tmp_root}/.aihaus/project" "${tmp_root}/.claude/rules"
+  printf '# Env\n' > "${tmp_root}/.aihaus/memory/workflows/environment.md"
+  printf '# Project\n' > "${tmp_root}/.aihaus/project.md"
+  printf '{}\n' > "${tmp_root}/.claude/settings.local.json"
+  printf '# Rule\n' > "${tmp_root}/.claude/rules/aihaus-project-memory.md"
+  cat > "${tmp_root}/.claude/CLAUDE.md" <<'EOF'
+<!-- AIHAUS:CLAUDE-CONTEXT-START -->
+@../.aihaus/project.md
+@../.aihaus/memory/workflows/environment.md
+<!-- AIHAUS:CLAUDE-CONTEXT-END -->
+EOF
+  printf 'version: 0.2\n' > "${tmp_root}/buildspec.yml"
+  printf 'export const config = {};\n' > "${tmp_root}/playwright.config.ts"
+  printf 'API_URL=\n' > "${tmp_root}/.env.example"
+  cat > "${tmp_root}/package.json" <<'EOF'
+{"scripts":{"dev":"vite","test":"vitest","build":"vite build"}}
+EOF
+
+  bash "${env_script}" --target "${tmp_root}" >/dev/null 2>&1 || issues+=("environment discovery fixture failed")
+  bash "${verify_script}" --target "${tmp_root}" >/dev/null 2>&1 || issues+=("Claude verifier fixture failed")
+  grep -Fq 'AIHAUS:ENV-DISCOVERY-START' "${tmp_root}/.aihaus/memory/workflows/environment.md" || issues+=("environment discovery did not write managed block")
+  grep -Fq 'buildspec present' "${tmp_root}/.aihaus/memory/workflows/environment.md" || issues+=("environment discovery did not detect CodeBuild buildspec")
+  grep -Fq 'playwright.config.ts' "${tmp_root}/.aihaus/memory/workflows/environment.md" || issues+=("environment discovery did not detect Playwright config")
+  grep -Fq 'Verdict: PASS' "${tmp_root}/.aihaus/audit/claude-context-verify.md" || issues+=("Claude verifier did not pass complete fixture")
+
+  rm -rf "${tmp_root}" 2>/dev/null || true
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -5448,6 +5512,7 @@ check_legacy_hygiene_regressions
 check_goal_business_rule_gap_contract
 check_memory_write_boundary_contract
 check_claude_project_context_bridge
+check_init_operational_context_discovery
 check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
 

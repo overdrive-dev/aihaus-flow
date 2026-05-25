@@ -12,12 +12,12 @@
 
 **You think. ai builds.**
 
-**An autonomous developer workflow for Claude Code. One approval gate, then 57 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
+**An autonomous developer workflow for Claude Code. One approval gate, then 58 specialist agents run the whole pipeline — research, planning, architecture, implementation, review, testing, verification, release.**
 
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.38.13-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.38.14-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -57,7 +57,7 @@ Most of your time with ai-assisted coding gets spent describing *how* instead of
 
 aihaus inverts that loop. **Front-load the thinking once; the system runs the rest.**
 
-After a single approval, a coordinated team of 57 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
+After a single approval, a coordinated team of 58 specialist agents handles research, requirements, architecture, implementation, review, testing, verification, and release. They all read the same project context file. They log every decision. They accumulate lessons across milestones. Each new run starts slightly smarter than the last.
 
 ---
 
@@ -316,7 +316,7 @@ aihaus ships 15 intent-based skills. Every command follows the same pattern: **a
 | **Quality** | code-reviewer, code-fixer, test-writer | Severity-classified review + auto-fix loop |
 | **Verification** | verifier, integration-checker, security-auditor, nyquist-auditor | Goal-backward proof, E2E wiring, threat-model verification |
 | **Documentation** | doc-writer, doc-verifier, research-synthesizer | Docs verified against live code |
-| **Intelligence** | project-analyst, codebase-mapper, intel-updater, user-profiler | Structured codebase knowledge |
+| **Intelligence** | project-analyst, project-business-interviewer, codebase-mapper, intel-updater, user-profiler | Structured codebase and business-context knowledge |
 | **Debug** | debugger, debug-session-manager | Scientific-method bug investigation |
 | **UI** | ux-designer, ui-researcher, ui-checker, ui-auditor | Design contracts and visual audits |
 | **AI/ML** | eval-planner, eval-auditor | Evaluation strategy and coverage |
@@ -333,7 +333,7 @@ your-project/
 │   ├── skills/                       # 15 intent-based commands
 │   │   └── _shared/
 │   │       └── autonomy-protocol.md  # Binding execution-autonomy rules (M005)
-│   ├── agents/                       # 57 specialized agent definitions
+│   ├── agents/                       # 58 specialized agent definitions
 │   ├── hooks/                        # 34 lifecycle + protocol-enforcement hook scripts
 │   ├── templates/                    # project.md + settings templates
 │   ├── memory/                       # Persistent agent memory (grows over time)
