@@ -56,8 +56,11 @@ git -C "$REPO" commit -m "initial" >/dev/null 2>&1
 run_guard() {
   local branch="$1"
   local cmd="$2"
+  local cmd_json
   local payload
-  payload="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"${cmd}\"}}"
+  cmd_json="${cmd//\\/\\\\}"
+  cmd_json="${cmd_json//\"/\\\"}"
+  payload="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"${cmd_json}\"}}"
 
   (
     cd "$REPO"

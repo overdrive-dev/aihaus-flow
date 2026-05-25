@@ -113,7 +113,9 @@ acquire_coarse_lock() {
   [ -n "${AIH_USE_MKDIR_LOCK:-}" ] || detect_platform
   if [ "${AIH_USE_MKDIR_LOCK:-0}" = "0" ]; then
     # POSIX path — flock -w 2 on fd 200
-    exec 200>"$target.lock" 2>/dev/null || return 6
+    # Keep stderr scoped to the open attempt. A bare `exec ... 2>/dev/null`
+    # redirects fd 2 for the rest of the caller, which hides refusal grammar.
+    { exec 200>"$target.lock"; } 2>/dev/null || return 6
     if ! flock -w 2 200; then
       return 6
     fi

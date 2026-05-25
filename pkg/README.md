@@ -17,7 +17,7 @@
 **This package is archived. See the main aihaus-flow repository for successor project guidance.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.38.15-181717?style=for-the-badge&logo=github)](VERSION)
+[![Version](https://img.shields.io/badge/version-0.38.16-181717?style=for-the-badge&logo=github)](VERSION)
 [![Built for Claude Code](https://img.shields.io/badge/built%20for-Claude%20Code-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>

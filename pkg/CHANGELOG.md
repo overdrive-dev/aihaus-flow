@@ -5,6 +5,21 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.16] - 2026-05-25 - smoke guard regressions
+
+### Fixed
+
+- `manifest-helpers.sh` no longer lets the POSIX coarse-lock `exec` redirect
+  stderr for the rest of the caller, so `merge-back.sh` refusal grammar remains
+  visible to agents and smoke fixtures.
+- `git-add-guard.sh` now uses POSIX-safe whitespace-boundary matching for
+  destructive `git add` and `git commit -am` forms on milestone/feature
+  branches.
+- The M017 `git-add-guard` fixture now emits valid JSON for commands containing
+  quotes.
+- Smoke assertions for autonomy-gate JSON now accept both compact and formatted
+  JSON, matching current hook output when `jq` is available.
+
 ## [0.38.15] - 2026-05-25 - continuous project context refresh
 
 ### Fixed

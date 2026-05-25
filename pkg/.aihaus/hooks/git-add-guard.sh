@@ -108,9 +108,11 @@ for seg in ${segments}; do
   trimmed="${seg#"${seg%%[![:space:]]*}"}"
   trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
   [ -z "${trimmed}" ] && continue
+  normalized="$(printf '%s' "${trimmed}" | tr '\t\r\n' '   ' | sed -E 's/[[:space:]]+/ /g')"
+  padded=" ${normalized} "
 
   # Pattern 1: git add with destructive flags
-  if printf '%s' "${trimmed}" | grep -qE 'git[[:space:]]+add[[:space:]]+(-A\b|--all\b|\.[[:space:]]|\.(\s|$)|-u\b|--update\b|:/\b|--interactive\b|-p\b)' 2>/dev/null; then
+  if printf '%s' "${padded}" | grep -qE ' git[[:space:]]+add[[:space:]]+(-A|--all|\.|-u|--update|:/|--interactive|-p)([[:space:]]|$)' 2>/dev/null; then
     deny_detected=1
     deny_reason="${trimmed}"
     break
@@ -130,7 +132,7 @@ for seg in ${segments}; do
   fi
 
   # Pattern 3: git commit -a / --all / -am / -a -m / --all -m (CHECK F-5)
-  if printf '%s' "${trimmed}" | grep -qE 'git[[:space:]]+commit[[:space:]]+(-a\b|--all\b|-am\b|-a[[:space:]]+-m\b|--all[[:space:]]+-m\b)' 2>/dev/null; then
+  if printf '%s' "${padded}" | grep -qE ' git[[:space:]]+commit[[:space:]]+(-a|--all|-am)([[:space:]]|$)' 2>/dev/null; then
     deny_detected=1
     deny_reason="${trimmed}"
     break

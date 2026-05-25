@@ -1254,7 +1254,7 @@ check_autonomy_gate_fixtures() {
     AIHAUS_AUDIT_GATE_CACHE="$tmp_a1/gate.cache" \
     AIHAUS_AUDIT_LOG="$tmp_a1/violations.jsonl" \
     bash "$hook" < "$fixtures/A1-regex-hit/message.txt" 2>/dev/null || true)"
-  if ! printf '%s' "$out_a1" | grep -q '"decision":"block"'; then
+  if ! printf '%s' "$out_a1" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
     problems+=("A1: expected block JSON; got: ${out_a1:0:120}")
   fi
   if [[ -f "$tmp_a1/gate.jsonl" ]]; then
@@ -1311,7 +1311,7 @@ EOF
     AIHAUS_AUDIT_GATE_CACHE="$tmp_a3/gate.cache" \
     AIHAUS_AUDIT_LOG="$tmp_a3/violations.jsonl" \
     bash "$hook" < "$fixtures/A3-haiku-block/message.txt" 2>/dev/null || true)"
-  if ! printf '%s' "$out_a3" | grep -q '"decision":"block"'; then
+  if ! printf '%s' "$out_a3" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
     problems+=("A3: expected block JSON; got: ${out_a3:0:120}")
   fi
   if [[ -f "$tmp_a3/gate.jsonl" ]]; then
@@ -3425,7 +3425,7 @@ check_gsp_ds_regex_coverage() {
     AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-b.jsonl" \
     AIHAUS_AUDIT_LOG="${tmp_dir}/viol-b.jsonl" \
     bash "$hook" <<< "$transcript" 2>/dev/null || true)"
-  if ! printf '%s' "$out_b" | grep -q '"decision":"block"'; then
+  if ! printf '%s' "$out_b" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
     issues+=("sub-assert(b): autonomy-guard did not block CONVERSATION.md:26 transcript excerpt")
   fi
 
@@ -3445,7 +3445,7 @@ check_gsp_ds_regex_coverage() {
       AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-c${idx}.jsonl" \
       AIHAUS_AUDIT_LOG="${tmp_dir}/viol-c${idx}.jsonl" \
       bash "$hook" <<< "$phrase" 2>/dev/null || true)"
-    if ! printf '%s' "$out_c" | grep -q '"decision":"block"'; then
+    if ! printf '%s' "$out_c" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
       issues+=("sub-assert(c): GAP phrase not blocked: $phrase")
     fi
   done
@@ -3458,7 +3458,7 @@ check_gsp_ds_regex_coverage() {
     AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-d1.jsonl" \
     AIHAUS_AUDIT_LOG="${tmp_dir}/viol-d1.jsonl" \
     bash "$hook" <<< "$ptbr_only" 2>/dev/null || true)"
-  if printf '%s' "$out_d_ptbr" | grep -q '"decision":"block"'; then
+  if printf '%s' "$out_d_ptbr" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
     issues+=("sub-assert(d): AIHAUS_GSP_DS_REGEX=0 still blocked PT-BR-only phrase (should skip)")
   fi
   # Existing English pattern must STILL block with opt-out
@@ -3468,7 +3468,7 @@ check_gsp_ds_regex_coverage() {
     AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-d2.jsonl" \
     AIHAUS_AUDIT_LOG="${tmp_dir}/viol-d2.jsonl" \
     bash "$hook" <<< "$eng_phrase" 2>/dev/null || true)"
-  if ! printf '%s' "$out_d_eng" | grep -q '"decision":"block"'; then
+  if ! printf '%s' "$out_d_eng" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
     issues+=("sub-assert(d): AIHAUS_GSP_DS_REGEX=0 suppressed existing English pattern; 'Checkpoint honesto' must still block")
   fi
 
@@ -3970,7 +3970,7 @@ check_lsdd_regex_coverage() {
       AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-b${idx}.jsonl" \
       AIHAUS_AUDIT_LOG="${tmp_dir}/viol-b${idx}.jsonl" \
       bash "$hook" <<< "$phrase" 2>/dev/null || true)"
-    if ! printf '%s' "$out_b" | grep -q '"decision":"block"'; then
+    if ! printf '%s' "$out_b" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
       issues+=("sub-assert(b): LSDD did not block screenshot string: $phrase")
     fi
   done
@@ -3983,7 +3983,7 @@ check_lsdd_regex_coverage() {
     AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-c1.jsonl" \
     AIHAUS_AUDIT_LOG="${tmp_dir}/viol-c1.jsonl" \
     bash "$hook" <<< "$lsdd_only" 2>/dev/null || true)"
-  if printf '%s' "$out_c1" | grep -q '"decision":"block"'; then
+  if printf '%s' "$out_c1" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
     issues+=("sub-assert(c): AIHAUS_LSDD_REGEX=0 still blocked LSDD-only phrase 'Phase 7 complete'")
   fi
   # Existing M005 fast-path must STILL block with LSDD opt-out
@@ -3993,7 +3993,7 @@ check_lsdd_regex_coverage() {
     AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-c2.jsonl" \
     AIHAUS_AUDIT_LOG="${tmp_dir}/viol-c2.jsonl" \
     bash "$hook" <<< "$m005_phrase" 2>/dev/null || true)"
-  if ! printf '%s' "$out_c2" | grep -q '"decision":"block"'; then
+  if ! printf '%s' "$out_c2" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
     issues+=("sub-assert(c): AIHAUS_LSDD_REGEX=0 suppressed existing M005 'Checkpoint honesto' (must still block)")
   fi
 
@@ -4007,7 +4007,7 @@ check_lsdd_regex_coverage() {
       AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-f.jsonl" \
       AIHAUS_AUDIT_LOG="${tmp_dir}/viol-f.jsonl" \
       bash "$fixture" <<< 'Etapa 5 paralelo' 2>/dev/null || true)"
-    if printf '%s' "$out_f" | grep -q '"decision":"block"'; then
+    if printf '%s' "$out_f" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
       issues+=("sub-assert(f): fixture WITH LSDD-PT-Etapa removed still blocks 'Etapa 5 paralelo' — fixture broken")
     fi
   fi
@@ -4053,7 +4053,7 @@ check_lsdd_false_positive_guards() {
       AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-a${idx}.jsonl" \
       AIHAUS_AUDIT_LOG="${tmp_dir}/viol-a${idx}.jsonl" \
       bash "$hook" <<< "$phrase" 2>/dev/null || true)"
-    if printf '%s' "$out" | grep -q '"decision":"block"'; then
+    if printf '%s' "$out" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
       issues+=("false-positive: legitimate phrase blocked: $phrase")
     fi
   done
@@ -4065,7 +4065,7 @@ check_lsdd_false_positive_guards() {
     AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-e.jsonl" \
     AIHAUS_AUDIT_LOG="${tmp_dir}/viol-e.jsonl" \
     bash "$hook" <<< "$narrative" 2>/dev/null || true)"
-  if ! printf '%s' "$out_e" | grep -q '"decision":"block"'; then
+  if ! printf '%s' "$out_e" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
     issues+=("sub-assert(e): runtime narrative '$narrative' should have blocked but did not")
   fi
 
@@ -4079,7 +4079,7 @@ check_lsdd_false_positive_guards() {
       AIHAUS_AUDIT_GATE_LOG="${tmp_dir}/gate-f.jsonl" \
       AIHAUS_AUDIT_LOG="${tmp_dir}/viol-f.jsonl" \
       bash "$fixture" <<< '## Phase 1 — Detect Package Source' 2>/dev/null || true)"
-    if ! printf '%s' "$out_f" | grep -q '"decision":"block"'; then
+    if ! printf '%s' "$out_f" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"block"'; then
       issues+=("sub-assert(f): fixture WITH bare [Pp]hase [0-9]+ should false-positive on markdown header but did not — fixture broken")
     fi
   fi
