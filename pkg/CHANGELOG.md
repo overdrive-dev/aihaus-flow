@@ -5,6 +5,22 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.17] - 2026-05-25 - fresh install startup hardening
+
+### Fixed
+
+- `.claude/CLAUDE.md` no longer imports the large `.aihaus/decisions.md` and
+  `.aihaus/knowledge.md` ledgers at startup. The bridge now imports bounded
+  project/workflow memory and tells agents to search large ledgers selectively.
+- Install, update, and continuous context refresh now remove legacy
+  `@../.aihaus/decisions.md` and `@../.aihaus/knowledge.md` startup imports from
+  existing `.claude/CLAUDE.md` bridge files.
+- `session-start.sh` no longer requires `jq`; fresh machines without `jq` emit
+  valid SessionStart JSON through a Bash fallback instead of surfacing a startup
+  hook error.
+- Smoke coverage now exercises the no-`jq` SessionStart path and verifies that
+  refresh scrubs large ledger imports.
+
 ## [0.38.16] - 2026-05-25 - smoke guard regressions
 
 ### Fixed

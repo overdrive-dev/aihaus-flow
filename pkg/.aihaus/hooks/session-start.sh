@@ -109,9 +109,25 @@ if [ -d "$HOME/.claude/skills/aih-install" ] && [ ! -d "$PWD/.aihaus" ]; then
   PREINSTALL_PRIME=" aihaus is available globally; per-repo overlay not active in this directory — type /aih-install to enable."
 fi
 
-jq -n --arg status "${PLANNING_STATUS:-no artifacts yet}" --arg notice "$STASH_NOTICE" --arg prime "$PREINSTALL_PRIME" '{
-  hookSpecificOutput: {
-    hookEventName: "SessionStart",
-    additionalContext: ("aihaus status: " + $status + ". Use /aih-init to bootstrap project.md, /aih-plan to scope work, /aih-milestone to build, /aih-help for all commands." + $notice + $prime)
-  }
-}'
+ADDITIONAL_CONTEXT="aihaus status: ${PLANNING_STATUS:-no artifacts yet}. Use /aih-init to bootstrap project.md, /aih-plan to scope work, /aih-milestone to build, /aih-help for all commands.${STASH_NOTICE}${PREINSTALL_PRIME}"
+
+json_escape() {
+  local s="${1:-}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\r'/}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+if command -v jq >/dev/null 2>&1; then
+  jq -n --arg context "$ADDITIONAL_CONTEXT" '{
+    hookSpecificOutput: {
+      hookEventName: "SessionStart",
+      additionalContext: $context
+    }
+  }'
+else
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(json_escape "$ADDITIONAL_CONTEXT")"
+fi

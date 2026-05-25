@@ -957,6 +957,26 @@ function Ensure-ClaudeContextBridge {
 
     New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
 
+    function Remove-LargeClaudeImports {
+        param([string]$Path)
+        if (-not (Test-Path -LiteralPath $Path)) { return }
+        $lines = Get-Content -LiteralPath $Path
+        $filtered = New-Object System.Collections.Generic.List[string]
+        $changed = $false
+        foreach ($line in $lines) {
+            $normalized = $line.TrimEnd()
+            if ($normalized -eq '@../.aihaus/decisions.md' -or $normalized -eq '@../.aihaus/knowledge.md') {
+                $changed = $true
+                continue
+            }
+            $filtered.Add($line)
+        }
+        if ($changed) {
+            Set-Content -LiteralPath $Path -Value $filtered -Encoding UTF8
+            Write-Host "  claude-context: removed large ledger startup imports"
+        }
+    }
+
     if (Test-Path -LiteralPath $contextSrc) {
         if (-not (Test-Path -LiteralPath $contextDst)) {
             Copy-Item -LiteralPath $contextSrc -Destination $contextDst
@@ -969,6 +989,7 @@ function Ensure-ClaudeContextBridge {
     } else {
         Write-Host "  warn: Claude context template missing at $contextSrc" -ForegroundColor Yellow
     }
+    Remove-LargeClaudeImports -Path $contextDst
 
     if (Test-Path -LiteralPath $ruleSrc) {
         if (-not (Test-Path -LiteralPath $ruleDst)) {

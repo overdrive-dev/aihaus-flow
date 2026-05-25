@@ -15,8 +15,9 @@ workflow-sync work, check the repo-local context sources:
   commands.
 - `.aihaus/memory/workflows/rules.md`, `user-preferences.md`, and `gotchas.md`
   for durable workflow rules and repeated failures.
-- `.aihaus/decisions.md` and `.aihaus/knowledge.md` for binding decisions and
-  reusable technical findings.
+- Search or read targeted sections of `.aihaus/decisions.md` and
+  `.aihaus/knowledge.md` for binding decisions and reusable technical findings.
+  Do not import entire large ledgers into startup context.
 
 If a required fact is absent, do not invent it. Record the missing project fact
 as a task-specific blocker or a Memory Candidate so `/aih-goal` can promote it

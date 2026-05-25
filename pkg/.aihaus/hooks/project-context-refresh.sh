@@ -96,6 +96,26 @@ ensure_block() {
   { printf '\n\n'; cat "$source_file"; } >> "$file" 2>/dev/null && repair_count=$((repair_count + 1))
 }
 
+scrub_large_claude_imports() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  if ! grep -Eq '^@\.\./\.aihaus/(decisions|knowledge)\.md[[:space:]]*$' "$file" 2>/dev/null; then
+    return 0
+  fi
+
+  local tmp
+  tmp="${file}.tmp.$$"
+  if awk '{
+    line=$0
+    sub(/\r$/, "", line)
+    if (line != "@../.aihaus/decisions.md" && line != "@../.aihaus/knowledge.md") print $0
+  }' "$file" > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$file" 2>/dev/null && repair_count=$((repair_count + 1))
+  else
+    rm -f "$tmp" 2>/dev/null || true
+  fi
+}
+
 ensure_claude_hook_path_normalized() {
   local settings="${claude_dir}/settings.local.json"
   [ -f "$settings" ] || return 0
@@ -173,6 +193,7 @@ copy_or_seed "${template_dir}/claude/CLAUDE.md" "${claude_dir}/CLAUDE.md" "Claud
 copy_or_seed "${template_dir}/claude/rules/aihaus-project-memory.md" "${claude_dir}/rules/aihaus-project-memory.md" "aihaus Project Memory Rule"
 ensure_block "${claude_dir}/CLAUDE.md" "AIHAUS:CLAUDE-CONTEXT-START" "${template_dir}/claude/CLAUDE.md"
 ensure_block "${claude_dir}/rules/aihaus-project-memory.md" "AIHAUS:CLAUDE-RULES-START" "${template_dir}/claude/rules/aihaus-project-memory.md"
+scrub_large_claude_imports "${claude_dir}/CLAUDE.md"
 
 copy_or_seed "${aihaus_dir}/templates/knowledge.md" "${aihaus_dir}/knowledge.md" "Knowledge Base"
 copy_or_seed "${aihaus_dir}/decisions.md" "${aihaus_dir}/decisions.md" "Architectural Decision Records"

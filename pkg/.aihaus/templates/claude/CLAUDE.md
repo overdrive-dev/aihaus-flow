@@ -18,6 +18,11 @@ credentials.
 @../.aihaus/memory/workflows/rules.md
 @../.aihaus/memory/workflows/user-preferences.md
 @../.aihaus/memory/workflows/gotchas.md
-@../.aihaus/decisions.md
-@../.aihaus/knowledge.md
+
+Large ledgers are intentionally not imported on startup. Consult them
+selectively with search or targeted reads when the task needs ADRs or reusable
+findings:
+
+- `.aihaus/decisions.md`
+- `.aihaus/knowledge.md`
 <!-- AIHAUS:CLAUDE-CONTEXT-END -->

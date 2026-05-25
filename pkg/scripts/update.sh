@@ -288,6 +288,25 @@ seed_claude_context_bridge() {
 
   mkdir -p "${claude_dir}/rules"
 
+  _scrub_large_claude_imports() {
+    local file="$1" tmp
+    [[ -f "${file}" ]] || return 0
+    if ! grep -Eq '^@\.\./\.aihaus/(decisions|knowledge)\.md[[:space:]]*$' "${file}" 2>/dev/null; then
+      return 0
+    fi
+    tmp="${file}.tmp.$$"
+    if awk '{
+      line=$0
+      sub(/\r$/, "", line)
+      if (line != "@../.aihaus/decisions.md" && line != "@../.aihaus/knowledge.md") print $0
+    }' "${file}" > "${tmp}" 2>/dev/null; then
+      mv "${tmp}" "${file}"
+      echo "  claude-context: removed large ledger startup imports"
+    else
+      rm -f "${tmp}" 2>/dev/null || true
+    fi
+  }
+
   if [[ -f "${context_src}" ]]; then
     if [[ ! -f "${context_dst}" ]]; then
       cp "${context_src}" "${context_dst}"
@@ -299,6 +318,7 @@ seed_claude_context_bridge() {
   else
     echo "  warn: Claude context template missing at ${context_src}"
   fi
+  _scrub_large_claude_imports "${context_dst}"
 
   if [[ -f "${rule_src}" ]]; then
     if [[ ! -f "${rule_dst}" ]]; then

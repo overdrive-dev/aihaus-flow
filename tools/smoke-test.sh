@@ -5378,10 +5378,13 @@ check_claude_project_context_bridge() {
   local rule_template="${PACKAGE_ROOT}/.aihaus/templates/claude/rules/aihaus-project-memory.md"
   local role_defaults="${PACKAGE_ROOT}/.aihaus/hooks/lib/role-defaults.json"
   local context_hook="${PACKAGE_ROOT}/.aihaus/hooks/context-inject.sh"
+  local session_hook="${PACKAGE_ROOT}/.aihaus/hooks/session-start.sh"
   local init_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-init/SKILL.md"
   local project_template="${PACKAGE_ROOT}/.aihaus/templates/project.md"
   local env_seed="${PACKAGE_ROOT}/.aihaus/memory/workflows/environment.md"
+  local out_root="${SCRIPT_DIR}/.out"
   local script
+  mkdir -p "${out_root}" 2>/dev/null || true
 
   if [[ ! -f "${context_template}" ]]; then
     issues+=("missing Claude context template")
@@ -5390,6 +5393,10 @@ check_claude_project_context_bridge() {
     grep -Fq '@../.aihaus/project.md' "${context_template}" || issues+=("CLAUDE.md template does not import project.md")
     grep -Fq '@../.aihaus/workflows/default.md' "${context_template}" || issues+=("CLAUDE.md template does not import workflow profile")
     grep -Fq '@../.aihaus/memory/workflows/environment.md' "${context_template}" || issues+=("CLAUDE.md template does not import workflow environment memory")
+    if grep -Eq '^@\.\./\.aihaus/(decisions|knowledge)\.md[[:space:]]*$' "${context_template}"; then
+      issues+=("CLAUDE.md template imports large decisions/knowledge ledgers at startup")
+    fi
+    grep -Fq 'Large ledgers are intentionally not imported on startup' "${context_template}" || issues+=("CLAUDE.md template missing large-ledger selective-read note")
   fi
 
   if [[ ! -f "${rule_template}" ]]; then
@@ -5397,10 +5404,12 @@ check_claude_project_context_bridge() {
   else
     grep -Fq 'AIHAUS:CLAUDE-RULES-START' "${rule_template}" || issues+=("Claude rule template missing managed marker")
     grep -Fq 'Never store plaintext secrets' "${rule_template}" || issues+=("Claude rule template missing secret-handling rule")
+    grep -Fq 'Do not import entire large ledgers into startup context' "${rule_template}" || issues+=("Claude rule template missing large-ledger startup guard")
   fi
 
   for script in "${PACKAGE_ROOT}/scripts/install.sh" "${PACKAGE_ROOT}/scripts/update.sh"; do
     grep -Fq 'seed_claude_context_bridge' "${script}" || issues+=("$(basename "${script}") missing Claude bridge seeding")
+    grep -Fq '_scrub_large_claude_imports' "${script}" || issues+=("$(basename "${script}") missing large-ledger import scrub")
     grep -Fq 'memory: created .aihaus/knowledge.md' "${script}" || issues+=("$(basename "${script}") missing knowledge.md seed")
     grep -Fq 'ensure_workflow_environment_prompts' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt backfill")
     grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt marker")
@@ -5408,6 +5417,7 @@ check_claude_project_context_bridge() {
 
   for script in "${PACKAGE_ROOT}/scripts/install.ps1" "${PACKAGE_ROOT}/scripts/update.ps1"; do
     grep -Fq 'Ensure-ClaudeContextBridge' "${script}" || issues+=("$(basename "${script}") missing Claude bridge seeding")
+    grep -Fq 'Remove-LargeClaudeImports' "${script}" || issues+=("$(basename "${script}") missing large-ledger import scrub")
     grep -Fq 'memory: created .aihaus\knowledge.md' "${script}" || issues+=("$(basename "${script}") missing knowledge.md seed")
     grep -Fq 'Ensure-WorkflowEnvironmentPrompts' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt backfill")
     grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt marker")
@@ -5432,6 +5442,34 @@ check_claude_project_context_bridge() {
   grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${env_seed}" || issues+=("environment memory seed missing managed prompt marker")
   grep -Fq 'CodeBuild' "${env_seed}" || issues+=("environment memory seed missing CodeBuild prompt")
   grep -Fq 'Credential location' "${env_seed}" || issues+=("environment memory seed missing credential-location prompt")
+
+  if [[ -f "${session_hook}" ]]; then
+    bash -n "${session_hook}" 2>/dev/null || issues+=("session-start.sh not parseable")
+    grep -Fq 'json_escape()' "${session_hook}" || issues+=("session-start.sh missing jq-free JSON fallback")
+
+    local tmp_session tmp_bin cmd out rc
+    tmp_session="$(mktemp -d "${out_root}/session-no-jq-XXXXXX" 2>/dev/null || true)"
+    if [[ -n "${tmp_session}" ]]; then
+      tmp_bin="${tmp_session}/bin"
+      mkdir -p "${tmp_session}/.aihaus/hooks" "${tmp_session}/.claude" "${tmp_bin}"
+      for cmd in bash git ls wc date awk sort tail grep tr; do
+        cat > "${tmp_bin}/${cmd}" <<EOF
+#!/usr/bin/bash
+exec /usr/bin/${cmd} "\$@"
+EOF
+        chmod +x "${tmp_bin}/${cmd}"
+      done
+      rc=0
+      out="$(PATH="${tmp_bin}" CLAUDE_PROJECT_DIR="${tmp_session}" bash "${session_hook}" 2>&1)" || rc=$?
+      [[ "${rc}" -eq 0 ]] || issues+=("session-start.sh failed without jq in PATH: rc=${rc} out=${out:0:120}")
+      printf '%s' "${out}" | grep -Fq '"hookEventName":"SessionStart"' || issues+=("session-start.sh jq-free output missing SessionStart JSON")
+      rm -rf "${tmp_session}" 2>/dev/null || true
+    else
+      issues+=("failed to create session-start no-jq fixture")
+    fi
+  else
+    issues+=("session-start.sh missing")
+  fi
 
   if [[ ${#issues[@]} -eq 0 ]]; then
     _pass "$label"
@@ -5566,6 +5604,15 @@ check_project_context_refresh_hook() {
   }
 }
 EOF
+  cat > "${tmp_root}/.claude/CLAUDE.md" <<'EOF'
+# Claude Project Context
+
+<!-- AIHAUS:CLAUDE-CONTEXT-START -->
+@../.aihaus/project.md
+@../.aihaus/decisions.md
+@../.aihaus/knowledge.md
+<!-- AIHAUS:CLAUDE-CONTEXT-END -->
+EOF
   printf 'version: 0.2\n' > "${tmp_root}/buildspec.yml"
   printf 'export const config = {};\n' > "${tmp_root}/playwright.config.ts"
 
@@ -5577,6 +5624,9 @@ EOF
   grep -Fq 'Verdict: PASS' "${tmp_root}/.aihaus/audit/claude-context-verify.md" || issues+=("refresh hook did not repair context imports to verifier PASS")
   if grep -Fq '.claude/hooks/' "${tmp_root}/.claude/settings.local.json"; then
     issues+=("refresh hook did not normalize legacy .claude/hooks command path")
+  fi
+  if grep -Eq '^@\.\./\.aihaus/(decisions|knowledge)\.md[[:space:]]*$' "${tmp_root}/.claude/CLAUDE.md"; then
+    issues+=("refresh hook did not scrub large decisions/knowledge startup imports")
   fi
   grep -Fq '.aihaus/hooks/bash-guard.sh' "${tmp_root}/.claude/settings.local.json" || issues+=("refresh hook did not write .aihaus/hooks command path")
   [[ -f "${tmp_root}/.aihaus/audit/project-context-refresh.jsonl" ]] || issues+=("refresh hook did not write audit event")
