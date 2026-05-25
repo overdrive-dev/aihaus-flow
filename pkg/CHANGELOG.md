@@ -5,6 +5,17 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.13] - 2026-05-25 - workflow environment prompt backfill
+
+### Fixed
+
+- `/aih-update` now appends the runtime/CI/CodeBuild/credential-location
+  scaffold to existing `.aihaus/memory/workflows/environment.md` files when
+  that scaffold is missing. Existing installs get the same project-context
+  prompts as fresh installs without overwriting local workflow memory.
+- Smoke-test coverage now verifies the environment prompt backfill in both
+  shell and PowerShell install/update scripts.
+
 ## [0.38.12] - 2026-05-25 - Claude-native project context bridge
 
 ### Added

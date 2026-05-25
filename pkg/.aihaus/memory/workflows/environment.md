@@ -13,6 +13,7 @@ Record only durable facts, for example:
 
 Do not paste transient logs, tokens, screenshots, or one-off command output.
 
+<!-- AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START -->
 ## Runtime and Deployment
 
 - **Where code runs:** _local dev / container / CodeBuild / ECS / Lambda / other_
@@ -38,3 +39,4 @@ Do not paste transient logs, tokens, screenshots, or one-off command output.
 - **External kanban:** _Linear team/project/view, Jira project, Notion DB, or none_
 - **Stage sync:** _which statuses/views mirror local aihaus stages_
 - **Question protocol:** _how business-rule gaps are recorded and answered_
+<!-- AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-END -->

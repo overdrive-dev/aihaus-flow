@@ -5401,11 +5401,15 @@ check_claude_project_context_bridge() {
   for script in "${PACKAGE_ROOT}/scripts/install.sh" "${PACKAGE_ROOT}/scripts/update.sh"; do
     grep -Fq 'seed_claude_context_bridge' "${script}" || issues+=("$(basename "${script}") missing Claude bridge seeding")
     grep -Fq 'memory: created .aihaus/knowledge.md' "${script}" || issues+=("$(basename "${script}") missing knowledge.md seed")
+    grep -Fq 'ensure_workflow_environment_prompts' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt backfill")
+    grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt marker")
   done
 
   for script in "${PACKAGE_ROOT}/scripts/install.ps1" "${PACKAGE_ROOT}/scripts/update.ps1"; do
     grep -Fq 'Ensure-ClaudeContextBridge' "${script}" || issues+=("$(basename "${script}") missing Claude bridge seeding")
     grep -Fq 'memory: created .aihaus\knowledge.md' "${script}" || issues+=("$(basename "${script}") missing knowledge.md seed")
+    grep -Fq 'Ensure-WorkflowEnvironmentPrompts' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt backfill")
+    grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt marker")
   done
 
   if [[ -f "${role_defaults}" ]]; then
@@ -5424,6 +5428,7 @@ check_claude_project_context_bridge() {
 
   grep -Fq '.claude/CLAUDE.md' "${init_skill}" || issues+=("aih-init missing .claude/CLAUDE.md bridge contract")
   grep -Fq '## Operating Context' "${project_template}" || issues+=("project.md template missing Operating Context section")
+  grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${env_seed}" || issues+=("environment memory seed missing managed prompt marker")
   grep -Fq 'CodeBuild' "${env_seed}" || issues+=("environment memory seed missing CodeBuild prompt")
   grep -Fq 'Credential location' "${env_seed}" || issues+=("environment memory seed missing credential-location prompt")
 
