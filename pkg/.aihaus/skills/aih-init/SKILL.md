@@ -8,7 +8,7 @@ argument-hint: "[no arguments needed]"
 
 ## Task
 
-Bootstrap or refresh `.aihaus/project.md` by analyzing the current repository, then initialize the aih-graph memory index (Phase 3, M041). Fully autonomous; zero clarifying questions. Makes NO commits, NO branch changes. Writes are limited to `.aihaus/`, `.claude/settings.local.json`, and reversible archive moves of known legacy harness leftovers during Phase 2.6.
+Bootstrap or refresh `.aihaus/project.md` by analyzing the current repository, then initialize the aih-graph memory index (Phase 3, M041). Fully autonomous; zero clarifying questions. Makes NO commits, NO branch changes. Writes are limited to `.aihaus/`, `.claude/settings.local.json`, `.claude/CLAUDE.md`, `.claude/rules/aihaus-project-memory.md`, and reversible archive moves of known legacy harness leftovers during Phase 2.6.
 
 ---
 
@@ -24,6 +24,12 @@ all subsequent commands and agent teams run without permission prompts.
    Normalize every `hooks.<Event>` value to an array, matching `update.*`.
 4. If no JSON-capable runtime is available, copy the template and warn.
 5. Print: "Claude Code settings configured for autonomous operation."
+
+### 0.5. Ensure Claude-native project context bridge
+Create or append the `.claude/CLAUDE.md` and
+`.claude/rules/aihaus-project-memory.md` bootstrap blocks described in
+`annexes/claude-context-bridge.md`. Preserve existing user text.
+Print: "Claude Code project context bridge configured."
 
 ---
 
@@ -179,7 +185,7 @@ Initializes the aih-graph structural+semantic memory index (BM25/FTS5 default; p
 
 ## Guardrails
 - NO commits, NO `git add`, NO `git checkout`, NO branch creation.
-- Writes limited to `.aihaus/` (scratch file, `project.md`, `project.md.bak`, workflow defaults, and memory runtime state)
+- Writes limited to `.aihaus/` (scratch file, `project.md`, `project.md.bak`, workflow defaults, and memory runtime state), `.claude/settings.local.json`, `.claude/CLAUDE.md`, and `.claude/rules/aihaus-project-memory.md`
   and `.claude/settings.local.json` (Phase 0 only), except Phase 2.6 may move
   untracked known-disposable legacy harness leftovers into `.aihaus/backups/`.
 - If anything fails, surface the error and leave `.aihaus/project.md`

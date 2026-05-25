@@ -215,6 +215,50 @@ foreach ($rel in $memorySeedFiles) {
         Copy-Item -LiteralPath $src -Destination $dst
     }
 }
+$knowledgeSeedSrc = Join-Path $PkgTemplates 'knowledge.md'
+$knowledgeSeedDst = Join-Path $Aihaus 'knowledge.md'
+if (-not (Test-Path -LiteralPath $knowledgeSeedDst) -and (Test-Path -LiteralPath $knowledgeSeedSrc)) {
+    Copy-Item -LiteralPath $knowledgeSeedSrc -Destination $knowledgeSeedDst
+    Write-Host "  memory: created .aihaus\knowledge.md"
+}
+
+function Ensure-ClaudeContextBridge {
+    param([string]$ClaudeDir)
+
+    $contextSrc = Join-Path $PkgTemplates 'claude\CLAUDE.md'
+    $contextDst = Join-Path $ClaudeDir 'CLAUDE.md'
+    $ruleSrc = Join-Path $PkgTemplates 'claude\rules\aihaus-project-memory.md'
+    $rulesDir = Join-Path $ClaudeDir 'rules'
+    $ruleDst = Join-Path $rulesDir 'aihaus-project-memory.md'
+
+    New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
+
+    if (Test-Path -LiteralPath $contextSrc) {
+        if (-not (Test-Path -LiteralPath $contextDst)) {
+            Copy-Item -LiteralPath $contextSrc -Destination $contextDst
+            Write-Host "  claude-context: created .claude\CLAUDE.md"
+        } elseif (-not (Select-String -LiteralPath $contextDst -Pattern 'AIHAUS:CLAUDE-CONTEXT-START' -SimpleMatch -Quiet)) {
+            Add-Content -LiteralPath $contextDst -Value ''
+            Add-Content -LiteralPath $contextDst -Value (Get-Content -LiteralPath $contextSrc -Raw)
+            Write-Host "  claude-context: appended aihaus imports to .claude\CLAUDE.md"
+        }
+    } else {
+        Write-Host "  warn: Claude context template missing at $contextSrc" -ForegroundColor Yellow
+    }
+
+    if (Test-Path -LiteralPath $ruleSrc) {
+        if (-not (Test-Path -LiteralPath $ruleDst)) {
+            Copy-Item -LiteralPath $ruleSrc -Destination $ruleDst
+            Write-Host "  claude-context: created .claude\rules\aihaus-project-memory.md"
+        } elseif (-not (Select-String -LiteralPath $ruleDst -Pattern 'AIHAUS:CLAUDE-RULES-START' -SimpleMatch -Quiet)) {
+            Add-Content -LiteralPath $ruleDst -Value ''
+            Add-Content -LiteralPath $ruleDst -Value (Get-Content -LiteralPath $ruleSrc -Raw)
+            Write-Host "  claude-context: appended aihaus rule to .claude\rules\aihaus-project-memory.md"
+        }
+    } else {
+        Write-Host "  warn: Claude rule template missing at $ruleSrc" -ForegroundColor Yellow
+    }
+}
 
 # ---- Refresh auto.ps1 from launch-aihaus.ps1 on hash change (M019/S02 F-C3 fix) --
 # Closes the same gap as update.sh: existing installs receive CLI-005 env defaults
@@ -551,6 +595,7 @@ function Link-Or-Copy {
 }
 
 New-Item -ItemType Directory -Path $Claude -Force | Out-Null
+Ensure-ClaudeContextBridge -ClaudeDir $Claude
 foreach ($name in @('skills', 'agents', 'hooks')) {
     Link-Or-Copy -Name $name
 }

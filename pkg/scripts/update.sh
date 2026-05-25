@@ -231,6 +231,44 @@ for rel in \
     cp "${PKG_AIHAUS}/${rel}" "${AIHAUS}/${rel}"
   fi
 done
+if [[ ! -f "${AIHAUS}/knowledge.md" && -f "${PKG_TEMPLATES}/knowledge.md" ]]; then
+  cp "${PKG_TEMPLATES}/knowledge.md" "${AIHAUS}/knowledge.md"
+  echo "  memory: created .aihaus/knowledge.md"
+fi
+
+seed_claude_context_bridge() {
+  local claude_dir="$1"
+  local context_src="${PKG_TEMPLATES}/claude/CLAUDE.md"
+  local context_dst="${claude_dir}/CLAUDE.md"
+  local rule_src="${PKG_TEMPLATES}/claude/rules/aihaus-project-memory.md"
+  local rule_dst="${claude_dir}/rules/aihaus-project-memory.md"
+
+  mkdir -p "${claude_dir}/rules"
+
+  if [[ -f "${context_src}" ]]; then
+    if [[ ! -f "${context_dst}" ]]; then
+      cp "${context_src}" "${context_dst}"
+      echo "  claude-context: created .claude/CLAUDE.md"
+    elif ! grep -Fq "AIHAUS:CLAUDE-CONTEXT-START" "${context_dst}"; then
+      { printf '\n\n'; cat "${context_src}"; } >> "${context_dst}"
+      echo "  claude-context: appended aihaus imports to .claude/CLAUDE.md"
+    fi
+  else
+    echo "  warn: Claude context template missing at ${context_src}"
+  fi
+
+  if [[ -f "${rule_src}" ]]; then
+    if [[ ! -f "${rule_dst}" ]]; then
+      cp "${rule_src}" "${rule_dst}"
+      echo "  claude-context: created .claude/rules/aihaus-project-memory.md"
+    elif ! grep -Fq "AIHAUS:CLAUDE-RULES-START" "${rule_dst}"; then
+      { printf '\n\n'; cat "${rule_src}"; } >> "${rule_dst}"
+      echo "  claude-context: appended aihaus rule to .claude/rules/aihaus-project-memory.md"
+    fi
+  else
+    echo "  warn: Claude rule template missing at ${rule_src}"
+  fi
+}
 
 # ---- Refresh auto.sh from launch-aihaus.sh on hash change (M019/S02 F-C3 fix) --
 # Previously update.sh only refreshed skills/agents/hooks/templates; this block
@@ -309,6 +347,7 @@ link_or_copy() {
 }
 
 mkdir -p "${CLAUDE}"
+seed_claude_context_bridge "${CLAUDE}"
 for name in skills agents hooks; do
   link_or_copy "${name}"
 done

@@ -17,7 +17,7 @@
 **Built for people who'd rather shape an idea than chaperone a model.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.38.11-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.38.12-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
 <br>
@@ -174,7 +174,10 @@ Every agent reads the same small set of files before it touches anything else. N
 
 | File | Purpose |
 |------|---------|
+| `.claude/CLAUDE.md` | Claude Code entrypoint that imports the repo-local aihaus context on fresh sessions |
+| `.claude/rules/aihaus-project-memory.md` | Claude Code rule reminding new sessions to consult project memory and avoid inventing missing environment facts |
 | `.aihaus/project.md` | Stack, conventions, architecture — read at runtime by every agent |
+| `.aihaus/memory/workflows/environment.md` | Runtime, CI/CD, CodeBuild, credential-location, dev URL, and validation-command facts |
 | `.aihaus/decisions.md` | Architecture Decision Records. Binding. Every code-writing agent reads this before editing code |
 | `.aihaus/knowledge.md` | Lessons and gotchas carried forward across milestones so they stop repeating |
 | `.aihaus/memory/` | Persistent scoped memory (global + project) spanning sessions |

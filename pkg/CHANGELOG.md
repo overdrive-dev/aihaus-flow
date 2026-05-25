@@ -5,6 +5,26 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.12] - 2026-05-25 - Claude-native project context bridge
+
+### Added
+
+- Install/update now seed `.claude/CLAUDE.md` and
+  `.claude/rules/aihaus-project-memory.md` from managed templates so fresh
+  Claude Code sessions load the repo-local aihaus workflow and memory context
+  before slash commands or subagents run.
+- `.aihaus/memory/workflows/environment.md` and the project template now expose
+  explicit slots for runtime location, CodeBuild/CI, credential locations, dev
+  URLs, Playwright/browser validation, and project protocols.
+- Subagent context defaults and the `context-inject.sh` fallback now include the
+  workflow profile and workflow environment memory, not only project/ADR/knowledge
+  files.
+- Install/update now seed `.aihaus/knowledge.md` from the bootstrap template
+  when it is missing, so Claude imports do not point at a non-existent knowledge
+  file.
+- Smoke-test coverage verifies the Claude-native bridge, installer/updater
+  seeding, environment-memory prompts, and subagent context defaults.
+
 ## [0.38.11] - 2026-05-25 - repo-local memory write boundary
 
 ### Fixed

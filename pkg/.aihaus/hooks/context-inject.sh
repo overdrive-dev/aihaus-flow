@@ -658,6 +658,8 @@ if [ -z "$(printf '%s' "$payload_lines" | tr -d '[:space:]')" ]; then
   payload_lines="HIGH:.aihaus/decisions.md — ADRs are binding; reading prevents conflicts.
 HIGH:.aihaus/knowledge.md — Known gotchas prevent known failures.
 HIGH:.aihaus/project.md — Stack and conventions are required context.
+HIGH:.aihaus/workflows/default.md — Workflow gates and protocols are required context.
+HIGH:.aihaus/memory/workflows/environment.md — Runtime, CI/CD, credential locations, and validation commands are required context.
 MED:.aihaus/memory/MEMORY.md — Agent memory index for cross-task context."
   path_method="fallback"
 fi

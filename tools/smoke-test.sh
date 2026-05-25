@@ -5369,6 +5369,71 @@ check_memory_write_boundary_contract() {
   fi
 }
 
+check_claude_project_context_bridge() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: Claude-native project context bridge"
+  local issues=()
+  local context_template="${PACKAGE_ROOT}/.aihaus/templates/claude/CLAUDE.md"
+  local rule_template="${PACKAGE_ROOT}/.aihaus/templates/claude/rules/aihaus-project-memory.md"
+  local role_defaults="${PACKAGE_ROOT}/.aihaus/hooks/lib/role-defaults.json"
+  local context_hook="${PACKAGE_ROOT}/.aihaus/hooks/context-inject.sh"
+  local init_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-init/SKILL.md"
+  local project_template="${PACKAGE_ROOT}/.aihaus/templates/project.md"
+  local env_seed="${PACKAGE_ROOT}/.aihaus/memory/workflows/environment.md"
+  local script
+
+  if [[ ! -f "${context_template}" ]]; then
+    issues+=("missing Claude context template")
+  else
+    grep -Fq 'AIHAUS:CLAUDE-CONTEXT-START' "${context_template}" || issues+=("CLAUDE.md template missing managed marker")
+    grep -Fq '@../.aihaus/project.md' "${context_template}" || issues+=("CLAUDE.md template does not import project.md")
+    grep -Fq '@../.aihaus/workflows/default.md' "${context_template}" || issues+=("CLAUDE.md template does not import workflow profile")
+    grep -Fq '@../.aihaus/memory/workflows/environment.md' "${context_template}" || issues+=("CLAUDE.md template does not import workflow environment memory")
+  fi
+
+  if [[ ! -f "${rule_template}" ]]; then
+    issues+=("missing Claude rules template")
+  else
+    grep -Fq 'AIHAUS:CLAUDE-RULES-START' "${rule_template}" || issues+=("Claude rule template missing managed marker")
+    grep -Fq 'Never store plaintext secrets' "${rule_template}" || issues+=("Claude rule template missing secret-handling rule")
+  fi
+
+  for script in "${PACKAGE_ROOT}/scripts/install.sh" "${PACKAGE_ROOT}/scripts/update.sh"; do
+    grep -Fq 'seed_claude_context_bridge' "${script}" || issues+=("$(basename "${script}") missing Claude bridge seeding")
+    grep -Fq 'memory: created .aihaus/knowledge.md' "${script}" || issues+=("$(basename "${script}") missing knowledge.md seed")
+  done
+
+  for script in "${PACKAGE_ROOT}/scripts/install.ps1" "${PACKAGE_ROOT}/scripts/update.ps1"; do
+    grep -Fq 'Ensure-ClaudeContextBridge' "${script}" || issues+=("$(basename "${script}") missing Claude bridge seeding")
+    grep -Fq 'memory: created .aihaus\knowledge.md' "${script}" || issues+=("$(basename "${script}") missing knowledge.md seed")
+  done
+
+  if [[ -f "${role_defaults}" ]]; then
+    grep -Fq '.aihaus/workflows/default.md' "${role_defaults}" || issues+=("role-defaults missing workflow profile context")
+    grep -Fq '.aihaus/memory/workflows/environment.md' "${role_defaults}" || issues+=("role-defaults missing workflow environment context")
+  else
+    issues+=("role-defaults.json missing")
+  fi
+
+  if [[ -f "${context_hook}" ]]; then
+    grep -Fq '.aihaus/workflows/default.md' "${context_hook}" || issues+=("context-inject fallback missing workflow profile")
+    grep -Fq '.aihaus/memory/workflows/environment.md' "${context_hook}" || issues+=("context-inject fallback missing workflow environment")
+  else
+    issues+=("context-inject.sh missing")
+  fi
+
+  grep -Fq '.claude/CLAUDE.md' "${init_skill}" || issues+=("aih-init missing .claude/CLAUDE.md bridge contract")
+  grep -Fq '## Operating Context' "${project_template}" || issues+=("project.md template missing Operating Context section")
+  grep -Fq 'CodeBuild' "${env_seed}" || issues+=("environment memory seed missing CodeBuild prompt")
+  grep -Fq 'Credential location' "${env_seed}" || issues+=("environment memory seed missing credential-location prompt")
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -5377,6 +5442,7 @@ check_goal_aftermath_regressions
 check_legacy_hygiene_regressions
 check_goal_business_rule_gap_contract
 check_memory_write_boundary_contract
+check_claude_project_context_bridge
 check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
 

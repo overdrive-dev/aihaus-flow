@@ -73,6 +73,19 @@ See [.aihaus/knowledge.md](.aihaus/knowledge.md) for accumulated lessons and got
 
 Short pointers to the most important knowledge entries can live here.
 
+## Operating Context
+
+<!-- Edit this manually; preserved across /aih-init runs. Keep secrets out of this file. -->
+
+Use this section for the project facts a fresh Claude Code session must know
+before it can plan, test, deploy, or review safely.
+
+- **Runtime:** _Where the code runs, for example local dev, Docker, ECS, CodeBuild, Lambda, staging, or production._
+- **CI/CD:** _Pipeline names, CodeBuild projects, deployment commands, promotion gates, rollback notes._
+- **Test credentials:** _Where authorized test credentials live and which roles/accounts they cover; never paste plaintext secrets._
+- **Validation:** _Default test, lint, Playwright, smoke, and environment-check commands._
+- **Protocols:** _Project-specific intake, Linear/kanban, release, incident, or support protocols._
+
 ## Milestone History
 
 <!-- Each milestone completion appends a row here -->
