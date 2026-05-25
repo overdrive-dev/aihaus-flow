@@ -54,3 +54,7 @@ allow other ready tasks to continue.
 For UI or user-flow work, `review-dev` cannot pass without Playwright/headless
 browser evidence. Backend-only skips must say why there is no frontend,
 console, or environment-visible behavior to validate.
+
+`review-dev` must dispatch `workflow-dev-reviewer` immediately when a task
+enters the stage. A `workflow-test-gate` Playwright plan is only input for that
+agent, not a substitute for running dev review.

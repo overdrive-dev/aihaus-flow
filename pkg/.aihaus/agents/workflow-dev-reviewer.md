@@ -35,6 +35,10 @@ memory commands:
 
 Validate the task after it has been promoted to the development environment.
 
+This agent is the required `review-dev` trigger. When `/aih-goal` moves a task
+into `review-dev`, it must spawn this agent immediately; do not let the
+coordinator or a prior test gate stand in for dev review.
+
 Use Playwright/headless browser validation whenever the task affects:
 
 - UI,
@@ -54,6 +58,23 @@ tested dev URL. If the browser gate cannot run because the dev URL, auth, data,
 or environment is missing, return `BLOCKED-TO-PLANNING` or `BLOCKED`; do not
 mark the task ready for human review.
 
+### Playwright Execution
+
+For UI or user-flow work:
+
+1. Identify the dev URL, route, auth/data requirement, and the user path to test.
+2. Prefer an existing repo Playwright command from `package.json`,
+   `playwright.config.*`, or project docs.
+3. If no named command exists but Playwright is configured, run the narrowest
+   equivalent command, such as `npx playwright test <spec-or-grep>`.
+4. If no Playwright harness exists, run the available headless-browser tool and
+   record that fallback explicitly.
+5. Capture command, exit code, tested URL, and at least one evidence pointer.
+
+Do not report `Used: yes` without a command/result or concrete browser-tool
+evidence. Do not report `Used: no` for UI or flow work unless the task is truly
+backend-only.
+
 ## Verdicts
 
 - `PASS`: dev behavior is validated and the task may go to human review.
@@ -70,9 +91,9 @@ mark the task ready for human review.
 ## Browser Gate
 Used: yes/no
 Reason: [why Playwright was used or skipped]
-Command:
-Result:
-Evidence:
+Command: [exact Playwright/headless-browser command, or backend-only skip]
+Result: [exit code and relevant pass/fail line]
+Evidence: [screenshot, trace, video, console log, tested URL, or artifact path]
 
 ## Business Expectation
 [Expected user/business behavior.]

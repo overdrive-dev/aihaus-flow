@@ -5,6 +5,22 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.10] - 2026-05-24 - review-dev Playwright dispatch
+
+### Fixed
+
+- `/aih-goal` now treats entry into `review-dev` as a mandatory dispatch edge:
+  every task reaching the stage must immediately spawn `workflow-dev-reviewer`
+  instead of letting the coordinator or prior test gate self-evaluate dev
+  review.
+- `workflow-test-gate` now states that a Playwright dev-review plan is only
+  preparation and does not replace running `workflow-dev-reviewer`.
+- `workflow-dev-reviewer` now has an explicit Playwright execution contract:
+  identify the dev route/auth/data, prefer the repo Playwright command, capture
+  command/result/evidence, and block rather than reporting a browser pass
+  without concrete execution evidence.
+- Smoke-test coverage now verifies the review-dev agent dispatch contract.
+
 ## [0.38.9] - 2026-05-24 - task-specific planning blockers
 
 ### Added

@@ -5115,14 +5115,20 @@ check_goal_aftermath_regressions() {
   if [[ ! -f "$goal_init" ]] || ! bash -n "$goal_init" >/dev/null 2>&1; then
     issues+=("aih-goal init-goal-db.sh missing or not parseable")
   fi
-  if ! grep -Fq 'Do not park tasks in `review-dev` with browser validation pending.' "$goal_skill"; then
-    issues+=("aih-goal missing no-park review-dev Playwright rule")
+  if ! grep -Fq 'Every task that reaches `review-dev` must immediately spawn `workflow-dev-reviewer`.' "$goal_skill"; then
+    issues+=("aih-goal missing mandatory review-dev agent dispatch rule")
+  fi
+  if ! grep -Fq 'do not self-evaluate' "$goal_skill"; then
+    issues+=("aih-goal missing no self-evaluate review-dev rule")
   fi
   if ! grep -Fq 'Playwright evidence passes' "$workflow_default"; then
     issues+=("workflow default missing Playwright evidence exit gate")
   fi
   if ! grep -Fq 'PASS requires a Playwright command result' "$dev_reviewer"; then
     issues+=("workflow-dev-reviewer missing mandatory Playwright PASS rule")
+  fi
+  if ! grep -Fq 'must spawn this agent immediately' "$dev_reviewer"; then
+    issues+=("workflow-dev-reviewer missing mandatory dispatch contract")
   fi
   if ! grep -Fq 'Playwright was required but not run' "$human_review"; then
     issues+=("workflow-human-review missing missing-Playwright blocker rule")

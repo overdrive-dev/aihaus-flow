@@ -56,6 +56,10 @@ For UI, navigation, forms, interaction, console-observable behavior, or user
 flows, `review-dev` must run Playwright or another headless browser check after
 the change is available in the dev environment.
 
+The stage transition itself must trigger `workflow-dev-reviewer`. A Playwright
+plan produced in `testes` is only preparation; it does not count as review-dev
+execution and cannot move the task to `human-review`.
+
 The task cannot move to `human-review`, and should not sit in `review-dev`, with
 browser validation still pending. It needs one of:
 

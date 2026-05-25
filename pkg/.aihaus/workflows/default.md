@@ -71,6 +71,10 @@ continue with other ready tasks.
 `review-dev` uses Playwright/headless browser validation whenever the task has
 visual, navigation, form, interaction, console, or user-flow impact.
 
+Entering `review-dev` is a dispatch edge. `/aih-goal` must immediately spawn
+`workflow-dev-reviewer`; a Playwright plan written in `testes` or evidence from
+another gate does not replace dev review.
+
 Backend-only tasks may skip browser validation only when there is no direct
 front-end, console, or environment-visible behavior to check. The reviewer must
 say why the browser gate was not applicable.
@@ -117,6 +121,7 @@ The goal runner must:
 - evaluate planning before TDD for every task,
 - persist task-specific planning questions and answers as structured contracts,
 - continue ready tasks when other tasks are blocked,
+- spawn `workflow-dev-reviewer` immediately when a task enters `review-dev`,
 - attach evidence before moving work to `human-review`,
 - require Playwright evidence before `human-review` for UI or user-flow work,
 - sync questions and evidence back to the external source when available.

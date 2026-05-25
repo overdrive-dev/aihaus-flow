@@ -132,11 +132,11 @@ For each `READY-FOR-TDD` task, run stages in order until `--until`:
 3. `workflow-execution-review`
 4. `workflow-test-gate`
 5. `workflow-cicd` for `subida-dev` and environment evidence
-6. `workflow-dev-reviewer`
+6. enter `review-dev` by spawning `workflow-dev-reviewer`; do not self-evaluate
 7. `workflow-human-review`
 
-For UI or user-flow work, `workflow-dev-reviewer` must run Playwright or record
-an explicit backend-only skip. Do not park tasks in `review-dev` with browser validation pending.
+Every task that reaches `review-dev` must immediately spawn `workflow-dev-reviewer`.
+For UI or user-flow work, it must run Playwright or record an explicit backend-only skip; never park browser validation pending.
 
 Implementation tasks default to sequential execution. Use `--max-active` only
 when owned files and deploy/test environments are independent. Never run two
