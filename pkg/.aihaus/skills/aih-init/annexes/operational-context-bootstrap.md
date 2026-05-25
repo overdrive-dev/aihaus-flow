@@ -33,9 +33,21 @@ inventing values.
    question, ask only Q1 to the human. Record the answer in the same artifact
    under `## Answered During Init`. Do not block init if the answer is absent.
 
+5. Promote only confirmed facts from repository evidence or explicit human answers:
+
+   - Repository evidence may update `.aihaus/memory/workflows/environment.md`
+     and `.aihaus/project.md` managed blocks.
+   - A human answer may be promoted to `.aihaus/memory/workflows/rules.md`,
+     `.aihaus/knowledge.md`, or `.aihaus/decisions.md` when it defines a
+     durable rule, operational gotcha, or binding decision.
+   - Unanswered questions are never promoted to memory, knowledge, decisions,
+     kanban, or external trackers as if they were facts.
+
 Rules:
 
 - Never read or store plaintext secrets.
 - Environment discovery is evidence-based; mark missing facts as gaps.
 - Business questions must be rule/criterion questions, not implementation
   trivia or bundled option menus.
+- Fresh installs must remain project-agnostic. Do not seed aihaus-flow package
+  history, examples, or internal decisions into the target repository.

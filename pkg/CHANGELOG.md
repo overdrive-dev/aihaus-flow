@@ -5,6 +5,22 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.18] - 2026-05-25 - project-agnostic fresh memory
+
+### Fixed
+
+- Fresh installs no longer bulk-copy package `.aihaus/` history into target
+  repositories. Install now copies only package-owned base surfaces and seeds
+  project knowledge, decisions, and memory from neutral templates.
+- `knowledge.md`, `decisions.md`, and memory bucket seeds now start empty and
+  explicitly require repository evidence or human answers before promotion.
+- Context injection no longer preloads empty or stale project ledgers as
+  required context; agents get bounded project/workflow memory and task
+  artifacts by default.
+- `/aih-init` now documents the bootstrap promotion policy: discovered evidence
+  may populate operational memory, answered business questions may become
+  rules/knowledge/decisions, and unanswered questions remain questions.
+
 ## [0.38.17] - 2026-05-25 - fresh install startup hardening
 
 ### Fixed

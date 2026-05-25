@@ -174,6 +174,10 @@ discovery and Claude context verifier scripts, then spawn
 `project-business-interviewer` to write
 `.aihaus/init/business-context-questions.md`. If interactive, ask only the top
 unanswered business-rule question; never block `/aih-init` on the answer.
+Promote context only from repository evidence or explicit human answers:
+unanswered questions stay in the init artifact, confirmed operational facts go
+to workflow memory, and confirmed architecture/business decisions go to
+`.aihaus/decisions.md` or `.aihaus/knowledge.md` as appropriate.
 
 ## Phase 3 — aih-graph memory bootstrap (M041)
 Initializes the aih-graph structural+semantic memory index (BM25/FTS5 default; pure-Go, no API key). Non-fatal — any failure degrades silently. Full 5-step flow: `annexes/aih-graph-bootstrap.md`.

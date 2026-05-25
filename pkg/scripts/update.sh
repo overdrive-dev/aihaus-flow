@@ -231,6 +231,10 @@ for rel in \
     cp "${PKG_AIHAUS}/${rel}" "${AIHAUS}/${rel}"
   fi
 done
+if [[ ! -f "${AIHAUS}/decisions.md" && -f "${PKG_TEMPLATES}/decisions.md" ]]; then
+  cp "${PKG_TEMPLATES}/decisions.md" "${AIHAUS}/decisions.md"
+  echo "  memory: created .aihaus/decisions.md"
+fi
 if [[ ! -f "${AIHAUS}/knowledge.md" && -f "${PKG_TEMPLATES}/knowledge.md" ]]; then
   cp "${PKG_TEMPLATES}/knowledge.md" "${AIHAUS}/knowledge.md"
   echo "  memory: created .aihaus/knowledge.md"
@@ -270,7 +274,7 @@ ensure_workflow_environment_prompts() {
 
 ## Source System Hints
 
-- **External kanban:** _Linear team/project/view, Jira project, Notion DB, or none_
+- **External kanban:** _source system, project/view/board identifiers, or none_
 - **Stage sync:** _which statuses/views mirror local aihaus stages_
 - **Question protocol:** _how business-rule gaps are recorded and answered_
 <!-- AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-END -->

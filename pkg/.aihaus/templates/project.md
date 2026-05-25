@@ -84,7 +84,7 @@ before it can plan, test, deploy, or review safely.
 - **CI/CD:** _Pipeline names, CodeBuild projects, deployment commands, promotion gates, rollback notes._
 - **Test credentials:** _Where authorized test credentials live and which roles/accounts they cover; never paste plaintext secrets._
 - **Validation:** _Default test, lint, Playwright, smoke, and environment-check commands._
-- **Protocols:** _Project-specific intake, Linear/kanban, release, incident, or support protocols._
+- **Protocols:** _Project-specific intake, kanban/source-system, release, incident, or support protocols._
 
 ## Milestone History
 

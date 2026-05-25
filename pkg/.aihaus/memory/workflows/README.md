@@ -9,8 +9,8 @@ Use it for:
 - CI/CD and environment notes,
 - recurring workflow gotchas,
 - business-language reasons a task returned to planning.
-- source-system preferences, such as how Linear issues encode planning answers.
-- kanban source hints, such as the default Linear project/view or Notion database
+- source-system preferences, such as how external cards encode planning answers.
+- kanban source hints, such as the default project, board, view, or database
   used by `/aih-goal`.
 - conventions for planning question/answer contracts and related-task links in
   the local kanban.

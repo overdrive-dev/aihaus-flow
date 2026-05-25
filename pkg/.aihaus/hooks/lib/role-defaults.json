@@ -1,48 +1,36 @@
 {
-  "_comment": "Role-default context paths keyed on cohort (ADR-M013-A). Used by context-inject.sh static path. Each entry is an array of {tier, path, rationale} objects. Paths are relative to the project root (or .aihaus/ base). The token '<story-file>' is resolved at runtime by context-inject.sh.",
+  "_comment": "Role-default context paths keyed on cohort. Used by context-inject.sh static path. Each entry is an array of {tier, path, rationale} objects. Paths are relative to the project root (or .aihaus/ base). The token '<story-file>' is resolved at runtime by context-inject.sh.",
   "_schema": 1,
   ":planner-binding": [
-    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs gate all architectural decisions and are binding on planners."},
-    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas and patterns prevent repeated mistakes in planning."},
     {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack, conventions, and milestone history inform planning scope."},
     {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Stage gates and source-sync rules shape task planning."},
     {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Runtime, CI/CD, credential locations, and validation commands are project-specific."},
     {"tier": "HIGH", "path": "<analysis-brief>", "rationale": "Analyst brief is the primary input to binding-tier planners."}
   ],
   ":planner": [
-    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs are binding; planners must not contradict existing architecture."},
-    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas and reusable patterns are relevant to research synthesis."},
     {"tier": "MED",  "path": ".aihaus/project.md", "rationale": "Stack and conventions provide grounding for research and analysis."},
     {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Stage gates and workflow protocols define how planned work moves."},
     {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Environment and CI/CD facts prevent generic validation plans."},
     {"tier": "MED",  "path": "<analysis-brief>", "rationale": "Prior analysis brief gives context on what has already been investigated."}
   ],
   ":doer": [
-    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs are binding on implementation; must not contradict architecture."},
-    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas prevent implementation mistakes."},
     {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack, conventions, and verification commands required for implementation."},
     {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Stage gates define required handoff and validation evidence."},
     {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Runtime, test credentials, deploy jobs, and smoke commands are required execution context."},
     {"tier": "HIGH", "path": "<story-file>", "rationale": "Story spec and acceptance criteria define the implementation target."}
   ],
   ":verifier": [
-    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs define what must be verified as implemented correctly."},
-    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas surface verification gaps agents self-report miss."},
     {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Workflow gates define pass, skip, block, and evidence semantics."},
     {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Verification depends on dev URLs, CI jobs, credentials, and smoke commands."},
     {"tier": "HIGH", "path": "<story-file>", "rationale": "Acceptance criteria are the ground truth for verification verdicts."},
     {"tier": "MED",  "path": "<execution-dir>", "rationale": "Execution artifacts and prior summaries provide evidence for verification."}
   ],
   ":adversarial-scout": [
-    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs are the binding contract scouts verify plans comply with."},
-    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas are primary adversarial scout targets."},
     {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Workflow gates reveal missing planning and validation obligations."},
     {"tier": "MED",  "path": ".aihaus/memory/workflows/environment.md", "rationale": "Environment facts often expose unvalidated assumptions."},
     {"tier": "HIGH", "path": "<story-file>", "rationale": "Story spec is the scope boundary for adversarial plan review."}
   ],
   ":adversarial-review": [
-    {"tier": "HIGH", "path": ".aihaus/decisions.md", "rationale": "ADRs are the contract reviewers verify the diff complies with."},
-    {"tier": "HIGH", "path": ".aihaus/knowledge.md", "rationale": "Known gotchas are the primary adversarial review targets."},
     {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Review must enforce workflow evidence and handoff gates."},
     {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Review and Playwright checks depend on runtime and credential context."},
     {"tier": "MED",  "path": ".aihaus/memory/reviews", "rationale": "Prior review findings inform adversarial review patterns."}

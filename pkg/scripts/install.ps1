@@ -1,5 +1,5 @@
 # aihaus install script (Windows PowerShell)
-# Copies .aihaus/ into target repo and links .claude/{skills,agents,hooks}.
+# Installs package-owned aihaus surfaces and seeds neutral repo-local context.
 # V5 (M022/Z4): user-global skill bootstrap + 8-tier discovery priority chain
 #               + dogfood-mode branch + zero-prompt happy path.
 # Flags:
@@ -839,9 +839,20 @@ if ($Update) {
         }
     }
 
-    # Step 4: copy package .aihaus into target
+    # Step 4: install only package-owned base surfaces. Project knowledge,
+    # decisions, and memory are seeded below from neutral templates so fresh
+    # repos do not inherit aihaus-flow's own dogfood history.
     New-Item -ItemType Directory -Path $TargetAihaus -Force | Out-Null
-    Copy-Item -Path (Join-Path $PkgAihaus '*') -Destination $TargetAihaus -Recurse -Force
+    foreach ($rel in @('skills', 'agents', 'hooks', 'templates')) {
+        $src = Join-Path $PkgAihaus $rel
+        $dst = Join-Path $TargetAihaus $rel
+        if (Test-Path -LiteralPath $src) {
+            if (Test-Path -LiteralPath $dst) {
+                Remove-Item -LiteralPath $dst -Recurse -Force
+            }
+            Copy-Item -LiteralPath $src -Destination $dst -Recurse -Force
+        }
+    }
 }
 
 # Repo-local runtime layout. Package-owned source stays in AIHAUS_HOME; target
@@ -897,6 +908,12 @@ foreach ($rel in $memorySeedFiles) {
         Copy-Item -LiteralPath $src -Destination $dst
     }
 }
+$decisionSeedSrc = Join-Path $PkgTemplates 'decisions.md'
+$decisionSeedDst = Join-Path $TargetAihaus 'decisions.md'
+if (-not (Test-Path -LiteralPath $decisionSeedDst) -and (Test-Path -LiteralPath $decisionSeedSrc)) {
+    Copy-Item -LiteralPath $decisionSeedSrc -Destination $decisionSeedDst
+    Write-Host "  memory: created .aihaus\decisions.md"
+}
 $knowledgeSeedSrc = Join-Path $PkgTemplates 'knowledge.md'
 $knowledgeSeedDst = Join-Path $TargetAihaus 'knowledge.md'
 if (-not (Test-Path -LiteralPath $knowledgeSeedDst) -and (Test-Path -LiteralPath $knowledgeSeedSrc)) {
@@ -937,7 +954,7 @@ function Ensure-WorkflowEnvironmentPrompts {
 
 ## Source System Hints
 
-- **External kanban:** _Linear team/project/view, Jira project, Notion DB, or none_
+- **External kanban:** _source system, project/view/board identifiers, or none_
 - **Stage sync:** _which statuses/views mirror local aihaus stages_
 - **Question protocol:** _how business-rule gaps are recorded and answered_
 <!-- AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-END -->

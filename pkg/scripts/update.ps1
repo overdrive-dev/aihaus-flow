@@ -215,6 +215,12 @@ foreach ($rel in $memorySeedFiles) {
         Copy-Item -LiteralPath $src -Destination $dst
     }
 }
+$decisionSeedSrc = Join-Path $PkgTemplates 'decisions.md'
+$decisionSeedDst = Join-Path $Aihaus 'decisions.md'
+if (-not (Test-Path -LiteralPath $decisionSeedDst) -and (Test-Path -LiteralPath $decisionSeedSrc)) {
+    Copy-Item -LiteralPath $decisionSeedSrc -Destination $decisionSeedDst
+    Write-Host "  memory: created .aihaus\decisions.md"
+}
 $knowledgeSeedSrc = Join-Path $PkgTemplates 'knowledge.md'
 $knowledgeSeedDst = Join-Path $Aihaus 'knowledge.md'
 if (-not (Test-Path -LiteralPath $knowledgeSeedDst) -and (Test-Path -LiteralPath $knowledgeSeedSrc)) {
@@ -255,7 +261,7 @@ function Ensure-WorkflowEnvironmentPrompts {
 
 ## Source System Hints
 
-- **External kanban:** _Linear team/project/view, Jira project, Notion DB, or none_
+- **External kanban:** _source system, project/view/board identifiers, or none_
 - **Stage sync:** _which statuses/views mirror local aihaus stages_
 - **Question protocol:** _how business-rule gaps are recorded and answered_
 <!-- AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-END -->

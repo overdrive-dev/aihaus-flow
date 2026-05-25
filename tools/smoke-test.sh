@@ -1601,8 +1601,10 @@ check_memory_readme_seeds() {
   _start_check
   local label="Check ${CHECK_NUMBER}: memory seeds exist and non-empty"
   local memory_root="${PACKAGE_ROOT}/.aihaus/memory"
+  local templates_root="${PACKAGE_ROOT}/.aihaus/templates"
   local subdirs=(global backend frontend reviews agents workflows)
   local workflow_files=(README.md environment.md user-preferences.md rules.md gotchas.md)
+  local forbidden_re='Promoted from|First observed|adopter|dogfood|ADR-M0|M00[0-9]|M0[0-9][0-9]|pkg/\.aihaus|pkg\\\\\.aihaus|aihaus-flow package'
   local problems=()
 
   for subdir in "${subdirs[@]}"; do
@@ -1619,6 +1621,28 @@ check_memory_readme_seeds() {
       problems+=("missing: memory/workflows/${name}")
     elif [[ ! -s "$f" ]]; then
       problems+=("empty: memory/workflows/${name}")
+    fi
+  done
+  for name in knowledge.md decisions.md; do
+    local f="${templates_root}/${name}"
+    if [[ ! -f "$f" ]]; then
+      problems+=("missing: templates/${name}")
+    elif [[ ! -s "$f" ]]; then
+      problems+=("empty: templates/${name}")
+    fi
+  done
+  grep -Fq 'AIHAUS:PROJECT-KNOWLEDGE-EMPTY' "${templates_root}/knowledge.md" 2>/dev/null \
+    || problems+=("templates/knowledge.md missing empty-project marker")
+  grep -Fq 'AIHAUS:PROJECT-DECISIONS-EMPTY' "${templates_root}/decisions.md" 2>/dev/null \
+    || problems+=("templates/decisions.md missing empty-project marker")
+  while IFS= read -r -d '' f; do
+    if grep -Eiq "${forbidden_re}" "$f" 2>/dev/null; then
+      problems+=("non-neutral seed content: ${f#${PACKAGE_ROOT}/.aihaus/}")
+    fi
+  done < <(find "${memory_root}" -type f \( -name '*.md' -o -name '*.txt' \) -print0)
+  for f in "${templates_root}/knowledge.md" "${templates_root}/decisions.md"; do
+    if grep -Eiq "${forbidden_re}" "$f" 2>/dev/null; then
+      problems+=("non-neutral seed content: ${f#${PACKAGE_ROOT}/.aihaus/}")
     fi
   done
 
@@ -5410,22 +5434,33 @@ check_claude_project_context_bridge() {
   for script in "${PACKAGE_ROOT}/scripts/install.sh" "${PACKAGE_ROOT}/scripts/update.sh"; do
     grep -Fq 'seed_claude_context_bridge' "${script}" || issues+=("$(basename "${script}") missing Claude bridge seeding")
     grep -Fq '_scrub_large_claude_imports' "${script}" || issues+=("$(basename "${script}") missing large-ledger import scrub")
+    grep -Fq 'memory: created .aihaus/decisions.md' "${script}" || issues+=("$(basename "${script}") missing decisions.md neutral seed")
     grep -Fq 'memory: created .aihaus/knowledge.md' "${script}" || issues+=("$(basename "${script}") missing knowledge.md seed")
     grep -Fq 'ensure_workflow_environment_prompts' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt backfill")
     grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt marker")
   done
+  if grep -Fq 'cp -R "${PKG_AIHAUS}/."' "${PACKAGE_ROOT}/scripts/install.sh"; then
+    issues+=("install.sh bulk-copies package .aihaus into fresh repositories")
+  fi
 
   for script in "${PACKAGE_ROOT}/scripts/install.ps1" "${PACKAGE_ROOT}/scripts/update.ps1"; do
     grep -Fq 'Ensure-ClaudeContextBridge' "${script}" || issues+=("$(basename "${script}") missing Claude bridge seeding")
     grep -Fq 'Remove-LargeClaudeImports' "${script}" || issues+=("$(basename "${script}") missing large-ledger import scrub")
+    grep -Fq 'memory: created .aihaus\decisions.md' "${script}" || issues+=("$(basename "${script}") missing decisions.md neutral seed")
     grep -Fq 'memory: created .aihaus\knowledge.md' "${script}" || issues+=("$(basename "${script}") missing knowledge.md seed")
     grep -Fq 'Ensure-WorkflowEnvironmentPrompts' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt backfill")
     grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt marker")
   done
+  if grep -Fq "Join-Path \$PkgAihaus '*'" "${PACKAGE_ROOT}/scripts/install.ps1"; then
+    issues+=("install.ps1 bulk-copies package .aihaus into fresh repositories")
+  fi
 
   if [[ -f "${role_defaults}" ]]; then
     grep -Fq '.aihaus/workflows/default.md' "${role_defaults}" || issues+=("role-defaults missing workflow profile context")
     grep -Fq '.aihaus/memory/workflows/environment.md' "${role_defaults}" || issues+=("role-defaults missing workflow environment context")
+    if grep -Eq '\.aihaus/(decisions|knowledge)\.md' "${role_defaults}"; then
+      issues+=("role-defaults preloads project decisions/knowledge ledgers")
+    fi
   else
     issues+=("role-defaults.json missing")
   fi
@@ -5433,6 +5468,9 @@ check_claude_project_context_bridge() {
   if [[ -f "${context_hook}" ]]; then
     grep -Fq '.aihaus/workflows/default.md' "${context_hook}" || issues+=("context-inject fallback missing workflow profile")
     grep -Fq '.aihaus/memory/workflows/environment.md' "${context_hook}" || issues+=("context-inject fallback missing workflow environment")
+    if grep -Eq 'payload_lines="HIGH:\.aihaus/(decisions|knowledge)\.md|cohorts_summary=.*(decisions|knowledge)\.md' "${context_hook}"; then
+      issues+=("context-inject fallback/cohort summary preloads project decisions/knowledge ledgers")
+    fi
   else
     issues+=("context-inject.sh missing")
   fi
@@ -5442,6 +5480,8 @@ check_claude_project_context_bridge() {
   grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${env_seed}" || issues+=("environment memory seed missing managed prompt marker")
   grep -Fq 'CodeBuild' "${env_seed}" || issues+=("environment memory seed missing CodeBuild prompt")
   grep -Fq 'Credential location' "${env_seed}" || issues+=("environment memory seed missing credential-location prompt")
+  grep -Fq 'explicit human answers' "${PACKAGE_ROOT}/.aihaus/skills/aih-init/annexes/operational-context-bootstrap.md" \
+    || issues+=("aih-init operational bootstrap missing explicit-answer promotion policy")
 
   if [[ -f "${session_hook}" ]]; then
     bash -n "${session_hook}" 2>/dev/null || issues+=("session-start.sh not parseable")

@@ -11,8 +11,8 @@
 ## Goal delivered
 
 <!-- One paragraph describing what problem this milestone solved and why it matters to users.
-     Focus on outcomes, not tasks. Example: "Closed the M017 dogfood regression loop: worktree-reap
-     locked-entry handling now survives the Windows/OneDrive path-format mismatch identified in K-001." -->
+     Focus on outcomes, not tasks. Example: "Delivered the access-control
+     cleanup so reviewers can validate role behavior with a single smoke command." -->
 
 _[Describe the goal that was delivered and the user-visible outcome.]_
 
@@ -20,8 +20,7 @@ _[Describe the goal that was delivered and the user-visible outcome.]_
 
 <!-- Required table for generate-release-notes.sh to extract user-facing story titles.
      The canonical section header MUST be exactly: ## Stories Completed
-     (generate-release-notes.sh accepts '## Commits shipped' as a non-canonical fallback with WARN;
-     that alternative will be removed in M020.) -->
+     (generate-release-notes.sh accepts '## Commits shipped' as a non-canonical fallback with WARN.) -->
 
 ## Stories Completed
 
@@ -29,8 +28,8 @@ _[Describe the goal that was delivered and the user-visible outcome.]_
 |---|-------|--------|-----------|--------|
 | 1 | [Story title — appears verbatim in release notes] | complete | `path/to/file` | `abc1234` |
 
-<!-- Add one row per completed story. Stories mentioning smoke-test, purity-check, or dogfood-brainstorm
-     are automatically filtered from user-facing release notes by generate-release-notes.sh. -->
+<!-- Add one row per completed story. Internal tooling-only validation stories may be filtered
+     from user-facing release notes by generate-release-notes.sh. -->
 
 ## Artifacts
 
@@ -50,7 +49,7 @@ _[Describe the goal that was delivered and the user-visible outcome.]_
 
 ## Side effects / cleanup
 
-<!-- Anything this milestone changes that future milestones or adopters need to be aware of:
+<!-- Anything this milestone changes that future runs or maintainers need to be aware of:
      renamed files, removed commands, deprecated behaviors, migration notes. -->
 
 _[List any breaking changes, deprecations, or migration steps. If none, write "None."]_

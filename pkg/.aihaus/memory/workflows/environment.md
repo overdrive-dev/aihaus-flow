@@ -5,7 +5,7 @@ survive across `/aih-goal` runs.
 
 Record only durable facts, for example:
 
-- default Linear team, project, or view names used for goal intake,
+- default external source-system names used for goal intake,
 - dev/staging/prod URLs that agents should verify,
 - deployment commands, CI jobs, or environment gates,
 - credentials or access prerequisites described without secrets,
@@ -36,7 +36,7 @@ Do not paste transient logs, tokens, screenshots, or one-off command output.
 
 ## Source System Hints
 
-- **External kanban:** _Linear team/project/view, Jira project, Notion DB, or none_
+- **External kanban:** _source system, project/view/board identifiers, or none_
 - **Stage sync:** _which statuses/views mirror local aihaus stages_
 - **Question protocol:** _how business-rule gaps are recorded and answered_
 <!-- AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-END -->

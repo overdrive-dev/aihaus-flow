@@ -52,8 +52,11 @@ insufficient and `aihaus memory` is available, run:
   approval boundary, acceptance criterion, or validation evidence.
 - If several gaps are related, link them as related but keep separate question
   entries.
-- Do not write to Linear, kanban, `.aihaus/memory/workflows/**`, or
-  `.aihaus/project.md`. This agent only writes the interview artifact.
+- Do not write to external trackers, kanban, `.aihaus/memory/workflows/**`,
+  `.aihaus/knowledge.md`, `.aihaus/decisions.md`, or `.aihaus/project.md`.
+  This agent only writes the interview artifact.
+- Memory candidates are proposals only. They become durable memory or decisions
+  only after repository evidence or a human answer confirms them.
 
 ## Output
 

@@ -1,40 +1,20 @@
-# memory/global/ — Project-Wide Reusable Patterns
+# Global Memory
 
-## Purpose
+This directory holds project-wide reusable patterns that apply across more than
+one part of the repository.
 
-This bucket holds knowledge that is reusable across the entire project,
-regardless of stack layer. It is the primary output surface for the
-agent-evolution pass (ADR-M013-A) and the canonical landing zone for
-discoveries made by any agent that apply to more than one domain.
+Fresh installs intentionally start with no inherited global facts.
 
-## What goes here
+## What Goes Here
 
-- Cross-cutting patterns (error handling conventions, naming rules,
-  logging contracts, commit discipline)
-- Agent-evolution output: improvements proposed by the reviewer after
-  milestone completion that affect all agents
-- Global gotchas — traps that cost a story in any area of the codebase
-- Shared architectural decisions that are not yet formal ADRs
-- `gotchas.md` — persistent list of known pitfalls (all agents read this)
-- `patterns.md` — reusable implementation patterns (all agents read this)
+- Cross-cutting implementation conventions.
+- Project-wide gotchas confirmed by evidence.
+- Shared validation, release, or review rules.
+- Architectural or business-rule notes that are not yet formal decisions.
 
-## What does NOT go here
+## What Does Not Go Here
 
-- Backend-specific patterns → use `memory/backend/`
-- Frontend-specific patterns → use `memory/frontend/`
-- Reviewer-output findings logs → use `memory/reviews/`
-- In-progress or per-run state → belongs in the milestone's
-  `execution/KNOWLEDGE-LOG.md`, not here
-
-## Ownership
-
-Files in this bucket are **agent-written, human-reviewable**.
-The implementer, code-fixer, and reviewer agents write here.
-Per ADR-M009-A, `/aih-update` never overwrites this directory.
-
-## Cross-references
-
-- ADR-M013-A (to be written in S04) locks the full ownership contract.
-- `memory/reviews/common-findings.md` holds the plan-checker's log.
-- `MEMORY.md` (index at `memory/MEMORY.md`) is the entry point for
-  agents loading context before a task.
+- Backend-specific patterns.
+- Frontend-specific patterns.
+- Reviewer-output logs.
+- Active run state or one-off command output.

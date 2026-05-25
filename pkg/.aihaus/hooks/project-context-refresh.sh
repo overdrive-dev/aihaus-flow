@@ -196,7 +196,7 @@ ensure_block "${claude_dir}/rules/aihaus-project-memory.md" "AIHAUS:CLAUDE-RULES
 scrub_large_claude_imports "${claude_dir}/CLAUDE.md"
 
 copy_or_seed "${aihaus_dir}/templates/knowledge.md" "${aihaus_dir}/knowledge.md" "Knowledge Base"
-copy_or_seed "${aihaus_dir}/decisions.md" "${aihaus_dir}/decisions.md" "Architectural Decision Records"
+copy_or_seed "${aihaus_dir}/templates/decisions.md" "${aihaus_dir}/decisions.md" "Architectural Decision Records"
 
 write_if_missing "${aihaus_dir}/project.md" <<'EOF'
 # Project Context

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # aihaus install script (Unix)
-# Copies .aihaus/ into target repo and links .claude/{skills,agents,hooks}.
+# Installs package-owned aihaus surfaces and seeds neutral repo-local context.
 # V5 (M022/Z3): user-global skill bootstrap + 8-tier discovery priority chain
 #               + dogfood-mode branch + zero-prompt happy path.
 # Flags:
@@ -416,9 +416,16 @@ else
     fi
   fi
 
-  # Step 4: copy package .aihaus/ into target
+  # Step 4: install only package-owned base surfaces. Project knowledge,
+  # decisions, and memory are seeded below from neutral templates so fresh repos
+  # do not inherit aihaus-flow's own dogfood history.
   mkdir -p "${TARGET}/.aihaus"
-  cp -R "${PKG_AIHAUS}/." "${TARGET}/.aihaus/"
+  for rel in skills agents hooks templates; do
+    if [[ -d "${PKG_AIHAUS}/${rel}" ]]; then
+      rm -rf "${TARGET}/.aihaus/${rel}"
+      cp -R "${PKG_AIHAUS}/${rel}" "${TARGET}/.aihaus/${rel}"
+    fi
+  done
 fi
 
 # Repo-local runtime layout. Package-owned source stays in AIHAUS_HOME; target
@@ -463,6 +470,10 @@ for rel in \
     cp "${PKG_AIHAUS}/${rel}" "${TARGET}/.aihaus/${rel}"
   fi
 done
+if [[ ! -f "${TARGET}/.aihaus/decisions.md" && -f "${PKG_TEMPLATES}/decisions.md" ]]; then
+  cp "${PKG_TEMPLATES}/decisions.md" "${TARGET}/.aihaus/decisions.md"
+  echo "  memory: created .aihaus/decisions.md"
+fi
 if [[ ! -f "${TARGET}/.aihaus/knowledge.md" && -f "${PKG_TEMPLATES}/knowledge.md" ]]; then
   cp "${PKG_TEMPLATES}/knowledge.md" "${TARGET}/.aihaus/knowledge.md"
   echo "  memory: created .aihaus/knowledge.md"
@@ -502,7 +513,7 @@ ensure_workflow_environment_prompts() {
 
 ## Source System Hints
 
-- **External kanban:** _Linear team/project/view, Jira project, Notion DB, or none_
+- **External kanban:** _source system, project/view/board identifiers, or none_
 - **Stage sync:** _which statuses/views mirror local aihaus stages_
 - **Question protocol:** _how business-rule gaps are recorded and answered_
 <!-- AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-END -->
