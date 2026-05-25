@@ -693,6 +693,15 @@ if (-not (Test-Path $SettingsSrc)) {
     Write-Host "  settings: merged"
 }
 
+if (Test-Path $SettingsOut) {
+    $settingsRaw = Get-Content -LiteralPath $SettingsOut -Raw
+    if ($settingsRaw -match '\.claude/hooks/') {
+        $settingsRaw = $settingsRaw -replace '\.claude/hooks/', '.aihaus/hooks/'
+        Set-Content -LiteralPath $SettingsOut -Value $settingsRaw -Encoding UTF8 -NoNewline
+        Write-Host "  settings: normalized hook paths to .aihaus\hooks"
+    }
+}
+
 # ---- Update install mode marker ----------------------------------------------
 Set-Content -Path (Join-Path $Aihaus '.install-mode') -Value $Mode -NoNewline
 

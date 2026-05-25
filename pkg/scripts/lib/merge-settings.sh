@@ -35,12 +35,10 @@ merge_settings() {
   local dst="$1" src="$2"
   AIHAUS_SETTINGS_BACKUP_PATH=""
 
-  # Single HAS_JQ detection at function-head (CHECK F3 anchor correction).
-  # Skip jq when AIHAUS_FORCE_PYTHON_MERGE is set (test path + parity gate).
+  # Python is the canonical merge path. The older jq implementation is kept
+  # below for reference but disabled because it fails on object-without-hooks
+  # fixtures when jq is present on Windows hosts.
   local HAS_JQ=0
-  if [ -z "${AIHAUS_FORCE_PYTHON_MERGE:-}" ] && command -v jq >/dev/null 2>&1; then
-    HAS_JQ=1
-  fi
 
   # AIHAUS_RECOMPUTE_MERGE consumer (M030/S05 integration fix per INTEGRATION W4).
   # When set, indicates a deliberate user-triggered recompute on already-installed
@@ -300,6 +298,8 @@ PY
     return 0
   fi
 
+  _normalize_hook_command_paths "$dst"
+
   # Post-merge defaultMode preserve --- user intent wins on this single scalar.
   # Reads .aihaus/.calibration's permission_mode field and overwrites
   # .permissions.defaultMode in $dst so /aih-effort choices survive
@@ -362,6 +362,69 @@ PY
   # would emit a stale "migrate to granular Bash" message that doesn't apply.
   if [ "${RECOMPUTE_MODE:-0}" = "0" ]; then
     _autonomy_post_merge_hint "$bak"
+  fi
+}
+
+_normalize_hook_command_paths() {
+  local dst="$1"
+  [[ -f "$dst" ]] || return 0
+  grep -Fq '.claude/hooks/' "$dst" 2>/dev/null || return 0
+
+  local tmp
+  tmp="$(mktemp)" || return 0
+
+  if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || command -v py >/dev/null 2>&1; then
+    local py_bin
+    py_bin="$(command -v python3 || command -v python || command -v py)"
+    if "$py_bin" - "$dst" "$tmp" <<'PY'
+import json
+import sys
+
+src, dst = sys.argv[1], sys.argv[2]
+with open(src, "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+
+def normalize(obj):
+    if isinstance(obj, dict):
+        out = {}
+        for key, value in obj.items():
+            if key == "command" and isinstance(value, str):
+                out[key] = value.replace(".claude/hooks/", ".aihaus/hooks/")
+            else:
+                out[key] = normalize(value)
+        return out
+    if isinstance(obj, list):
+        normalized = [normalize(item) for item in obj]
+        if all(isinstance(item, dict) and "command" in item for item in normalized):
+            seen = set()
+            deduped = []
+            for item in normalized:
+                command = item.get("command")
+                if command in seen:
+                    continue
+                seen.add(command)
+                deduped.append(item)
+            return deduped
+        return normalized
+    return obj
+
+with open(dst, "w", encoding="utf-8") as fh:
+    json.dump(normalize(data), fh, indent=2, separators=(",", ": "))
+    fh.write("\n")
+PY
+    then
+      mv "$tmp" "$dst"
+      echo "  settings: normalized hook paths to .aihaus/hooks"
+      return 0
+    fi
+  fi
+
+  if sed 's#\.claude/hooks/#.aihaus/hooks/#g' "$dst" > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$dst"
+    echo "  settings: normalized hook paths to .aihaus/hooks"
+  else
+    rm -f "$tmp"
+    echo "  warn: could not normalize .claude/hooks settings paths"
   fi
 }
 

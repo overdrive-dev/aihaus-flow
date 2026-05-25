@@ -5,6 +5,32 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.15] - 2026-05-25 - continuous project context refresh
+
+### Fixed
+
+- Settings templates now call hooks through `.aihaus/hooks` instead of
+  `.claude/hooks`, so update/init sessions no longer depend on a generated
+  `.claude/hooks` junction or copy being present.
+- Install/update now normalize legacy `.claude/hooks` command paths in
+  existing `.claude/settings.local.json` files to the canonical `.aihaus/hooks`
+  path.
+- The package repository now pins shell files to LF through `.gitattributes` so
+  Windows checkouts do not publish CRLF-broken Bash hooks.
+- The Bash settings merge now uses the Python merger as the canonical path,
+  avoiding the older `jq` hook-array edge case on Windows hosts.
+
+### Added
+
+- Added `project-context-refresh.sh`, a non-blocking SessionStart,
+  TaskCompleted, and SessionEnd hook that repairs missing Claude context
+  bridge files, workflow memory imports, workflow profile files, and legacy
+  hook paths outside the one-time `/aih-init` flow.
+- The refresh hook re-runs environment discovery and Claude context verification
+  on a throttled cadence, and immediately after it repairs missing context.
+- Smoke-test coverage now exercises the continuous refresh fixture and fails if
+  settings regress to `.claude/hooks` paths.
+
 ## [0.38.14] - 2026-05-25 - init operational discovery
 
 ### Added

@@ -1257,6 +1257,15 @@ if (-not (Test-Path $SettingsSrc)) {
         }
     }
 
+    if (Test-Path $SettingsOut) {
+        $settingsRaw = Get-Content -LiteralPath $SettingsOut -Raw
+        if ($settingsRaw -match '\.claude/hooks/') {
+            $settingsRaw = $settingsRaw -replace '\.claude/hooks/', '.aihaus/hooks/'
+            Set-Content -LiteralPath $SettingsOut -Value $settingsRaw -Encoding UTF8 -NoNewline
+            Write-Host "  settings: normalized hook paths to .aihaus\hooks"
+        }
+    }
+
     # ---- Drift-detect: prompt recompute if hook count fell behind template ----
     # ADR-260514-B Half B rollout closure (PowerShell port of update.sh drift-detect).
     # Compares template hook count vs merged settings hook count for each .hooks.<Event>[].

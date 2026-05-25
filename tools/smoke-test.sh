@@ -142,6 +142,7 @@ check_hooks() {
     worktree-drift-check.sh
     tdd-guard.sh
     aih-graph-refresh.sh
+    project-context-refresh.sh
   )
   local missing=()
   for hook in "${EXPECTED_HOOKS[@]}"; do
@@ -5007,7 +5008,7 @@ check_m048_memory_integration_contract() {
     if ! grep -Fq 'aih-graph-refresh.sh' "${tpl}"; then
       issues+=("${tpl}: missing lifecycle refresh hook")
     fi
-    if ! grep -Fq 'SessionStart' "${tpl}" || ! grep -Fq 'AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-refresh.sh' "${tpl}"; then
+    if ! grep -Fq 'SessionStart' "${tpl}" || ! grep -Fq 'AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/aih-graph-refresh.sh' "${tpl}"; then
       issues+=("${tpl}: missing automatic SessionStart memory refresh")
     fi
     if ! grep -Fq 'context-inject.sh' "${tpl}"; then
@@ -5503,6 +5504,92 @@ EOF
   fi
 }
 
+check_project_context_refresh_hook() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: continuous project context refresh hook"
+  local issues=()
+  local refresh_hook="${PACKAGE_ROOT}/.aihaus/hooks/project-context-refresh.sh"
+  local merge_lib="${PACKAGE_ROOT}/scripts/lib/merge-settings.sh"
+  local update_ps1="${PACKAGE_ROOT}/scripts/update.ps1"
+  local install_ps1="${PACKAGE_ROOT}/scripts/install.ps1"
+  local settings_full="${PACKAGE_ROOT}/.aihaus/templates/settings.local.json"
+  local settings_legacy="${PACKAGE_ROOT}/templates/settings.local.json"
+
+  [[ -f "${refresh_hook}" ]] || issues+=("project-context-refresh.sh missing")
+  [[ -f "${refresh_hook}" ]] && bash -n "${refresh_hook}" 2>/dev/null || issues+=("project-context-refresh.sh not parseable")
+  grep -Fq 'environment-discovery.sh' "${refresh_hook}" || issues+=("refresh hook does not call environment discovery")
+  grep -Fq 'claude-context-verify.sh' "${refresh_hook}" || issues+=("refresh hook does not call Claude verifier")
+  grep -Fq '.claude/hooks/' "${refresh_hook}" || issues+=("refresh hook does not detect legacy .claude/hooks paths")
+  grep -Fq '.aihaus/hooks/' "${refresh_hook}" || issues+=("refresh hook does not normalize to .aihaus/hooks")
+
+  for settings in "${settings_full}" "${settings_legacy}"; do
+    grep -Fq 'project-context-refresh.sh --reason startup' "${settings}" || issues+=("$(basename "$(dirname "${settings}")") settings missing startup refresh hook")
+    grep -Fq 'project-context-refresh.sh --reason task-completed' "${settings}" || issues+=("$(basename "$(dirname "${settings}")") settings missing task-completed refresh hook")
+    grep -Fq 'project-context-refresh.sh --reason session-end' "${settings}" || issues+=("$(basename "$(dirname "${settings}")") settings missing session-end refresh hook")
+    if grep -Fq '.claude/hooks/' "${settings}"; then
+      issues+=("$(basename "$(dirname "${settings}")") settings still points at .claude/hooks")
+    fi
+  done
+
+  grep -Fq 'normalized hook paths to .aihaus/hooks' "${merge_lib}" || issues+=("merge-settings.sh missing legacy hook path normalization")
+  grep -Fq 'normalized hook paths to .aihaus\hooks' "${update_ps1}" || issues+=("update.ps1 missing legacy hook path normalization")
+  grep -Fq 'normalized hook paths to .aihaus\hooks' "${install_ps1}" || issues+=("install.ps1 missing legacy hook path normalization")
+
+  local tmp_root
+  tmp_root="$(_mktemp_dir aih-context-refresh)" || {
+    _fail "$label" "failed to create temp dir"
+    return
+  }
+  mkdir -p \
+    "${tmp_root}/.aihaus/templates/claude/rules" \
+    "${tmp_root}/.aihaus/skills/aih-init/scripts" \
+    "${tmp_root}/.claude"
+  cp "${PACKAGE_ROOT}/.aihaus/templates/claude/CLAUDE.md" "${tmp_root}/.aihaus/templates/claude/CLAUDE.md"
+  cp "${PACKAGE_ROOT}/.aihaus/templates/claude/rules/aihaus-project-memory.md" "${tmp_root}/.aihaus/templates/claude/rules/aihaus-project-memory.md"
+  cp "${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/environment-discovery.sh" "${tmp_root}/.aihaus/skills/aih-init/scripts/environment-discovery.sh"
+  cp "${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/claude-context-verify.sh" "${tmp_root}/.aihaus/skills/aih-init/scripts/claude-context-verify.sh"
+  cat > "${tmp_root}/.claude/settings.local.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/bash-guard.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+  printf 'version: 0.2\n' > "${tmp_root}/buildspec.yml"
+  printf 'export const config = {};\n' > "${tmp_root}/playwright.config.ts"
+
+  CLAUDE_PROJECT_DIR="${tmp_root}" bash "${refresh_hook}" --reason smoke --force >/dev/null 2>&1 || issues+=("project-context-refresh fixture failed")
+  [[ -f "${tmp_root}/.aihaus/workflows/default.md" ]] || issues+=("refresh hook did not seed workflow profile")
+  [[ -f "${tmp_root}/.aihaus/memory/workflows/rules.md" ]] || issues+=("refresh hook did not seed workflow rules memory")
+  [[ -f "${tmp_root}/.aihaus/init/environment-discovery.md" ]] || issues+=("refresh hook did not run environment discovery")
+  [[ -f "${tmp_root}/.aihaus/audit/claude-context-verify.md" ]] || issues+=("refresh hook did not run Claude verifier")
+  grep -Fq 'Verdict: PASS' "${tmp_root}/.aihaus/audit/claude-context-verify.md" || issues+=("refresh hook did not repair context imports to verifier PASS")
+  if grep -Fq '.claude/hooks/' "${tmp_root}/.claude/settings.local.json"; then
+    issues+=("refresh hook did not normalize legacy .claude/hooks command path")
+  fi
+  grep -Fq '.aihaus/hooks/bash-guard.sh' "${tmp_root}/.claude/settings.local.json" || issues+=("refresh hook did not write .aihaus/hooks command path")
+  [[ -f "${tmp_root}/.aihaus/audit/project-context-refresh.jsonl" ]] || issues+=("refresh hook did not write audit event")
+
+  rm -rf "${tmp_root}" 2>/dev/null || true
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -5513,6 +5600,7 @@ check_goal_business_rule_gap_contract
 check_memory_write_boundary_contract
 check_claude_project_context_bridge
 check_init_operational_context_discovery
+check_project_context_refresh_hook
 check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
 

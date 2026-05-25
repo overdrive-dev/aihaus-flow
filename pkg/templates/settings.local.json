@@ -72,12 +72,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/session-start.sh",
             "statusMessage": "Loading project context..."
           },
           {
             "type": "command",
-            "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-refresh.sh",
+            "command": "AIHAUS_CONTEXT_REFRESH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/project-context-refresh.sh --reason startup",
+            "timeout": 60,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/aih-graph-refresh.sh",
             "timeout": 300,
             "async": true
           }
@@ -90,7 +96,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/bash-guard.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/bash-guard.sh",
             "timeout": 10,
             "statusMessage": "Checking command safety..."
           }
@@ -101,7 +107,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/file-guard.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/file-guard.sh",
             "timeout": 10,
             "statusMessage": "Checking file safety..."
           }
@@ -114,13 +120,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/backup-file.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/backup-file.sh",
             "async": true,
             "statusMessage": "Backing up..."
           },
           {
             "type": "command",
-            "command": "AIH_GRAPH_STALE_REASON=write-edit bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-stale.sh --reason write-edit",
+            "command": "AIH_GRAPH_STALE_REASON=write-edit bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/aih-graph-stale.sh --reason write-edit",
             "async": true
           }
         ]
@@ -130,12 +136,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit-log.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/audit-log.sh",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-stale.sh --from-hook bash",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/aih-graph-stale.sh --from-hook bash",
             "async": true
           }
         ]
@@ -147,7 +153,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/task-created.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/task-created.sh",
             "timeout": 10,
             "statusMessage": "Validating task..."
           }
@@ -160,13 +166,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/task-completed.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/task-completed.sh",
             "timeout": 30,
             "statusMessage": "Verifying completion..."
           },
           {
             "type": "command",
-            "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-refresh.sh",
+            "command": "AIHAUS_CONTEXT_REFRESH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/project-context-refresh.sh --reason task-completed",
+            "timeout": 60,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/aih-graph-refresh.sh",
             "timeout": 300,
             "async": true
           }
@@ -179,7 +191,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/teammate-idle.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/teammate-idle.sh",
             "timeout": 10
           }
         ]
@@ -191,7 +203,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/context-inject.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/context-inject.sh",
             "timeout": 10,
             "statusMessage": "Injecting context..."
           }
@@ -202,7 +214,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/audit-agent.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/audit-agent.sh",
             "async": true
           }
         ]
@@ -214,7 +226,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-end.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/session-end.sh",
             "async": true
           }
         ]
@@ -224,7 +236,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aih-graph-refresh.sh",
+            "command": "AIHAUS_CONTEXT_REFRESH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/project-context-refresh.sh --reason session-end",
+            "timeout": 60,
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/aih-graph-refresh.sh",
             "timeout": 300,
             "async": true
           }
