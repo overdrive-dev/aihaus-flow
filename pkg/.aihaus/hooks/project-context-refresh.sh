@@ -84,13 +84,37 @@ copy_or_seed() {
 
 ensure_block() {
   local file="$1" marker="$2" source_file="$3"
+  local end_marker tmp
   [ -f "$source_file" ] || return 0
   if [ ! -f "$file" ]; then
     mkdir -p "$(dirname "$file")" 2>/dev/null || return 0
     cp "$source_file" "$file" 2>/dev/null && repair_count=$((repair_count + 1))
     return 0
   fi
-  if grep -Fq "$marker" "$file" 2>/dev/null; then
+  end_marker="$(printf '%s' "$marker" | sed 's/-START/-END/')"
+  if grep -Fq "$marker" "$file" 2>/dev/null && grep -Fq "$end_marker" "$file" 2>/dev/null; then
+    tmp="${file}.tmp.$$"
+    if awk -v src="$source_file" -v start="$marker" -v end="$end_marker" '
+      BEGIN {
+        while ((getline line < src) > 0) source[++n] = line
+        close(src)
+      }
+      index($0, start) {
+        for (i = 1; i <= n; i++) print source[i]
+        in_block = 1
+        next
+      }
+      in_block && index($0, end) { in_block = 0; next }
+      !in_block { print }
+    ' "$file" > "$tmp" 2>/dev/null; then
+      if cmp -s "$tmp" "$file"; then
+        rm -f "$tmp" 2>/dev/null || true
+      else
+        mv "$tmp" "$file" 2>/dev/null && repair_count=$((repair_count + 1))
+      fi
+    else
+      rm -f "$tmp" 2>/dev/null || true
+    fi
     return 0
   fi
   { printf '\n\n'; cat "$source_file"; } >> "$file" 2>/dev/null && repair_count=$((repair_count + 1))

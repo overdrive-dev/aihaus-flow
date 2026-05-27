@@ -24,8 +24,9 @@
 
 ```bash
 # Install aihaus (machine-once)
-git clone https://github.com/overdrive-dev/aihaus-flow "$XDG_DATA_HOME/aihaus"
-bash "$XDG_DATA_HOME/aihaus/pkg/scripts/install.sh"
+INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/aihaus"
+git clone https://github.com/overdrive-dev/aihaus-flow "$INSTALL_DIR"
+cd "$INSTALL_DIR" && bash pkg/scripts/install.sh
 
 # Bind it to a project (per-repo, opt-in)
 cd ~/myproject && claude
@@ -67,22 +68,71 @@ aihaus is a Claude Code workflow toolkit. Install it once; use it in any repo.
 
 ```bash
 # macOS / Linux — machine-once
-git clone https://github.com/overdrive-dev/aihaus-flow "$XDG_DATA_HOME/aihaus"
-bash "$XDG_DATA_HOME/aihaus/pkg/scripts/install.sh"
-# Windows PowerShell: replace $XDG_DATA_HOME with $env:LOCALAPPDATA
+INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/aihaus"
+git clone https://github.com/overdrive-dev/aihaus-flow "$INSTALL_DIR"
+cd "$INSTALL_DIR" && bash pkg/scripts/install.sh
+```
+
+```powershell
+# Windows PowerShell - machine-once
+$InstallDir = Join-Path $env:LOCALAPPDATA 'aihaus'
+git clone https://github.com/overdrive-dev/aihaus-flow $InstallDir
+Set-Location $InstallDir
+.\pkg\scripts\install.ps1
 ```
 
 Then in any project:
-
 ```bash
 cd ~/myproject
 claude
 > /aih-install
 ```
 
-`aihaus install` (machine-once CLI) bootstraps the global skill set and links it to the current repo. `/aih-init` is a separate slash command — run inside Claude Code — that bootstraps `project.md`. They are different steps.
+`install.sh` / `install.ps1` bootstraps the global skill set. `/aih-install` links aihaus to the current repo. `/aih-init` is a separate slash command — run inside Claude Code — that bootstraps `project.md`. They are different steps.
 
-To stay current: `/aih-update` (pull latest + re-link) or `/aih-update --check` (dry run). For an LLM-driven install path, see [`INSTALL-VIA-LLM.md`](./INSTALL-VIA-LLM.md).
+To stay current: `/aih-update` (pull latest + re-link) or `/aih-update --check` (dry run).
+
+## LLM Agent Install
+
+Use this when you want Claude Code, Cursor, Windsurf, or another local agent
+with shell access to install aihaus for you. Paste the prompt as-is:
+
+```text
+Install aihaus-flow for this machine.
+
+You have approval to perform the machine-wide aihaus install using the canonical
+repository and standard per-user install directory. Detect the platform first.
+Do not ask what I want to do unless a required prerequisite install needs admin
+approval or a command fails.
+
+Important:
+- This is a machine-wide install only. Do not bind aihaus to the current project
+  unless I explicitly provide PROJECT_DIR.
+- Do not run `bash .aihaus/auto.sh`.
+- On Windows, use PowerShell commands and $env:LOCALAPPDATA. Do not use
+  $XDG_DATA_HOME unless you are in Unix/WSL.
+- macOS/Linux canonical path: clone or pull
+  https://github.com/overdrive-dev/aihaus-flow into
+  ${XDG_DATA_HOME:-$HOME/.local/share}/aihaus, cd into that clone, then run
+  `bash pkg/scripts/install.sh`.
+- Windows canonical path: clone or pull the same repo into
+  $env:LOCALAPPDATA\aihaus, Set-Location into that clone, then run
+  `.\pkg\scripts\install.ps1`.
+
+Verify and report:
+- install location
+- `~/.aihaus/.install-source` exists and points at the clone
+- `~/.claude/skills` contains the `aih-*` commands
+- whether `aih-graph` installed or was skipped as optional
+
+After that, tell me the final interactive steps:
+1. `cd <project>`
+2. `claude`
+3. `/aih-install`
+4. `/aih-init`
+```
+
+For the detailed agent handoff prompt, see [`INSTALL-VIA-LLM.md`](./INSTALL-VIA-LLM.md).
 
 ### Migrating from `~/tools/aihaus/`
 
@@ -263,7 +313,7 @@ aihaus ships 15 intent-based skills. Every command follows the same pattern: **a
 | `/aih-install` | Install/refresh per-repo overlay in cwd; resolves `AIHAUS_HOME` via 8-tier priority chain. Model-invokable (M022 / v0.26.0+) |
 | `/aih-brainstorm` | Multi-specialist exploratory panel for fuzzy topics — outputs `BRIEF.md` |
 | `/aih-plan` | Research and plan a concrete change — outputs `PLAN.md` |
-| `/aih-goal` | Discover planned kanban tasks, register local planning contracts, and run workflow gates autonomously until a target stage |
+| `/aih-goal` | Discover planned kanban tasks or import a pasted/local list, register local planning contracts, and run workflow gates autonomously until a target stage |
 | `/aih-feature` | Plan → branch → implement → review → commit (single feature) |
 | `/aih-bugfix` | Triage → branch → fix → test → commit |
 | `/aih-milestone` | Conversational gathering for milestone-sized work — drafts to `STATUS.md` |
@@ -276,6 +326,7 @@ aihaus ships 15 intent-based skills. Every command follows the same pattern: **a
 |---------|--------------|
 | `/aih-milestone [slug]` + start-intent / `--execute` | Execute a ready milestone draft — full agent team (via `annexes/execution.md`) |
 | `/aih-goal --until human-review` | Execute the discovered planned backlog until each task reaches human review or has a planning blocker |
+| `/aih-goal --from-list --run-to-completion --until human-review` | Import a pasted checklist/list as local tasks and keep working without mid-run approval prompts until each item reaches the target stage or has a true blocker |
 | `/aih-feature --plan [slug]` | Execute a small plan inline on a single `feature/[slug]` branch |
 | `/aih-resume [slug]` | Pick up an interrupted run from `RUN-MANIFEST.md` |
 | `/aih-milestone --plan [slug]` | Promote a plan to a milestone draft for conversational refinement (absorbs retired `/aih-plan-to-milestone`) |

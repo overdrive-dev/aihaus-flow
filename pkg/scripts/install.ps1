@@ -994,29 +994,72 @@ function Ensure-ClaudeContextBridge {
         }
     }
 
-    if (Test-Path -LiteralPath $contextSrc) {
-        if (-not (Test-Path -LiteralPath $contextDst)) {
-            Copy-Item -LiteralPath $contextSrc -Destination $contextDst
-            Write-Host "  claude-context: created .claude\CLAUDE.md"
-        } elseif (-not (Select-String -LiteralPath $contextDst -Pattern 'AIHAUS:CLAUDE-CONTEXT-START' -SimpleMatch -Quiet)) {
-            Add-Content -LiteralPath $contextDst -Value ''
-            Add-Content -LiteralPath $contextDst -Value (Get-Content -LiteralPath $contextSrc -Raw)
-            Write-Host "  claude-context: appended aihaus imports to .claude\CLAUDE.md"
+    function Sync-ManagedBlock {
+        param(
+            [string]$Path,
+            [string]$SourcePath,
+            [string]$StartMarker,
+            [string]$EndMarker,
+            [string]$Label
+        )
+        if (-not (Test-Path -LiteralPath $SourcePath)) { return }
+        New-Item -ItemType Directory -Path (Split-Path $Path) -Force | Out-Null
+        if (-not (Test-Path -LiteralPath $Path)) {
+            Copy-Item -LiteralPath $SourcePath -Destination $Path
+            Write-Host "  claude-context: created $Label"
+            return
         }
+
+        $lines = @(Get-Content -LiteralPath $Path)
+        $sourceLines = @(Get-Content -LiteralPath $SourcePath)
+        $startIndex = -1
+        $endIndex = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Contains($StartMarker)) {
+                $startIndex = $i
+                break
+            }
+        }
+        if ($startIndex -ge 0) {
+            for ($j = $startIndex; $j -lt $lines.Count; $j++) {
+                if ($lines[$j].Contains($EndMarker)) {
+                    $endIndex = $j
+                    break
+                }
+            }
+        }
+        if ($startIndex -lt 0 -or $endIndex -lt 0) {
+            Add-Content -LiteralPath $Path -Value ''
+            Add-Content -LiteralPath $Path -Value (Get-Content -LiteralPath $SourcePath -Raw)
+            Write-Host "  claude-context: appended $Label"
+            return
+        }
+
+        $newLines = New-Object System.Collections.Generic.List[string]
+        if ($startIndex -gt 0) {
+            for ($i = 0; $i -lt $startIndex; $i++) { $newLines.Add($lines[$i]) }
+        }
+        foreach ($line in $sourceLines) { $newLines.Add($line) }
+        if (($endIndex + 1) -lt $lines.Count) {
+            for ($i = $endIndex + 1; $i -lt $lines.Count; $i++) { $newLines.Add($lines[$i]) }
+        }
+        $oldText = ($lines -join "`n")
+        $newText = ($newLines -join "`n")
+        if ($newText -ne $oldText) {
+            Set-Content -LiteralPath $Path -Value $newLines -Encoding UTF8
+            Write-Host "  claude-context: refreshed $Label"
+        }
+    }
+
+    if (Test-Path -LiteralPath $contextSrc) {
+        Sync-ManagedBlock -Path $contextDst -SourcePath $contextSrc -StartMarker 'AIHAUS:CLAUDE-CONTEXT-START' -EndMarker 'AIHAUS:CLAUDE-CONTEXT-END' -Label '.claude\CLAUDE.md'
     } else {
         Write-Host "  warn: Claude context template missing at $contextSrc" -ForegroundColor Yellow
     }
     Remove-LargeClaudeImports -Path $contextDst
 
     if (Test-Path -LiteralPath $ruleSrc) {
-        if (-not (Test-Path -LiteralPath $ruleDst)) {
-            Copy-Item -LiteralPath $ruleSrc -Destination $ruleDst
-            Write-Host "  claude-context: created .claude\rules\aihaus-project-memory.md"
-        } elseif (-not (Select-String -LiteralPath $ruleDst -Pattern 'AIHAUS:CLAUDE-RULES-START' -SimpleMatch -Quiet)) {
-            Add-Content -LiteralPath $ruleDst -Value ''
-            Add-Content -LiteralPath $ruleDst -Value (Get-Content -LiteralPath $ruleSrc -Raw)
-            Write-Host "  claude-context: appended aihaus rule to .claude\rules\aihaus-project-memory.md"
-        }
+        Sync-ManagedBlock -Path $ruleDst -SourcePath $ruleSrc -StartMarker 'AIHAUS:CLAUDE-RULES-START' -EndMarker 'AIHAUS:CLAUDE-RULES-END' -Label '.claude\rules\aihaus-project-memory.md'
     } else {
         Write-Host "  warn: Claude rule template missing at $ruleSrc" -ForegroundColor Yellow
     }
@@ -1520,6 +1563,21 @@ function Invoke-InjectGitignore {
         '/.gsd/',
         '/.gsd-id',
         '/.hermes/',
+        '/aihaus-pi/state/',
+        '/aihaus-pi/continue.md',
+        '/aihaus-pi/runtime/',
+        '/aihaus-pi/tmp/',
+        '/aihaus-pi/logs/',
+        '/aihaus-pi/evidence/',
+        '/aihaus-pi/memory/',
+        '/.aihaus-pi/state/',
+        '/.aihaus-pi/continue.md',
+        '/.aihaus-pi/runtime/',
+        '/.aihaus-pi/tmp/',
+        '/.aihaus-pi/logs/',
+        '/.aihaus-pi/evidence/',
+        '/.aihaus-pi/memory/',
+        '/.pi/',
         '/.aihaus/.context-budgets',
         '/.aihaus/.effort',
         '/.aihaus/.calibration',

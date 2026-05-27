@@ -113,3 +113,10 @@ answers, and related-task links.
 
 Readable markdown artifacts are still required so humans can inspect the run
 without querying SQLite.
+
+For a pasted list or `--from-list` run, create one local task per list item. Do
+not collapse the list into one task just because it arrived in a single prompt.
+The user's request to work "sem checkpoints", "ininterruptamente", or
+"ate terminar" changes the autonomy contract only: keep writing state
+checkpoints to files, but do not stop for conversational approvals between
+items.

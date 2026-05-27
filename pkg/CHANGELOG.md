@@ -5,6 +5,24 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - direct list goal runs
+
+### Changed
+
+- `/aih-goal` now documents `--from-list` and `--run-to-completion` for pasted
+  task lists, importing each item as a local task while preserving state
+  checkpoints and avoiding mid-run approval prompts.
+- Installed Claude context now routes autonomous batch/list requests to
+  `/aih-goal` and records the aihaus-pi artifact boundary: Pi-owned state,
+  memory, MCP config, logs, temp files, evidence, and continuation files belong
+  under `aihaus-pi/`.
+- Pi/aihaus-pi runs now have a context auto-compaction contract at 95% of usable
+  context, writing continuation state under `aihaus-pi/` and continuing the
+  agreed objective instead of interrupting for a checkpoint.
+- Install, update, and continuous project-context refresh now replace existing
+  managed Claude context blocks so routing and aihaus-pi boundary changes reach
+  already-initialized repositories.
+
 ## [0.38.18] - 2026-05-25 - project-agnostic fresh memory
 
 ### Fixed

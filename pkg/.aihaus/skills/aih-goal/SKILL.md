@@ -1,13 +1,13 @@
 ---
 name: aih-goal
-description: Execute a planned kanban goal autonomously through aihaus workflow gates until a target stage such as human-review.
+description: Execute a planned kanban or local task-list goal autonomously through aihaus workflow gates until a target stage such as human-review.
 allowed-tools: Read Write Edit Grep Glob Bash Agent TaskCreate TaskUpdate Skill
-argument-hint: "[goal description] [--until human-review] [--source <selector>] [--from-linear <selector>] [--from-file <path>]"
+argument-hint: "[goal description or pasted list] [--run-to-completion] [--until human-review] [--source <selector>] [--from-list] [--from-file <path>]"
 ---
 
 ## Task
 
-Run a goal as an autonomous workflow over a planned kanban/backlog. Discover or
+Run a goal as an autonomous workflow over a planned kanban/backlog or local task list. Discover or
 resume the work source, import tasks into the local operational goal DB,
 register planning contracts, evaluate every workflow gate, execute ready work,
 attach evidence, and continue without user input until the target stage is
@@ -16,17 +16,16 @@ reached or every remaining task has a true blocker.
 $ARGUMENTS
 ## Inputs
 
-- `--source <selector>` - preferred kanban/source selector.
-- `--from-linear <selector>` - import candidate tasks from Linear.
-- `--from-file <path>` - import tasks from a local markdown/json/text file.
-- `--until <stage>` - target workflow stage. Default: `human-review`.
+- `--source <selector>` / `--from-linear <selector>` - preferred source.
+- `--from-file <path>` / `--from-list` - import local markdown/json/text tasks or a pasted list from `$ARGUMENTS`.
+- `--until <stage>` - target workflow stage. Default: `human-review`; `--run-to-completion` means every task reaches it or a true blocker.
 - `--max-active <n>` - maximum implementation tasks in flight. Default: 1.
 
 Allowed stages: `planejamento`, `tdd`, `review-execucao`, `testes`, `subida-dev`, `review-dev`, `human-review`, `box-dev`.
 
 ## Autonomy Contract
 
-The `/aih-goal` invocation is approval to work without mid-run user input until
+The `/aih-goal` invocation, `--run-to-completion`, or explicit no-checkpoint wording is approval to work without mid-run user input until
 `--until` is reached.
 
 Do not ask the user to choose between normal execution paths. Evaluate the gate,
@@ -67,14 +66,14 @@ repo already has a planned kanban/backlog and should find it.
 
 Discovery order:
 
-1. explicit override flags: `--from-linear`, `--from-file`, or `--source`,
+1. explicit override flags: `--from-linear`, `--from-file`, `--from-list`, or `--source`,
 2. existing `.aihaus/state/aih-goal.db` tasks not yet at `--until`,
 3. source hints in `.aihaus/memory/workflows/*.md`,
 4. source hints in `.aihaus/workflows/default.md` and `.aihaus/project.md`,
 5. available connected kanban systems such as Linear, Notion, Jira, Trello, or
    GitHub Issues,
 6. a local task list under `.aihaus/workflows/` if present,
-7. `$ARGUMENTS` as a single goal brief only when no planned source exists.
+7. `$ARGUMENTS` as a local task list when it contains multiple list items; otherwise as a single goal brief only when no planned source exists.
 
 See `annexes/source-discovery.md`. If an external system is unavailable but
 `aih-goal.db` already has imported tasks, continue locally and record sync debt.

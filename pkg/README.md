@@ -56,21 +56,28 @@ After a single approval, a coordinated team of 58 specialist agents handles rese
 ## Install
 
 ```bash
-# 1. Clone the package somewhere stable
-git clone https://github.com/overdrive-dev/aihaus-flow ~/tools/aihaus
+# 1. Install aihaus once for this machine
+INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/aihaus"
+git clone https://github.com/overdrive-dev/aihaus-flow "$INSTALL_DIR"
+cd "$INSTALL_DIR"
+bash pkg/scripts/install.sh
 
-# 2. Install into your project
+# 2. Bind aihaus inside Claude Code for each project
 cd your-project
-bash ~/tools/aihaus/pkg/scripts/install.sh --target .
-
-# 3. Bootstrap project context
+claude
+/aih-install
 /aih-init
 
-# 4. Build something
+# 3. Build something
 /aih-feature Add rate limiting to the public API
 ```
 
-The installer symlinks (or junctions on Windows) `.claude/{skills,agents,hooks}` into `.aihaus/{skills,agents,hooks}`. Your existing `settings.local.json` gets merged in, never clobbered.
+The machine installer registers the global `aih-*` skills. `/aih-install` links
+aihaus into the current repo. Your existing `settings.local.json` gets merged
+in, never clobbered.
+
+For an LLM-driven install prompt, see
+[`INSTALL-VIA-LLM.md`](../INSTALL-VIA-LLM.md).
 
 Verify with:
 
@@ -272,7 +279,7 @@ aihaus ships 15 intent-based skills. Every command follows the same pattern: **a
 | `/aih-init` | Bootstrap — scans codebase, writes `project.md`, seeds memory |
 | `/aih-brainstorm` | Multi-specialist exploratory panel for fuzzy topics — outputs `BRIEF.md` |
 | `/aih-plan` | Research and plan a concrete change — outputs `PLAN.md` |
-| `/aih-goal` | Discover planned kanban tasks, register local planning contracts, and run workflow gates autonomously until a target stage |
+| `/aih-goal` | Discover planned kanban tasks or import a pasted/local list, register local planning contracts, and run workflow gates autonomously until a target stage |
 | `/aih-feature` | Plan → branch → implement → review → commit (single feature) |
 | `/aih-bugfix` | Triage → branch → fix → test → commit |
 | `/aih-milestone` | Conversational gathering for milestone-sized work — drafts to `STATUS.md` |
@@ -284,6 +291,7 @@ aihaus ships 15 intent-based skills. Every command follows the same pattern: **a
 |---------|--------------|
 | `/aih-milestone [slug]` + start-intent / `--execute` | Execute a ready milestone draft — full agent team (via `annexes/execution.md`) |
 | `/aih-goal --until human-review` | Execute the discovered planned backlog until each task reaches human review or has a planning blocker |
+| `/aih-goal --from-list --run-to-completion --until human-review` | Import a pasted checklist/list as local tasks and keep working without mid-run approval prompts until each item reaches the target stage or has a true blocker |
 | `/aih-feature --plan [slug]` | Execute a small plan inline on a single `feature/[slug]` branch |
 | `/aih-resume [slug]` | Pick up an interrupted run from `RUN-MANIFEST.md` |
 | `/aih-milestone --plan [slug]` | Promote a plan to a milestone draft for conversational refinement (absorbs retired `/aih-plan-to-milestone`) |

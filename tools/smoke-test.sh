@@ -5233,7 +5233,7 @@ check_legacy_hygiene_regressions() {
   if ! grep -Fq 'copy mode overwrites package-managed' "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
     issues+=("update.ps1 missing copy-mode overwrite warning")
   fi
-  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '*/.aihaus/' '*/.claude/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
+  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '*/.aihaus/' '*/.claude/' '/.bg-shell/' '/.gsd/' '/.hermes/' '/aihaus-pi/state/' '/aihaus-pi/continue.md' '/.aihaus-pi/state/' '/.pi/'; do
     if ! grep -Fxq "$needle" "$fragment"; then
       issues+=("gitignore fragment missing ${needle}")
     fi
@@ -5311,6 +5311,7 @@ check_goal_business_rule_gap_contract() {
   local issues=()
   local goal_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/SKILL.md"
   local local_kanban="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/local-kanban.md"
+  local source_discovery="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/source-discovery.md"
   local linear_intake="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/linear-intake.md"
   local run_state="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/run-state.md"
   local planning_agent="${PACKAGE_ROOT}/.aihaus/agents/workflow-planning-gate.md"
@@ -5324,6 +5325,9 @@ check_goal_business_rule_gap_contract() {
   fi
   if ! grep -Fq 'one row per task' "$local_kanban"; then
     issues+=("local-kanban annex missing per-task row rule")
+  fi
+  if ! grep -Fq -- '--from-list' "$goal_skill" || ! grep -Fq 'Direct list intake' "$source_discovery"; then
+    issues+=("aih-goal missing direct pasted-list intake contract")
   fi
   if ! grep -Fq 'one issue at a time' "$linear_intake"; then
     issues+=("linear intake missing one-issue-at-a-time sync rule")
@@ -5421,6 +5425,13 @@ check_claude_project_context_bridge() {
       issues+=("CLAUDE.md template imports large decisions/knowledge ledgers at startup")
     fi
     grep -Fq 'Large ledgers are intentionally not imported on startup' "${context_template}" || issues+=("CLAUDE.md template missing large-ledger selective-read note")
+    grep -Fq 'Autonomous batch routing' "${context_template}" || issues+=("CLAUDE.md template missing autonomous batch routing rule")
+    grep -Fq 'aihaus-pi boundary' "${context_template}" || issues+=("CLAUDE.md template missing aihaus-pi boundary rule")
+    grep -Fq 'Context auto-compaction' "${context_template}" || issues+=("CLAUDE.md template missing context auto-compaction rule")
+    grep -Fq 'approaches 95% of the usable' "${context_template}" || issues+=("CLAUDE.md template missing 95 percent compaction threshold")
+    grep -Fq 'aihaus-pi/state/execution.json' "${context_template}" || issues+=("CLAUDE.md template missing aihaus-pi execution state path")
+    grep -Fq 'aihaus-pi/memory/run-summaries' "${context_template}" || issues+=("CLAUDE.md template missing aihaus-pi run summaries path")
+    grep -Fq 'not interrupt, pause, or replace the agreed objective' "${context_template}" || issues+=("CLAUDE.md template missing non-interruption objective rule")
   fi
 
   if [[ ! -f "${rule_template}" ]]; then
@@ -5429,6 +5440,12 @@ check_claude_project_context_bridge() {
     grep -Fq 'AIHAUS:CLAUDE-RULES-START' "${rule_template}" || issues+=("Claude rule template missing managed marker")
     grep -Fq 'Never store plaintext secrets' "${rule_template}" || issues+=("Claude rule template missing secret-handling rule")
     grep -Fq 'Do not import entire large ledgers into startup context' "${rule_template}" || issues+=("Claude rule template missing large-ledger startup guard")
+    grep -Fq 'Route autonomous batch requests to `/aih-goal`' "${rule_template}" || issues+=("Claude rule template missing aih-goal batch routing")
+    grep -Fq 'keep its artifacts under `aihaus-pi/` only' "${rule_template}" || issues+=("Claude rule template missing aihaus-pi artifact boundary")
+    grep -Fq 'context auto-compaction around 95%' "${rule_template}" || issues+=("Claude rule template missing 95 percent context auto-compaction rule")
+    grep -Fq 'aihaus-pi/state/execution.json' "${rule_template}" || issues+=("Claude rule template missing aihaus-pi execution state path")
+    grep -Fq 'aihaus-pi/memory/run-summaries' "${rule_template}" || issues+=("Claude rule template missing aihaus-pi run summaries path")
+    grep -Fq 'must not interrupt, pause, or replace the agreed objective' "${rule_template}" || issues+=("Claude rule template missing non-interruption objective rule")
   fi
 
   for script in "${PACKAGE_ROOT}/scripts/install.sh" "${PACKAGE_ROOT}/scripts/update.sh"; do
@@ -5438,6 +5455,8 @@ check_claude_project_context_bridge() {
     grep -Fq 'memory: created .aihaus/knowledge.md' "${script}" || issues+=("$(basename "${script}") missing knowledge.md seed")
     grep -Fq 'ensure_workflow_environment_prompts' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt backfill")
     grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt marker")
+    grep -Fq '_sync_managed_block' "${script}" || issues+=("$(basename "${script}") does not refresh existing Claude managed blocks")
+    grep -Fq 'AIHAUS:CLAUDE-CONTEXT-END' "${script}" || issues+=("$(basename "${script}") missing Claude context end-marker sync")
   done
   if grep -Fq 'cp -R "${PKG_AIHAUS}/."' "${PACKAGE_ROOT}/scripts/install.sh"; then
     issues+=("install.sh bulk-copies package .aihaus into fresh repositories")
@@ -5450,6 +5469,8 @@ check_claude_project_context_bridge() {
     grep -Fq 'memory: created .aihaus\knowledge.md' "${script}" || issues+=("$(basename "${script}") missing knowledge.md seed")
     grep -Fq 'Ensure-WorkflowEnvironmentPrompts' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt backfill")
     grep -Fq 'AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START' "${script}" || issues+=("$(basename "${script}") missing workflow environment prompt marker")
+    grep -Fq 'Sync-ManagedBlock' "${script}" || issues+=("$(basename "${script}") does not refresh existing Claude managed blocks")
+    grep -Fq 'AIHAUS:CLAUDE-CONTEXT-END' "${script}" || issues+=("$(basename "${script}") missing Claude context end-marker sync")
   done
   if grep -Fq "Join-Path \$PkgAihaus '*'" "${PACKAGE_ROOT}/scripts/install.ps1"; then
     issues+=("install.ps1 bulk-copies package .aihaus into fresh repositories")
@@ -5474,6 +5495,8 @@ check_claude_project_context_bridge() {
   else
     issues+=("context-inject.sh missing")
   fi
+
+  grep -Fq 'end_marker=' "${PACKAGE_ROOT}/.aihaus/hooks/project-context-refresh.sh" || issues+=("project-context-refresh does not refresh existing managed Claude blocks")
 
   grep -Fq '.claude/CLAUDE.md' "${init_skill}" || issues+=("aih-init missing .claude/CLAUDE.md bridge contract")
   grep -Fq '## Operating Context' "${project_template}" || issues+=("project.md template missing Operating Context section")

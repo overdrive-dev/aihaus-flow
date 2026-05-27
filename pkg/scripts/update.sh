@@ -311,27 +311,55 @@ seed_claude_context_bridge() {
     fi
   }
 
-  if [[ -f "${context_src}" ]]; then
-    if [[ ! -f "${context_dst}" ]]; then
-      cp "${context_src}" "${context_dst}"
-      echo "  claude-context: created .claude/CLAUDE.md"
-    elif ! grep -Fq "AIHAUS:CLAUDE-CONTEXT-START" "${context_dst}"; then
-      { printf '\n\n'; cat "${context_src}"; } >> "${context_dst}"
-      echo "  claude-context: appended aihaus imports to .claude/CLAUDE.md"
+  _sync_managed_block() {
+    local file="$1" source_file="$2" start_marker="$3" end_marker="$4" label="$5"
+    local tmp
+    [[ -f "${source_file}" ]] || return 0
+    mkdir -p "$(dirname "${file}")"
+    if [[ ! -f "${file}" ]]; then
+      cp "${source_file}" "${file}"
+      echo "  claude-context: created ${label}"
+      return 0
     fi
+    if ! grep -Fq "${start_marker}" "${file}" 2>/dev/null || ! grep -Fq "${end_marker}" "${file}" 2>/dev/null; then
+      { printf '\n\n'; cat "${source_file}"; } >> "${file}"
+      echo "  claude-context: appended ${label}"
+      return 0
+    fi
+    tmp="${file}.tmp.$$"
+    if awk -v src="${source_file}" -v start="${start_marker}" -v end="${end_marker}" '
+      BEGIN {
+        while ((getline line < src) > 0) source[++n] = line
+        close(src)
+      }
+      index($0, start) {
+        for (i = 1; i <= n; i++) print source[i]
+        in_block = 1
+        next
+      }
+      in_block && index($0, end) { in_block = 0; next }
+      !in_block { print }
+    ' "${file}" > "${tmp}" 2>/dev/null; then
+      if cmp -s "${tmp}" "${file}"; then
+        rm -f "${tmp}"
+      else
+        mv "${tmp}" "${file}"
+        echo "  claude-context: refreshed ${label}"
+      fi
+    else
+      rm -f "${tmp}" 2>/dev/null || true
+    fi
+  }
+
+  if [[ -f "${context_src}" ]]; then
+    _sync_managed_block "${context_dst}" "${context_src}" "AIHAUS:CLAUDE-CONTEXT-START" "AIHAUS:CLAUDE-CONTEXT-END" ".claude/CLAUDE.md"
   else
     echo "  warn: Claude context template missing at ${context_src}"
   fi
   _scrub_large_claude_imports "${context_dst}"
 
   if [[ -f "${rule_src}" ]]; then
-    if [[ ! -f "${rule_dst}" ]]; then
-      cp "${rule_src}" "${rule_dst}"
-      echo "  claude-context: created .claude/rules/aihaus-project-memory.md"
-    elif ! grep -Fq "AIHAUS:CLAUDE-RULES-START" "${rule_dst}"; then
-      { printf '\n\n'; cat "${rule_src}"; } >> "${rule_dst}"
-      echo "  claude-context: appended aihaus rule to .claude/rules/aihaus-project-memory.md"
-    fi
+    _sync_managed_block "${rule_dst}" "${rule_src}" "AIHAUS:CLAUDE-RULES-START" "AIHAUS:CLAUDE-RULES-END" ".claude/rules/aihaus-project-memory.md"
   else
     echo "  warn: Claude rule template missing at ${rule_src}"
   fi
@@ -741,6 +769,21 @@ _backfill_gitignore() {
     '/.gsd/'
     '/.gsd-id'
     '/.hermes/'
+    '/aihaus-pi/state/'
+    '/aihaus-pi/continue.md'
+    '/aihaus-pi/runtime/'
+    '/aihaus-pi/tmp/'
+    '/aihaus-pi/logs/'
+    '/aihaus-pi/evidence/'
+    '/aihaus-pi/memory/'
+    '/.aihaus-pi/state/'
+    '/.aihaus-pi/continue.md'
+    '/.aihaus-pi/runtime/'
+    '/.aihaus-pi/tmp/'
+    '/.aihaus-pi/logs/'
+    '/.aihaus-pi/evidence/'
+    '/.aihaus-pi/memory/'
+    '/.pi/'
     '/.aihaus/.context-budgets'
     '/.aihaus/.effort'
     '/.aihaus/.calibration'

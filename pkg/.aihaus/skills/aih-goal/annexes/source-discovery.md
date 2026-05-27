@@ -8,6 +8,7 @@ flags are overrides, not the default path.
 1. Explicit flags:
    - `--from-linear <selector>`
    - `--from-file <path>`
+   - `--from-list`
    - `--source <selector>`
 2. Existing local operational state:
    - `.aihaus/state/aih-goal.db`
@@ -29,7 +30,8 @@ flags are overrides, not the default path.
    - Trello
    - GitHub Issues
 6. Local task files under `.aihaus/workflows/`.
-7. `$ARGUMENTS` as a single goal brief only when no planned source exists.
+7. `$ARGUMENTS` as a local task list when it contains multiple list items, or
+   as a single goal brief only when no planned source exists.
 
 ### Source selection
 
@@ -81,3 +83,19 @@ source id or the user explicitly asked for deduplication.
 If no external source, local DB, or local task file can be found, stop before
 code changes. Report the missing source and tell the user what to connect or
 where to place the local task list.
+
+### Direct list intake
+
+`--from-list` forces local-only list intake from `$ARGUMENTS`. Without the flag,
+use direct list intake when `$ARGUMENTS` contains two or more markdown bullets,
+numbered rows, checklist rows, or newline-separated imperative items.
+
+Rules:
+
+- Preserve the user-provided order as task priority.
+- Generate stable local ids such as `LOCAL-001`, `LOCAL-002`, and so on.
+- Use any sentence before the first list item as the goal title.
+- Treat `--run-to-completion`, "sem checkpoints", "ininterruptamente", and
+  "ate terminar" as autonomy modifiers, not task text.
+- Put the full list in `TASKS.md`, task files, and `aih-goal.db`; TaskCreate
+  should show only the current coordination rows, not all list items.
