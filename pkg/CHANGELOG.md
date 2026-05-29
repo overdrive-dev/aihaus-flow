@@ -5,6 +5,29 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.0] - 2026-05-29 - aihaus 3.0: native-first stage workflow
+
+### Added
+
+- `/aih-env` — capture the test environment, credential *locations* (never values), env access, and deploy path once; persisted to `environment.md` and loaded by every session/agent (survives `/compact`).
+- Role-based access (`pm`/`builder`/`dev`/`qa`/`devops`) with a hook-enforced staging→prod online boundary (`role-guard.sh`); `builder`/`dev`/`qa` are offline-local (Docker).
+- Local SQLite kanban (`kanban.db`) as the default operational substrate across gated stages; tests run in local Docker by default.
+- `workflows/parallelism.md` + ADR-260529-A — worktree isolation + Owned-Files sharding + sequential merge-back + single-writer invariant for conflict-free parallel agents.
+- Homepage README fully revamped for 3.0.
+
+### Changed
+
+- Native-first orchestration: native `/goal` + auto-routed sub-flows (`aih-plan`/`aih-feature`/`aih-bugfix`) replace the `aih-goal` orchestrator skill; `/aih-*` is now an optional override. Plans surface to the native Plan panel.
+- Sub-flows register their task + gate events in `kanban.db` by default.
+
+### Fixed
+
+- `audit-skill-enforcement.sh` is locale-portable — `grep -P` no longer aborts under a POSIX-C locale on Windows Git Bash (resolves Check 62).
+
+### Removed
+
+- The `aih-goal` orchestrator skill — its kanban/DB substrate relocated to `workflows/kanban/`, decoupled from any "goal" command.
+
 ## [0.38.18] - 2026-05-25 - project-agnostic fresh memory
 
 ### Fixed
