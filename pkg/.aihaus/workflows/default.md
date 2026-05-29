@@ -14,6 +14,7 @@ moving tasks between stages.
 - Runtime evidence and generated state belong in `.aihaus/state/`.
 - Artifact storage + consumption rules (IDs, pointers, scope, worktree paths): see `artifacts.md`.
 - Routing + the single autonomous entry (no `/aih-*` required): see `routing.md`.
+- Native fan-out workflows (autonomous only; qa/devops, runtime-authored): see `fan-out.md`.
 
 ## Composition
 
