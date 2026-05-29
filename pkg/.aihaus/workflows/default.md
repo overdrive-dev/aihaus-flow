@@ -14,6 +14,18 @@ moving tasks between stages.
 - Runtime evidence and generated state belong in `.aihaus/state/`.
 - Artifact storage + consumption rules (IDs, pointers, scope, worktree paths): see `artifacts.md`.
 
+## Composition
+
+This stage-workflow is the **single orchestration spine**. Interactive flows
+(planning, bugfix, feature scoping) are **sub-flows invoked at their stages** —
+`planejamento` invokes the planning sub-flow, `desenvolvimento` invokes the
+feature/bugfix sub-flow — not standalone `/aih-*` entry points. The single
+autonomous entry routes a request to the right sub-flow, then drives gated
+execution through the stages below. **Native dynamic workflows are reserved for
+autonomous fan-out only** (qa sweeps, devops deploy). Rule: interactive → skill
+sub-flow (can ask the requester); fully autonomous → native JS workflow (no
+mid-run input).
+
 ## Default Stages
 
 | Stage | Purpose | Exit Gate |

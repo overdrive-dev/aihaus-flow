@@ -2,7 +2,9 @@
 
 Workflow agents govern process, gates, memory, and environment movement. They do
 not replace specialist code agents. They decide when to spawn or request
-specialists.
+specialists, and invoke the interactive sub-flows (planning, bugfix, feature) at
+their stages — the stage-workflow is the single spine, so those flows are no
+longer standalone `/aih-*` entry points.
 
 Claude-callable agent files may still live under `.aihaus/agents/` because the
 Claude agent loader expects that shape. Workflow-specific rules and durable
