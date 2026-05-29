@@ -96,7 +96,7 @@ Chain dependencies sequentially. Before each step, set its task to `in_progress`
 - **Pre-flight (collision check, ADR-260427-C):** see `annexes/pre-flight-collision.md` before any branch op.
 - Derive `[slug]` (lowercase, hyphens, ≤40 chars, strip trailing hyphens). If user said "stay on this branch", skip branching.
 - `git checkout -b feature/[slug]`. If user approved stashing: `git stash` before branching; `git stash pop` after.
-- Create `.aihaus/features/[YYMMDD]-[slug]/RUN-MANIFEST.md` from the v3 YAML template in `annexes/run-manifest-template.md` (schema: v3, status: running, phase: implement). Mutations go via `manifest-append.sh` (single-writer — never inline edits). Update `last_updated` and append to Progress Log after each subsequent step.
+- Create `.aihaus/features/[YYMMDD]-[slug]/RUN-MANIFEST.md` from the v3 YAML template in `annexes/run-manifest-template.md` (schema: v3, status: running, phase: implement). Mutations go via `manifest-append.sh` (single-writer — never inline edits). Update `last_updated` and append to Progress Log after each subsequent step. **Kanban (default):** also register this task in `.aihaus/state/kanban.db` (`bash .aihaus/workflows/kanban/init-kanban-db.sh` — idempotent), then record each gate's verdict there per `workflows/kanban/local-kanban.md` (single-writer); the native task list (TaskCreate/TaskUpdate) mirrors it.
 
 ### Step 7: Implement (delegate; never inline for non-trivial work)
 
