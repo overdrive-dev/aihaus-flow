@@ -1,12 +1,12 @@
-# aih-goal run state
+# Run state
 
-`/aih-goal` stores readable run artifacts under:
+The workflow stores readable run artifacts under:
 
 ```text
 .aihaus/workflows/runs/[YYMMDD]-[slug]/
 ```
 
-The operational task cache and journal live in `.aihaus/state/aih-goal.db`.
+The operational task cache and journal live in `.aihaus/state/kanban.db`.
 The run directory is the readable evidence package for resume, audit, and human
 review. External systems such as Linear remain the human kanban source of truth.
 
@@ -87,7 +87,7 @@ Evidence: [screenshot, trace, command, URL, or none]
 | [id] | related | [why this matters] |
 
 ### Human Review Package
-[Summary written after review-dev passes.]
+[Summary written after homolog passes.]
 ```
 
 ### RUN-MANIFEST.md
@@ -114,13 +114,20 @@ last_updated: [ISO timestamp]
 After every gate or stage transition, rewrite the readable projection from the
 DB:
 
+- The native CLI task list (TaskCreate/TaskUpdate) is a projection of the DB too:
+  one CLI task per active coordination row, status synced from gate verdicts. The
+  durable run artifacts + `kanban.db` are the source; the written plan and the
+  CLI task list stay **one synced view** — no drift between document and CLI (S10).
+- The interactive planning sub-flow ALSO surfaces the plan via **native plan mode**
+  (`ExitPlanMode` → GUI Plan panel + approve/reject gate). Plan panel, task list,
+  and plan file are all projections of the same durable plan.
 - `TASKS.md` stage/planning/open-question counts match `tasks`,
   `planning_questions`, and `gate_events`.
 - `tasks/<id>.md` `Stage:` matches `tasks.stage`.
 - `tasks/<id>.md` `Gate Log` has one row for every evaluated stage, including
   `SKIPPED: <reason>`.
 - UI or user-flow tasks must have `Browser Gate` result `pass` before leaving
-  `review-dev`; backend-only skips must include a reason. `pending` browser
+  `homolog`; backend-only skips must include a reason. `pending` browser
   gates cannot move to `human-review`.
 - Batch gates such as full-suite test, deploy, or dev-review may reuse a shared
   evidence file, but every affected task still gets its own gate row.
@@ -138,14 +145,15 @@ DB:
 ### Status vocabulary
 
 - `pending`
+- `entendimento`
 - `planejamento`
 - `ready-for-tdd`
 - `tdd`
 - `review-execucao`
 - `testes`
-- `subida-dev`
-- `review-dev`
+- `homolog`
 - `human-review`
+- `prod`
 - `box-dev`
 - `blocked-to-planejamento`
 - `blocked`

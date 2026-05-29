@@ -1,6 +1,6 @@
-# aih-goal source discovery
+# Source discovery
 
-`/aih-goal` assumes work has already been planned in a kanban/backlog. Source
+The workflow assumes work has already been planned in a kanban/backlog. Source
 flags are overrides, not the default path.
 
 ### Discovery order
@@ -10,7 +10,7 @@ flags are overrides, not the default path.
    - `--from-file <path>`
    - `--source <selector>`
 2. Existing local operational state:
-   - `.aihaus/state/aih-goal.db`
+   - `.aihaus/state/kanban.db`
    - tasks not yet at the requested `--until` stage
    - unsynced source cursors/events
 3. Workflow memory:
@@ -46,7 +46,7 @@ and record the reason in `RUN-MANIFEST.md`; do not stop for a menu.
 
 ### External reconciliation
 
-When discovery finds existing `aih-goal.db` tasks with `source_kind != local`,
+When discovery finds existing `kanban.db` tasks with `source_kind != local`,
 refresh those tasks from the external source before using local stage/status for
 execution decisions.
 

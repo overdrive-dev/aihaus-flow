@@ -1,6 +1,6 @@
 ﻿---
 name: aih-bugfix
-description: Triage and fix a bug — root cause analysis, branch, fix, test, commit. Use for defects and errors.
+description: "Triage and fix a bug through the gated workflow — root cause, branch, fix, test, commit. Use for defects and errors."
 allowed-tools: Read Write Edit Grep Glob Bash TaskCreate TaskUpdate Skill
 argument-hint: "[bug description, error message, or symptom]"
 ---
@@ -109,7 +109,7 @@ git checkout -b fix/[slug]
 ```
 If branching fails (e.g., branch exists), append a short suffix: `fix/[slug]-2`.
 
-Create `.aihaus/bugfixes/[YYMMDD]-[slug]/RUN-MANIFEST.md` from the v3 YAML template in `annexes/run-manifest-template.md` (schema: v3, status: running, phase: apply-fix). Mutations go via `manifest-append.sh` (single-writer — never inline edits). Update `last_updated` and append to Progress Log after each subsequent step.
+Create `.aihaus/bugfixes/[YYMMDD]-[slug]/RUN-MANIFEST.md` from the v3 YAML template in `annexes/run-manifest-template.md` (schema: v3, status: running, phase: apply-fix). Mutations go via `manifest-append.sh` (single-writer — never inline edits). Update `last_updated` and append to Progress Log after each subsequent step. **Kanban (default):** also register this task in `.aihaus/state/kanban.db` (`bash .aihaus/workflows/kanban/init-kanban-db.sh` — idempotent), then record each gate's verdict there per `workflows/kanban/local-kanban.md` (single-writer); the native task list (TaskCreate/TaskUpdate) mirrors it.
 
 ### 9. Apply Fix (delegate; never inline for non-trivial work)
 

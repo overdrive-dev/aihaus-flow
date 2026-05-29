@@ -1,6 +1,6 @@
-# aih-goal local kanban contract
+# Local kanban contract
 
-The local kanban is the minimum durable task ledger needed for `/aih-goal` to
+The local kanban is the minimum durable task ledger needed for the workflow to
 work with or without Linear, Notion, Jira, Trello, or GitHub Issues.
 
 It is intentionally small. It is not a full clone of an external product.
@@ -42,7 +42,7 @@ Required format:
 Examples:
 
 - Bad: `Should I update the kanban now or at the end?`
-- Good: `Business rule gap for NORACAR-123: define which stage change must be visible in Linear after review-dev passes, including the required evidence comment.`
+- Good: `Business rule gap for NORACAR-123: define which stage change must be visible in Linear after homolog passes, including the required evidence comment.`
 - Bad: `For tasks A, B, and C, what should happen with billing filters and exports?`
 - Good: `Business rule gap for NORACAR-124: define whether archived billing records appear in the doctor financial filter results.`
 
@@ -106,7 +106,7 @@ them. Do not merge external tasks without explicit user instruction.
 
 ### Local-only mode
 
-When no external kanban is integrated, `/aih-goal` may create local tasks from a
+When no external kanban is integrated, the workflow may create local tasks from a
 file, existing DB rows, or `$ARGUMENTS`. In this mode the local kanban owns task
 title, description, priority, visible status, planning questions, planning
 answers, and related-task links.

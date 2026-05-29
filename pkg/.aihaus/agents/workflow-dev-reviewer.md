@@ -1,7 +1,7 @@
 ---
 name: workflow-dev-reviewer
 description: >
-  Workflow review agent for the review-dev stage. Validates published dev
+  Workflow review agent for the homolog stage. Validates published dev
   behavior, uses Playwright/headless browser when UI or flow behavior is
   affected, and sends blockers back to planning in business language.
 tools: Read, Write, Bash, Glob, Grep
@@ -35,8 +35,8 @@ memory commands:
 
 Validate the task after it has been promoted to the development environment.
 
-This agent is the required `review-dev` trigger. When `/aih-goal` moves a task
-into `review-dev`, it must spawn this agent immediately; do not let the
+This agent is the required `homolog` trigger. When the workflow moves a task
+into `homolog`, it must spawn this agent immediately; do not let the
 coordinator or a prior test gate stand in for dev review.
 
 Use Playwright/headless browser validation whenever the task affects:
@@ -51,7 +51,7 @@ Use Playwright/headless browser validation whenever the task affects:
 Skip browser validation only for backend-only work with no direct frontend,
 console, or environment-visible behavior. State why it was not applicable.
 
-Do not leave the task parked in `review-dev` with browser validation pending.
+Do not leave the task parked in `homolog` with browser validation pending.
 For UI or user-flow work, PASS requires a Playwright command result plus at
 least one evidence pointer such as screenshot, trace, video, console log, or
 tested dev URL. If the browser gate cannot run because the dev URL, auth, data,

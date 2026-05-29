@@ -23,6 +23,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKG_ROOT="${REPO_ROOT}/pkg"
 
+# ---- Ensure grep -P works (PCRE requires a UTF-8/unibyte locale) --------------
+# On minimal Git Bash / POSIX-"C" environments the inherited locale makes
+# `grep -P` abort ("supports only unibyte and UTF-8 locales"), which silently
+# zeroes every step count (compute-expected -> 0) and falsely fails Check 62.
+# Only override the locale when -P is actually broken, so working envs (Linux/CI
+# with a UTF-8 locale already set) are left untouched.
+if ! printf 'a\n' | grep -qP 'a' 2>/dev/null; then
+  for _loc in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do
+    if LC_ALL="$_loc" sh -c "printf 'a\n' | grep -qP 'a'" 2>/dev/null; then
+      export LC_ALL="$_loc"
+      break
+    fi
+  done
+fi
+
 # ---- Per-format regex constants (architecture.md §7.2 + B3 fix) ---------------
 # H3 colon/dash format: aih-feature, aih-milestone/annexes/execution.md
 RE_H3_STEP='^### Step [0-9]+(\.[0-9]+)?[ —:]'

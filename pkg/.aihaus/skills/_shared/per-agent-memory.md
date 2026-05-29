@@ -84,7 +84,7 @@ Guidance:
 
 ## Writer Discipline
 
-The orchestrator (completion-protocol Step 4.7b, or `/aih-goal` memory
+The orchestrator (completion-protocol Step 4.7b, or a workflow run's memory
 promotion) is the **sole writer** of `.aihaus/memory/agents/**`. Agents emit the
 block as part of their return payload only; they never write files directly.
 The same rule applies to broader `.aihaus/memory/**` surfaces: agents propose
@@ -92,5 +92,5 @@ durable facts, and the orchestrator applies them during memory promotion.
 
 See `pkg/.aihaus/skills/aih-milestone/completion-protocol.md` Step 4.7b for
 the milestone application algorithm and
-`pkg/.aihaus/skills/aih-goal/annexes/memory-promotion.md` for the goal-run
+`pkg/.aihaus/workflows/kanban/memory-promotion.md` for the workflow-run
 application algorithm.

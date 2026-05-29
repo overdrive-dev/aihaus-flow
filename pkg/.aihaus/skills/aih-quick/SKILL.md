@@ -1,6 +1,6 @@
 ﻿---
 name: aih-quick
-description: Fast-track for small, well-understood changes. Skips full planning — analyze, implement, and review in one shot.
+description: "Fast-path for a small, well-understood change — analyze, implement, review in one shot, intentionally skipping the full gates. Use only for trivial, low-risk changes."
 allowed-tools: Read Write Edit Grep Glob Bash Skill
 argument-hint: "[what to fix or change]"
 ---

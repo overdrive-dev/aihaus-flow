@@ -1,6 +1,6 @@
-# aih-goal memory promotion
+# Memory promotion
 
-`/aih-goal` run artifacts are not durable memory by themselves. At finish, and
+Workflow run artifacts are not durable memory by themselves. At finish, and
 before any long pause caused by true blockers, promote reusable findings into
 the repository memory surfaces that future runs read.
 

@@ -718,6 +718,7 @@ _inject_gitignore() {
     '/.aihaus/state/'
     '/.aihaus/runtime/'
     '/.aihaus/backups/'
+    '/.aihaus/memory/local/'
     '/.claude/agents/'
     '/.claude/hooks/'
     '/.claude/skills/'

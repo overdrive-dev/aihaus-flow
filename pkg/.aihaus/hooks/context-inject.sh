@@ -176,7 +176,7 @@ _write_audit() {
 #     Rotation:   10 KB OR 100 lines (lighter than 10 MB/10000 in advisor)
 # ---------------------------------------------------------------------------
 compute_hash() {
-  local combined="${target_agent_name:-}|${cohort:-}|${task_description:-}"
+  local combined="${target_agent_name:-}|${cohort:-}|${_active_profile:-}|${task_description:-}"
   if command -v sha256sum >/dev/null 2>&1; then
     printf '%s' "$combined" | sha256sum | awk '{print $1}'
   elif command -v shasum >/dev/null 2>&1; then
@@ -277,6 +277,15 @@ _resolve_cohort() {
 cohort="$(_resolve_cohort "$target_agent_name")"
 # Default to :doer if cohort cannot be resolved.
 [ -z "$cohort" ] && cohort=":doer"
+
+# Resolve active profile (role-scoped context, S4). Folded into the cache key
+# below so builder/devops never share a cached payload — the online env must
+# never leak into a non-devops profile's context.
+_active_profile=""
+_profile_file_early="$(aihaus_project_path ".aihaus/.profile" 2>/dev/null || echo "")"
+if [ -n "$_profile_file_early" ] && [ -f "$_profile_file_early" ]; then
+  _active_profile="$(tr ',' ' ' < "$_profile_file_early" 2>/dev/null | tr -s '[:space:]' ' ' | sed 's/^ *//; s/ *$//')"
+fi
 
 # ---------------------------------------------------------------------------
 # 6b. Cache lookup (M016-S07) — cache key: hash(target_agent_name | cohort | task)
@@ -661,6 +670,17 @@ HIGH:.aihaus/memory/workflows/environment.md — Runtime, CI/CD, credential loca
 MED:.aihaus/memory/MEMORY.md — Agent memory index for cross-task context."
   path_method="fallback"
 fi
+
+# Role-scoped online env (S4): only profiles holding `devops` get the online
+# (staging/prod) env pointer. Keeps online URLs/credential locations out of
+# builder/dev/qa agent context (reinforces the role-guard online boundary).
+# Uses _active_profile resolved above (also folded into the cache key).
+case " ${_active_profile:-} " in
+  *" devops "*)
+    payload_lines="${payload_lines}
+HIGH:.aihaus/memory/local/environment-online.md — Online (staging/prod) env: deploy URLs, promote/rollback commands, credential locations. devops-scoped."
+    ;;
+esac
 
 memory_context_section="$(_build_memory_context)"
 [ -n "$memory_context_section" ] && memory_context_section="${memory_context_section}"$'\n'
