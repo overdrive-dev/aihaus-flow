@@ -1,7 +1,7 @@
 ﻿---
 name: aih-plan
-description: Research a problem and produce a plan without writing code. Use when you want to think before building.
-allowed-tools: Read Grep Glob Bash WebFetch Skill
+description: "Planning sub-flow — research and produce a plan with no code, surfaced to the native Plan panel for approval. Normally invoked by the spine at planejamento; type /aih-plan to plan standalone."
+allowed-tools: Read Grep Glob Bash WebFetch Skill ExitPlanMode
 argument-hint: "[what you want to plan — feature, migration, refactor, etc.]"
 ---
 
@@ -36,7 +36,7 @@ If `--no-tdd` flag is present in `$ARGUMENTS` → audit-log and suppress downstr
 
 ## Phase 4 — Report + threshold gate
 10. **Summarize** the plan in 3-5 bullets. Print: PLAN.md path; auxiliary artifacts (ASSUMPTIONS.md, PATTERNS.md, CHECK.md, RESEARCH.md, BUSINESS-RULES.md if present). Honor `--no-tdd` flag (audit-logged). **Sentinel cleanup:** `rm -f .claude/calibrate-guard.active-slug 2>/dev/null || true`.
-11. **Threshold gate (see `_shared/autonomy-protocol.md`):** planning is complete → ask ONE natural-language question in the conversation. Small scope: *"Posso executar agora?"* Large scope (>10 files or multi-story): *"Posso promover para milestone draft e seguir até execução?"* On affirmative (y/sim/vai/go/enter), dispatch the appropriate skill via the Skill tool (`aih-milestone --plan [slug]` for large, `aih-feature --plan [slug]` for small). On negative, plan stays standalone — user retoma quando quiser. **Never print "Suggested Next Command: /aih-xxx" as an instruction for the user to type** — that delegates keyboard work. Opt-out: `--no-chain` in `$ARGUMENTS` reverts to print-suggestion behavior.
+11. **Threshold gate (see `_shared/autonomy-protocol.md`):** planning is complete → **surface the plan via native plan mode (`ExitPlanMode`)** so it renders in the GUI Plan panel; the native approve/reject IS the planejamento gate. PLAN.md stays the durable source — the panel is a projection of it (run-state.md). If plan mode is unavailable, fall back to ONE natural-language question. Small scope: *"Posso executar agora?"* Large scope (>10 files or multi-story): *"Posso promover para milestone draft e seguir até execução?"* On approval/affirmative (y/sim/vai/go/enter), dispatch the appropriate skill via the Skill tool (`aih-milestone --plan [slug]` for large, `aih-feature --plan [slug]` for small). On reject/negative, plan stays standalone — user retoma quando quiser. **Never print "Suggested Next Command: /aih-xxx" as an instruction for the user to type** — that delegates keyboard work. Opt-out: `--no-chain` reverts to print-suggestion; `--no-plan-mode` forces the NL question instead of `ExitPlanMode`.
 
 ## Annexes (referenced, not duplicated)
 - `annexes/attachments.md` — temp-slug flow, crash recovery, limits

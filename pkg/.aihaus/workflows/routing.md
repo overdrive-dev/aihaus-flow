@@ -23,9 +23,12 @@ determinism anchor), never required.
   roles permit (see [roles.md](roles.md)); `role-guard.sh` enforces the online
   boundary. builder/dev/qa never reach the online stages.
 - **Descriptions are the routing fuel.** The model auto-invokes by `description`.
-  Empty descriptions force `/`-typing; populated descriptions enable routing. The
-  entry carries a routing-rich description; the interactive sub-flows are invoked
-  by the stage-workflow, not auto-triggered standalone.
+  The entry (`aih-goal`) carries a routing-**dominant** description so any feature,
+  bug, or task request lands on the spine. The interactive sub-flows (`aih-plan`,
+  `aih-feature`, `aih-bugfix`) and the `aih-quick` fast-path carry **de-competed**
+  descriptions (framed as "invoked by the spine; `/aih-*` for a standalone
+  override"), so they do not steal generic requests. Disambiguation — not empty
+  descriptions — is what makes the spine the default auto-route.
 
 ## Catalog hygiene (prerequisite)
 

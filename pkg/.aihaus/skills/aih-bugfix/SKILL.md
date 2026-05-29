@@ -1,6 +1,6 @@
 ﻿---
 name: aih-bugfix
-description: Triage and fix a bug — root cause analysis, branch, fix, test, commit. Use for defects and errors.
+description: "Bug triage and fix sub-flow (root cause, branch, fix, test, commit). Normally invoked by the goal runner; type /aih-bugfix to run it directly for one standalone defect."
 allowed-tools: Read Write Edit Grep Glob Bash TaskCreate TaskUpdate Skill
 argument-hint: "[bug description, error message, or symptom]"
 ---

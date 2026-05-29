@@ -1,6 +1,6 @@
 ---
 name: aih-goal
-description: Execute a planned kanban goal autonomously through aihaus workflow gates until a target stage such as human-review.
+description: "The default entry for getting work done — routes any feature, bug, or task request through the gated stage-workflow (entendimento, planejamento, tdd, review, testes, homolog, human-review) and drives it autonomously, scoping interactively first when needed. Use for any build, fix, or ship request."
 allowed-tools: Read Write Edit Grep Glob Bash Agent TaskCreate TaskUpdate Skill
 argument-hint: "[goal description] [--until human-review] [--source <selector>] [--from-linear <selector>] [--from-file <path>]"
 ---
