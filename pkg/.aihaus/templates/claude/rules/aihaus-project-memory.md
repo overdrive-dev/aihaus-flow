@@ -20,7 +20,7 @@ workflow-sync work, check the repo-local context sources:
   Do not import entire large ledgers into startup context.
 
 If a required fact is absent, do not invent it. Record the missing project fact
-as a task-specific blocker or a Memory Candidate so `/aih-goal` can promote it
+as a task-specific blocker or a Memory Candidate so the workflow can promote it
 into project memory after human confirmation.
 
 Never store plaintext secrets. Store only where credentials live and how an

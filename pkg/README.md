@@ -272,7 +272,6 @@ aihaus ships 15 intent-based skills. Every command follows the same pattern: **a
 | `/aih-init` | Bootstrap — scans codebase, writes `project.md`, seeds memory |
 | `/aih-brainstorm` | Multi-specialist exploratory panel for fuzzy topics — outputs `BRIEF.md` |
 | `/aih-plan` | Research and plan a concrete change — outputs `PLAN.md` |
-| `/aih-goal` | Discover planned kanban tasks, register local planning contracts, and run workflow gates autonomously until a target stage |
 | `/aih-feature` | Plan → branch → implement → review → commit (single feature) |
 | `/aih-bugfix` | Triage → branch → fix → test → commit |
 | `/aih-milestone` | Conversational gathering for milestone-sized work — drafts to `STATUS.md` |
@@ -283,7 +282,7 @@ aihaus ships 15 intent-based skills. Every command follows the same pattern: **a
 | Command | What it does |
 |---------|--------------|
 | `/aih-milestone [slug]` + start-intent / `--execute` | Execute a ready milestone draft — full agent team (via `annexes/execution.md`) |
-| `/aih-goal --until human-review` | Execute the discovered planned backlog until each task reaches human review or has a planning blocker |
+| `/goal <condition>` (native) | Drive a planned backlog through the gated workflow until each task reaches human review — auto-routes each task; `kanban.db` tracks state |
 | `/aih-feature --plan [slug]` | Execute a small plan inline on a single `feature/[slug]` branch |
 | `/aih-resume [slug]` | Pick up an interrupted run from `RUN-MANIFEST.md` |
 | `/aih-milestone --plan [slug]` | Promote a plan to a milestone draft for conversational refinement (absorbs retired `/aih-plan-to-milestone`) |

@@ -1,6 +1,6 @@
 # Workflow Gotchas
 
-Use this file for recurring workflow failures that future `/aih-goal` runs
+Use this file for recurring workflow failures that future workflow runs
 should avoid.
 
 Good entries include:

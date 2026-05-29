@@ -33,6 +33,6 @@ fake it as a deterministic check (avoids the green-but-vacuous trap).
 
 ## Eval gate
 
-At goal finish (`/aih-goal` Phase 7), run `eval-run.sh` over the run's
+At run finish, run `eval-run.sh` over the run's
 `kanban.db`. A deterministic FAIL blocks marking the run complete — see
 `.aihaus/workflows/artifacts.md` § Eval gate.

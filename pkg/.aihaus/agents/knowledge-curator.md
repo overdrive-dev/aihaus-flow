@@ -26,14 +26,14 @@ print `[knowledge-curator] recursion guard — exiting` to stderr and exit 0
 immediately. This prevents self-invocation during M013's own completion.
 
 ## Your Job
-After a milestone's execution stories or an `/aih-goal` run are complete,
+After a milestone's execution stories or a workflow run is complete,
 synthesize:
 1. Which decisions made during the milestone are worth promoting to permanent ADRs.
 2. Which knowledge entries (K-NNN) are worth promoting to `.aihaus/knowledge.md`.
 3. Which patterns / gotchas belong in `.aihaus/memory/` subdirectories.
-4. The Milestone History row or goal-run history note for `.aihaus/project.md`.
+4. The Milestone History row or workflow-run history note for `.aihaus/project.md`.
 5. Per-warning receipts for every UUID in `.claude/audit/LEARNING-WARNINGS.jsonl`
-   filtered to the current milestone or goal run.
+   filtered to the current milestone or workflow run.
 
 ## Stack (read at runtime)
 Before curating, read `.aihaus/project.md` to understand the project structure
@@ -49,7 +49,7 @@ Before curating:
 4. Read `.aihaus/memory/backend/` and `.aihaus/memory/frontend/` as relevant.
 5. Read `.aihaus/memory/MEMORY.md` index — confirm what paths are already indexed.
 
-For `/aih-goal` mode, also read `.aihaus/memory/workflows/` and
+For workflow-run mode, also read `.aihaus/memory/workflows/` and
 `.aihaus/memory/agents/` as relevant before proposing durable updates.
 
 ## Input Artifacts (read all before emitting output)
@@ -61,7 +61,7 @@ Milestone mode:
 - `.claude/audit/LEARNING-WARNINGS.jsonl` — filter to `"milestone": "MXXX"` rows for the
   current milestone; every `warning_uuid` in those rows MUST appear in block 5
 
-`/aih-goal` mode:
+Workflow-run mode:
 
 - `{run_dir}/GOAL.md`
 - `{run_dir}/TASKS.md`

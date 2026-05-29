@@ -11,7 +11,7 @@ Use it for:
 - business-language reasons a task returned to planning.
 - source-system preferences, such as how external cards encode planning answers.
 - kanban source hints, such as the default project, board, view, or database
-  used by `/aih-goal`.
+  used by the workflow.
 - conventions for planning question/answer contracts and related-task links in
   the local kanban.
 
@@ -34,5 +34,5 @@ Generated state belongs in `.aihaus/state/`. The workflow profile belongs in
 
 Agents should not write this directory directly during a run. They should return
 candidate workflow-memory findings in their report, or emit per-agent memory to
-`.aihaus/memory/agents/<agent-name>.md`; `/aih-goal` promotes durable workflow
-facts during its memory-promotion phase.
+`.aihaus/memory/agents/<agent-name>.md`; the memory-promotion phase promotes
+durable workflow facts.

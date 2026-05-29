@@ -1,6 +1,6 @@
-# aih-goal Linear intake
+# Linear intake
 
-Linear is a source and sync target for `/aih-goal`. Local aihaus artifacts remain
+Linear is a source and sync target for the workflow. Local aihaus artifacts remain
 the recoverable execution record during autonomous work.
 
 ### Import

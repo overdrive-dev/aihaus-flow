@@ -1,6 +1,6 @@
-# aih-goal SQLite state
+# Kanban SQLite state
 
-`/aih-goal` uses `.aihaus/state/kanban.db` as an operational cache and
+The workflow uses `.aihaus/state/kanban.db` as an operational cache and
 append-only journal. When an external kanban exists, the DB is not the human
 source of truth. Linear, Notion, Jira, Trello, or GitHub Issues remain the task
 source. When no external kanban exists, the DB plus readable run artifacts are

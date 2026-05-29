@@ -35,7 +35,7 @@ memory commands:
 
 Validate the task after it has been promoted to the development environment.
 
-This agent is the required `homolog` trigger. When `/aih-goal` moves a task
+This agent is the required `homolog` trigger. When the workflow moves a task
 into `homolog`, it must spawn this agent immediately; do not let the
 coordinator or a prior test gate stand in for dev review.
 

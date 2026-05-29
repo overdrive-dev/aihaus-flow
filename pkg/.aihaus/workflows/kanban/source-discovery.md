@@ -1,6 +1,6 @@
-# aih-goal source discovery
+# Source discovery
 
-`/aih-goal` assumes work has already been planned in a kanban/backlog. Source
+The workflow assumes work has already been planned in a kanban/backlog. Source
 flags are overrides, not the default path.
 
 ### Discovery order

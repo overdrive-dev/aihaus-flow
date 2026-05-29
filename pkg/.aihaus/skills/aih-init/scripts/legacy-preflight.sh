@@ -102,8 +102,8 @@ manual_review() {
 archive_safe ".aihaus/.claude" "nested audit/cache directory created by old relative hook paths"
 archive_safe ".aihaus/state/.claude" "nested audit/cache directory created by old relative hook paths"
 archive_safe ".aihaus/plans/.claude" "nested audit/cache directory created by old relative hook paths"
-archive_safe ".aihaus/state/schema.sql" "old ad hoc /aih-goal schema now packaged with aihaus-flow"
-archive_safe ".aihaus/state/import_tasks.py" "old ad hoc /aih-goal import helper now packaged with aihaus-flow"
+archive_safe ".aihaus/state/schema.sql" "old ad hoc kanban schema (now packaged at workflows/kanban/)"
+archive_safe ".aihaus/state/import_tasks.py" "old ad hoc kanban import helper (now packaged at workflows/kanban/)"
 
 append ""
 append "## Manual Review Artifacts"

@@ -1,11 +1,11 @@
 # Workflow Environment Memory
 
 Use this file for repository-specific execution environment notes that should
-survive across `/aih-goal` runs.
+survive across workflow runs.
 
 Record only durable facts, for example:
 
-- default external source-system names used for goal intake,
+- default external source-system names used for workflow intake,
 - dev/staging/prod URLs that agents should verify,
 - deployment commands, CI jobs, or environment gates,
 - credentials or access prerequisites described without secrets,

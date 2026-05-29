@@ -1,6 +1,6 @@
-# aih-goal run state
+# Run state
 
-`/aih-goal` stores readable run artifacts under:
+The workflow stores readable run artifacts under:
 
 ```text
 .aihaus/workflows/runs/[YYMMDD]-[slug]/

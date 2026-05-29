@@ -27,7 +27,7 @@ aihaus is a four-pillar intent-based workflow package. **Scope** the work, optio
 |--------|----------|---------|
 | **Scope** | `/aih-plan`, `/aih-milestone`, `/aih-brainstorm` | Create plans / gather milestone context / explore fuzzy ideas |
 | **Promote** | `/aih-milestone --plan [slug]` | Seed a milestone draft from a `PLAN.md` (absorbed from the retired `/aih-plan-to-milestone` in v0.11.0) |
-| **Execute** | `/aih-goal`, `/aih-milestone --execute`, `/aih-feature`, `/aih-bugfix`, `/aih-quick` | Start autonomous work |
+| **Execute** | `/aih-feature`, `/aih-bugfix`, `/aih-quick`, `/aih-milestone --execute` | Start work — a request auto-routes to the right sub-flow; native `/goal` wraps a hands-off multi-turn run |
 | **Continue** | `/aih-resume` | Pick up an interrupted run |
 
 ## All Commands
@@ -36,7 +36,6 @@ aihaus is a four-pillar intent-based workflow package. **Scope** the work, optio
 |---------|-------------|----------|
 | `/aih-init` | Bootstrap aihaus in a project — creates `.aihaus/` layout and seeds project memory | First time using aihaus in a repo |
 | `/aih-plan [description]` | Research and write a concrete, implementable plan without changing code — produces `PLAN.md` | You have a concrete task and want to think before building |
-| `/aih-goal [description] [--until human-review] [--source <selector>]` | Discover planned kanban tasks, register planning Q/A contracts, and execute ready work without mid-run input | You have a batch of planned tasks and want them advanced until a target workflow stage |
 | `/aih-brainstorm "<topic>" [--panel <roles>] [--deep] [--research]` | Multi-specialist exploratory panel for fuzzy "how should we think about X" questions — produces `BRIEF.md` that feeds `/aih-plan --from-brainstorm` or `/aih-milestone --from-brainstorm` | The problem is open-ended and you want diverse perspectives before committing to an approach |
 | `/aih-milestone [description]` | Conversational gathering, plan-promotion (`--plan [slug]`), or direct execution (`--execute` or start-intent on a ready draft). Absorbs the retired `/aih-run` + `/aih-plan-to-milestone` | You want to scope, promote, or execute a multi-story milestone |
 | `/aih-resume [slug]` | Resume an interrupted run — detects in-progress work via RUN-MANIFEST.md | Session crashed, context reset, or you paused execution |
@@ -79,11 +78,11 @@ aihaus is a four-pillar intent-based workflow package. **Scope** the work, optio
   -> single-branch feature execution seeded from plan
 ```
 
-### Goal from planned backlog
+### Run a planned backlog (native /goal)
 
 ```
-/aih-goal --until human-review
-  -> discovers the planned source, records planning Q/A contracts, evaluates gates, syncs blockers/evidence
+/goal every backlog task has reached human-review through the aihaus gates
+  -> each task auto-routes through the sub-flows + gates; kanban.db tracks state; blockers/evidence synced
 ```
 
 ### Resume after interruption
@@ -120,7 +119,7 @@ Applied at these gates:
 - `/aih-plan` → `plan-checker` on the drafted plan
 - `/aih-bugfix` → `code-reviewer` + `code-fixer` loop (2 iterations) after fix
 - `/aih-feature` → `code-reviewer` + `code-fixer` + `verifier` + conditional `integration-checker`
-- `/aih-goal` → workflow gate agents for planning, TDD, execution review, tests, CI/CD, dev review, and human-review packaging
+- a workflow run (sub-flows + native `/goal`) → workflow gate agents for planning, TDD, execution review, tests, CI/CD, dev review, and human-review packaging
 - `/aih-quick` → single `code-reviewer` pass
 - `/aih-milestone` execution path (`--execute` or start-intent) → always-on `verifier` + `integration-checker`, systematic `security-auditor` for sensitive work
 - `/aih-brainstorm` → `contrarian` round on panelist perspectives; `brainstorm-synthesizer` fans in all artifacts into `BRIEF.md`.
@@ -186,7 +185,7 @@ All artifacts live under `.aihaus/`:
 - `.aihaus/milestones/drafts/[slug]/` — In-progress milestone drafts (CONTEXT.md, STATUS.md, CONVERSATION.md)
 - `.aihaus/milestones/drafts/.archive/` — Drafts that have been promoted to milestones
 - `.aihaus/milestones/[M0XX]-[slug]/` — Full milestone artifacts + RUN-MANIFEST.md checkpoint
-- `.aihaus/workflows/runs/[YYMMDD]-[slug]/` — Goal-run task state, gate logs, and evidence packages
+- `.aihaus/workflows/runs/[YYMMDD]-[slug]/` — Workflow-run task state, gate logs, and evidence packages
 - `.aihaus/features/[YYMMDD]-[slug]/` — Feature summaries + RUN-MANIFEST.md
 - `.aihaus/bugfixes/[YYMMDD]-[slug]/` — Bugfix summaries + RUN-MANIFEST.md
 - `.aihaus/memory/` — Persistent agent memory
