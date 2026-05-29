@@ -5681,6 +5681,31 @@ EOF
   fi
 }
 
+# ---- Check 95: eval-run.sh deterministic eval (good passes, bad fails) (3.0/S6) ----
+check_eval_run_deterministic() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: eval-run.sh deterministic eval — good passes, bad fails (3.0/S6)"
+  local eval_script="${PACKAGE_ROOT}/.aihaus/eval/eval-run.sh"
+  local schema="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/scripts/schema.sql"
+  if [[ ! -f "$eval_script" ]]; then _fail "$label" "eval-run.sh missing"; return; fi
+  if ! bash -n "$eval_script" >/dev/null 2>&1; then _fail "$label" "eval-run.sh not parseable"; return; fi
+  if ! command -v sqlite3 >/dev/null 2>&1; then _pass "$label (skipped: sqlite3 unavailable)"; return; fi
+  local issues=()
+  local d
+  d="$(_mktemp_dir aih-eval)" || { _fail "$label" "mktemp failed"; return; }
+  mkdir -p "$d/.aihaus/state" "$d/.aihaus/workflows/runs/r/evidence" 2>/dev/null || true
+  sqlite3 "$d/.aihaus/state/aih-goal.db" < "$schema" >/dev/null 2>&1 || true
+  printf 'ev\n' > "$d/.aihaus/workflows/runs/r/evidence/EV-1.md" 2>/dev/null || true
+  sqlite3 "$d/.aihaus/state/aih-goal.db" "INSERT INTO gate_events (id,task_id,stage,verdict,evidence_path,created_at) VALUES('G1','T1','testes','PASS','.aihaus/workflows/runs/r/evidence/EV-1.md','t');" >/dev/null 2>&1 || true
+  bash "$eval_script" --project "$d" >/dev/null 2>&1 || issues+=("good fixture should pass (exit 0) but eval failed")
+  sqlite3 "$d/.aihaus/state/aih-goal.db" "INSERT INTO gate_events (id,task_id,stage,verdict,created_at) VALUES('G2','T1','testes','MAYBE','t');" >/dev/null 2>&1 || true
+  if bash "$eval_script" --project "$d" >/dev/null 2>&1; then
+    issues+=("bad fixture should fail (exit 1) but eval passed — green-but-vacuous")
+  fi
+  rm -rf "$d" 2>/dev/null || true
+  if [[ ${#issues[@]} -eq 0 ]]; then _pass "$label"; else _fail "$label" "${issues[@]}"; fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -5694,6 +5719,7 @@ check_init_operational_context_discovery
 check_project_context_refresh_hook
 check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
+check_eval_run_deterministic
 
 printf "
 "

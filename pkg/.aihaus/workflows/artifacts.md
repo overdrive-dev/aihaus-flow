@@ -59,3 +59,10 @@ Scope is encoded in the **path**, and `.gitignore` enforces it:
 
 Writing a project-scoped fact into a local path (or vice versa) is a scope bug —
 the path decides commit visibility and role-scoped exposure.
+
+## Eval gate (S6)
+
+At goal finish, run `eval/eval-run.sh` over the run's `aih-goal.db`. A deterministic
+FAIL (invalid verdict, missing evidence, planning-gate violation, gate churn) blocks
+marking the run complete. The business-rule-coverage rubric is a separate judgment
+pass — see `eval/README.md`.
