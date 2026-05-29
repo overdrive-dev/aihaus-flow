@@ -60,3 +60,29 @@ console, or environment-visible behavior to validate.
 `homolog` must dispatch `workflow-dev-reviewer` immediately when a task
 enters the stage. A `workflow-test-gate` Playwright plan is only input for that
 agent, not a substitute for running dev review.
+
+## Sub-flow invocation
+
+The interactive sub-flows are real skills invoked via the **Skill tool**, never
+standalone entry points. `aih-goal` decides per task whether a stage needs
+interactive scoping or runs fully autonomously:
+
+- **planejamento.** A *fresh requester brief* (a single request, no pre-planned
+  source) routes to the interactive planning sub-flow `Skill(aih-plan)`: it reaches
+  `entendimento` (100% understanding, BR-1), clarifies business rules with the
+  requester, and surfaces the plan via **native plan mode** (`ExitPlanMode` → GUI
+  Plan panel). That approval **is** the `planejamento → tdd` gate. A *source-backed*
+  backlog (Linear, file) instead runs the autonomous planning sweep
+  (`workflow-planning-gate`); gaps become per-task `BLOCKED-TO-PLANNING` rows, never
+  an interactive prompt.
+- **desenvolvimento (tdd / review-execucao).** When a ready task needs dev-level
+  scoping, route to `Skill(aih-feature)` (feature) or `Skill(aih-bugfix)` (defect)
+  for the interactive scoping, then drive the autonomous gates. Pre-scoped tasks go
+  straight to the specialist agents.
+
+**Interactive-vs-autonomous rule.** Interactive scoping is a *scoping-first window*
+at the entry of a task — it may ask the requester. Once the plan-mode approval lands
+(or the autonomous sweep passes), `aih-goal` drives every downstream gate with **no
+mid-run input** until `--until` or a true blocker. The online stages (`homolog`,
+`prod`) are never interactive and never sub-flowed; they stay devops-gated CI/CD
+(`role-guard.sh`).

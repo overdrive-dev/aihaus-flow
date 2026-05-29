@@ -27,7 +27,7 @@ Allowed stages: `entendimento`, `planejamento`, `tdd`, `review-execucao`, `teste
 ## Autonomy Contract
 
 The `/aih-goal` invocation is approval to work without mid-run user input until
-`--until` is reached.
+`--until` is reached — except a fresh requester brief's scoping-first window, where the interactive planning/dev sub-flow may ask the requester before autonomous execution begins (see `agents.md` § Sub-flow invocation).
 
 Do not ask the user to choose between normal execution paths. Evaluate the gate,
 pick the safest applicable path, write the reason to the run artifacts, and
@@ -110,9 +110,8 @@ planning gate runs.
 For every imported task:
 
 1. Search the local kanban for related tasks and record `task_links` when found.
-2. Spawn `workflow-intake` when the source item is raw or underspecified.
-3. Spawn `workflow-planning-gate`.
-4. Record verdict: `READY-FOR-TDD`, `BLOCKED`, or `SKIPPED` with reason.
+2. **Fresh requester brief** (no pre-planned source) → invoke the interactive planning sub-flow `Skill(aih-plan)` (entendimento + plan-mode approval = the `planejamento → tdd` gate); **source-backed** → spawn `workflow-intake` (if raw) then `workflow-planning-gate`. See `agents.md` § Sub-flow invocation.
+3. Record verdict: `READY-FOR-TDD`, `BLOCKED`, or `SKIPPED` with reason.
 
 The planning gate must use source content first. If Linear already contains the
 answers, record them as `planning_answers` and do not ask again. If something is
@@ -127,8 +126,8 @@ then linked with `task_links`.
 For each `READY-FOR-TDD` task, run stages in order until `--until`:
 
 1. `workflow-tdd-gate`
-2. implementation specialist agents (`implementer`, `frontend-dev`, `executor`,
-   `test-writer`, or narrower existing agents as appropriate)
+2. dev scoping when the task needs it (`Skill(aih-feature)` for a feature, `Skill(aih-bugfix)` for a defect), then
+   implementation specialists (`implementer`, `frontend-dev`, `executor`, `test-writer`)
 3. `workflow-execution-review`
 4. `workflow-test-gate`
 5. `workflow-cicd` for `homolog`/`prod` and environment evidence
