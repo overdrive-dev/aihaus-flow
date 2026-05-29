@@ -13,6 +13,7 @@ moving tasks between stages.
   file.
 - Runtime evidence and generated state belong in `.aihaus/state/`.
 - Artifact storage + consumption rules (IDs, pointers, scope, worktree paths): see `artifacts.md`.
+- Routing + the single autonomous entry (no `/aih-*` required): see `routing.md`.
 
 ## Composition
 
