@@ -118,6 +118,9 @@ DB:
   one CLI task per active coordination row, status synced from gate verdicts. The
   durable run artifacts + `aih-goal.db` are the source; the written plan and the
   CLI task list stay **one synced view** — no drift between document and CLI (S10).
+- The interactive planning sub-flow ALSO surfaces the plan via **native plan mode**
+  (`ExitPlanMode` → GUI Plan panel + approve/reject gate). Plan panel, task list,
+  and plan file are all projections of the same durable plan.
 - `TASKS.md` stage/planning/open-question counts match `tasks`,
   `planning_questions`, and `gate_events`.
 - `tasks/<id>.md` `Stage:` matches `tasks.stage`.

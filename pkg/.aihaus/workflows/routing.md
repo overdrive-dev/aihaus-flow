@@ -32,3 +32,19 @@ determinism anchor), never required.
 Reliable routing requires a **lean, non-overlapping** catalog — competing or
 duplicate descriptions cause mis-routes. Keep the routable set scoped to what the
 active profile uses; the stage-workflow + its sub-flows are the spine.
+
+## Native surfaces (plan mode + task list)
+
+The written plan must feed **native Claude Code surfaces** so it shows in the GUI,
+not only in files:
+
+- **Native plan mode (`ExitPlanMode`)** — the interactive planning sub-flow
+  (`planejamento`, main thread) surfaces its plan via plan mode → the GUI **Plan**
+  panel + the native approve/reject gate. That approval IS the
+  `planejamento → desenvolvimento` gate. The autonomous runner cannot call it
+  (no mid-run input); only the interactive sub-flow does.
+- **Native task list (`TaskCreate`/`TaskUpdate`)** — the runner projects one task
+  per active coordination row, status synced from gate verdicts.
+
+Both are **projections** of the durable plan / `aih-goal.db` (the source) — one
+synced view across the plan file, the GUI Plan panel, and the task list (S10).
