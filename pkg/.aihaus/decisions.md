@@ -5281,6 +5281,38 @@ M048 establishes aihaus-flow 2.0 as an integrated agent-memory system.
 
 Reverting this ADR returns aihaus-flow to the previous model: agents and hooks remain primary, while repository memory remains a supplemental `aih-graph` capability. Any M048 implementation commits would need to be reverted separately by story.
 
+## ADR-260529-A — Parallel worktree safety invariant: isolation + Owned-Files + sequential merge-back + single-writer + autonomy
+
+**Status:** Accepted
+**Date:** 2026-05-29
+
+### Context
+
+aihaus-flow 3.0 maximizes parallel agent work (user goal: "mitigar problemas de conflito e maximizar os workflows, teams"). Research against Claude Code's native docs (worktrees, sub-agents, agent-teams, common-workflows) established hard limits: (a) two agents **cannot** edit the same file in parallel — the worktree-branch-from escape is non-viable (CC issues #27749, #50850, "not-planned"); (b) agent **teams** cannot be spawned programmatically from a skill (user-NL-gated, ADR-260518-A); (c) native concurrency cap is 16 agents, CPU-bound. aihaus already had the pieces — `isolation: worktree` on 5 stateful agents, `merge-back.sh` (per-file Owned-Files, refuse-on-spill), `git-add-guard.sh`, the same-file cross-story rule (ADR-M017-C), single-writer discipline (ADR-004), and `autonomy-guard.sh` — but no single statement binding them into one safety invariant.
+
+### Decision
+
+**File writes by parallel agents are safe IFF all five hold:**
+1. **Isolated checkout** — each writer runs in its own git worktree (`isolation: worktree` + `permissionMode: bypassPermissions`). Conditional default by cohort: stateful 5 always; `:doer` when ≥2 disjoint-file writers run; read-only cohorts never.
+2. **Owned-Files boundary** — every story/task declares disjoint Owned Files; the planner blocks overlaps pre-execution (ADR-M017-C). No same-file parallel edit.
+3. **Sequential merge-back** — `merge-back.sh` merges per-file with refuse-on-spill (exit 3); merges run one at a time, never concurrently.
+4. **Single-writer DB** — the operational kanban (`.aihaus/state/kanban.db`) follows ADR-004 single-writer: one writer per transition, written as merge-back completes.
+5. **Autonomy-guard drift catch** — `autonomy-guard.sh` backstops decomposition-seam drift during parallel execution.
+
+Parallelism is achieved by **sharding work into disjoint Owned-Files sets**, not by relaxing any of the five. ≤5 worktrees/run is the safe default. The operational contract lives in `workflows/parallelism.md`. Agent **teams** stay a user-driven option, not a programmatic aihaus primitive.
+
+### Consequences
+
+**Positive:** one auditable invariant for safe parallel agent work; maximizes throughput (disjoint shards run concurrently) without write collisions; reuses the existing merge-back + single-writer + autonomy stack.
+
+**Negative:** parallelism is bounded by file-disjointness — same-file work must serialize; story-authoring discipline (one story = one cohesive file set) is required for max parallelism and is not hook-enforced.
+
+**Neutral:** no agent frontmatter changes — the 5 stateful agents already isolate; `:doer` isolation is a per-flow runtime decision, not a blanket frontmatter flag.
+
+### Rollback
+
+Reverting returns to the prior implicit state (the pieces exist but unbound). No code changes to revert beyond `workflows/parallelism.md` + this ADR.
+
 ### References
 
 - `docs/M048-aihaus-flow-2-native-repo-memory.md` - milestone plan and gates
