@@ -58,11 +58,11 @@ _mktemp_dir() {
   return 1
 }
 
-# ---- Check 1: 15 expected SKILL.md files in expected subdirectories ---------
+# ---- Check 1: 14 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 15 expected SKILL.md files"
-  local expected=(aih-brainstorm aih-bugfix aih-close aih-effort aih-feature aih-goal aih-help aih-init aih-install aih-milestone aih-plan aih-quick aih-resume aih-sync-notion aih-update)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 14 expected SKILL.md files"
+  local expected=(aih-brainstorm aih-bugfix aih-close aih-effort aih-feature aih-help aih-init aih-install aih-milestone aih-plan aih-quick aih-resume aih-sync-notion aih-update)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -1059,25 +1059,25 @@ check_purity() {
   fi
 }
 
-# ---- Check 27: skill directory count = 15 (M049 adds aih-goal) --------------
-# Verifies that exactly 15 aih-* skill directories exist under .aihaus/skills/.
-# Note: Check 1 verifies the NAMED SKILL.md files (15 expected names including
-# aih-close (M020/S10), aih-effort, and aih-install (M022/Z6); aih-automode
-# deleted in M014/S03). Check 27 independently verifies the directory count so
-# that unexpected directories (stale renames, extra skill dirs) also cause CI
-# failure. If the count exceeds 15, a stale directory likely remains from a
-# prior rename.
+# ---- Check 27: skill directory count = 14 -----------------------------------
+# Verifies that exactly 14 aih-* skill directories exist under .aihaus/skills/.
+# Note: Check 1 verifies the NAMED SKILL.md files (14 expected names). The
+# aih-goal orchestrator SKILL was removed in the 3.0 pure-native refactor; its
+# kanban/DB substrate was RELOCATED to workflows/kanban/ (decoupled from goal),
+# not deleted. Check 27 independently verifies the directory count so that
+# unexpected directories (stale renames, extra skill dirs) also cause CI
+# failure. If the count exceeds 14, a stale directory likely remains.
 check_skill_count_and_staleness() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: exactly 15 aih-* skill dirs exist (M049)"
+  local label="Check ${CHECK_NUMBER}: exactly 14 aih-* skill dirs exist"
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   local problems=()
 
   # Count aih-* directories (exclude _shared and any non-aih prefixed dirs).
   local actual_count
   actual_count=$(find "$skills_root" -maxdepth 1 -type d -name 'aih-*' | wc -l | tr -d ' ')
-  if [[ "$actual_count" -ne 15 ]]; then
-    problems+=("expected 15 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
+  if [[ "$actual_count" -ne 14 ]]; then
+    problems+=("expected 14 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -4979,8 +4979,8 @@ check_aih_graph_integration_round_trip() {
   if ! grep -qE "Agents:    58 " <<< "${out}"; then
     issues+=("expected Agents: 58 (Smoke Check 2)")
   fi
-  if ! grep -qE "Skills:    15" <<< "${out}"; then
-    issues+=("expected Skills: 15 (Smoke Check 1)")
+  if ! grep -qE "Skills:    14" <<< "${out}"; then
+    issues+=("expected Skills: 14 (Smoke Check 1)")
   fi
   if ! grep -qE "Hooks: +[0-9]+ " <<< "${out}"; then
     issues+=("build output missing Hooks line")
@@ -5114,15 +5114,14 @@ check_m048_memory_integration_contract() {
 
 check_goal_aftermath_regressions() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: goal aftermath regressions (audit root, no auto-close churn, packaged DB schema)"
+  local label="Check ${CHECK_NUMBER}: workflow aftermath regressions (audit root, no auto-close churn, kanban DB schema)"
   local issues=()
   local hooks_root="${PACKAGE_ROOT}/.aihaus/hooks"
   local helper="${hooks_root}/lib/path-helpers.sh"
   local git_add_guard="${hooks_root}/git-add-guard.sh"
   local auto_close="${hooks_root}/manifest-auto-close.sh"
-  local goal_schema="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/scripts/schema.sql"
-  local goal_init="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/scripts/init-goal-db.sh"
-  local goal_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/SKILL.md"
+  local goal_schema="${PACKAGE_ROOT}/.aihaus/workflows/kanban/schema.sql"
+  local goal_init="${PACKAGE_ROOT}/.aihaus/workflows/kanban/init-kanban-db.sh"
   local workflow_default="${PACKAGE_ROOT}/.aihaus/workflows/default.md"
   local dev_reviewer="${PACKAGE_ROOT}/.aihaus/agents/workflow-dev-reviewer.md"
   local human_review="${PACKAGE_ROOT}/.aihaus/agents/workflow-human-review.md"
@@ -5131,21 +5130,15 @@ check_goal_aftermath_regressions() {
     issues+=("path-helpers.sh missing or not parseable")
   fi
   if [[ ! -f "$goal_schema" ]]; then
-    issues+=("aih-goal packaged schema.sql missing")
+    issues+=("kanban packaged schema.sql missing")
   fi
   for needle in 'CREATE TABLE IF NOT EXISTS memory_events' 'idx_memory_events_task'; do
     if ! grep -Fq "$needle" "$goal_schema"; then
-      issues+=("aih-goal schema missing ${needle}")
+      issues+=("kanban schema missing ${needle}")
     fi
   done
   if [[ ! -f "$goal_init" ]] || ! bash -n "$goal_init" >/dev/null 2>&1; then
-    issues+=("aih-goal init-goal-db.sh missing or not parseable")
-  fi
-  if ! grep -Fq 'Every task that reaches `homolog` must immediately spawn `workflow-dev-reviewer`.' "$goal_skill"; then
-    issues+=("aih-goal missing mandatory homolog agent dispatch rule")
-  fi
-  if ! grep -Fq 'do not self-evaluate' "$goal_skill"; then
-    issues+=("aih-goal missing no self-evaluate homolog rule")
+    issues+=("kanban init-kanban-db.sh missing or not parseable")
   fi
   if ! grep -Fq 'Playwright/E2E evidence' "$workflow_default"; then
     issues+=("workflow default missing Playwright evidence exit gate")
@@ -5308,18 +5301,14 @@ check_legacy_hygiene_regressions() {
 
 check_goal_business_rule_gap_contract() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: aih-goal business-rule gap contract"
+  local label="Check ${CHECK_NUMBER}: kanban business-rule gap contract"
   local issues=()
-  local goal_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/SKILL.md"
-  local local_kanban="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/local-kanban.md"
-  local linear_intake="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/linear-intake.md"
-  local run_state="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/run-state.md"
+  local local_kanban="${PACKAGE_ROOT}/.aihaus/workflows/kanban/local-kanban.md"
+  local linear_intake="${PACKAGE_ROOT}/.aihaus/workflows/kanban/linear-intake.md"
+  local run_state="${PACKAGE_ROOT}/.aihaus/workflows/kanban/run-state.md"
   local planning_agent="${PACKAGE_ROOT}/.aihaus/agents/workflow-planning-gate.md"
   local workflow_default="${PACKAGE_ROOT}/.aihaus/workflows/default.md"
 
-  if ! grep -Fq 'Do not batch unrelated task gaps' "$goal_skill"; then
-    issues+=("aih-goal skill missing no-batch task-gap rule")
-  fi
   if ! grep -Fq 'business-rule gap for one task' "$local_kanban"; then
     issues+=("local-kanban annex missing one-task business-rule gap rule")
   fi
@@ -5338,8 +5327,8 @@ check_goal_business_rule_gap_contract() {
   if ! grep -Fq 'Do not merge blockers from several tasks' "$workflow_default"; then
     issues+=("workflow default missing no-merged-blockers rule")
   fi
-  if grep -R "Socratic" "$goal_skill" "$local_kanban" "$linear_intake" "$run_state" "$planning_agent" "$workflow_default" >/dev/null 2>&1; then
-    issues+=("aih-goal planning contract still contains Socratic wording")
+  if grep -R "Socratic" "$local_kanban" "$linear_intake" "$run_state" "$planning_agent" "$workflow_default" >/dev/null 2>&1; then
+    issues+=("kanban planning contract still contains Socratic wording")
   fi
 
   if [[ ${#issues[@]} -eq 0 ]]; then
@@ -5355,7 +5344,7 @@ check_memory_write_boundary_contract() {
   local issues=()
   local file_guard="${PACKAGE_ROOT}/.aihaus/hooks/file-guard.sh"
   local per_agent="${PACKAGE_ROOT}/.aihaus/skills/_shared/per-agent-memory.md"
-  local goal_memory="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/annexes/memory-promotion.md"
+  local goal_memory="${PACKAGE_ROOT}/.aihaus/workflows/kanban/memory-promotion.md"
   local workflow_agents="${PACKAGE_ROOT}/.aihaus/agents/workflow-"'*.md'
 
   if ! grep -Fq 'Do not whitelist ~/.claude/projects/**/memory' "$file_guard"; then
@@ -5365,7 +5354,7 @@ check_memory_write_boundary_contract() {
     issues+=("per-agent memory contract missing path restriction")
   fi
   if ! grep -Fq 'Reject or defer any `aihaus:agent-memory` block whose `path:` targets' "$goal_memory"; then
-    issues+=("aih-goal memory promotion missing invalid target rejection")
+    issues+=("kanban memory promotion missing invalid target rejection")
   fi
   if grep -R "targeting \`.aihaus/memory/workflows" $workflow_agents >/dev/null 2>&1; then
     issues+=("workflow agent still targets workflow memory from aihaus:agent-memory")
@@ -5686,7 +5675,7 @@ check_eval_run_deterministic() {
   _start_check
   local label="Check ${CHECK_NUMBER}: eval-run.sh deterministic eval — good passes, bad fails (3.0/S6)"
   local eval_script="${PACKAGE_ROOT}/.aihaus/eval/eval-run.sh"
-  local schema="${PACKAGE_ROOT}/.aihaus/skills/aih-goal/scripts/schema.sql"
+  local schema="${PACKAGE_ROOT}/.aihaus/workflows/kanban/schema.sql"
   if [[ ! -f "$eval_script" ]]; then _fail "$label" "eval-run.sh missing"; return; fi
   if ! bash -n "$eval_script" >/dev/null 2>&1; then _fail "$label" "eval-run.sh not parseable"; return; fi
   if ! command -v sqlite3 >/dev/null 2>&1; then _pass "$label (skipped: sqlite3 unavailable)"; return; fi
@@ -5694,11 +5683,11 @@ check_eval_run_deterministic() {
   local d
   d="$(_mktemp_dir aih-eval)" || { _fail "$label" "mktemp failed"; return; }
   mkdir -p "$d/.aihaus/state" "$d/.aihaus/workflows/runs/r/evidence" 2>/dev/null || true
-  sqlite3 "$d/.aihaus/state/aih-goal.db" < "$schema" >/dev/null 2>&1 || true
+  sqlite3 "$d/.aihaus/state/kanban.db" < "$schema" >/dev/null 2>&1 || true
   printf 'ev\n' > "$d/.aihaus/workflows/runs/r/evidence/EV-1.md" 2>/dev/null || true
-  sqlite3 "$d/.aihaus/state/aih-goal.db" "INSERT INTO gate_events (id,task_id,stage,verdict,evidence_path,created_at) VALUES('G1','T1','testes','PASS','.aihaus/workflows/runs/r/evidence/EV-1.md','t');" >/dev/null 2>&1 || true
+  sqlite3 "$d/.aihaus/state/kanban.db" "INSERT INTO gate_events (id,task_id,stage,verdict,evidence_path,created_at) VALUES('G1','T1','testes','PASS','.aihaus/workflows/runs/r/evidence/EV-1.md','t');" >/dev/null 2>&1 || true
   bash "$eval_script" --project "$d" >/dev/null 2>&1 || issues+=("good fixture should pass (exit 0) but eval failed")
-  sqlite3 "$d/.aihaus/state/aih-goal.db" "INSERT INTO gate_events (id,task_id,stage,verdict,created_at) VALUES('G2','T1','testes','MAYBE','t');" >/dev/null 2>&1 || true
+  sqlite3 "$d/.aihaus/state/kanban.db" "INSERT INTO gate_events (id,task_id,stage,verdict,created_at) VALUES('G2','T1','testes','MAYBE','t');" >/dev/null 2>&1 || true
   if bash "$eval_script" --project "$d" >/dev/null 2>&1; then
     issues+=("bad fixture should fail (exit 1) but eval passed — green-but-vacuous")
   fi

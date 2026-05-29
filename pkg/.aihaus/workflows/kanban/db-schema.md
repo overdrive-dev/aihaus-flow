@@ -1,6 +1,6 @@
 # aih-goal SQLite state
 
-`/aih-goal` uses `.aihaus/state/aih-goal.db` as an operational cache and
+`/aih-goal` uses `.aihaus/state/kanban.db` as an operational cache and
 append-only journal. When an external kanban exists, the DB is not the human
 source of truth. Linear, Notion, Jira, Trello, or GitHub Issues remain the task
 source. When no external kanban exists, the DB plus readable run artifacts are
@@ -38,10 +38,10 @@ Prefer the packaged initializer; do not generate ad hoc `schema.sql` or
 `import_tasks.py` under `.aihaus/state/`:
 
 ```bash
-bash .claude/skills/aih-goal/scripts/init-goal-db.sh .aihaus/state/aih-goal.db
+bash .aihaus/workflows/kanban/init-kanban-db.sh .aihaus/state/kanban.db
 ```
 
-If the installed skill path is unavailable, create the DB with `sqlite3` from
+If the packaged initializer is unavailable, create the DB with `sqlite3` from
 the canonical schema below and write temporary import helpers under the current
 run directory or OS temp, not `.aihaus/state/`. If SQLite is unavailable, keep
 the markdown run artifacts and record `db-unavailable` as a sync blocker before

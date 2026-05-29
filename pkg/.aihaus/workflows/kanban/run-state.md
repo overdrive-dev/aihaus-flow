@@ -6,7 +6,7 @@
 .aihaus/workflows/runs/[YYMMDD]-[slug]/
 ```
 
-The operational task cache and journal live in `.aihaus/state/aih-goal.db`.
+The operational task cache and journal live in `.aihaus/state/kanban.db`.
 The run directory is the readable evidence package for resume, audit, and human
 review. External systems such as Linear remain the human kanban source of truth.
 
@@ -116,7 +116,7 @@ DB:
 
 - The native CLI task list (TaskCreate/TaskUpdate) is a projection of the DB too:
   one CLI task per active coordination row, status synced from gate verdicts. The
-  durable run artifacts + `aih-goal.db` are the source; the written plan and the
+  durable run artifacts + `kanban.db` are the source; the written plan and the
   CLI task list stay **one synced view** — no drift between document and CLI (S10).
 - The interactive planning sub-flow ALSO surfaces the plan via **native plan mode**
   (`ExitPlanMode` → GUI Plan panel + approve/reject gate). Plan panel, task list,

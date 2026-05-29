@@ -8,7 +8,7 @@ the "autonomy without introducing problems" goal: it makes that property
 ## `eval-run.sh`
 
 ```bash
-bash .aihaus/eval/eval-run.sh [--db <aih-goal.db>] [--project <root>]
+bash .aihaus/eval/eval-run.sh [--db <kanban.db>] [--project <root>]
 ```
 
 Exit: `0` = all deterministic checks pass · `1` = ≥1 failed · `2` = cannot run
@@ -34,5 +34,5 @@ fake it as a deterministic check (avoids the green-but-vacuous trap).
 ## Eval gate
 
 At goal finish (`/aih-goal` Phase 7), run `eval-run.sh` over the run's
-`aih-goal.db`. A deterministic FAIL blocks marking the run complete — see
+`kanban.db`. A deterministic FAIL blocks marking the run complete — see
 `.aihaus/workflows/artifacts.md` § Eval gate.

@@ -7,7 +7,7 @@
 # satisfy the confirmed business rules?) needs a judgment/LLM pass and is deliberately
 # OUT of scope here — see the "Rubric" note at the end.
 #
-# Usage: bash eval-run.sh [--db <aih-goal.db>] [--project <root>]
+# Usage: bash eval-run.sh [--db <kanban.db>] [--project <root>]
 # Exit: 0 = all deterministic checks pass · 1 = >=1 failed · 2 = cannot run.
 # Emits one JSONL row per check to stdout.
 set -uo pipefail
@@ -18,11 +18,11 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --db) DB="$2"; shift 2 ;;
     --project) PROJECT="$2"; shift 2 ;;
-    -h|--help) echo "Usage: eval-run.sh [--db <aih-goal.db>] [--project <root>]"; exit 0 ;;
+    -h|--help) echo "Usage: eval-run.sh [--db <kanban.db>] [--project <root>]"; exit 0 ;;
     *) echo "warn: unknown arg ignored: $1" >&2; shift ;;
   esac
 done
-[[ -z "$DB" ]] && DB="${PROJECT}/.aihaus/state/aih-goal.db"
+[[ -z "$DB" ]] && DB="${PROJECT}/.aihaus/state/kanban.db"
 
 if ! command -v sqlite3 >/dev/null 2>&1; then
   echo "EVAL-SKIP: sqlite3 unavailable" >&2; exit 2

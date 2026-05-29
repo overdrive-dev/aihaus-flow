@@ -93,6 +93,6 @@ task file and add a sync blocker to the run manifest.
 ### Failure handling
 
 Linear unavailable before import is a true blocker only when no local
-`aih-goal.db`, local task file, or alternate connected source can be used.
+`kanban.db`, local task file, or alternate connected source can be used.
 Linear unavailable after local import is not a run blocker; continue locally and
 record pending sync work.
