@@ -12,6 +12,7 @@ moving tasks between stages.
 - Durable learned behavior belongs in `.aihaus/memory/workflows/`, not in this
   file.
 - Runtime evidence and generated state belong in `.aihaus/state/`.
+- Artifact storage + consumption rules (IDs, pointers, scope, worktree paths): see `artifacts.md`.
 
 ## Default Stages
 

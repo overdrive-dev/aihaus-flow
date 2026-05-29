@@ -27,7 +27,7 @@ profile data live here.
 
 Before acting, workflow agents read:
 
-1. `.aihaus/workflows/default.md`
+1. `.aihaus/workflows/default.md` + `.aihaus/workflows/artifacts.md`
 2. `.aihaus/project.md`
 3. `.aihaus/memory/workflows/README.md`
 4. `.aihaus/memory/workflows/*.md`
