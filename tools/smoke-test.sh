@@ -58,11 +58,11 @@ _mktemp_dir() {
   return 1
 }
 
-# ---- Check 1: 14 expected SKILL.md files in expected subdirectories ---------
+# ---- Check 1: 15 expected SKILL.md files in expected subdirectories ---------
 check_skills() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 14 expected SKILL.md files"
-  local expected=(aih-brainstorm aih-bugfix aih-close aih-effort aih-feature aih-help aih-init aih-install aih-milestone aih-plan aih-quick aih-resume aih-sync-notion aih-update)
+  local label="Check ${CHECK_NUMBER}: .aihaus/skills/ has 15 expected SKILL.md files"
+  local expected=(aih-brainstorm aih-bugfix aih-close aih-effort aih-env aih-feature aih-help aih-init aih-install aih-milestone aih-plan aih-quick aih-resume aih-sync-notion aih-update)
   local missing=()
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   for name in "${expected[@]}"; do
@@ -1059,25 +1059,25 @@ check_purity() {
   fi
 }
 
-# ---- Check 27: skill directory count = 14 -----------------------------------
-# Verifies that exactly 14 aih-* skill directories exist under .aihaus/skills/.
-# Note: Check 1 verifies the NAMED SKILL.md files (14 expected names). The
-# aih-goal orchestrator SKILL was removed in the 3.0 pure-native refactor; its
-# kanban/DB substrate was RELOCATED to workflows/kanban/ (decoupled from goal),
-# not deleted. Check 27 independently verifies the directory count so that
-# unexpected directories (stale renames, extra skill dirs) also cause CI
-# failure. If the count exceeds 14, a stale directory likely remains.
+# ---- Check 27: skill directory count = 15 -----------------------------------
+# Verifies that exactly 15 aih-* skill directories exist under .aihaus/skills/.
+# Note: Check 1 verifies the NAMED SKILL.md files (15 expected names). In the
+# 3.0 refactor aih-goal (orchestrator) was removed — its kanban/DB substrate
+# relocated to workflows/kanban/, decoupled from goal — and aih-env (env
+# capture) was added. Check 27 independently verifies the directory count so
+# that unexpected directories (stale renames, extra skill dirs) also cause CI
+# failure. If the count exceeds 15, a stale directory likely remains.
 check_skill_count_and_staleness() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: exactly 14 aih-* skill dirs exist"
+  local label="Check ${CHECK_NUMBER}: exactly 15 aih-* skill dirs exist"
   local skills_root="${PACKAGE_ROOT}/.aihaus/skills"
   local problems=()
 
   # Count aih-* directories (exclude _shared and any non-aih prefixed dirs).
   local actual_count
   actual_count=$(find "$skills_root" -maxdepth 1 -type d -name 'aih-*' | wc -l | tr -d ' ')
-  if [[ "$actual_count" -ne 14 ]]; then
-    problems+=("expected 14 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
+  if [[ "$actual_count" -ne 15 ]]; then
+    problems+=("expected 15 aih-* skill dirs; found ${actual_count} (stale dir from rename? run: ls ${skills_root}/)")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -4979,8 +4979,8 @@ check_aih_graph_integration_round_trip() {
   if ! grep -qE "Agents:    58 " <<< "${out}"; then
     issues+=("expected Agents: 58 (Smoke Check 2)")
   fi
-  if ! grep -qE "Skills:    14" <<< "${out}"; then
-    issues+=("expected Skills: 14 (Smoke Check 1)")
+  if ! grep -qE "Skills:    15" <<< "${out}"; then
+    issues+=("expected Skills: 15 (Smoke Check 1)")
   fi
   if ! grep -qE "Hooks: +[0-9]+ " <<< "${out}"; then
     issues+=("build output missing Hooks line")
