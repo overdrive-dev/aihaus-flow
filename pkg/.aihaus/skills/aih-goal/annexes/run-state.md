@@ -114,6 +114,10 @@ last_updated: [ISO timestamp]
 After every gate or stage transition, rewrite the readable projection from the
 DB:
 
+- The native CLI task list (TaskCreate/TaskUpdate) is a projection of the DB too:
+  one CLI task per active coordination row, status synced from gate verdicts. The
+  durable run artifacts + `aih-goal.db` are the source; the written plan and the
+  CLI task list stay **one synced view** — no drift between document and CLI (S10).
 - `TASKS.md` stage/planning/open-question counts match `tasks`,
   `planning_questions`, and `gate_events`.
 - `tasks/<id>.md` `Stage:` matches `tasks.stage`.

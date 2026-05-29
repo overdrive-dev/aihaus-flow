@@ -27,9 +27,10 @@ Writing a workflow artifact into `.claude/` (or reading workflow state from it) 
 ## Consumption rules (anti-failure)
 
 1. **One authority per fact.** State → `aih-goal.db`. Knowledge → durable docs.
-   Evidence → the file the DB points to. Projections (`TASKS.md`, `tasks/<id>.md`)
-   are **derived** — never read as the source of truth; rewrite them from the DB
-   after every transition.
+   Evidence → the file the DB points to. Projections (`TASKS.md`, `tasks/<id>.md`,
+   **and the native CLI task list**) are **derived** — never read as the source of
+   truth; rewrite/sync them from the DB after every transition (the written plan and
+   the CLI task list are one view).
 2. **Reference by recorded pointer**, never a guessed filename. Consumers read
    `gate_events.evidence_path` / `memory_events.target_path` / `tasks.*` — they do
    not reconstruct paths. (Kills producer/consumer path mismatch.)
