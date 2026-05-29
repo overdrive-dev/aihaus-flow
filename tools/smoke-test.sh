@@ -126,6 +126,7 @@ check_hooks() {
     merge-back.sh
     phase-advance.sh
     read-guard.sh
+    role-guard.sh
     scaffold-assert.sh
     session-end.sh
     session-start.sh
@@ -5140,13 +5141,13 @@ check_goal_aftermath_regressions() {
   if [[ ! -f "$goal_init" ]] || ! bash -n "$goal_init" >/dev/null 2>&1; then
     issues+=("aih-goal init-goal-db.sh missing or not parseable")
   fi
-  if ! grep -Fq 'Every task that reaches `review-dev` must immediately spawn `workflow-dev-reviewer`.' "$goal_skill"; then
-    issues+=("aih-goal missing mandatory review-dev agent dispatch rule")
+  if ! grep -Fq 'Every task that reaches `homolog` must immediately spawn `workflow-dev-reviewer`.' "$goal_skill"; then
+    issues+=("aih-goal missing mandatory homolog agent dispatch rule")
   fi
   if ! grep -Fq 'do not self-evaluate' "$goal_skill"; then
-    issues+=("aih-goal missing no self-evaluate review-dev rule")
+    issues+=("aih-goal missing no self-evaluate homolog rule")
   fi
-  if ! grep -Fq 'Playwright evidence passes' "$workflow_default"; then
+  if ! grep -Fq 'Playwright/E2E evidence' "$workflow_default"; then
     issues+=("workflow default missing Playwright evidence exit gate")
   fi
   if ! grep -Fq 'PASS requires a Playwright command result' "$dev_reviewer"; then

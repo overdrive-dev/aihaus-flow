@@ -17,8 +17,8 @@ profile data live here.
 | workflow-tdd-gate | tdd | Ensure acceptance criteria become failing tests or explicit verification contracts. |
 | workflow-execution-review | review-execucao | Review implementation readiness before broad tests and deployment. |
 | workflow-test-gate | testes | Run or coordinate automated tests, identify breakage, and require a Playwright dev-review plan for UI/flow work. |
-| workflow-cicd | testes, subida-dev | Prepare repeatable CI/CD commands, deployment checks, and environment evidence. |
-| workflow-dev-reviewer | review-dev | Validate the published dev result; Playwright/headless browser is mandatory for UI and flow work. |
+| workflow-cicd | testes, homolog, prod | Prepare repeatable CI/CD commands, deployment checks, and environment evidence. |
+| workflow-dev-reviewer | homolog | Validate the published homolog result; Playwright/headless browser is mandatory for UI and flow work. |
 | workflow-human-review | human-review | Summarize evidence for the human and reject handoff when required Playwright evidence is missing. |
 | workflow-designer | any | Create or adjust repo workflow profiles and workflow-agent rules when the project changes. |
 | aih-goal | any | Skill-level coordinator that imports tasks, evaluates gates, and drives work until the target stage. |
@@ -51,10 +51,10 @@ Task-specific `BLOCKED-TO-PLANNING` results should not stop a larger `/aih-goal`
 run; they create one source-facing business-rule gap for the affected task and
 allow other ready tasks to continue.
 
-For UI or user-flow work, `review-dev` cannot pass without Playwright/headless
+For UI or user-flow work, `homolog` cannot pass without Playwright/headless
 browser evidence. Backend-only skips must say why there is no frontend,
 console, or environment-visible behavior to validate.
 
-`review-dev` must dispatch `workflow-dev-reviewer` immediately when a task
+`homolog` must dispatch `workflow-dev-reviewer` immediately when a task
 enters the stage. A `workflow-test-gate` Playwright plan is only input for that
 agent, not a substitute for running dev review.

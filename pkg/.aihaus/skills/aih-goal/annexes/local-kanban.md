@@ -42,7 +42,7 @@ Required format:
 Examples:
 
 - Bad: `Should I update the kanban now or at the end?`
-- Good: `Business rule gap for NORACAR-123: define which stage change must be visible in Linear after review-dev passes, including the required evidence comment.`
+- Good: `Business rule gap for NORACAR-123: define which stage change must be visible in Linear after homolog passes, including the required evidence comment.`
 - Bad: `For tasks A, B, and C, what should happen with billing filters and exports?`
 - Good: `Business rule gap for NORACAR-124: define whether archived billing records appear in the doctor financial filter results.`
 

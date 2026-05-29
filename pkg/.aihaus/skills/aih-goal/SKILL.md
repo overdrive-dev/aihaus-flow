@@ -22,7 +22,7 @@ $ARGUMENTS
 - `--until <stage>` - target workflow stage. Default: `human-review`.
 - `--max-active <n>` - maximum implementation tasks in flight. Default: 1.
 
-Allowed stages: `planejamento`, `tdd`, `review-execucao`, `testes`, `subida-dev`, `review-dev`, `human-review`, `box-dev`.
+Allowed stages: `entendimento`, `planejamento`, `tdd`, `review-execucao`, `testes`, `homolog`, `human-review`, `prod`, `box-dev`.
 
 ## Autonomy Contract
 
@@ -131,11 +131,11 @@ For each `READY-FOR-TDD` task, run stages in order until `--until`:
    `test-writer`, or narrower existing agents as appropriate)
 3. `workflow-execution-review`
 4. `workflow-test-gate`
-5. `workflow-cicd` for `subida-dev` and environment evidence
-6. enter `review-dev` by spawning `workflow-dev-reviewer`; do not self-evaluate
+5. `workflow-cicd` for `homolog`/`prod` and environment evidence
+6. enter `homolog` by spawning `workflow-dev-reviewer`; do not self-evaluate
 7. `workflow-human-review`
 
-Every task that reaches `review-dev` must immediately spawn `workflow-dev-reviewer`.
+Every task that reaches `homolog` must immediately spawn `workflow-dev-reviewer`.
 For UI or user-flow work, it must run Playwright or record an explicit backend-only skip; never park browser validation pending.
 
 Implementation tasks default to sequential execution. Use `--max-active` only

@@ -43,7 +43,7 @@ name the dev URL or route to test, the user flow, required auth/data setup, and
 the expected evidence shape. If the task cannot be browser-validated, mark why
 it is backend-only or block with the missing validation method.
 
-This plan is not dev-review execution. When the task later enters `review-dev`,
+This plan is not homolog-review execution. When the task later enters `homolog`,
 `/aih-goal` must still spawn `workflow-dev-reviewer` to run the browser check or
 record the backend-only skip.
 

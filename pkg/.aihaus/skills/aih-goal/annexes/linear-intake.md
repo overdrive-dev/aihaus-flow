@@ -60,13 +60,13 @@ After every evaluated stage for a Linear-backed task:
 1. Resolve the current Linear team statuses from the workspace, not from stale
    local assumptions.
 2. Move the issue to the matching workflow status when a matching status exists.
-   Internal stages map semantically: `planejamento`, `tdd`,
-   `review-execucao`, `testes`, `subida-dev`, `review-dev`, `human-review`,
+   Internal stages map semantically: `entendimento`, `planejamento`, `tdd`,
+   `review-execucao`, `testes`, `homolog`, `human-review`, `prod`,
    and `box-dev`.
 3. Add an append-only comment when the stage produces evidence, asks a business
    business-rule gap, skips a gate, or blocks. Keep routine comments short:
    stage, verdict, evidence pointer, next stage or blocker.
-   For `review-dev`, include Playwright command/result and screenshot/trace/URL
+   For `homolog`, include Playwright command/result and screenshot/trace/URL
    evidence when UI or user-flow behavior is affected. If skipped, state the
    backend-only reason.
 4. Record an outbound `sync_events` row with a stable id before writing, and

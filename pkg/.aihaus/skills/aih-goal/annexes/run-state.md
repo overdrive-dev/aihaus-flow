@@ -87,7 +87,7 @@ Evidence: [screenshot, trace, command, URL, or none]
 | [id] | related | [why this matters] |
 
 ### Human Review Package
-[Summary written after review-dev passes.]
+[Summary written after homolog passes.]
 ```
 
 ### RUN-MANIFEST.md
@@ -120,7 +120,7 @@ DB:
 - `tasks/<id>.md` `Gate Log` has one row for every evaluated stage, including
   `SKIPPED: <reason>`.
 - UI or user-flow tasks must have `Browser Gate` result `pass` before leaving
-  `review-dev`; backend-only skips must include a reason. `pending` browser
+  `homolog`; backend-only skips must include a reason. `pending` browser
   gates cannot move to `human-review`.
 - Batch gates such as full-suite test, deploy, or dev-review may reuse a shared
   evidence file, but every affected task still gets its own gate row.
@@ -138,14 +138,15 @@ DB:
 ### Status vocabulary
 
 - `pending`
+- `entendimento`
 - `planejamento`
 - `ready-for-tdd`
 - `tdd`
 - `review-execucao`
 - `testes`
-- `subida-dev`
-- `review-dev`
+- `homolog`
 - `human-review`
+- `prod`
 - `box-dev`
 - `blocked-to-planejamento`
 - `blocked`

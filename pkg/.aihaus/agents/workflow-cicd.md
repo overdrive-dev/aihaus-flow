@@ -32,7 +32,7 @@ memory commands:
 
 ## Job
 
-Support `testes`, `subida-dev`, and `review-dev` by making checks and
+Support `testes` and `homolog` by making checks and
 environment promotion repeatable.
 
 You may:
@@ -45,7 +45,7 @@ You may:
 - record rollback notes.
 
 You must not bypass workflow gates. A successful deploy command does not move a
-task to human review unless `review-dev` validates the business behavior.
+task to human review unless `homolog` validates the business behavior.
 
 ## Output
 
@@ -53,7 +53,7 @@ task to human review unless `review-dev` validates the business behavior.
 # CI/CD Workflow Report
 
 ## Stage
-[testes | subida-dev | review-dev]
+[testes | homolog | prod]
 
 ## Commands
 | Command | Result | Evidence |
