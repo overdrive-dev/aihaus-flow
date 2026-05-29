@@ -136,5 +136,37 @@ else
 fi
 rm -f "${tmp}" 2>/dev/null || true
 
+# Role-scoped online env (S4): devops-only template under memory/local/.
+# Holds online (staging/prod) facts that are kept out of builder/dev/qa context.
+ONLINE_DIR="${AIHAUS_DIR}/memory/local"
+ONLINE_FILE="${ONLINE_DIR}/environment-online.md"
+mkdir -p "${ONLINE_DIR}" 2>/dev/null || true
+if [[ ! -f "${ONLINE_FILE}" ]]; then
+  cat > "${ONLINE_FILE}" <<'EOF_ONLINE'
+# Online Environment (devops-scoped, local)
+
+> LOCAL + gitignored. Injected into agent context ONLY for profiles holding the
+> `devops` role (context-inject.sh reads .aihaus/.profile). builder/dev/qa never
+> receive this file. Store credential LOCATIONS only — never plaintext secrets.
+
+## Staging / Homolog
+- URL:
+- Deploy command:
+- Smoke/validation command:
+- Credential location (not the secret):
+
+## Production
+- URL:
+- Promote command:
+- Rollback command:
+- Approval/owner:
+
+## Online-action patterns
+- Add deploy/online command patterns to `.aihaus/roles/online-actions.conf` so
+  role-guard.sh blocks them for non-devops profiles.
+EOF_ONLINE
+fi
+
 echo "environment discovery written: .aihaus/init/environment-discovery.md"
 echo "environment memory updated: .aihaus/memory/workflows/environment.md"
+[[ -f "${ONLINE_FILE}" ]] && echo "online env template (devops-scoped): .aihaus/memory/local/environment-online.md"

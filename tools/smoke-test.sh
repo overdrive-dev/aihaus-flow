@@ -5050,8 +5050,8 @@ check_m048_memory_integration_contract() {
     if ! grep -Fq '_run_memory_with_timeout query --repo "$PROJECT_ROOT"' "${context_hook}" || ! grep -Fq -- '--json --top "$AIHAUS_MEMORY_QUERY_TOP"' "${context_hook}"; then
       issues+=("context-inject.sh: missing automatic aihaus memory query")
     fi
-    if ! grep -Fq 'local combined="${target_agent_name:-}|${cohort:-}|${task_description:-}"' "${context_hook}"; then
-      issues+=("context-inject.sh: cache key must include task-specific context")
+    if ! grep -Fq 'local combined="${target_agent_name:-}|${cohort:-}|${_active_profile:-}|${task_description:-}"' "${context_hook}"; then
+      issues+=("context-inject.sh: cache key must include task-specific context (+ active profile, S4)")
     fi
   fi
 
