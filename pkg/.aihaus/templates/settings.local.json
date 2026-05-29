@@ -85,6 +85,17 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/role-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking role capability boundary..."
+          }
+        ]
+      },
+      {
         "matcher": "Write|Edit",
         "hooks": [
           {
