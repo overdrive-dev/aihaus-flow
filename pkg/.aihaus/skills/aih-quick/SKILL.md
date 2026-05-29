@@ -1,6 +1,6 @@
 ﻿---
 name: aih-quick
-description: "Explicit fast-path that intentionally skips the workflow gates for a small, well-understood change (analyze, implement, review in one shot). Type /aih-quick to bypass planning; the gated spine is the default for everything else."
+description: "Fast-path for a small, well-understood change — analyze, implement, review in one shot, intentionally skipping the full gates. Use only for trivial, low-risk changes."
 allowed-tools: Read Write Edit Grep Glob Bash Skill
 argument-hint: "[what to fix or change]"
 ---

@@ -2,9 +2,10 @@
 
 Workflow agents govern process, gates, memory, and environment movement. They do
 not replace specialist code agents. They decide when to spawn or request
-specialists, and invoke the interactive sub-flows (planning, bugfix, feature) at
-their stages — the stage-workflow is the single spine, so those flows are no
-longer standalone `/aih-*` entry points.
+specialists at their stages. The interactive sub-flows (planning, bugfix, feature)
+are the **routable entries** a request lands on; the workflow agents are the gate
+executors those sub-flows (and native `/goal` runs) spawn as work moves through
+the stages.
 
 Claude-callable agent files may still live under `.aihaus/agents/` because the
 Claude agent loader expects that shape. Workflow-specific rules and durable
@@ -23,7 +24,6 @@ profile data live here.
 | workflow-dev-reviewer | homolog | Validate the published homolog result; Playwright/headless browser is mandatory for UI and flow work. |
 | workflow-human-review | human-review | Summarize evidence for the human and reject handoff when required Playwright evidence is missing. |
 | workflow-designer | any | Create or adjust repo workflow profiles and workflow-agent rules when the project changes. |
-| aih-goal | any | Skill-level coordinator that imports tasks, evaluates gates, and drives work until the target stage. |
 
 ## Memory Contract
 
@@ -49,7 +49,7 @@ details may be included as evidence, not as the main explanation.
 
 Every workflow gate must produce `PASS`, `SKIPPED`, `BLOCKED-TO-PLANNING`, or
 `BLOCKED`. Skips are allowed only after evaluation and must include a reason.
-Task-specific `BLOCKED-TO-PLANNING` results should not stop a larger `/aih-goal`
+Task-specific `BLOCKED-TO-PLANNING` results should not stop a larger
 run; they create one source-facing business-rule gap for the affected task and
 allow other ready tasks to continue.
 
@@ -63,9 +63,9 @@ agent, not a substitute for running dev review.
 
 ## Sub-flow invocation
 
-The interactive sub-flows are real skills invoked via the **Skill tool**, never
-standalone entry points. `aih-goal` decides per task whether a stage needs
-interactive scoping or runs fully autonomously:
+The interactive sub-flows are the **routable entries** (and can also be invoked
+via the Skill tool from a native `/goal` run). Per task, the active flow decides
+whether a stage needs interactive scoping or runs fully autonomously:
 
 - **planejamento.** A *fresh requester brief* (a single request, no pre-planned
   source) routes to the interactive planning sub-flow `Skill(aih-plan)`: it reaches
@@ -82,7 +82,7 @@ interactive scoping or runs fully autonomously:
 
 **Interactive-vs-autonomous rule.** Interactive scoping is a *scoping-first window*
 at the entry of a task — it may ask the requester. Once the plan-mode approval lands
-(or the autonomous sweep passes), `aih-goal` drives every downstream gate with **no
-mid-run input** until `--until` or a true blocker. The online stages (`homolog`,
+(or the autonomous sweep passes), the run drives every downstream gate with **no
+mid-run input** until the target stage or a true blocker. The online stages (`homolog`,
 `prod`) are never interactive and never sub-flowed; they stay devops-gated CI/CD
 (`role-guard.sh`).

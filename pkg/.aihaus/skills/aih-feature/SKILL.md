@@ -1,6 +1,6 @@
 ﻿---
 name: aih-feature
-description: "Feature scoping and build sub-flow of the workflow spine (plan, branch, build, test, commit). Normally invoked by the goal runner at desenvolvimento; type /aih-feature to run it directly for one standalone feature."
+description: "Implement a scoped feature through the gated workflow — plan, branch, build, test, commit. Use for a feature that fits in one working session."
 allowed-tools: Read Write Edit Grep Glob Bash TaskCreate TaskUpdate Skill
 argument-hint: "[feature description] [--plan slug]"
 ---

@@ -13,20 +13,24 @@ moving tasks between stages.
   file.
 - Runtime evidence and generated state belong in `.aihaus/state/`.
 - Artifact storage + consumption rules (IDs, pointers, scope, worktree paths): see `artifacts.md`.
-- Routing + the single autonomous entry (no `/aih-*` required): see `routing.md`.
+- Routing — natural-language requests auto-route to sub-flows (no `/aih-*` typing required): see `routing.md`.
 - Native fan-out workflows (autonomous only; qa/devops, runtime-authored): see `fan-out.md`.
 
 ## Composition
 
-This stage-workflow is the **single orchestration spine**. Interactive flows
-(planning, bugfix, feature scoping) are **sub-flows invoked at their stages** —
-`planejamento` invokes the planning sub-flow, `desenvolvimento` invokes the
-feature/bugfix sub-flow — not standalone `/aih-*` entry points. The single
-autonomous entry routes a request to the right sub-flow, then drives gated
-execution through the stages below. **Native dynamic workflows are reserved for
-autonomous fan-out only** (qa sweeps, devops deploy). Rule: interactive → skill
-sub-flow (can ask the requester); fully autonomous → native JS workflow (no
-mid-run input).
+The **actions are the spine.** A natural-language request auto-routes to the
+interactive sub-flow that fits it — planning (`aih-plan`), feature (`aih-feature`),
+or bugfix (`aih-bugfix`) — which then drives the gated stages below, reading this
+contract. The **kanban DB (`.aihaus/state/kanban.db`) is the default operational
+substrate**: every action registers its task + gate events there, under
+**single-writer** discipline (one writer per transition — ADR-004; safe when
+parallel worktree agents each own disjoint files and merge back sequentially).
+Native **`/goal`** supplies the autonomous loop for hands-off multi-turn
+execution; the gates here plus the hooks (`role-guard`, `autonomy-guard`,
+`tdd-guard`) enforce regardless of how a run is launched. **Native dynamic
+workflows are reserved for autonomous fan-out only** (qa sweeps, devops deploy).
+Rule: interactive scoping → sub-flow skill (can ask the requester); fully
+autonomous fan-out → native JS workflow (no mid-run input).
 
 ## Default Stages
 
@@ -79,7 +83,7 @@ read the issue description, comments, links, and attached context before asking
 anything. Do not ask the human to repeat answers already present in the source.
 
 Every task that enters `planejamento` must be registered in the local kanban
-under `.aihaus/state/aih-goal.db`. Planning questions and answers are workflow
+under `.aihaus/state/kanban.db`. Planning questions and answers are workflow
 contracts: record the task-specific business-rule gap before syncing it, record
 the answer before using it, and keep the task in `planejamento` while any
 planning question is open.
@@ -100,7 +104,7 @@ run. A gate may pass, skip, or block:
   criterion, or validation method is missing or failed.
 - `BLOCKED` means a true operational blocker prevents progress.
 
-Task-specific blockers should not stop a larger goal run. Mark that task and
+Task-specific blockers should not stop a larger run. Mark that task and
 continue with other ready tasks.
 
 ## Homolog Review Gate
@@ -108,7 +112,7 @@ continue with other ready tasks.
 `homolog` uses Playwright/headless browser validation whenever the task has
 visual, navigation, form, interaction, console, or user-flow impact.
 
-Entering `homolog` is a dispatch edge. `/aih-goal` must immediately spawn
+Entering `homolog` is a dispatch edge. The workflow must immediately spawn
 `workflow-dev-reviewer`; a Playwright plan written in `testes` or the local
 smoke run in `review-execucao` does not replace full homolog validation.
 
@@ -142,15 +146,16 @@ stages — devops only). Their job is to optimize repeatable checks, deployments
 rollback notes, smoke tests, and environment evidence while preserving the gates
 above.
 
-## Goal Runs
+## Kanban Runs
 
-`/aih-goal` may import many tasks from Linear or a local source and run them
-autonomously until a target stage such as `human-review`.
+A run — any sub-flow, or native `/goal` for hands-off multi-turn execution — may
+import many tasks from Linear or a local source and advance them autonomously
+until a target stage such as `human-review`.
 
-The goal runner must:
+The runner must:
 
 - discover a planned kanban/backlog by default, without requiring source flags,
-- use `.aihaus/state/aih-goal.db` as the local operational cache and journal,
+- use `.aihaus/state/kanban.db` as the local operational cache and journal,
 - register every discovered or imported task in the local kanban before
   planning,
 - search the local kanban for related tasks before creating new local tasks,
@@ -166,7 +171,7 @@ The goal runner must:
 The external kanban remains the source of truth for user-owned task fields.
 When no external kanban is connected, the local kanban owns task title,
 description, priority, status, planning contracts, and related-task links.
-`aih-goal.db` stores workflow state, snapshots, planning contracts, gate events,
+`kanban.db` stores workflow state, snapshots, planning contracts, gate events,
 task links, and sync debt.
 
 ## Customization

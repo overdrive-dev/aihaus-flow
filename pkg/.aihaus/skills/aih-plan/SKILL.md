@@ -1,6 +1,6 @@
 ﻿---
 name: aih-plan
-description: "Planning sub-flow — research and produce a plan with no code, surfaced to the native Plan panel for approval. Normally invoked by the spine at planejamento; type /aih-plan to plan standalone."
+description: "Research a problem and produce a plan with no code, surfaced to the native Plan panel for approval. Use when you want to think and plan before building."
 allowed-tools: Read Grep Glob Bash WebFetch Skill ExitPlanMode
 argument-hint: "[what you want to plan — feature, migration, refactor, etc.]"
 ---

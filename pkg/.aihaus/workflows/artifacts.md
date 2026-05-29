@@ -1,10 +1,10 @@
 # aihaus Artifact Contract (storage & consumption)
 
 How aihaus artifacts are stored and consumed **without failure**. Workflow agents
-and `/aih-goal` MUST follow this before producing or reading any artifact. Much of
-this is already enforced by `annexes/run-state.md` (projection rules) and
-`annexes/goal-db.md` (sync safety + schema); this file is the single consolidated
-contract.
+and the actions (sub-flows + native `/goal` runs) MUST follow this before producing
+or reading any artifact. Much of this is already enforced by
+`workflows/kanban/run-state.md` (projection rules) and `workflows/kanban/db-schema.md`
+(sync safety + schema); this file is the single consolidated contract.
 
 ## Two trees (strict division)
 
@@ -18,7 +18,7 @@ Writing a workflow artifact into `.claude/` (or reading workflow state from it) 
 
 | Class | Path | Scope | Authority |
 |---|---|---|---|
-| Operational state | `.aihaus/state/aih-goal.db` | local | **AUTHORITY (state)** |
+| Operational state | `.aihaus/state/kanban.db` | local | **AUTHORITY (state)** |
 | Readable projection | `.aihaus/workflows/runs/<YYMMDD-slug>/` (GOAL/TASKS/RUN-MANIFEST/tasks/) | local | derived from DB |
 | Per-task evidence | `runs/<slug>/evidence/<task-id>/` | local (heavy) | referenced by DB |
 | Durable knowledge (incl. business rules) | `.aihaus/decisions.md`, `.aihaus/knowledge.md`, `.aihaus/project.md`, `.aihaus/memory/**` (except `local/`) | **project (committed)** | **AUTHORITY (knowledge)** |
@@ -26,7 +26,7 @@ Writing a workflow artifact into `.claude/` (or reading workflow state from it) 
 
 ## Consumption rules (anti-failure)
 
-1. **One authority per fact.** State → `aih-goal.db`. Knowledge → durable docs.
+1. **One authority per fact.** State → `kanban.db`. Knowledge → durable docs.
    Evidence → the file the DB points to. Projections (`TASKS.md`, `tasks/<id>.md`,
    **and the native CLI task list**) are **derived** — never read as the source of
    truth; rewrite/sync them from the DB after every transition (the written plan and
@@ -36,7 +36,7 @@ Writing a workflow artifact into `.claude/` (or reading workflow state from it) 
    not reconstruct paths. (Kills producer/consumer path mismatch.)
 3. **Typed, DB-allocated, never-reused IDs.** Filenames embed the ID:
    `T-` task · `pq-` planning question · `GATE-` · `EV-` evidence · `BR-` business
-   rule · `RUN-` run. `aih-goal.db` is the sole allocator. For source-backed tasks
+   rule · `RUN-` run. `kanban.db` is the sole allocator. For source-backed tasks
    the **source ID is canonical** (e.g. Linear `NORACAR-123`) — no cross-builder
    collision.
 4. **Single-writer per transition.** Only the stage's lead agent writes that
@@ -63,7 +63,7 @@ the path decides commit visibility and role-scoped exposure.
 
 ## Eval gate (S6)
 
-At goal finish, run `eval/eval-run.sh` over the run's `aih-goal.db`. A deterministic
+At run finish, run `eval/eval-run.sh` over the run's `kanban.db`. A deterministic
 FAIL (invalid verdict, missing evidence, planning-gate violation, gate churn) blocks
 marking the run complete. The business-rule-coverage rubric is a separate judgment
 pass — see `eval/README.md`.
