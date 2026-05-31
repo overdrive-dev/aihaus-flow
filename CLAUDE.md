@@ -392,8 +392,11 @@ promoted change traces to a flow → a rule → code+tests.
 **Founding rules (BR-F1..F4):** F1 the 6 domains; F2 `flow-guard` enforces only at the promotion
 boundary (online + production code), not offline scratch; F3 markdown ledger = source of truth,
 aih-graph `Rule` node = index; F4 cite the rule id on behaviour-affecting decisions only.
-**Deferred:** lossy per-plan `BUSINESS-RULES.md`→ledger migration (ledger seeds fresh); the
-output-style subagent-spawn canary (top-level use is safe; ADR-260517 caveat unverified for Task spawn).
+**Migration:** `hooks/business-rules-migrate.sh [--dry-run]` converts a plan's Confirmed-Rules
+table → ledger BDD entries under a `## Migrated rules` review section (lossy — placeholder
+Given/When/Then for you to complete; idempotent via a `.business-rules-migrated` marker).
+**Deferred:** the output-style subagent-spawn canary (top-level use is safe; ADR-260517 caveat
+unverified for Task spawn).
 
 ## Installer Behavior
 

@@ -114,6 +114,7 @@ check_hooks() {
     autonomy-guard.sh
     backup-file.sh
     bash-guard.sh
+    business-rules-migrate.sh
     calibrate-guard.sh
     composite-score.sh
     context-inject.sh
