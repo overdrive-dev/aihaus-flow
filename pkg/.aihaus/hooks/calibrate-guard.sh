@@ -152,11 +152,24 @@ if [ "${AMBIGUITY_COUNT}" -eq 0 ]; then
   exit 0
 fi
 
-# ---- check BUSINESS-RULES.md (calibration completed) -----------------------
+# ---- check BUSINESS-RULES.md (calibration completed + rule-gate) -----------
+# BRC-S5 (ADR-260531-A): the rule-gate requires BUSINESS-RULES.md to carry ≥1
+# NON-VACUOUS rule — a numbered Confirmed-Rules table row OR a Given/When/Then
+# scenario — not merely exist. A rule artifact with no actual rule is vacuous;
+# the change has nothing testable to trace to. Defining the rule unblocks (the
+# contract's gap→ask→rule loop), so this is hard-but-not-deadlocking. Accepts
+# both the plan-calibrator table format and the contract BDD format.
 BUSINESS_RULES=".aihaus/plans/${SLUG}/BUSINESS-RULES.md"
 if [ -f "${BUSINESS_RULES}" ]; then
-  log_event "allow" "business-rules-present-calibration-done" "${SLUG}" "${COMMAND_NAME}"
-  exit 0
+  RULE_SIGNALS="$(grep -ciE '^\|[[:space:]]*[0-9]+[[:space:]]*\||given\b.+\bwhen\b.+\bthen\b' "${BUSINESS_RULES}" 2>/dev/null || true)"
+  case "${RULE_SIGNALS}" in ''|*[!0-9]*) RULE_SIGNALS=0 ;; esac
+  if [ "${RULE_SIGNALS}" -ge 1 ]; then
+    log_event "allow" "business-rules-present-non-vacuous" "${SLUG}" "${COMMAND_NAME}"
+    exit 0
+  fi
+  echo "calibrate-guard (rule-gate): /${COMMAND_NAME} blocked. Plan ${SLUG} has BUSINESS-RULES.md but no actual rule (no Confirmed-Rules table row, no Given/When/Then). A change must trace to a testable business rule before tdd (ADR-260531-A) — define the rule, OR set AIHAUS_CALIBRATE_GUARD=0 / --no-calibrate to bypass." >&2
+  log_event "block" "rule-gate-vacuous-business-rules" "${SLUG}" "${COMMAND_NAME}"
+  exit 2
 fi
 
 # ---- check for recent calibration-skip opt-out row in audit log (24h) -------
