@@ -405,13 +405,13 @@ Since v0.26.0 / M022 (ADR-260504-A), `install.sh` ships V5 — global-skill boot
 
 ## Dogfooding
 
-To use aihaus on this repo itself:
+Running the installer from **inside this repo** triggers **dogfood mode** (M022 / `install.sh:310-322`):
 ```bash
 bash pkg/scripts/install.sh --target .
 ```
-This creates `.aihaus/` (gitignored) with symlinks back to `pkg/.aihaus/`. Local artifacts accumulate in `.aihaus/` while package improvements go to `pkg/.aihaus/`.
+It installs/refreshes the **user-global `aih-*` skills** (symlinked from this clone's `pkg/.aihaus/skills/` into `~/.claude/skills/`) and points the registry (`~/.aihaus/.install-source`) at this clone's `pkg/`, then exits **before** the per-repo overlay — it does **not** create a local `.aihaus/`. The package itself is the source of truth: edit `pkg/.aihaus/` directly. The hooks / ledger / settings overlay (including the BRC) auto-activates in the **other** repos where you install aihaus, not on this package repo.
 
-After any post-merge drift in `pkg/.aihaus/{hooks,skills,agents,templates}/` (including `settings.local.json`), re-run `bash pkg/scripts/update.sh --target .` to keep the local install aligned with the latest package contents.
+To exercise the hooks/ledger ON this repo itself (true self-dogfood), build the overlay manually: seed `.aihaus/memory/workflows/business-rules.md` from `pkg/.aihaus/templates/business-rules.md`, and merge `.claude/settings.local.json` from `pkg/.aihaus/templates/settings.local.json`. For **non-package** repos, `bash pkg/scripts/update.sh --target .` refreshes an existing overlay after any post-merge drift in `pkg/.aihaus/{hooks,skills,agents,templates}/`.
 
 ## Releasing
 
