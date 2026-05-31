@@ -5,6 +5,19 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.0] - 2026-05-31 - Business-Rules Contract
+
+### Added
+
+- **Business-rules contract** — a living per-project rules ledger (`.aihaus/memory/workflows/business-rules.md`) the agent decides from autonomously: premises are front-loaded once, and the agent derives every *covered* decision from the contract, returning to a human only on a genuine *gap/conflict* (which becomes a new rule). BDD (Given/When/Then) is the lingua franca. Spec in `workflows/business-rules.md`; 6 domains (`software`/`design`/`infra`/`security`/`data`/`compliance`).
+- **Promotion-boundary determinism** — `flow-guard` blocks a deploy/online-action command unless an active flow exists (`phase-advance.sh` sets/clears `.claude/_state/active-flow`); composes with `role-guard`. The **rule-gate** (`calibrate-guard`) requires a non-vacuous testable rule before `tdd`. Opt-outs: `AIHAUS_FLOW_GUARD=0`, `AIHAUS_CALIBRATE_GUARD=0`.
+- **aih-graph `Rule` node** (needs aih-graph ≥ v0.1.6) — bidirectional rule↔code binding (`implements`/`relates`/`decided_by`), BM25 + embedding search, and `aih-graph rule-drift` to flag unreviewed rules + dangling bindings.
+- **Output-style `aihaus-contract`** — bakes decide-from-contract + BDD framing into the session prompt; enable with `/output-style aihaus-contract`.
+
+### Fixed
+
+- Shipped contract artifacts are project-agnostic — no aihaus-flow-specific identifiers leak into a client's seeded ledger, spec, or output-style.
+
 ## [0.39.0] - 2026-05-29 - aihaus 3.0: native-first stage workflow
 
 ### Added

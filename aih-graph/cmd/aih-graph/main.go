@@ -40,7 +40,7 @@ import (
 //
 // (Go's -X only works on string vars, not consts — keeping this as var is
 // load-bearing for release pipeline correctness.)
-var version = "0.1.5-dev"
+var version = "0.1.6"
 
 const jsonPropertyStringLimit = 4000
 const embedInputStringLimit = 4000
