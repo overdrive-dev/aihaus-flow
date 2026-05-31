@@ -14,7 +14,7 @@ import "time"
 // JSON-serializable map.
 type Node struct {
 	ID             int64
-	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill" | "File" | "Chunk" | "Symbol" | "Call" | "Test" | "Memory" | "Commit"
+	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill" | "Rule" | "File" | "Chunk" | "Symbol" | "Call" | "Test" | "Memory" | "Commit"
 	Identifier     string // e.g. "ADR-260514-B", "M030", "aih-milestone"
 	Properties     map[string]any
 	Embedding      []float32 // optional; nil if not yet embedded
@@ -191,4 +191,26 @@ type Skill struct {
 	DisableModelInvocation bool
 	AllowedTools           []string
 	ArgumentHint           string
+}
+
+// Rule represents a business rule from the decision-autonomy contract.
+// Source: .aihaus/memory/workflows/business-rules.md sections beginning with
+// `### BR-`. Per ADR-260531-A. Scenarios are the BDD core (Given/When/Then);
+// Implements / Relates / DecidedBy are cross-link fields used to build edges to
+// code symbols/files/tests, other rules, and ADRs. The markdown ledger stays the
+// source of truth; aih-graph indexes Rule nodes so agents can query rule↔code.
+type Rule struct {
+	Identifier   string   // "BR-001", "BR-F1"
+	Title        string   // header line after the em-dash
+	Domain       string   // "software" | "design" | "infra" | "security" | "data" | "compliance"
+	Statement    string   // one-line business statement (WHAT must hold)
+	Scenarios    []string // Given/When/Then lines
+	Status       string   // "proposed" | "accepted" | "deprecated"
+	Source       string   // who defined the premise + when
+	Rationale    string   // why this rule exists
+	Implements   []string // symbol/file/test references (→ code edges)
+	Relates      []string // BR-<id> references (→ rule edges)
+	DecidedBy    []string // ADR-<id> references (→ ADR edges)
+	LastReviewed string   // commit SHA (staleness anchor)
+	Body         string   // full markdown body of the section
 }
