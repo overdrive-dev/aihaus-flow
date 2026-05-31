@@ -81,6 +81,8 @@ Commands:
     --json                Print stable machine-readable output
   status [--repo PATH]    Show memory index freshness and counts
     --json                Print stable machine-readable output
+  rule-drift              Flag business rules that are unreviewed or have broken code bindings
+    --json                Print stable machine-readable output
   mark-stale [--reason R] Mark derived memory stale after repo changes
   uninstall [--purge]     Remove aih-graph state (single .db file delete)
   version                 Print version
@@ -1734,6 +1736,92 @@ func runMilestone(args []string) int {
 	return runHybrid(db, queryText, "", *topK)
 }
 
+// runRuleDrift reports business rules whose binding is suspect (BRC-S3,
+// ADR-260531-A): a rule is flagged when it was never reviewed (last_reviewed
+// empty or "-") or when its declared implements: refs outnumber the code edges
+// that actually resolved (a dangling binding — code moved/renamed/removed). The
+// dangling-binding signal is the load-bearing staleness catch: a rule whose
+// `implements` ref no longer points at real code is the contract going stale.
+func runRuleDrift(args []string) int {
+	fs := flag.NewFlagSet("rule-drift", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	db, err := openQueryDB(*dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rule-drift: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+
+	// Collect rule rows first, then per-rule edge counts (avoid nested cursor).
+	type ruleRow struct {
+		id           int64
+		ident, props string
+	}
+	rows, err := db.SQL().Query("SELECT id, identifier, properties FROM nodes WHERE type='Rule' ORDER BY identifier")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rule-drift: query rules: %v\n", err)
+		return 1
+	}
+	var ruleRows []ruleRow
+	for rows.Next() {
+		var r ruleRow
+		if err := rows.Scan(&r.id, &r.ident, &r.props); err != nil {
+			continue
+		}
+		ruleRows = append(ruleRows, r)
+	}
+	_ = rows.Err()
+	rows.Close()
+
+	type ruleDrift struct {
+		Rule          string `json:"rule"`
+		Reason        string `json:"reason"`
+		LastReviewed  string `json:"last_reviewed"`
+		DeclaredLinks int    `json:"declared_links"`
+		BoundLinks    int    `json:"bound_links"`
+	}
+	var drifts []ruleDrift
+	for _, r := range ruleRows {
+		var p struct {
+			LastReviewed string   `json:"last_reviewed"`
+			Implements   []string `json:"implements"`
+		}
+		_ = json.Unmarshal([]byte(r.props), &p)
+
+		lr := strings.TrimSpace(p.LastReviewed)
+		if lr == "" || lr == "-" {
+			drifts = append(drifts, ruleDrift{Rule: r.ident, Reason: "never-reviewed", LastReviewed: lr, DeclaredLinks: len(p.Implements)})
+			continue
+		}
+		var bound int
+		_ = db.SQL().QueryRow("SELECT COUNT(*) FROM edges WHERE from_id=? AND type='implements'", r.id).Scan(&bound)
+		if len(p.Implements) > bound {
+			drifts = append(drifts, ruleDrift{Rule: r.ident, Reason: "dangling-binding", LastReviewed: lr, DeclaredLinks: len(p.Implements), BoundLinks: bound})
+		}
+	}
+
+	if *jsonOut {
+		return writeJSON(map[string]any{"total_rules": len(ruleRows), "drift_count": len(drifts), "drifts": drifts})
+	}
+	fmt.Printf("aih-graph rule-drift: %d rule(s), %d drift(s)\n", len(ruleRows), len(drifts))
+	for _, d := range drifts {
+		switch d.Reason {
+		case "never-reviewed":
+			fmt.Printf("  [never-reviewed]   %s\n", d.Rule)
+		case "dangling-binding":
+			fmt.Printf("  [dangling-binding] %s — %d declared, %d bound to code\n", d.Rule, d.DeclaredLinks, d.BoundLinks)
+		}
+	}
+	if len(drifts) == 0 {
+		fmt.Println("  no drift detected")
+	}
+	return 0
+}
+
 func runStatus(args []string) int {
 	fs := flag.NewFlagSet("status", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
@@ -2618,6 +2706,8 @@ func main() {
 		os.Exit(runMilestone(args))
 	case "status":
 		os.Exit(runStatus(args))
+	case "rule-drift":
+		os.Exit(runRuleDrift(args))
 	case "mark-stale":
 		os.Exit(runMarkStale(args))
 	case "uninstall":
