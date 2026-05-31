@@ -156,6 +156,11 @@ func runBuild(args []string) int {
 		filepath.Join(repoPath, ".aihaus", "decisions.md"),
 		filepath.Join(repoPath, "pkg", ".aihaus", "decisions.md"),
 	)
+	// Business-rules ledger — the decision-autonomy contract (ADR-260531-A).
+	// Source-of-truth is the runtime ledger; absent on a fresh repo (→ 0 Rules).
+	rulesPath := firstExistingPath(
+		filepath.Join(repoPath, ".aihaus", "memory", "workflows", "business-rules.md"),
+	)
 
 	// Consent gate (ADR-260515-A privacy contract).
 	consented, err := privacy.HasConsent(repoPath)
@@ -206,6 +211,17 @@ func runBuild(args []string) int {
 		}
 	}
 	fmt.Printf("  Decisions: %d (%d are amendments)\n", len(decisions), amendCount)
+
+	// Business-rule (contract) extraction.
+	var rules []types.Rule
+	if rulesPath != "" {
+		rules, err = extract.ParseRulesFile(rulesPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "build: parse business-rules.md: %v\n", err)
+			return 1
+		}
+	}
+	fmt.Printf("  Rules: %d\n", len(rules))
 
 	// Agent extraction.
 	agents, err := extract.ParseAgentsDir(repoPath)
@@ -468,6 +484,13 @@ func runBuild(args []string) int {
 		}
 		persisted++
 	}
+	for _, r := range rules {
+		if _, err := db.UpsertNode("Rule", r.Identifier, ruleProps(r)); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert rule %s: %v\n", r.Identifier, err)
+			return 1
+		}
+		persisted++
+	}
 
 	// Edge derivation: Decision.Amends → Decision-[amends]→Decision;
 	// Story.MilestoneID → Story-[in_milestone]→Milestone. More edge types
@@ -504,6 +527,38 @@ func runBuild(args []string) int {
 		}
 		if err := db.UpsertEdge(fromID, toID, "in_milestone", nil); err == nil {
 			edgesAdded++
+		}
+	}
+
+	// Rule edges (ADR-260531-A): Rule-[implements]→Symbol|File|Test;
+	// Rule-[relates]→Rule; Rule-[decided_by]→Decision. implements: refs are
+	// best-effort exact-id matches (symbols are "<relpath>:<name>", files are
+	// "<relpath>"); unresolved refs are skipped, never errors.
+	for _, r := range rules {
+		fromID, err := db.LookupNodeID("Rule", r.Identifier)
+		if err != nil {
+			continue
+		}
+		for _, ref := range r.Implements {
+			if toID, ok := lookupCodeRef(db, ref); ok {
+				if err := db.UpsertEdge(fromID, toID, "implements", nil); err == nil {
+					edgesAdded++
+				}
+			}
+		}
+		for _, ref := range r.Relates {
+			if toID, err := db.LookupNodeID("Rule", ref); err == nil {
+				if err := db.UpsertEdge(fromID, toID, "relates", nil); err == nil {
+					edgesAdded++
+				}
+			}
+		}
+		for _, ref := range r.DecidedBy {
+			if toID, err := db.LookupNodeID("Decision", ref); err == nil {
+				if err := db.UpsertEdge(fromID, toID, "decided_by", nil); err == nil {
+					edgesAdded++
+				}
+			}
 		}
 	}
 
@@ -630,11 +685,11 @@ func runBuild(args []string) int {
 
 	// Search pipeline: BM25 is always refreshed; Ollama/nomic embeddings are
 	// added when the local server is available.
-	if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits); err != nil {
+	if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules); err != nil {
 		fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
 		return 1
 	}
-	runOllamaEmbeddingPipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits)
+	runOllamaEmbeddingPipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules)
 	clearStaleMarker(repoPath)
 	return 0
 }
@@ -705,6 +760,7 @@ func runBM25Pipeline(
 	repoTests []types.RepoTest,
 	memories []types.MarkdownMemory,
 	commits []types.RepoCommit,
+	rules []types.Rule,
 ) error {
 	type unit struct{ typ, identifier, text string }
 	var units []unit
@@ -751,6 +807,9 @@ func runBM25Pipeline(
 	for _, c := range commits {
 		units = append(units, unit{"Commit", c.Hash, embedTextForCommit(c)})
 	}
+	for _, r := range rules {
+		units = append(units, unit{"Rule", r.Identifier, embedTextForRule(r)})
+	}
 
 	indexed, errs := 0, 0
 	for _, u := range units {
@@ -775,6 +834,10 @@ func runBM25Pipeline(
 // against the actual decision narrative.
 func embedTextForDecision(d types.Decision) string {
 	return d.Identifier + "\n" + d.Title + "\n" + d.Status + "\n" + d.Body
+}
+
+func embedTextForRule(r types.Rule) string {
+	return r.Identifier + "\n" + r.Title + "\n" + r.Domain + "\n" + r.Statement + "\n" + r.Body
 }
 
 func embedTextForAgent(a types.Agent) string {
@@ -844,6 +907,7 @@ func runOllamaEmbeddingPipeline(
 	repoTests []types.RepoTest,
 	memories []types.MarkdownMemory,
 	commits []types.RepoCommit,
+	rules []types.Rule,
 ) {
 	embedder, err := embed.NewOllamaEmbedder(embed.OllamaOptions{})
 	if err != nil {
@@ -854,7 +918,7 @@ func runOllamaEmbeddingPipeline(
 		fmt.Fprintf(os.Stderr, "build: Ollama embeddings skipped: %v\n", err)
 		return
 	}
-	if err := runEmbedPipeline(db, embedder, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits); err != nil {
+	if err := runEmbedPipeline(db, embedder, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules); err != nil {
 		fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
 	}
 }
@@ -878,6 +942,7 @@ func runEmbedPipeline(
 	repoTests []types.RepoTest,
 	memories []types.MarkdownMemory,
 	commits []types.RepoCommit,
+	rules []types.Rule,
 ) error {
 	type unit struct {
 		typ        string
@@ -927,6 +992,9 @@ func runEmbedPipeline(
 	}
 	for _, c := range commits {
 		units = append(units, unit{"Commit", c.Hash, embedTextForCommit(c)})
+	}
+	for _, r := range rules {
+		units = append(units, unit{"Rule", r.Identifier, embedTextForRule(r)})
 	}
 
 	embedded, skipped, errs := 0, 0, 0
@@ -2377,6 +2445,37 @@ func propFloat(props map[string]any, key string) float64 {
 // <name>/MEMORY.md exists (native CC memory: project field accumulation). The
 // excerpt becomes part of the Agent node's properties JSON → BM25/FTS5 +
 // semantic queries search across what each agent has learned across sessions.
+// ruleProps converts a business Rule into node properties. Scenarios + link
+// lists are stored so query consumers can render the rule and traverse bindings.
+func ruleProps(r types.Rule) map[string]any {
+	return map[string]any{
+		"title":         r.Title,
+		"domain":        r.Domain,
+		"statement":     r.Statement,
+		"scenarios":     r.Scenarios,
+		"status":        r.Status,
+		"source":        r.Source,
+		"rationale":     r.Rationale,
+		"implements":    r.Implements,
+		"relates":       r.Relates,
+		"decided_by":    r.DecidedBy,
+		"last_reviewed": r.LastReviewed,
+		"body":          r.Body,
+	}
+}
+
+// lookupCodeRef resolves a rule's implements: reference to a node id, trying
+// Symbol ("<relpath>:<name>"), then File ("<relpath>"), then Test. Returns
+// false when the ref matches no indexed code node.
+func lookupCodeRef(db *storage.DB, ref string) (int64, bool) {
+	for _, typ := range []string{"Symbol", "File", "Test"} {
+		if id, err := db.LookupNodeID(typ, ref); err == nil {
+			return id, true
+		}
+	}
+	return 0, false
+}
+
 func agentProps(a types.Agent) map[string]any {
 	props := map[string]any{
 		"tools":                  a.Tools,
