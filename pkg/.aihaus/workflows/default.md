@@ -16,6 +16,7 @@ moving tasks between stages.
 - Routing — natural-language requests auto-route to sub-flows (no `/aih-*` typing required): see `routing.md`.
 - Native fan-out workflows (autonomous only; qa/devops, runtime-authored): see `fan-out.md`.
 - Parallel agents without conflicts (worktree isolation, Owned-Files sharding, single-writer): see `parallelism.md`.
+- Business rules — the decision-autonomy contract agents decide from (schema, domains, gates): see `business-rules.md`.
 
 ## Composition
 

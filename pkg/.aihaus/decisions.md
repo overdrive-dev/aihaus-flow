@@ -5321,3 +5321,48 @@ Reverting returns to the prior implicit state (the pieces exist but unbound). No
 - `pkg/.aihaus/hooks/context-inject.sh` - current context injection mechanism
 - ADR-001 - files are state
 - ADR-260515-A through ADR-260516-A - current aih-graph privacy, storage, scope, and BM25 decisions
+
+## ADR-260531-A — Business-Rules Contract: decision-autonomy substrate + 4 founding rules
+
+**Status:** Accepted
+**Date:** 2026-05-31
+
+### Context
+
+aihaus 3.0's autonomy depends on agents deciding without re-asking the client. Today the premises an agent decides from are scattered: per-plan `BUSINESS-RULES.md` (from `plan-calibrator`), the `BR-1/8/9` rules hardcoded in `workflows/default.md`, and the planning-gate's ad-hoc "business-rule gaps". There is no single, project-wide, living contract an agent can consult to decide autonomously. The maintainer's thesis: if the system serves business rules and we encode all rule premises into a reviewable contract, the agent can make any decision from those fundamentals — the client front-loads premises once, and the contract converts that into permanent agent decision-authority.
+
+### Decision
+
+Establish a **business-rules ledger** as the decision-autonomy substrate. **The autonomy law:** an agent decides alone for every contract-*covered* decision (citing the rule ID when behavior is affected) and returns to the client only on a genuine *gap* or *conflict* — whose answer becomes a new rule. Autonomy = contract coverage; the ledger self-extends. BDD (Given/When/Then) is the lingua franca: a rule's scenarios are both its statement and the failing tests the `tdd` stage consumes.
+
+Four **founding rules** set by the maintainer (2026-05-31):
+
+- **BR-F1 (domains)** — six domains, one namespace: `software · design · infra · security · data · compliance`. Further domains are each a recorded decision.
+- **BR-F2 (determinism scope)** — `flow-guard` enforces dispatch at the **promotion boundary only** (online `homolog`/`prod` + production code), not blanket offline. Determinism governs *what lands*; offline scratch is free; composes with `role-guard`.
+- **BR-F3 (residence)** — the markdown ledger is the source of truth; the aih-graph `Rule` node is the queryable index (rule ↔ code).
+- **BR-F4 (provenance)** — an autonomous decision cites its rule ID when it affects business behavior; pure-mechanics decisions need no citation.
+
+**Three-ledger ownership boundary (no bleed):** business-rules = WHAT the system must do; ADRs = HOW/WHY of a technical approach; `knowledge.md` = reusable how-to. Cross-links allowed; ownership never overlaps.
+
+The contract spec lives at `workflows/business-rules.md`; the per-project ledger template at `templates/business-rules.md`. Gates: `rule-gate` (no `planejamento → tdd` without a linked testable rule, extending `calibrate-guard.sh`) and `flow-guard` (BR-F2). This is an evolution of existing primitives (`BUSINESS-RULES.md`, `BR-1/8/9`, `calibrate-guard`, aih-graph node types, the `decisions.md` pattern), not a new stack.
+
+### Consequences
+
+**Positive:** a single living contract grounds autonomous decisions; code↔rule traceability answers "why does this exist?" and "where is this implemented?"; BDD unifies rule statement, interaction language, and test source.
+
+**Negative:** the rule↔code binding must be kept current — a stale contract yields confident-wrong decisions, so staleness detection (S3) is load-bearing, not optional. Three ledgers raise the discipline bar to keep ownership crisp.
+
+**Neutral:** the contract is consulted by slice (aih-graph retrieval), not loaded whole per turn; mechanical / no-behavior-change work is explicitly exempt from the rule-gate.
+
+### Rollback
+
+Reverting removes `workflows/business-rules.md`, `templates/business-rules.md`, the `Rule` aih-graph node, and the two gates; per-task `BUSINESS-RULES.md` + `calibrate-guard` remain as before. No data loss (the ledger is curated, the graph rebuildable).
+
+### References
+
+- `docs/business-rules-contract.md` — the full plan + 7-story breakdown
+- `workflows/business-rules.md` — the contract spec
+- `templates/business-rules.md` — the per-project ledger template
+- ADR-260529-A — parallel worktree safety (the build shards by Owned-Files)
+- ADR-260511-A / 260511-C — `calibrate-guard` (extended into the rule-gate)
+- ADR-260515-B — aih-graph Node/Edge model (the `Rule` node extends it)
