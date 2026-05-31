@@ -45,7 +45,7 @@ Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and s
 
 <br>
 
-[Why](#why-aihaus) · [Quickstart](#your-first-5-minutes) · [The Four Pillars](#the-four-pillars) · [Roles](#roles--the-online-boundary) · [How the Engine Works](#how-the-engine-works) · [Commands](#commands) · [Requirements](#requirements)
+[Why](#why-aihaus) · [Quickstart](#your-first-5-minutes) · [The Four Pillars](#the-four-pillars) · [Roles](#roles--the-online-boundary) · [How the Engine Works](#how-the-engine-works) · [Architecture](docs/architecture-3.0.md) · [Commands](#commands) · [Requirements](#requirements)
 
 </div>
 
