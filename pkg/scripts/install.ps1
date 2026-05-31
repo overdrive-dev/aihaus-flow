@@ -929,6 +929,19 @@ if (-not (Test-Path -LiteralPath $brSeedDst) -and (Test-Path -LiteralPath $brSee
     Copy-Item -LiteralPath $brSeedSrc -Destination $brSeedDst
     Write-Host "  memory: created .aihaus\memory\workflows\business-rules.md (business-rules contract)"
 }
+# Output-style: the decision-autonomy contract framing (BRC-S6 / A1 finding). Opt-in.
+$osSrcDir = Join-Path $PkgAihaus 'output-styles'
+if (Test-Path -LiteralPath $osSrcDir) {
+    $osDstDir = Join-Path $Target '.claude\output-styles'
+    if (-not (Test-Path -LiteralPath $osDstDir)) { New-Item -ItemType Directory -Force -Path $osDstDir | Out-Null }
+    Get-ChildItem -LiteralPath $osSrcDir -Filter '*.md' -File | ForEach-Object {
+        $osDst = Join-Path $osDstDir $_.Name
+        if (-not (Test-Path -LiteralPath $osDst)) {
+            Copy-Item -LiteralPath $_.FullName -Destination $osDst
+            Write-Host "  output-style: created .claude\output-styles\$($_.Name)"
+        }
+    }
+}
 
 function Ensure-WorkflowEnvironmentPrompts {
     param([string]$EnvironmentFile)
