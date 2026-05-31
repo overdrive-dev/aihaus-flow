@@ -81,6 +81,8 @@ Commands:
     --json                Print stable machine-readable output
   status [--repo PATH]    Show memory index freshness and counts
     --json                Print stable machine-readable output
+  rule-drift              Flag business rules that are unreviewed or have broken code bindings
+    --json                Print stable machine-readable output
   mark-stale [--reason R] Mark derived memory stale after repo changes
   uninstall [--purge]     Remove aih-graph state (single .db file delete)
   version                 Print version
@@ -156,6 +158,11 @@ func runBuild(args []string) int {
 		filepath.Join(repoPath, ".aihaus", "decisions.md"),
 		filepath.Join(repoPath, "pkg", ".aihaus", "decisions.md"),
 	)
+	// Business-rules ledger — the decision-autonomy contract (ADR-260531-A).
+	// Source-of-truth is the runtime ledger; absent on a fresh repo (→ 0 Rules).
+	rulesPath := firstExistingPath(
+		filepath.Join(repoPath, ".aihaus", "memory", "workflows", "business-rules.md"),
+	)
 
 	// Consent gate (ADR-260515-A privacy contract).
 	consented, err := privacy.HasConsent(repoPath)
@@ -206,6 +213,17 @@ func runBuild(args []string) int {
 		}
 	}
 	fmt.Printf("  Decisions: %d (%d are amendments)\n", len(decisions), amendCount)
+
+	// Business-rule (contract) extraction.
+	var rules []types.Rule
+	if rulesPath != "" {
+		rules, err = extract.ParseRulesFile(rulesPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "build: parse business-rules.md: %v\n", err)
+			return 1
+		}
+	}
+	fmt.Printf("  Rules: %d\n", len(rules))
 
 	// Agent extraction.
 	agents, err := extract.ParseAgentsDir(repoPath)
@@ -468,6 +486,13 @@ func runBuild(args []string) int {
 		}
 		persisted++
 	}
+	for _, r := range rules {
+		if _, err := db.UpsertNode("Rule", r.Identifier, ruleProps(r)); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert rule %s: %v\n", r.Identifier, err)
+			return 1
+		}
+		persisted++
+	}
 
 	// Edge derivation: Decision.Amends → Decision-[amends]→Decision;
 	// Story.MilestoneID → Story-[in_milestone]→Milestone. More edge types
@@ -504,6 +529,38 @@ func runBuild(args []string) int {
 		}
 		if err := db.UpsertEdge(fromID, toID, "in_milestone", nil); err == nil {
 			edgesAdded++
+		}
+	}
+
+	// Rule edges (ADR-260531-A): Rule-[implements]→Symbol|File|Test;
+	// Rule-[relates]→Rule; Rule-[decided_by]→Decision. implements: refs are
+	// best-effort exact-id matches (symbols are "<relpath>:<name>", files are
+	// "<relpath>"); unresolved refs are skipped, never errors.
+	for _, r := range rules {
+		fromID, err := db.LookupNodeID("Rule", r.Identifier)
+		if err != nil {
+			continue
+		}
+		for _, ref := range r.Implements {
+			if toID, ok := lookupCodeRef(db, ref); ok {
+				if err := db.UpsertEdge(fromID, toID, "implements", nil); err == nil {
+					edgesAdded++
+				}
+			}
+		}
+		for _, ref := range r.Relates {
+			if toID, err := db.LookupNodeID("Rule", ref); err == nil {
+				if err := db.UpsertEdge(fromID, toID, "relates", nil); err == nil {
+					edgesAdded++
+				}
+			}
+		}
+		for _, ref := range r.DecidedBy {
+			if toID, err := db.LookupNodeID("Decision", ref); err == nil {
+				if err := db.UpsertEdge(fromID, toID, "decided_by", nil); err == nil {
+					edgesAdded++
+				}
+			}
 		}
 	}
 
@@ -630,11 +687,11 @@ func runBuild(args []string) int {
 
 	// Search pipeline: BM25 is always refreshed; Ollama/nomic embeddings are
 	// added when the local server is available.
-	if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits); err != nil {
+	if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules); err != nil {
 		fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
 		return 1
 	}
-	runOllamaEmbeddingPipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits)
+	runOllamaEmbeddingPipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules)
 	clearStaleMarker(repoPath)
 	return 0
 }
@@ -705,6 +762,7 @@ func runBM25Pipeline(
 	repoTests []types.RepoTest,
 	memories []types.MarkdownMemory,
 	commits []types.RepoCommit,
+	rules []types.Rule,
 ) error {
 	type unit struct{ typ, identifier, text string }
 	var units []unit
@@ -751,6 +809,9 @@ func runBM25Pipeline(
 	for _, c := range commits {
 		units = append(units, unit{"Commit", c.Hash, embedTextForCommit(c)})
 	}
+	for _, r := range rules {
+		units = append(units, unit{"Rule", r.Identifier, embedTextForRule(r)})
+	}
 
 	indexed, errs := 0, 0
 	for _, u := range units {
@@ -775,6 +836,10 @@ func runBM25Pipeline(
 // against the actual decision narrative.
 func embedTextForDecision(d types.Decision) string {
 	return d.Identifier + "\n" + d.Title + "\n" + d.Status + "\n" + d.Body
+}
+
+func embedTextForRule(r types.Rule) string {
+	return r.Identifier + "\n" + r.Title + "\n" + r.Domain + "\n" + r.Statement + "\n" + r.Body
 }
 
 func embedTextForAgent(a types.Agent) string {
@@ -844,6 +909,7 @@ func runOllamaEmbeddingPipeline(
 	repoTests []types.RepoTest,
 	memories []types.MarkdownMemory,
 	commits []types.RepoCommit,
+	rules []types.Rule,
 ) {
 	embedder, err := embed.NewOllamaEmbedder(embed.OllamaOptions{})
 	if err != nil {
@@ -854,7 +920,7 @@ func runOllamaEmbeddingPipeline(
 		fmt.Fprintf(os.Stderr, "build: Ollama embeddings skipped: %v\n", err)
 		return
 	}
-	if err := runEmbedPipeline(db, embedder, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits); err != nil {
+	if err := runEmbedPipeline(db, embedder, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules); err != nil {
 		fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
 	}
 }
@@ -878,6 +944,7 @@ func runEmbedPipeline(
 	repoTests []types.RepoTest,
 	memories []types.MarkdownMemory,
 	commits []types.RepoCommit,
+	rules []types.Rule,
 ) error {
 	type unit struct {
 		typ        string
@@ -927,6 +994,9 @@ func runEmbedPipeline(
 	}
 	for _, c := range commits {
 		units = append(units, unit{"Commit", c.Hash, embedTextForCommit(c)})
+	}
+	for _, r := range rules {
+		units = append(units, unit{"Rule", r.Identifier, embedTextForRule(r)})
 	}
 
 	embedded, skipped, errs := 0, 0, 0
@@ -1666,6 +1736,92 @@ func runMilestone(args []string) int {
 	return runHybrid(db, queryText, "", *topK)
 }
 
+// runRuleDrift reports business rules whose binding is suspect (BRC-S3,
+// ADR-260531-A): a rule is flagged when it was never reviewed (last_reviewed
+// empty or "-") or when its declared implements: refs outnumber the code edges
+// that actually resolved (a dangling binding — code moved/renamed/removed). The
+// dangling-binding signal is the load-bearing staleness catch: a rule whose
+// `implements` ref no longer points at real code is the contract going stale.
+func runRuleDrift(args []string) int {
+	fs := flag.NewFlagSet("rule-drift", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	db, err := openQueryDB(*dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rule-drift: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+
+	// Collect rule rows first, then per-rule edge counts (avoid nested cursor).
+	type ruleRow struct {
+		id           int64
+		ident, props string
+	}
+	rows, err := db.SQL().Query("SELECT id, identifier, properties FROM nodes WHERE type='Rule' ORDER BY identifier")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rule-drift: query rules: %v\n", err)
+		return 1
+	}
+	var ruleRows []ruleRow
+	for rows.Next() {
+		var r ruleRow
+		if err := rows.Scan(&r.id, &r.ident, &r.props); err != nil {
+			continue
+		}
+		ruleRows = append(ruleRows, r)
+	}
+	_ = rows.Err()
+	rows.Close()
+
+	type ruleDrift struct {
+		Rule          string `json:"rule"`
+		Reason        string `json:"reason"`
+		LastReviewed  string `json:"last_reviewed"`
+		DeclaredLinks int    `json:"declared_links"`
+		BoundLinks    int    `json:"bound_links"`
+	}
+	var drifts []ruleDrift
+	for _, r := range ruleRows {
+		var p struct {
+			LastReviewed string   `json:"last_reviewed"`
+			Implements   []string `json:"implements"`
+		}
+		_ = json.Unmarshal([]byte(r.props), &p)
+
+		lr := strings.TrimSpace(p.LastReviewed)
+		if lr == "" || lr == "-" {
+			drifts = append(drifts, ruleDrift{Rule: r.ident, Reason: "never-reviewed", LastReviewed: lr, DeclaredLinks: len(p.Implements)})
+			continue
+		}
+		var bound int
+		_ = db.SQL().QueryRow("SELECT COUNT(*) FROM edges WHERE from_id=? AND type='implements'", r.id).Scan(&bound)
+		if len(p.Implements) > bound {
+			drifts = append(drifts, ruleDrift{Rule: r.ident, Reason: "dangling-binding", LastReviewed: lr, DeclaredLinks: len(p.Implements), BoundLinks: bound})
+		}
+	}
+
+	if *jsonOut {
+		return writeJSON(map[string]any{"total_rules": len(ruleRows), "drift_count": len(drifts), "drifts": drifts})
+	}
+	fmt.Printf("aih-graph rule-drift: %d rule(s), %d drift(s)\n", len(ruleRows), len(drifts))
+	for _, d := range drifts {
+		switch d.Reason {
+		case "never-reviewed":
+			fmt.Printf("  [never-reviewed]   %s\n", d.Rule)
+		case "dangling-binding":
+			fmt.Printf("  [dangling-binding] %s — %d declared, %d bound to code\n", d.Rule, d.DeclaredLinks, d.BoundLinks)
+		}
+	}
+	if len(drifts) == 0 {
+		fmt.Println("  no drift detected")
+	}
+	return 0
+}
+
 func runStatus(args []string) int {
 	fs := flag.NewFlagSet("status", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
@@ -2377,6 +2533,37 @@ func propFloat(props map[string]any, key string) float64 {
 // <name>/MEMORY.md exists (native CC memory: project field accumulation). The
 // excerpt becomes part of the Agent node's properties JSON → BM25/FTS5 +
 // semantic queries search across what each agent has learned across sessions.
+// ruleProps converts a business Rule into node properties. Scenarios + link
+// lists are stored so query consumers can render the rule and traverse bindings.
+func ruleProps(r types.Rule) map[string]any {
+	return map[string]any{
+		"title":         r.Title,
+		"domain":        r.Domain,
+		"statement":     r.Statement,
+		"scenarios":     r.Scenarios,
+		"status":        r.Status,
+		"source":        r.Source,
+		"rationale":     r.Rationale,
+		"implements":    r.Implements,
+		"relates":       r.Relates,
+		"decided_by":    r.DecidedBy,
+		"last_reviewed": r.LastReviewed,
+		"body":          r.Body,
+	}
+}
+
+// lookupCodeRef resolves a rule's implements: reference to a node id, trying
+// Symbol ("<relpath>:<name>"), then File ("<relpath>"), then Test. Returns
+// false when the ref matches no indexed code node.
+func lookupCodeRef(db *storage.DB, ref string) (int64, bool) {
+	for _, typ := range []string{"Symbol", "File", "Test"} {
+		if id, err := db.LookupNodeID(typ, ref); err == nil {
+			return id, true
+		}
+	}
+	return 0, false
+}
+
 func agentProps(a types.Agent) map[string]any {
 	props := map[string]any{
 		"tools":                  a.Tools,
@@ -2519,6 +2706,8 @@ func main() {
 		os.Exit(runMilestone(args))
 	case "status":
 		os.Exit(runStatus(args))
+	case "rule-drift":
+		os.Exit(runRuleDrift(args))
 	case "mark-stale":
 		os.Exit(runMarkStale(args))
 	case "uninstall":

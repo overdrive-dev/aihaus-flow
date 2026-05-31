@@ -257,5 +257,21 @@ if [ "$TO" = "aborted" ] && [ -f "$MANIFEST" ]; then
   append_progress_log "aborted: $REASON (active-stack-rows=$STACK_ROWS)"
 fi
 
+# --- BRC-S4b (ADR-260531-A BR-F2): active-flow sentinel for flow-guard ---
+# A running flow sets the sentinel so flow-guard permits in-flow online actions;
+# terminal phases (complete/aborted) clear it. `running` is worktree-refused
+# above, so the set lands on the main checkout. `paused` intentionally keeps the
+# sentinel — a paused flow is still in progress and re-affirms it on resume.
+FLOW_SENTINEL="$(aihaus_project_path ".claude/_state/active-flow")"
+case "$TO" in
+  running)
+    mkdir -p "$(dirname "$FLOW_SENTINEL")" 2>/dev/null || true
+    printf '%s\n' "$(basename "$DIR")" > "$FLOW_SENTINEL" 2>/dev/null || true
+    ;;
+  complete|aborted)
+    rm -f "$FLOW_SENTINEL" 2>/dev/null || true
+    ;;
+esac
+
 log_audit "ok" "$FROM_PHASE" "$FALLBACK_USED" "$BACKUP_CREATED"
 echo "phase-advance.sh: $FROM_PHASE → $TO (dir=$DIR)"

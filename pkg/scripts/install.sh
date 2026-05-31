@@ -478,6 +478,26 @@ if [[ ! -f "${TARGET}/.aihaus/knowledge.md" && -f "${PKG_TEMPLATES}/knowledge.md
   cp "${PKG_TEMPLATES}/knowledge.md" "${TARGET}/.aihaus/knowledge.md"
   echo "  memory: created .aihaus/knowledge.md"
 fi
+# Business-rules contract ledger (BRC-S7 / ADR-260531-A) — the decision-autonomy
+# substrate. Seeded once from the template; rules accrete here at runtime.
+if [[ ! -f "${TARGET}/.aihaus/memory/workflows/business-rules.md" && -f "${PKG_TEMPLATES}/business-rules.md" ]]; then
+  mkdir -p "${TARGET}/.aihaus/memory/workflows"
+  cp "${PKG_TEMPLATES}/business-rules.md" "${TARGET}/.aihaus/memory/workflows/business-rules.md"
+  echo "  memory: created .aihaus/memory/workflows/business-rules.md (business-rules contract)"
+fi
+# Output-style: the decision-autonomy contract framing (BRC-S6 / A1 finding). Opt-in —
+# copied to .claude/output-styles/; enable per session via /output-style aihaus-contract.
+if [[ -d "${PKG_AIHAUS}/output-styles" ]]; then
+  mkdir -p "${TARGET}/.claude/output-styles"
+  for _os in "${PKG_AIHAUS}/output-styles/"*.md; do
+    [[ -f "${_os}" ]] || continue
+    _osdst="${TARGET}/.claude/output-styles/$(basename "${_os}")"
+    if [[ ! -f "${_osdst}" ]]; then
+      cp "${_os}" "${_osdst}"
+      echo "  output-style: created .claude/output-styles/$(basename "${_os}")"
+    fi
+  done
+fi
 
 ensure_workflow_environment_prompts() {
   local env_file="$1"
