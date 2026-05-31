@@ -361,6 +361,40 @@ Claude Code ships `/bg` (alias `/background`) as a native slash command that det
 
 `claude agents` itself shows **sibling Claude Code sessions only** — aihaus subagents spawned via Task/Agent tool (in worktrees with `isolation: worktree`) do NOT appear as separate rows (per `docs/cc-native-features-260515.md` §4:256).
 
+## Business-Rules Contract (BRC / ADR-260531-A)
+
+A **decision-autonomy substrate**: a living business-rules ledger the agent decides from. The
+client front-loads rule premises once; the agent then derives every *covered* decision from the
+contract and returns to the human only on a genuine *gap/conflict* (whose answer becomes a new
+rule). BDD (Given/When/Then) is the lingua franca — a rule's scenarios are its statement, its
+acceptance criteria, and the `tdd` stage's failing tests. Plan: `docs/business-rules-contract.md`
+(7 stories). Closed loop: `flow-guard` + rule-gate + aih-graph binding + rule-drift → every
+promoted change traces to a flow → a rule → code+tests.
+
+- **Contract + ledger** — `pkg/.aihaus/workflows/business-rules.md` (spec: autonomy law, rule
+  schema, 6 domains `software·design·infra·security·data·compliance`, the 3-ledger boundary
+  BR≠ADR≠knowledge) + `pkg/.aihaus/templates/business-rules.md` (per-project ledger, seeded by
+  `install.sh`/`install.ps1` → `.aihaus/memory/workflows/business-rules.md`).
+- **aih-graph `Rule` node** (7th typed node) — `internal/extract/rule.go` parses the ledger;
+  bidirectional edges `Rule-[implements]→Symbol|File|Test`, `-[relates]→Rule`,
+  `-[decided_by]→Decision`; rules are BM25- + embedding-searchable. `aih-graph rule-drift [--json]`
+  flags never-reviewed rules + dangling bindings (an `implements` ref that no longer resolves to code).
+- **Determinism hooks** — `flow-guard.sh` (PreToolUse, BR-F2): blocks an online-action/deploy
+  command unless an active-flow sentinel exists (`phase-advance.sh` writes `.claude/_state/active-flow`
+  on `--to running`, clears on `complete|aborted`); composes with `role-guard.sh`; deploy patterns
+  are a single shared source `hooks/lib/online-actions.sh`. The **rule-gate** (`calibrate-guard.sh`)
+  requires `BUSINESS-RULES.md` carry a non-vacuous testable rule (a Confirmed-Rules table row OR a
+  Given/When/Then) before `tdd`. Opt-outs `AIHAUS_FLOW_GUARD=0`, `AIHAUS_CALIBRATE_GUARD=0`.
+- **Output-style** — `pkg/.aihaus/output-styles/aihaus-contract.md` bakes the autonomy law
+  (decide-from-contract, cite rule ids on behaviour, BDD framing, no option menus) into the
+  top-level session prompt; opt-in via `/output-style aihaus-contract`.
+
+**Founding rules (BR-F1..F4):** F1 the 6 domains; F2 `flow-guard` enforces only at the promotion
+boundary (online + production code), not offline scratch; F3 markdown ledger = source of truth,
+aih-graph `Rule` node = index; F4 cite the rule id on behaviour-affecting decisions only.
+**Deferred:** lossy per-plan `BUSINESS-RULES.md`→ledger migration (ledger seeds fresh); the
+output-style subagent-spawn canary (top-level use is safe; ADR-260517 caveat unverified for Task spawn).
+
 ## Installer Behavior
 
 The install scripts create symlinks (Unix) or directory junctions (Windows) from `.claude/{skills,agents,hooks}` to `.aihaus/{skills,agents,hooks}` in the target repo. The `--copy` flag forces file copies instead. Settings are merged (not overwritten) using `jq` or Python as a fallback.
