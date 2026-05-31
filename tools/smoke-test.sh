@@ -118,6 +118,7 @@ check_hooks() {
     composite-score.sh
     context-inject.sh
     file-guard.sh
+    flow-guard.sh
     git-add-guard.sh
     invoke-guard.sh
     learning-advisor.sh

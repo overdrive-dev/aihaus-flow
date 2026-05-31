@@ -92,6 +92,12 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/role-guard.sh",
             "timeout": 10,
             "statusMessage": "Checking role capability boundary..."
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/flow-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking promotion-boundary flow..."
           }
         ]
       },

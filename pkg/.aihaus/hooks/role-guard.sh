@@ -18,6 +18,8 @@ set -euo pipefail
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/path-helpers.sh
 . "${HOOK_DIR}/lib/path-helpers.sh"
+# shellcheck source=lib/online-actions.sh
+. "${HOOK_DIR}/lib/online-actions.sh"
 
 if [ "${AIHAUS_ROLE_GUARD:-1}" = "0" ]; then
   exit 0
@@ -26,26 +28,10 @@ fi
 # Roles allowed to cross the staging→prod boundary.
 ONLINE_CAPABLE_ROLES="devops"
 
-# Default online-action patterns (ERE). Extensible via
-# .aihaus/roles/online-actions.conf (one ERE per line; populated by aih-init
-# env-detection in S2). Intentionally conservative — false-negatives are safer
-# than false-positives here (a missed pattern fails open, not destructively).
-ONLINE_ACTION_PATTERNS=(
-  'kubectl\s+.*(apply|delete|rollout|scale|set\s+image)'
-  'helm\s+(install|upgrade|uninstall|rollback)'
-  'terraform\s+(apply|destroy)'
-  'gh\s+workflow\s+run'
-  'gh\s+release\s+create'
-  'docker\s+push'
-  'docker\s+compose\s+.*-f\s+[^ ]*(staging|stg|homolog|hml|prod|production)'
-  'aws\s+(ecs|lambda|cloudformation|elasticbeanstalk|amplify)\s'
-  '(flyctl|fly)\s+deploy'
-  'vercel\s+(deploy|--prod)'
-  'netlify\s+deploy'
-  '(serverless|sls)\s+deploy'
-  'git\s+push\s+(origin\s+)?(staging|homolog|hml|production|prod|release)\b'
-  '\b(deploy|subir|subida)[-_]?(staging|stg|homolog|hml|prod|production)\b'
-)
+# Online-action patterns (ERE) live in lib/online-actions.sh — the single source
+# shared with flow-guard.sh. Project patterns extend via
+# .aihaus/roles/online-actions.conf. Conservative by design: a missed pattern
+# fails open (allowed), never destructively.
 
 INPUT=$(cat)
 
@@ -72,16 +58,7 @@ for role in $PROFILE; do
   done
 done
 
-# Append project-specific online-action patterns if present.
-ONLINE_CONF="$(aihaus_project_path ".aihaus/roles/online-actions.conf")"
-if [ -f "$ONLINE_CONF" ]; then
-  while IFS= read -r line; do
-    case "$line" in ''|\#*) continue ;; esac
-    ONLINE_ACTION_PATTERNS+=("$line")
-  done < "$ONLINE_CONF"
-fi
-
-ONLINE_REGEX=$(IFS='|'; echo "${ONLINE_ACTION_PATTERNS[*]}")
+ONLINE_REGEX="$(aihaus_online_action_regex "$(aihaus_project_root)")"
 
 # Segment on && || ; (mirror bash-guard) and test each segment.
 matched=0
