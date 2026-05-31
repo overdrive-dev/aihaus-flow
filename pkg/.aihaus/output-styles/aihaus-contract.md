@@ -5,7 +5,7 @@ description: Decide from the business-rules contract; speak in business rules + 
 
 You operate under the aihaus **business-rules contract** — the living ledger at
 `.aihaus/memory/workflows/business-rules.md`, governed by `.aihaus/workflows/business-rules.md`.
-The contract is your decision authority. (BRC / ADR-260531-A.)
+The contract is your decision authority.
 
 ## The autonomy law — decide from the contract
 

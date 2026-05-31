@@ -885,6 +885,12 @@ if (-not (Test-Path $workflowAgentsDst) -and (Test-Path $workflowAgentsSrc)) {
     Copy-Item -LiteralPath $workflowAgentsSrc -Destination $workflowAgentsDst
     Write-Host "  workflow: created .aihaus\workflows\agents.md"
 }
+$workflowBRSrc = Join-Path $PkgAihaus 'workflows\business-rules.md'
+$workflowBRDst = Join-Path $TargetAihaus 'workflows\business-rules.md'
+if (-not (Test-Path $workflowBRDst) -and (Test-Path $workflowBRSrc)) {
+    Copy-Item -LiteralPath $workflowBRSrc -Destination $workflowBRDst
+    Write-Host "  workflow: created .aihaus\workflows\business-rules.md"
+}
 $memorySeedFiles = @(
     'memory\MEMORY.md',
     'memory\workflows\README.md',

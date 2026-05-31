@@ -20,7 +20,7 @@ were genuinely open. "Silence" resolves by default: business-visible → gap (as
 mechanics → decide. Mark known-free areas with an explicit *unconstrained* rule so
 silence is never ambiguous.
 
-## Residence (BR-F3)
+## Residence
 
 - **Source of truth** — the markdown ledger at `.aihaus/memory/workflows/business-rules.md`.
   Reviewable, git-diffable, incremental, like `decisions.md`.
@@ -46,7 +46,7 @@ BR-<id>
   last-reviewed: <commit SHA>                                # staleness anchor
 ```
 
-## Domains (BR-F1)
+## Domains
 
 Six domains, one namespace: `software` · `design` · `infra` · `security` · `data` ·
 `compliance`. A rule names exactly one. Further domains are each a recorded decision.
@@ -64,7 +64,7 @@ Rule = behavior; ADR = approach; knowledge = technique.
 
 - **rule-gate** (`planejamento → tdd`) — a task may not enter `tdd` without ≥1 linked
   rule carrying testable BDD criteria. Extends `calibrate-guard.sh`.
-- **flow-guard** (promotion boundary — BR-F2) — a code mutation reaching an online
+- **flow-guard** (promotion boundary) — a code mutation reaching an online
   stage (`homolog` / `prod`) or production code is rejected unless it arrives through
   an active flow. Offline / dev scratch is free; nothing lands in prod without the
   contract. Composes with `role-guard.sh` at the same boundary.
@@ -72,7 +72,7 @@ Rule = behavior; ADR = approach; knowledge = technique.
 ## How agents consume it
 
 1. Retrieve the **relevant slice** (aih-graph semantic) — never the whole ledger per turn.
-2. Decide every covered question from it; **cite the rule** (BR-F4) when behavior is affected.
+2. Decide every covered question from it; **cite the rule** when behavior is affected.
 3. On a gap / conflict: pause, ask the one question, **write the answer as a rule**, resume.
 4. Never invent a rule to satisfy a gate — a vacuous rule has no testable scenario, so
    the `tdd` stage fails it anyway. Mechanical / no-behaviour-change work is exempt.

@@ -451,6 +451,10 @@ if [[ ! -f "${TARGET}/.aihaus/workflows/agents.md" && -f "${PKG_AIHAUS}/workflow
   cp "${PKG_AIHAUS}/workflows/agents.md" "${TARGET}/.aihaus/workflows/agents.md"
   echo "  workflow: created .aihaus/workflows/agents.md"
 fi
+if [[ ! -f "${TARGET}/.aihaus/workflows/business-rules.md" && -f "${PKG_AIHAUS}/workflows/business-rules.md" ]]; then
+  cp "${PKG_AIHAUS}/workflows/business-rules.md" "${TARGET}/.aihaus/workflows/business-rules.md"
+  echo "  workflow: created .aihaus/workflows/business-rules.md"
+fi
 for rel in \
   "memory/MEMORY.md" \
   "memory/workflows/README.md" \
