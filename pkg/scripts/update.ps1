@@ -699,17 +699,181 @@ if (-not (Test-Path $SettingsSrc)) {
     $srcJson = Get-Content $SettingsSrc -Raw | ConvertFrom-Json
     $dstJson = Get-Content $SettingsOut -Raw | ConvertFrom-Json
 
+    function Get-HookCommand {
+        param($Entry)
+        if ($Entry -is [psobject] -and $Entry.PSObject.Properties.Name -contains 'command') {
+            return [string]$Entry.command
+        }
+        return $null
+    }
+
+    function Test-AihManagedHookCommand {
+        param([string]$Command)
+        return (-not [string]::IsNullOrWhiteSpace($Command) -and
+            ($Command -match '\.aihaus/hooks/' -or $Command -match '\.claude/hooks/'))
+    }
+
+    function Get-HookCommands {
+        param($Entry)
+        $commands = [System.Collections.Generic.HashSet[string]]::new()
+        if (-not ($Entry -is [psobject]) -or -not ($Entry.PSObject.Properties.Name -contains 'hooks')) {
+            return $commands
+        }
+        foreach ($hook in @($Entry.hooks)) {
+            $cmd = Get-HookCommand $hook
+            if (-not [string]::IsNullOrWhiteSpace($cmd)) {
+                [void]$commands.Add($cmd)
+            }
+        }
+        return $commands
+    }
+
+    function Test-HookEntriesMatch {
+        param($BaseEntry, $OverlayEntry)
+        if (-not ($BaseEntry -is [psobject]) -or -not ($OverlayEntry -is [psobject])) { return $false }
+        if (-not ($BaseEntry.PSObject.Properties.Name -contains 'matcher')) { return $false }
+        if (-not ($OverlayEntry.PSObject.Properties.Name -contains 'matcher')) { return $false }
+        if ($BaseEntry.matcher -ne $OverlayEntry.matcher) { return $false }
+
+        $baseCommands = Get-HookCommands $BaseEntry
+        foreach ($cmd in (Get-HookCommands $OverlayEntry)) {
+            if ($baseCommands.Contains($cmd)) { return $true }
+        }
+        return $false
+    }
+
+    function Copy-HookEntryWithCustomHooks {
+        param($Entry)
+        if (-not ($Entry -is [psobject]) -or -not ($Entry.PSObject.Properties.Name -contains 'hooks')) {
+            return $Entry
+        }
+        $customHooks = [System.Collections.Generic.List[object]]::new()
+        foreach ($hook in @($Entry.hooks)) {
+            $cmd = Get-HookCommand $hook
+            if (-not (Test-AihManagedHookCommand $cmd)) {
+                $customHooks.Add($hook) | Out-Null
+            }
+        }
+        if ($customHooks.Count -eq 0) { return $null }
+        $copy = $Entry.PSObject.Copy()
+        $copy.hooks = $customHooks.ToArray()
+        return $copy
+    }
+
+    function Test-HasMatcherHooks($Arr) {
+        if (-not $Arr -or $Arr.Count -eq 0) { return $false }
+        foreach ($item in $Arr) {
+            if (-not ($item -is [psobject])) { return $false }
+            if (-not ($item.PSObject.Properties.Name -contains 'matcher')) { return $false }
+            if (-not ($item.PSObject.Properties.Name -contains 'hooks')) { return $false }
+        }
+        return $true
+    }
+
+    function Test-HasCommand($Arr) {
+        if (-not $Arr -or $Arr.Count -eq 0) { return $false }
+        foreach ($item in $Arr) {
+            if (-not ($item -is [psobject])) { return $false }
+            if (-not ($item.PSObject.Properties.Name -contains 'command')) { return $false }
+        }
+        return $true
+    }
+
+    function Merge-HooksByCommand {
+        param($BaseArr, $OverlayArr)
+        $result = [System.Collections.Generic.List[object]]::new()
+        $overlayCommands = [System.Collections.Generic.HashSet[string]]::new()
+        foreach ($entry in @($OverlayArr)) {
+            $result.Add($entry) | Out-Null
+            $cmd = Get-HookCommand $entry
+            if (-not [string]::IsNullOrWhiteSpace($cmd)) {
+                [void]$overlayCommands.Add($cmd)
+            }
+        }
+        foreach ($entry in @($BaseArr)) {
+            $cmd = Get-HookCommand $entry
+            if (-not [string]::IsNullOrWhiteSpace($cmd) -and $overlayCommands.Contains($cmd)) { continue }
+            if (Test-AihManagedHookCommand $cmd) { continue }
+            $result.Add($entry) | Out-Null
+        }
+        return $result.ToArray()
+    }
+
+    function Merge-HooksArrays {
+        param($BaseArr, $OverlayArr)
+        $baseList = if ($null -eq $BaseArr) { @() } else { @($BaseArr) }
+        $overlayList = if ($null -eq $OverlayArr) { @() } else { @($OverlayArr) }
+        if ($baseList.Count -eq 0) { return $overlayList }
+        if ($overlayList.Count -eq 0) { return $baseList }
+        if ((Test-HasMatcherHooks $baseList) -and (Test-HasMatcherHooks $overlayList)) {
+            $result = [System.Collections.Generic.List[object]]::new()
+            $usedBase = [System.Collections.Generic.HashSet[int]]::new()
+            for ($oi = 0; $oi -lt $overlayList.Count; $oi++) {
+                $overlayEntry = $overlayList[$oi]
+                $matchIndex = -1
+                for ($bi = 0; $bi -lt $baseList.Count; $bi++) {
+                    if ($usedBase.Contains($bi)) { continue }
+                    if (Test-HookEntriesMatch $baseList[$bi] $overlayEntry) {
+                        $matchIndex = $bi
+                        break
+                    }
+                }
+                if ($matchIndex -lt 0) {
+                    $result.Add($overlayEntry) | Out-Null
+                    continue
+                }
+                [void]$usedBase.Add($matchIndex)
+                $baseEntry = $baseList[$matchIndex]
+                $bh = if ($baseEntry.PSObject.Properties.Name -contains 'hooks') { $baseEntry.hooks } else { @() }
+                $oh = if ($overlayEntry.PSObject.Properties.Name -contains 'hooks') { $overlayEntry.hooks } else { @() }
+                $mergedInner = Merge-HooksArrays $bh $oh
+                $entry = $overlayEntry.PSObject.Copy()
+                $entry.hooks = $mergedInner
+                $result.Add($entry) | Out-Null
+            }
+            for ($bi = 0; $bi -lt $baseList.Count; $bi++) {
+                if ($usedBase.Contains($bi)) { continue }
+                $pruned = Copy-HookEntryWithCustomHooks $baseList[$bi]
+                if ($null -ne $pruned) { $result.Add($pruned) | Out-Null }
+            }
+            return $result.ToArray()
+        }
+        if ((Test-HasCommand $baseList) -and (Test-HasCommand $overlayList)) {
+            return Merge-HooksByCommand $baseList $overlayList
+        }
+        return $overlayList
+    }
+
     function Merge-Object {
         param($Base, $Overlay)
         if ($Overlay -is [psobject] -and $Base -is [psobject]) {
             foreach ($prop in $Overlay.PSObject.Properties) {
                 if ($Base.PSObject.Properties.Name -contains $prop.Name) {
-                    $Base.$($prop.Name) = Merge-Object $Base.$($prop.Name) $prop.Value
+                    if ($prop.Name -eq 'hooks' -and
+                        $Base.hooks -is [psobject] -and $Overlay.hooks -is [psobject]) {
+                        $mergedHooks = $Base.hooks.PSObject.Copy()
+                        foreach ($eventProp in $Overlay.hooks.PSObject.Properties) {
+                            $eventName = $eventProp.Name
+                            $ovArr = $eventProp.Value
+                            if ($mergedHooks.PSObject.Properties.Name -contains $eventName) {
+                                $baseArr = $mergedHooks.$eventName
+                                $mergedHooks.$eventName = Merge-HooksArrays $baseArr $ovArr
+                            } else {
+                                Add-Member -InputObject $mergedHooks -NotePropertyName $eventName -NotePropertyValue $ovArr -Force
+                            }
+                        }
+                        $Base.hooks = $mergedHooks
+                    } else {
+                        $Base.$($prop.Name) = Merge-Object $Base.$($prop.Name) $prop.Value
+                    }
                 } else {
                     Add-Member -InputObject $Base -NotePropertyName $prop.Name -NotePropertyValue $prop.Value -Force
                 }
             }
             return $Base
+        }
+        if ($Overlay -is [array] -and $Base -is [array]) {
+            return Merge-HooksArrays $Base $Overlay
         }
         return $Overlay
     }
@@ -973,6 +1137,7 @@ function Invoke-BackfillGitignore {
         '/.aihaus/state/',
         '/.aihaus/runtime/',
         '/.aihaus/backups/',
+        '/.aihaus/memory/local/',
         '/.claude/agents/',
         '/.claude/hooks/',
         '/.claude/skills/',

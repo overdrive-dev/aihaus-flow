@@ -1165,18 +1165,89 @@ if (-not (Test-Path $SettingsSrc)) {
 
     # Merge-Object: deep-merge $Overlay over $Base (ADR-260514-B array-aware semantics).
     # Dual by-shape rule for arrays:
-    #   Outer shape ({matcher,hooks} elements): position-paired merge with recursion.
-    #   Inner shape ({command} elements): union by .command (template/overlay wins).
+    #   Outer shape ({matcher,hooks} elements): merge by matcher+command identity.
+    #   Inner shape ({command} elements): template commands win; custom hooks survive.
+    #   Stale package-managed aihaus hook commands are pruned.
     #   All other arrays: replacement (overlay wins) -- preserves M014 permissions contract.
+    function Get-HookCommand {
+        param($Entry)
+        if ($Entry -is [psobject] -and $Entry.PSObject.Properties.Name -contains 'command') {
+            return [string]$Entry.command
+        }
+        return $null
+    }
+
+    function Test-AihManagedHookCommand {
+        param([string]$Command)
+        return (-not [string]::IsNullOrWhiteSpace($Command) -and
+            ($Command -match '\.aihaus/hooks/' -or $Command -match '\.claude/hooks/'))
+    }
+
+    function Get-HookCommands {
+        param($Entry)
+        $commands = [System.Collections.Generic.HashSet[string]]::new()
+        if (-not ($Entry -is [psobject]) -or -not ($Entry.PSObject.Properties.Name -contains 'hooks')) {
+            return $commands
+        }
+        foreach ($hook in @($Entry.hooks)) {
+            $cmd = Get-HookCommand $hook
+            if (-not [string]::IsNullOrWhiteSpace($cmd)) {
+                [void]$commands.Add($cmd)
+            }
+        }
+        return $commands
+    }
+
+    function Test-HookEntriesMatch {
+        param($BaseEntry, $OverlayEntry)
+        if (-not ($BaseEntry -is [psobject]) -or -not ($OverlayEntry -is [psobject])) { return $false }
+        if (-not ($BaseEntry.PSObject.Properties.Name -contains 'matcher')) { return $false }
+        if (-not ($OverlayEntry.PSObject.Properties.Name -contains 'matcher')) { return $false }
+        if ($BaseEntry.matcher -ne $OverlayEntry.matcher) { return $false }
+
+        $baseCommands = Get-HookCommands $BaseEntry
+        foreach ($cmd in (Get-HookCommands $OverlayEntry)) {
+            if ($baseCommands.Contains($cmd)) { return $true }
+        }
+        return $false
+    }
+
+    function Copy-HookEntryWithCustomHooks {
+        param($Entry)
+        if (-not ($Entry -is [psobject]) -or -not ($Entry.PSObject.Properties.Name -contains 'hooks')) {
+            return $Entry
+        }
+        $customHooks = [System.Collections.Generic.List[object]]::new()
+        foreach ($hook in @($Entry.hooks)) {
+            $cmd = Get-HookCommand $hook
+            if (-not (Test-AihManagedHookCommand $cmd)) {
+                $customHooks.Add($hook) | Out-Null
+            }
+        }
+        if ($customHooks.Count -eq 0) { return $null }
+        $copy = $Entry.PSObject.Copy()
+        $copy.hooks = $customHooks.ToArray()
+        return $copy
+    }
+
     function Merge-HooksByCommand {
         param($BaseArr, $OverlayArr)
-        # Union by .command -- overlay (template) wins on collision
+        # Template commands define canonical aihaus hooks. Preserve custom
+        # user commands while pruning stale package-managed aihaus hook commands.
         $result = [System.Collections.Generic.List[object]]::new()
-        foreach ($item in $BaseArr) { $result.Add($item) | Out-Null }
-        foreach ($entry in $OverlayArr) {
-            $cmd = if ($entry.PSObject.Properties.Name -contains 'command') { $entry.command } else { $null }
-            $exists = $result | Where-Object { $_.PSObject.Properties.Name -contains 'command' -and $_.command -eq $cmd }
-            if (-not $exists) { $result.Add($entry) | Out-Null }
+        $overlayCommands = [System.Collections.Generic.HashSet[string]]::new()
+        foreach ($entry in @($OverlayArr)) {
+            $result.Add($entry) | Out-Null
+            $cmd = Get-HookCommand $entry
+            if (-not [string]::IsNullOrWhiteSpace($cmd)) {
+                [void]$overlayCommands.Add($cmd)
+            }
+        }
+        foreach ($entry in @($BaseArr)) {
+            $cmd = Get-HookCommand $entry
+            if (-not [string]::IsNullOrWhiteSpace($cmd) -and $overlayCommands.Contains($cmd)) { continue }
+            if (Test-AihManagedHookCommand $cmd) { continue }
+            $result.Add($entry) | Out-Null
         }
         return $result.ToArray()
     }
@@ -1202,27 +1273,47 @@ if (-not (Test-Path $SettingsSrc)) {
 
     function Merge-HooksArrays {
         param($BaseArr, $OverlayArr)
-        if (-not $BaseArr -or $BaseArr.Count -eq 0) { return $OverlayArr }
-        if (-not $OverlayArr -or $OverlayArr.Count -eq 0) { return $BaseArr }
-        if ((Test-HasMatcherHooks $BaseArr) -and (Test-HasMatcherHooks $OverlayArr)) {
-            # outer shape: position-paired merge
-            $minLen = [Math]::Min($BaseArr.Count, $OverlayArr.Count)
+        $baseList = if ($null -eq $BaseArr) { @() } else { @($BaseArr) }
+        $overlayList = if ($null -eq $OverlayArr) { @() } else { @($OverlayArr) }
+        if ($baseList.Count -eq 0) { return $overlayList }
+        if ($overlayList.Count -eq 0) { return $baseList }
+        if ((Test-HasMatcherHooks $baseList) -and (Test-HasMatcherHooks $overlayList)) {
+            # outer shape: merge canonical template entries by matcher+command
+            # identity so removed package hooks do not shift later hook blocks.
             $result = [System.Collections.Generic.List[object]]::new()
-            for ($i = 0; $i -lt $minLen; $i++) {
-                $bh = if ($BaseArr[$i].PSObject.Properties.Name -contains 'hooks') { $BaseArr[$i].hooks } else { @() }
-                $oh = if ($OverlayArr[$i].PSObject.Properties.Name -contains 'hooks') { $OverlayArr[$i].hooks } else { @() }
+            $usedBase = [System.Collections.Generic.HashSet[int]]::new()
+            for ($oi = 0; $oi -lt $overlayList.Count; $oi++) {
+                $overlayEntry = $overlayList[$oi]
+                $matchIndex = -1
+                for ($bi = 0; $bi -lt $baseList.Count; $bi++) {
+                    if ($usedBase.Contains($bi)) { continue }
+                    if (Test-HookEntriesMatch $baseList[$bi] $overlayEntry) {
+                        $matchIndex = $bi
+                        break
+                    }
+                }
+                if ($matchIndex -lt 0) {
+                    $result.Add($overlayEntry) | Out-Null
+                    continue
+                }
+                [void]$usedBase.Add($matchIndex)
+                $baseEntry = $baseList[$matchIndex]
+                $bh = if ($baseEntry.PSObject.Properties.Name -contains 'hooks') { $baseEntry.hooks } else { @() }
+                $oh = if ($overlayEntry.PSObject.Properties.Name -contains 'hooks') { $overlayEntry.hooks } else { @() }
                 $mergedInner = Merge-HooksArrays $bh $oh
-                $entry = $OverlayArr[$i].PSObject.Copy()
+                $entry = $overlayEntry.PSObject.Copy()
                 $entry.hooks = $mergedInner
                 $result.Add($entry) | Out-Null
             }
-            # surplus template entries first, then surplus user entries
-            for ($i = $minLen; $i -lt $OverlayArr.Count; $i++) { $result.Add($OverlayArr[$i]) | Out-Null }
-            for ($i = $minLen; $i -lt $BaseArr.Count; $i++) { $result.Add($BaseArr[$i]) | Out-Null }
+            for ($bi = 0; $bi -lt $baseList.Count; $bi++) {
+                if ($usedBase.Contains($bi)) { continue }
+                $pruned = Copy-HookEntryWithCustomHooks $baseList[$bi]
+                if ($null -ne $pruned) { $result.Add($pruned) | Out-Null }
+            }
             return $result.ToArray()
         }
-        if ((Test-HasCommand $BaseArr) -and (Test-HasCommand $OverlayArr)) {
-            return Merge-HooksByCommand $BaseArr $OverlayArr
+        if ((Test-HasCommand $baseList) -and (Test-HasCommand $overlayList)) {
+            return Merge-HooksByCommand $baseList $overlayList
         }
         # default: replacement
         return $OverlayArr

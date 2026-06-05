@@ -18,9 +18,11 @@
 #     1. Create timestamped backup at SETTINGS_DST.bak.<epoch>
 #     2. Deep-merge SETTINGS_SRC over SETTINGS_DST via jq (preferred)
 #        or python (fallback). Object keys deep-merge.
-#        v0.34.0+ behavior: .hooks.<Event>[N].hooks[] arrays union-merge by .command;
-#        .hooks.<Event>[] arrays position-paired-merge by .matcher+.hooks shape;
-#        all other arrays retain replacement semantics. See ADR-260514-B.
+#        v0.34.0+ behavior: .hooks.<Event>[N].hooks[] arrays merge by .command;
+#        package-managed aihaus hook commands absent from the template are pruned,
+#        user/custom commands are preserved, and .hooks.<Event>[] arrays merge by
+#        matcher+command identity. All other arrays retain replacement semantics.
+#        See ADR-260514-B.
 #     3. If pre-merge backup had granular Bash entries but no Bash(*),
 #        emit a one-line migration hint to stdout.
 #
@@ -210,15 +212,72 @@ def has_command(lst):
         for e in lst
     ))
 
+def hook_command(entry):
+    if isinstance(entry, dict):
+        return entry.get("command")
+    return None
+
+def is_aihaus_hook_command(command):
+    return isinstance(command, str) and (
+        ".aihaus/hooks/" in command or ".claude/hooks/" in command
+    )
+
+def entry_commands(entry):
+    if not isinstance(entry, dict):
+        return set()
+    hooks = entry.get("hooks", [])
+    if not isinstance(hooks, list):
+        return set()
+    return {
+        command
+        for command in (hook_command(hook) for hook in hooks)
+        if command
+    }
+
+def entries_match(base_entry, overlay_entry):
+    if not isinstance(base_entry, dict) or not isinstance(overlay_entry, dict):
+        return False
+    if base_entry.get("matcher") != overlay_entry.get("matcher"):
+        return False
+    return bool(entry_commands(base_entry) & entry_commands(overlay_entry))
+
+def prune_surplus_hook_entry(entry):
+    if not isinstance(entry, dict):
+        return entry
+    hooks = entry.get("hooks")
+    if not isinstance(hooks, list):
+        return entry
+    custom_hooks = [
+        hook
+        for hook in hooks
+        if not is_aihaus_hook_command(hook_command(hook))
+    ]
+    if not custom_hooks:
+        return None
+    pruned = dict(entry)
+    pruned["hooks"] = custom_hooks
+    return pruned
+
 def merge_inner_by_command(base, overlay):
-    # union by .command -- template (overlay) wins on collision
-    result = list(base)
+    # Template (overlay) wins and defines canonical aihaus hooks. Preserve
+    # user/custom commands, but prune stale package-managed aihaus hook commands.
+    result = list(overlay)
+    overlay_commands = {
+        command
+        for command in (hook_command(entry) for entry in overlay)
+        if command
+    }
     for entry in overlay:
-        if not any(
-            isinstance(b, dict) and b.get("command") == entry.get("command")
-            for b in result
-        ):
-            result.append(entry)
+        command = hook_command(entry)
+        if command:
+            overlay_commands.add(command)
+    for entry in base:
+        command = hook_command(entry)
+        if command and command in overlay_commands:
+            continue
+        if is_aihaus_hook_command(command):
+            continue
+        result.append(entry)
     return result
 
 def merge_hooks_arrays(base_arr, overlay_arr):
@@ -232,21 +291,38 @@ def merge_hooks_arrays(base_arr, overlay_arr):
     if not overlay_arr:
         return base_arr
     if has_matcher_hooks(base_arr) and has_matcher_hooks(overlay_arr):
-        # outer shape: position-paired merge
-        min_len = min(len(base_arr), len(overlay_arr))
+        # outer shape: merge canonical template entries with matching installed
+        # entries by matcher+command identity. This survives inserted/removed
+        # package hook entries without shifting later hook blocks.
+        used_base = set()
         result = []
-        for i in range(min_len):
-            bh = base_arr[i].get("hooks", [])
-            oh = overlay_arr[i].get("hooks", [])
+        for overlay_entry in overlay_arr:
+            match_idx = None
+            for idx, base_entry in enumerate(base_arr):
+                if idx in used_base:
+                    continue
+                if entries_match(base_entry, overlay_entry):
+                    match_idx = idx
+                    break
+            if match_idx is None:
+                result.append(overlay_entry)
+                continue
+            used_base.add(match_idx)
+            base_entry = base_arr[match_idx]
+            bh = base_entry.get("hooks", [])
+            oh = overlay_entry.get("hooks", [])
             merged_inner = merge_hooks_arrays(bh, oh)
-            # template wins on matcher, preserve extra overlay keys
-            entry = dict(base_arr[i])
-            entry.update(overlay_arr[i])
+            # template wins on matcher and metadata, custom user hooks survive.
+            entry = dict(base_entry)
+            entry.update(overlay_entry)
             entry["hooks"] = merged_inner
             result.append(entry)
-        # surplus template entries appended first, then surplus user entries
-        result.extend(overlay_arr[min_len:])
-        result.extend(base_arr[min_len:])
+        for idx, base_entry in enumerate(base_arr):
+            if idx in used_base:
+                continue
+            pruned = prune_surplus_hook_entry(base_entry)
+            if pruned is not None:
+                result.append(pruned)
         return result
     if has_command(base_arr) and has_command(overlay_arr):
         return merge_inner_by_command(base_arr, overlay_arr)

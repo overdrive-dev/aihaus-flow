@@ -872,7 +872,7 @@ check_merge_hooks_union() {
 
   local issues=()
 
-  for n in 01-empty-base 02-pre-m017-shape 03-two-bash-matchers 04-user-custom-non-colliding; do
+  for n in 01-empty-base 02-pre-m017-shape 03-two-bash-matchers 04-user-custom-non-colliding 05-prune-obsolete-aihaus-hooks; do
     local fixdir="${fixtures_base}/${n}"
     _check_merge_hooks_fixture "$fixdir" "fixture-${n}" "$helper" "$py_bin" "0" "issues"
     _check_merge_hooks_fixture "$fixdir" "fixture-${n}" "$helper" "$py_bin" "1" "issues"
@@ -5229,7 +5229,7 @@ check_legacy_hygiene_regressions() {
   if ! grep -Fq 'copy mode overwrites package-managed' "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
     issues+=("update.ps1 missing copy-mode overwrite warning")
   fi
-  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '*/.aihaus/' '*/.claude/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
+  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '/.aihaus/memory/local/' '*/.aihaus/' '*/.claude/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
     if ! grep -Fxq "$needle" "$fragment"; then
       issues+=("gitignore fragment missing ${needle}")
     fi

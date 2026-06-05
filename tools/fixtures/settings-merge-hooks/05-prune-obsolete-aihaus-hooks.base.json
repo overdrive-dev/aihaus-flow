@@ -1,0 +1,50 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/bash-guard.sh"},
+          {"type": "command", "command": "my-company-audit.sh"}
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/git-add-guard.sh"}
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/file-guard.sh"}
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/role-guard.sh"},
+          {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/flow-guard.sh"}
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/read-guard.sh"}
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/file-guard.sh"}
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/read-guard.sh"}
+        ]
+      }
+    ]
+  }
+}

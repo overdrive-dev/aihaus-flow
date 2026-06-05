@@ -5,6 +5,14 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.1] - 2026-06-05 - install hygiene
+
+### Fixed
+
+- Install/update settings merges now prune stale package-managed aihaus hook commands while preserving user/custom hooks, preventing old `.claude/settings.local.json` entries from accumulating redundant guard hooks.
+- PowerShell and Bash update flows now keep the managed `.gitignore` block aligned with the install fragment, including `/.aihaus/memory/local/` for repo-local private memory.
+- Added a regression fixture for obsolete hook pruning so package smoke catches the drift seen in existing installs.
+
 ## [0.40.0] - 2026-05-31 - Business-Rules Contract
 
 ### Added
