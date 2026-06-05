@@ -5,6 +5,16 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.2] - 2026-06-05 - context freshness and package seeding
+
+### Fixed
+
+- Install/update now seed all packaged workflow profiles, including roles, routing, artifacts, fan-out, and parallelism, instead of only the default/agents/business-rules subset.
+- Continuous context refresh now seeds the business-rules memory ledger and local `online-actions.conf`, imports business rules into Claude project context, and writes a freshness audit when `.aihaus/project.md` inventory or milestone state is stale.
+- Environment discovery now prunes nested generated directories such as `frontend/node_modules`, avoiding false package-script evidence from dependency folders.
+- The default workflow and business-rules template no longer ship concrete sample `BR-*` references that look like real project rules.
+- The legacy `pkg/templates/settings.local.json` is aligned with the canonical package template so TaskCreated, TaskCompleted, SubagentStop, UserPromptExpansion, Stop, and memory refresh hooks do not drift across install harnesses.
+
 ## [0.40.1] - 2026-06-05 - install hygiene
 
 ### Fixed

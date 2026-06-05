@@ -873,28 +873,29 @@ foreach ($dir in @(
 )) {
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
 }
-$workflowDefaultSrc = Join-Path $PkgAihaus 'workflows\default.md'
-$workflowDefaultDst = Join-Path $TargetAihaus 'workflows\default.md'
-if (-not (Test-Path $workflowDefaultDst) -and (Test-Path $workflowDefaultSrc)) {
-    Copy-Item -LiteralPath $workflowDefaultSrc -Destination $workflowDefaultDst
-    Write-Host "  workflow: created .aihaus\workflows\default.md"
-}
-$workflowAgentsSrc = Join-Path $PkgAihaus 'workflows\agents.md'
-$workflowAgentsDst = Join-Path $TargetAihaus 'workflows\agents.md'
-if (-not (Test-Path $workflowAgentsDst) -and (Test-Path $workflowAgentsSrc)) {
-    Copy-Item -LiteralPath $workflowAgentsSrc -Destination $workflowAgentsDst
-    Write-Host "  workflow: created .aihaus\workflows\agents.md"
-}
-$workflowBRSrc = Join-Path $PkgAihaus 'workflows\business-rules.md'
-$workflowBRDst = Join-Path $TargetAihaus 'workflows\business-rules.md'
-if (-not (Test-Path $workflowBRDst) -and (Test-Path $workflowBRSrc)) {
-    Copy-Item -LiteralPath $workflowBRSrc -Destination $workflowBRDst
-    Write-Host "  workflow: created .aihaus\workflows\business-rules.md"
+$workflowSeedFiles = @(
+    'default.md',
+    'agents.md',
+    'artifacts.md',
+    'business-rules.md',
+    'fan-out.md',
+    'parallelism.md',
+    'roles.md',
+    'routing.md'
+)
+foreach ($workflowFile in $workflowSeedFiles) {
+    $src = Join-Path $PkgAihaus (Join-Path 'workflows' $workflowFile)
+    $dst = Join-Path $TargetAihaus (Join-Path 'workflows' $workflowFile)
+    if (-not (Test-Path -LiteralPath $dst) -and (Test-Path -LiteralPath $src)) {
+        Copy-Item -LiteralPath $src -Destination $dst
+        Write-Host "  workflow: created .aihaus\workflows\$workflowFile"
+    }
 }
 $memorySeedFiles = @(
     'memory\MEMORY.md',
     'memory\workflows\README.md',
     'memory\workflows\environment.md',
+    'memory\workflows\business-rules.md',
     'memory\workflows\user-preferences.md',
     'memory\workflows\rules.md',
     'memory\workflows\gotchas.md',
@@ -1626,6 +1627,7 @@ function Invoke-InjectGitignore {
         '/.aihaus/state/',
         '/.aihaus/runtime/',
         '/.aihaus/backups/',
+        '/.aihaus/roles/',
         '/.aihaus/memory/local/',
         '/.claude/agents/',
         '/.claude/hooks/',

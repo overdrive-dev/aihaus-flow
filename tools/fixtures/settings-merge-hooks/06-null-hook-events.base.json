@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "TaskCreated": null,
+    "TaskCompleted": null,
+    "SubagentStop": null,
+    "UserPromptExpansion": null,
+    "Stop": null
+  }
+}

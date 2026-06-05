@@ -50,11 +50,13 @@ aihaus_dir="${project_root}/.aihaus"
 claude_dir="${project_root}/.claude"
 audit_dir="${aihaus_dir}/audit"
 state_dir="${aihaus_dir}/state"
+roles_dir="${aihaus_dir}/roles"
 repair_count=0
 discovery_run=0
 verify_run=0
+freshness_status="unknown"
 
-mkdir -p "$aihaus_dir" "$claude_dir" "$audit_dir" "$state_dir" 2>/dev/null || true
+mkdir -p "$aihaus_dir" "$claude_dir" "$audit_dir" "$state_dir" "$roles_dir" 2>/dev/null || true
 
 write_if_missing() {
   local file="$1"
@@ -110,6 +112,29 @@ scrub_large_claude_imports() {
     sub(/\r$/, "", line)
     if (line != "@../.aihaus/decisions.md" && line != "@../.aihaus/knowledge.md") print $0
   }' "$file" > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$file" 2>/dev/null && repair_count=$((repair_count + 1))
+  else
+    rm -f "$tmp" 2>/dev/null || true
+  fi
+}
+
+ensure_line_before_marker() {
+  local file="$1" needle="$2" marker="$3"
+  [ -f "$file" ] || return 0
+  grep -Fq "$needle" "$file" 2>/dev/null && return 0
+
+  local tmp
+  tmp="${file}.tmp.$$"
+  if awk -v needle="$needle" -v marker="$marker" '
+    index($0, marker) > 0 && inserted == 0 {
+      print needle
+      inserted = 1
+    }
+    { print }
+    END {
+      if (inserted == 0) print needle
+    }
+  ' "$file" > "$tmp" 2>/dev/null; then
     mv "$tmp" "$file" 2>/dev/null && repair_count=$((repair_count + 1))
   else
     rm -f "$tmp" 2>/dev/null || true
@@ -194,6 +219,8 @@ copy_or_seed "${template_dir}/claude/rules/aihaus-project-memory.md" "${claude_d
 ensure_block "${claude_dir}/CLAUDE.md" "AIHAUS:CLAUDE-CONTEXT-START" "${template_dir}/claude/CLAUDE.md"
 ensure_block "${claude_dir}/rules/aihaus-project-memory.md" "AIHAUS:CLAUDE-RULES-START" "${template_dir}/claude/rules/aihaus-project-memory.md"
 scrub_large_claude_imports "${claude_dir}/CLAUDE.md"
+ensure_line_before_marker "${claude_dir}/CLAUDE.md" "@../.aihaus/memory/workflows/business-rules.md" "AIHAUS:CLAUDE-CONTEXT-END"
+ensure_line_before_marker "${claude_dir}/rules/aihaus-project-memory.md" "- \`.aihaus/memory/workflows/business-rules.md\` for accepted project business rules; if a behavior-affecting premise is absent, record the gap before deciding." "AIHAUS:CLAUDE-RULES-END"
 
 copy_or_seed "${aihaus_dir}/templates/knowledge.md" "${aihaus_dir}/knowledge.md" "Knowledge Base"
 copy_or_seed "${aihaus_dir}/templates/decisions.md" "${aihaus_dir}/decisions.md" "Architectural Decision Records"
@@ -286,7 +313,99 @@ survive across aihaus runs. Do not store plaintext secrets.
 <!-- AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-END -->
 EOF
 
+copy_or_seed "${aihaus_dir}/templates/business-rules.md" "${aihaus_dir}/memory/workflows/business-rules.md" "Business Rules"
+
+write_if_missing "${roles_dir}/online-actions.conf" <<'EOF'
+# Project-specific online-action command patterns.
+# One extended regular expression per line. Blank lines and # comments ignored.
+# Keep local; do not commit credentials or environment-specific secrets here.
+EOF
+
 ensure_claude_hook_path_normalized
+
+write_project_freshness_audit() {
+  local project_file="${aihaus_dir}/project.md"
+  local audit_file="${audit_dir}/project-context-freshness.md"
+  local warnings=""
+  freshness_status="missing"
+  [ -f "$project_file" ] || {
+    cat > "$audit_file" <<'EOF' 2>/dev/null || true
+# Project Context Freshness
+
+Status: MISSING
+
+`.aihaus/project.md` is missing. Run `/aih-init` before relying on project
+architecture, inventory, commands, or milestones.
+EOF
+    return 0
+  }
+
+  freshness_status="fresh"
+  if grep -Fq '[PROJECT_NAME]' "$project_file" 2>/dev/null || grep -Fq '_example paths_' "$project_file" 2>/dev/null; then
+    warnings="${warnings}- project.md still contains template placeholders.\n"
+  fi
+  if grep -Fq '_No active milestones yet._' "$project_file" 2>/dev/null; then
+    if find "${aihaus_dir}/milestones" -maxdepth 1 -type d -name 'M*' 2>/dev/null | grep -q .; then
+      warnings="${warnings}- project.md says no active milestones, but .aihaus/milestones contains M* directories.\n"
+    fi
+  fi
+
+  _count_files() {
+    local dir="$1" pattern="$2"
+    [ -d "$dir" ] || { printf '0\n'; return 0; }
+    find "$dir" -type f -name "$pattern" 2>/dev/null | wc -l | tr -d ' '
+  }
+
+  _inventory_count() {
+    local label="$1"
+    awk -F'|' -v label="$label" '
+      $2 ~ label {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $3)
+        print $3
+        exit
+      }
+    ' "$project_file" 2>/dev/null
+  }
+
+  local current recorded
+  current="$(_count_files "${project_root}/backend/alembic/versions" '*.py')"
+  recorded="$(_inventory_count 'Alembic migrations')"
+  if [ -n "$recorded" ] && [ "$recorded" != "$current" ]; then
+    warnings="${warnings}- Alembic migrations inventory is stale: project.md=${recorded}, current=${current}.\n"
+  fi
+  current="$(_count_files "${project_root}/backend/tests" '*.py')"
+  recorded="$(_inventory_count 'Backend tests')"
+  if [ -n "$recorded" ] && [ "$recorded" != "$current" ]; then
+    warnings="${warnings}- Backend tests inventory is stale: project.md=${recorded}, current=${current}.\n"
+  fi
+  current="$(_count_files "${project_root}/frontend/src/components" '*.tsx')"
+  recorded="$(_inventory_count 'Frontend components')"
+  if [ -n "$recorded" ] && [ "$recorded" != "$current" ]; then
+    warnings="${warnings}- Frontend components inventory is stale: project.md=${recorded}, current=${current}.\n"
+  fi
+  current="$(_count_files "${project_root}/frontend/app" '*.tsx')"
+  recorded="$(_inventory_count 'Frontend screens')"
+  if [ -n "$recorded" ] && [ "$recorded" != "$current" ]; then
+    warnings="${warnings}- Frontend screens inventory is stale: project.md=${recorded}, current=${current}.\n"
+  fi
+
+  if [ -n "$warnings" ]; then
+    freshness_status="stale"
+    {
+      printf '# Project Context Freshness\n\n'
+      printf 'Status: STALE\n\n'
+      printf '%b' "$warnings"
+      printf '\nRun `/aih-init` to refresh the auto-generated project inventory. '
+      printf 'Update manual milestone/decision/knowledge pointers after validating the generated block.\n'
+    } > "$audit_file" 2>/dev/null || true
+  else
+    {
+      printf '# Project Context Freshness\n\n'
+      printf 'Status: FRESH\n\n'
+      printf 'No obvious project.md inventory drift detected by project-context-refresh.\n'
+    } > "$audit_file" 2>/dev/null || true
+  fi
+}
 
 last_file="${state_dir}/project-context-refresh.last"
 now_epoch="$(date +%s 2>/dev/null || echo 0)"
@@ -314,12 +433,14 @@ if [ "${AIHAUS_CONTEXT_REFRESH_VERIFY:-1}" != "0" ] && [ -f "$verify_script" ]; 
   bash "$verify_script" --target "$project_root" >/dev/null 2>&1 && verify_run=1
 fi
 
+write_project_freshness_audit
+
 [ "$now_epoch" -gt 0 ] && printf '%s\n' "$now_epoch" > "$last_file" 2>/dev/null || true
 
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-printf '{"ts":"%s","reason":"%s","repairs":%s,"discovery_run":%s,"verify_run":%s}\n' \
-  "$ts" "$reason" "$repair_count" "$discovery_run" "$verify_run" \
+printf '{"ts":"%s","reason":"%s","repairs":%s,"discovery_run":%s,"verify_run":%s,"project_freshness":"%s"}\n' \
+  "$ts" "$reason" "$repair_count" "$discovery_run" "$verify_run" "$freshness_status" \
   >> "${audit_dir}/project-context-refresh.jsonl" 2>/dev/null || true
 
-say "project context refresh: repairs=${repair_count} discovery=${discovery_run} verify=${verify_run}"
+say "project context refresh: repairs=${repair_count} discovery=${discovery_run} verify=${verify_run} project=${freshness_status}"
 exit 0

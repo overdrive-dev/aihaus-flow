@@ -38,7 +38,7 @@ fi
 find_rel() {
   local regex="$1"
   find "${ROOT}" \
-    \( -path "${ROOT}/.git" -o -path "${ROOT}/node_modules" -o -path "${ROOT}/.aihaus" -o -path "${ROOT}/.claude" -o -path "${ROOT}/dist" -o -path "${ROOT}/build" \) -prune \
+    \( -path '*/.git' -o -path '*/node_modules' -o -path '*/.aihaus' -o -path '*/.claude' -o -path '*/dist' -o -path '*/build' -o -path '*/.next' -o -path '*/coverage' \) -prune \
     -o -type f -print 2>/dev/null |
     sed "s#^${ROOT}/##" |
     grep -Ei "${regex}" |

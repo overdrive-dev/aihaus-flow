@@ -443,22 +443,17 @@ mkdir -p \
   "${TARGET}/.aihaus/memory/global" \
   "${TARGET}/.aihaus/memory/backend" \
   "${TARGET}/.aihaus/memory/frontend"
-if [[ ! -f "${TARGET}/.aihaus/workflows/default.md" && -f "${PKG_AIHAUS}/workflows/default.md" ]]; then
-  cp "${PKG_AIHAUS}/workflows/default.md" "${TARGET}/.aihaus/workflows/default.md"
-  echo "  workflow: created .aihaus/workflows/default.md"
-fi
-if [[ ! -f "${TARGET}/.aihaus/workflows/agents.md" && -f "${PKG_AIHAUS}/workflows/agents.md" ]]; then
-  cp "${PKG_AIHAUS}/workflows/agents.md" "${TARGET}/.aihaus/workflows/agents.md"
-  echo "  workflow: created .aihaus/workflows/agents.md"
-fi
-if [[ ! -f "${TARGET}/.aihaus/workflows/business-rules.md" && -f "${PKG_AIHAUS}/workflows/business-rules.md" ]]; then
-  cp "${PKG_AIHAUS}/workflows/business-rules.md" "${TARGET}/.aihaus/workflows/business-rules.md"
-  echo "  workflow: created .aihaus/workflows/business-rules.md"
-fi
+for workflow_file in default.md agents.md artifacts.md business-rules.md fan-out.md parallelism.md roles.md routing.md; do
+  if [[ ! -f "${TARGET}/.aihaus/workflows/${workflow_file}" && -f "${PKG_AIHAUS}/workflows/${workflow_file}" ]]; then
+    cp "${PKG_AIHAUS}/workflows/${workflow_file}" "${TARGET}/.aihaus/workflows/${workflow_file}"
+    echo "  workflow: created .aihaus/workflows/${workflow_file}"
+  fi
+done
 for rel in \
   "memory/MEMORY.md" \
   "memory/workflows/README.md" \
   "memory/workflows/environment.md" \
+  "memory/workflows/business-rules.md" \
   "memory/workflows/user-preferences.md" \
   "memory/workflows/rules.md" \
   "memory/workflows/gotchas.md" \
@@ -742,6 +737,7 @@ _inject_gitignore() {
     '/.aihaus/state/'
     '/.aihaus/runtime/'
     '/.aihaus/backups/'
+    '/.aihaus/roles/'
     '/.aihaus/memory/local/'
     '/.claude/agents/'
     '/.claude/hooks/'

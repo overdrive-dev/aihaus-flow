@@ -15,6 +15,7 @@
 /.aihaus/state/
 /.aihaus/runtime/
 /.aihaus/backups/
+/.aihaus/roles/
 /.aihaus/memory/local/
 /.claude/agents/
 /.claude/hooks/

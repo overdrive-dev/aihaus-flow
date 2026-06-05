@@ -872,7 +872,7 @@ check_merge_hooks_union() {
 
   local issues=()
 
-  for n in 01-empty-base 02-pre-m017-shape 03-two-bash-matchers 04-user-custom-non-colliding 05-prune-obsolete-aihaus-hooks; do
+  for n in 01-empty-base 02-pre-m017-shape 03-two-bash-matchers 04-user-custom-non-colliding 05-prune-obsolete-aihaus-hooks 06-null-hook-events; do
     local fixdir="${fixtures_base}/${n}"
     _check_merge_hooks_fixture "$fixdir" "fixture-${n}" "$helper" "$py_bin" "0" "issues"
     _check_merge_hooks_fixture "$fixdir" "fixture-${n}" "$helper" "$py_bin" "1" "issues"
@@ -5229,7 +5229,7 @@ check_legacy_hygiene_regressions() {
   if ! grep -Fq 'copy mode overwrites package-managed' "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
     issues+=("update.ps1 missing copy-mode overwrite warning")
   fi
-  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '/.aihaus/memory/local/' '*/.aihaus/' '*/.claude/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
+  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '/.aihaus/roles/' '/.aihaus/memory/local/' '*/.aihaus/' '*/.claude/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
     if ! grep -Fxq "$needle" "$fragment"; then
       issues+=("gitignore fragment missing ${needle}")
     fi
@@ -5589,13 +5589,24 @@ check_project_context_refresh_hook() {
   [[ -f "${refresh_hook}" ]] && bash -n "${refresh_hook}" 2>/dev/null || issues+=("project-context-refresh.sh not parseable")
   grep -Fq 'environment-discovery.sh' "${refresh_hook}" || issues+=("refresh hook does not call environment discovery")
   grep -Fq 'claude-context-verify.sh' "${refresh_hook}" || issues+=("refresh hook does not call Claude verifier")
+  grep -Fq 'project-context-freshness.md' "${refresh_hook}" || issues+=("refresh hook does not audit project.md freshness")
+  grep -Fq 'online-actions.conf' "${refresh_hook}" || issues+=("refresh hook does not seed local online-actions config")
   grep -Fq '.claude/hooks/' "${refresh_hook}" || issues+=("refresh hook does not detect legacy .claude/hooks paths")
   grep -Fq '.aihaus/hooks/' "${refresh_hook}" || issues+=("refresh hook does not normalize to .aihaus/hooks")
+  grep -Fq '*/node_modules' "${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/environment-discovery.sh" || issues+=("environment discovery does not prune nested node_modules")
+  grep -Fq '.aihaus/memory/workflows/business-rules.md' "${PACKAGE_ROOT}/.aihaus/templates/claude/CLAUDE.md" || issues+=("Claude context template does not import workflow business-rules memory")
+  grep -Fq '.aihaus/memory/workflows/business-rules.md' "${PACKAGE_ROOT}/.aihaus/templates/claude/rules/aihaus-project-memory.md" || issues+=("Claude memory rule does not mention business-rules memory")
+  if grep -Eq 'BR-[0-9]+' "${PACKAGE_ROOT}/.aihaus/workflows/default.md"; then
+    issues+=("default workflow references concrete BR-* ids not present in installed ledgers")
+  fi
 
   for settings in "${settings_full}" "${settings_legacy}"; do
     grep -Fq 'project-context-refresh.sh --reason startup' "${settings}" || issues+=("$(basename "$(dirname "${settings}")") settings missing startup refresh hook")
+    grep -Fq 'task-created.sh' "${settings}" || issues+=("$(basename "$(dirname "${settings}")") settings missing task-created hook")
     grep -Fq 'project-context-refresh.sh --reason task-completed' "${settings}" || issues+=("$(basename "$(dirname "${settings}")") settings missing task-completed refresh hook")
     grep -Fq 'project-context-refresh.sh --reason session-end' "${settings}" || issues+=("$(basename "$(dirname "${settings}")") settings missing session-end refresh hook")
+    grep -Fq 'learning-advisor.sh' "${settings}" || issues+=("$(basename "$(dirname "${settings}")") settings missing learning-advisor hook")
+    grep -Fq 'UserPromptExpansion' "${settings}" || issues+=("$(basename "$(dirname "${settings}")") settings missing UserPromptExpansion hook")
     if grep -Fq '.claude/hooks/' "${settings}"; then
       issues+=("$(basename "$(dirname "${settings}")") settings still points at .claude/hooks")
     fi
@@ -5613,9 +5624,15 @@ check_project_context_refresh_hook() {
   mkdir -p \
     "${tmp_root}/.aihaus/templates/claude/rules" \
     "${tmp_root}/.aihaus/skills/aih-init/scripts" \
+    "${tmp_root}/.aihaus/milestones/M001" \
+    "${tmp_root}/backend/alembic/versions" \
+    "${tmp_root}/backend/tests" \
+    "${tmp_root}/frontend/app" \
+    "${tmp_root}/frontend/node_modules/noisy-package" \
     "${tmp_root}/.claude"
   cp "${PACKAGE_ROOT}/.aihaus/templates/claude/CLAUDE.md" "${tmp_root}/.aihaus/templates/claude/CLAUDE.md"
   cp "${PACKAGE_ROOT}/.aihaus/templates/claude/rules/aihaus-project-memory.md" "${tmp_root}/.aihaus/templates/claude/rules/aihaus-project-memory.md"
+  cp "${PACKAGE_ROOT}/.aihaus/templates/business-rules.md" "${tmp_root}/.aihaus/templates/business-rules.md"
   cp "${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/environment-discovery.sh" "${tmp_root}/.aihaus/skills/aih-init/scripts/environment-discovery.sh"
   cp "${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/claude-context-verify.sh" "${tmp_root}/.aihaus/skills/aih-init/scripts/claude-context-verify.sh"
   cat > "${tmp_root}/.claude/settings.local.json" <<'EOF'
@@ -5647,13 +5664,51 @@ EOF
 EOF
   printf 'version: 0.2\n' > "${tmp_root}/buildspec.yml"
   printf 'export const config = {};\n' > "${tmp_root}/playwright.config.ts"
+  printf 'revision = "a"\n' > "${tmp_root}/backend/alembic/versions/001_a.py"
+  printf 'def test_a():\n    assert True\n' > "${tmp_root}/backend/tests/test_a.py"
+  printf 'export default function Screen() { return null; }\n' > "${tmp_root}/frontend/app/index.tsx"
+  cat > "${tmp_root}/frontend/package.json" <<'EOF'
+{"scripts":{"dev":"vite"}}
+EOF
+  cat > "${tmp_root}/frontend/node_modules/noisy-package/package.json" <<'EOF'
+{"scripts":{"postinstall":"should-not-be-discovered"}}
+EOF
+  cat > "${tmp_root}/.aihaus/project.md" <<'EOF'
+# Project Context
+
+## Active Milestones
+
+_No active milestones yet._
+
+## Repository Inventory
+
+| Item | Count | Notes |
+|---|---:|---|
+| Alembic migrations | 0 | stale |
+| Backend tests | 0 | stale |
+| Frontend screens | 0 | stale |
+EOF
 
   CLAUDE_PROJECT_DIR="${tmp_root}" bash "${refresh_hook}" --reason smoke --force >/dev/null 2>&1 || issues+=("project-context-refresh fixture failed")
   [[ -f "${tmp_root}/.aihaus/workflows/default.md" ]] || issues+=("refresh hook did not seed workflow profile")
   [[ -f "${tmp_root}/.aihaus/memory/workflows/rules.md" ]] || issues+=("refresh hook did not seed workflow rules memory")
+  [[ -f "${tmp_root}/.aihaus/memory/workflows/business-rules.md" ]] || issues+=("refresh hook did not seed business-rules memory")
+  [[ -f "${tmp_root}/.aihaus/roles/online-actions.conf" ]] || issues+=("refresh hook did not seed local online-actions config")
   [[ -f "${tmp_root}/.aihaus/init/environment-discovery.md" ]] || issues+=("refresh hook did not run environment discovery")
   [[ -f "${tmp_root}/.aihaus/audit/claude-context-verify.md" ]] || issues+=("refresh hook did not run Claude verifier")
+  if [[ -f "${tmp_root}/.aihaus/audit/project-context-freshness.md" ]]; then
+    grep -Fq 'Status: STALE' "${tmp_root}/.aihaus/audit/project-context-freshness.md" || issues+=("project freshness audit did not flag stale project.md")
+    grep -Fq 'Alembic migrations inventory is stale' "${tmp_root}/.aihaus/audit/project-context-freshness.md" || issues+=("project freshness audit did not compare migration inventory")
+    grep -Fq 'no active milestones' "${tmp_root}/.aihaus/audit/project-context-freshness.md" || issues+=("project freshness audit did not compare milestone inventory")
+  else
+    issues+=("refresh hook did not write project freshness audit")
+  fi
   grep -Fq 'Verdict: PASS' "${tmp_root}/.aihaus/audit/claude-context-verify.md" || issues+=("refresh hook did not repair context imports to verifier PASS")
+  grep -Fq '.aihaus/memory/workflows/business-rules.md' "${tmp_root}/.claude/CLAUDE.md" || issues+=("refresh hook did not repair Claude business-rules import")
+  grep -Fq '.aihaus/memory/workflows/business-rules.md' "${tmp_root}/.claude/rules/aihaus-project-memory.md" || issues+=("refresh hook did not repair Claude memory rule")
+  if grep -Fq 'node_modules/noisy-package' "${tmp_root}/.aihaus/init/environment-discovery.md" || grep -Fq 'should-not-be-discovered' "${tmp_root}/.aihaus/init/environment-discovery.md"; then
+    issues+=("environment discovery included nested node_modules package data")
+  fi
   if grep -Fq '.claude/hooks/' "${tmp_root}/.claude/settings.local.json"; then
     issues+=("refresh hook did not normalize legacy .claude/hooks command path")
   fi

@@ -39,10 +39,10 @@ autonomous fan-out → native JS workflow (no mid-run input).
 | Stage | Purpose | Exit Gate |
 |---|---|---|
 | backlog | Capture tasks that make sense to pick up later, even without detail. | Task has a clear enough title and short intent. |
-| entendimento | Reach 100% understanding of the problem/feature before specifying (BR-1). | No open question remains about what is being asked; ambiguity resolved with the requester. |
+| entendimento | Reach 100% understanding of the problem/feature before specifying. | No open question remains about what is being asked; ambiguity resolved with the requester. |
 | planejamento | Clarify scope, business rules, user expectations, risks, and acceptance criteria. | Task-specific business-rule gaps are answered or explicitly waived; acceptance criteria are testable. |
-| tdd | (dev 4.0–4.1) Map technical impact (BR-8), then turn acceptance criteria into failing tests/contracts. | Impact surface mapped with no NEEDS-REVIEW rule pending; tests/contracts fail for the expected reason or strict-TDD-N/A recorded. |
-| review-execucao | (dev 4.2–4.5) Implement in a local worktree, run local Playwright smoke for UI/flow, verify integration wiring, review readiness. | Code satisfies the contract; UI/flow has local Playwright evidence (BR-9); connections wired; quality issues resolved. All offline/Docker. |
+| tdd | (dev 4.0–4.1) Map technical impact, then turn acceptance criteria into failing tests/contracts. | Impact surface mapped with no NEEDS-REVIEW rule pending; tests/contracts fail for the expected reason or strict-TDD-N/A recorded. |
+| review-execucao | (dev 4.2–4.5) Implement in a local worktree, run local Playwright smoke for UI/flow, verify integration wiring, review readiness. | Code satisfies the contract; UI/flow has local Playwright evidence; connections wired; quality issues resolved. All offline/Docker. |
 | testes | Run the full test pipeline in local Docker; capture breakage and regression risk. | Relevant automated checks pass in Docker-local; UI/flow records the homolog Playwright plan or blocks. |
 | homolog | Promote to the staging/homologation environment and validate published behavior (full Playwright for UI/flow). | Published in homolog with passing Playwright/E2E evidence, or backend-only skip justified. **Online — devops only.** |
 | human-review | Human validates the homolog result in business language and approves promotion. | Human accepts (approval to promote) or sends back with business-language feedback. |
@@ -52,13 +52,13 @@ autonomous fan-out → native JS workflow (no mid-run input).
 ## Understanding Gate
 
 `entendimento` precedes `planejamento`: reach 100% understanding of the
-problem/feature (BR-1) before planning. No open question about *what* is being
+problem/feature before planning. No open question about *what* is being
 asked may remain; resolve ambiguity with the requester.
 
 ## Development Sub-stages (4.0–4.5)
 
 `tdd` and `review-execucao` carry the development detail, all **offline/Docker**:
-4.0 technical impact (feeds the BR-8 rule-conflict flag) · 4.1 failing
+4.0 technical impact and rule-conflict check · 4.1 failing
 tests/contracts · 4.2 implementation in a local worktree · 4.3 local Playwright
 **smoke** for UI/flow · 4.4 integration wiring · 4.5 readiness review. Full
 Playwright E2E runs later at `homolog`.

@@ -35,7 +35,7 @@ ADRs, or `knowledge.md`, not here.
 _Behavioral rules of the application: what it must do, validate, allow, or reject._
 
 <!-- Example — delete once you add real rules:
-### BR-001 — Orders require a positive total
+### EXAMPLE — Orders require a positive total
 - **domain:** software
 - **statement:** An order cannot be submitted with a total of zero or less.
 - **scenarios:**

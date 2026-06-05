@@ -13,6 +13,9 @@ workflow-sync work, check the repo-local context sources:
 - `.aihaus/memory/workflows/environment.md` for runtime location, CI/CD,
   CodeBuild or deploy jobs, test credential locations, dev URLs, and validation
   commands.
+- `.aihaus/memory/workflows/business-rules.md` for accepted project business
+  rules. If a behavior-affecting premise is absent, record the gap before
+  deciding.
 - `.aihaus/memory/workflows/rules.md`, `user-preferences.md`, and `gotchas.md`
   for durable workflow rules and repeated failures.
 - Search or read targeted sections of `.aihaus/decisions.md` and

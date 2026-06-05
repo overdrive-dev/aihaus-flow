@@ -15,6 +15,7 @@ credentials.
 @../.aihaus/workflows/agents.md
 @../.aihaus/memory/workflows/README.md
 @../.aihaus/memory/workflows/environment.md
+@../.aihaus/memory/workflows/business-rules.md
 @../.aihaus/memory/workflows/rules.md
 @../.aihaus/memory/workflows/user-preferences.md
 @../.aihaus/memory/workflows/gotchas.md

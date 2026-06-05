@@ -1,69 +1,27 @@
 {
   "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "AIHAUS_AUTONOMY_HAIKU": "1"
+  },
+  "aihaus": {
+    "suppress": {
+      "taskCreateReminder": true
+    },
+    "audit": {
+      "gateLogPath": ".claude/audit/autonomy-gate.jsonl",
+      "rotateSizeMB": 10,
+      "rotateLines": 10000,
+      "haikuRateWindowSec": 30,
+      "cacheTtlSec": 300
+    }
   },
   "additionalDirectories": [
     ".aihaus",
     ".claude"
   ],
-  "permissions": {
-    "allow": [
-      "Read",
-      "Glob",
-      "Grep",
-      "Write",
-      "Edit",
-      "WebFetch",
-      "WebSearch",
-      "Agent",
-      "Skill",
-      "Bash(git *)",
-      "Bash(git -C *)",
-      "Bash(npm *)",
-      "Bash(npx *)",
-      "Bash(node *)",
-      "Bash(py *)",
-      "Bash(python *)",
-      "Bash(python3 *)",
-      "Bash(pytest *)",
-      "Bash(alembic *)",
-      "Bash(pip *)",
-      "Bash(uv *)",
-      "Bash(gh *)",
-      "Bash(ls *)",
-      "Bash(pwd)",
-      "Bash(cat *)",
-      "Bash(head *)",
-      "Bash(tail *)",
-      "Bash(wc *)",
-      "Bash(mkdir *)",
-      "Bash(touch *)",
-      "Bash(cp *)",
-      "Bash(mv *)",
-      "Bash(find *)",
-      "Bash(grep *)",
-      "Bash(curl *)",
-      "Bash(which *)",
-      "Bash(where *)",
-      "Bash(echo *)",
-      "Bash(sort *)",
-      "Bash(jq *)",
-      "Bash(realpath *)",
-      "Bash(date *)",
-      "Bash(test *)",
-      "Bash(diff *)",
-      "Bash(chmod *)",
-      "Bash(bash *)"
-    ],
-    "deny": [
-      "Bash(rm -rf /)",
-      "Bash(rm -rf ~)",
-      "Read(//**/.env)",
-      "Read(//**/.env.*)",
-      "Read(//**/credentials*)",
-      "Read(//**/id_rsa*)",
-      "Read(//**/*.pem)"
-    ]
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/statusline-milestone.sh"
   },
   "hooks": {
     "SessionStart": [
@@ -90,6 +48,19 @@
         ]
       }
     ],
+    "UserPromptExpansion": [
+      {
+        "matcher": "aih-feature|aih-milestone",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/calibrate-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking calibration gate..."
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -103,6 +74,34 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/git-add-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking git stage safety..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/role-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking role capability boundary..."
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/flow-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Checking promotion-boundary flow..."
+          }
+        ]
+      },
+      {
         "matcher": "Write|Edit",
         "hooks": [
           {
@@ -110,6 +109,16 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/file-guard.sh",
             "timeout": 10,
             "statusMessage": "Checking file safety..."
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/read-guard.sh",
+            "timeout": 10
           }
         ]
       }
@@ -220,6 +229,41 @@
         ]
       }
     ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/learning-advisor.sh",
+            "timeout": 10,
+            "statusMessage": "Capturing learning..."
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/warning-recurrence.sh",
+            "timeout": 30,
+            "statusMessage": "Aggregating warning recurrence..."
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/worktree-release.sh",
+            "timeout": 30,
+            "statusMessage": "Releasing worktree lock (L1)..."
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "matcher": "",
@@ -228,6 +272,17 @@
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/session-end.sh",
             "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/worktree-release-all.sh",
+            "timeout": 60,
+            "statusMessage": "Releasing session worktrees (L2)..."
           }
         ]
       },
@@ -250,6 +305,18 @@
             "command": "AIH_GRAPH_QUIET=1 bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/aih-graph-refresh.sh",
             "timeout": 300,
             "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/autonomy-guard.sh",
+            "timeout": 10
           }
         ]
       }
