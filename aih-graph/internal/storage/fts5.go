@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"strings"
 )
 
 // SaveFTS writes (or replaces) the FTS5 row for a node. Idempotent: delete-
@@ -44,53 +45,37 @@ type FTSMatch struct {
 //   "merge AND arrays"     → boolean AND
 //   "merge*"               → prefix match
 //
-// typeFilter optionally restricts to one node type ("Decision", etc.); pass
-// "" to match across all types.
-func (d *DB) QueryFTS5(query string, k int, typeFilter string) ([]FTSMatch, error) {
+// typeFilters optionally restricts to the given node types (e.g.
+// ["Rule", "Decision"]); pass nil (or an empty slice) to match across all
+// types.
+//
+// F15 (M050/S04): widened from a single `typeFilter string` to
+// `typeFilters []string` — the restriction is a SQL `n.type IN (...)` clause
+// applied BEFORE the LIMIT, so top-K semantics stay correct under multi-type
+// filters (post-filtering after LIMIT would silently under-return).
+func (d *DB) QueryFTS5(query string, k int, typeFilters []string) ([]FTSMatch, error) {
 	if query == "" || k <= 0 {
 		return nil, nil
 	}
-	if typeFilter == "" {
-		return d.queryFTS5All(query, k)
-	}
-	return d.queryFTS5Typed(query, k, typeFilter)
-}
-
-func (d *DB) queryFTS5All(query string, k int) ([]FTSMatch, error) {
-	rows, err := d.sql.Query(`
+	q := `
 		SELECT n.id, n.type, n.identifier, bm25(nodes_fts) AS score
 		FROM nodes_fts
 		JOIN nodes n ON n.id = nodes_fts.rowid
-		WHERE nodes_fts MATCH ?
+		WHERE nodes_fts MATCH ?`
+	args := []any{query}
+	if len(typeFilters) > 0 {
+		q += " AND n.type IN (?" + strings.Repeat(",?", len(typeFilters)-1) + ")"
+		for _, t := range typeFilters {
+			args = append(args, t)
+		}
+	}
+	q += `
 		ORDER BY score
-		LIMIT ?
-	`, query, k)
+		LIMIT ?`
+	args = append(args, k)
+	rows, err := d.sql.Query(q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("fts5 query: %w", err)
-	}
-	defer rows.Close()
-	var out []FTSMatch
-	for rows.Next() {
-		var m FTSMatch
-		if err := rows.Scan(&m.NodeID, &m.Type, &m.Identifier, &m.Score); err != nil {
-			return nil, err
-		}
-		out = append(out, m)
-	}
-	return out, rows.Err()
-}
-
-func (d *DB) queryFTS5Typed(query string, k int, typeFilter string) ([]FTSMatch, error) {
-	rows, err := d.sql.Query(`
-		SELECT n.id, n.type, n.identifier, bm25(nodes_fts) AS score
-		FROM nodes_fts
-		JOIN nodes n ON n.id = nodes_fts.rowid
-		WHERE nodes_fts MATCH ? AND n.type = ?
-		ORDER BY score
-		LIMIT ?
-	`, query, typeFilter, k)
-	if err != nil {
-		return nil, fmt.Errorf("fts5 query (typed): %w", err)
 	}
 	defer rows.Close()
 	var out []FTSMatch

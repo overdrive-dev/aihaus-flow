@@ -58,12 +58,17 @@ _memory() {
     local cmd="$1"
     shift
     case "$cmd" in
-      build|refresh|status|query|context|callers|impact|gotchas|milestone|rule-drift|obsidian-export|export-obsidian)
-        local has_db=0 arg repo_root db_path
+      build|refresh|status|query|context|callers|impact|gotchas|milestone|rule|why|rule-drift|obsidian-export|export-obsidian)
+        # db-pin allowlist (BR-P3): every query verb pins --db to the repo DB
+        # unless the caller passed one. --user scope is exempt — the user-scope
+        # graph lives at ~/.aihaus/state/user-graph.db (ADR-260611-E), never
+        # the per-repo DB.
+        local has_db=0 user_scope=0 arg repo_root db_path
         for arg in "$@"; do
           [[ "$arg" == "--db" || "$arg" == "-db" || "$arg" == --db=* || "$arg" == -db=* ]] && has_db=1
+          [[ "$arg" == "--user" ]] && user_scope=1
         done
-        if [[ "$has_db" == "0" ]]; then
+        if [[ "$has_db" == "0" && "$user_scope" == "0" ]]; then
           repo_root="${AIH_GRAPH_REPO:-${CLAUDE_PROJECT_DIR:-$PWD}}"
           local expect_repo=0
           for arg in "$@"; do

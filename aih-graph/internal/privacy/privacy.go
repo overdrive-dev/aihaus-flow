@@ -28,6 +28,14 @@ import (
 // confirm the user has opted in to building a graph for this repo.
 const ConsentMarker = ".aih-graph-consent"
 
+// UserConsentMarker is the filename aih-graph looks for under ~/.aihaus to
+// confirm the user has opted in to indexing global user memory
+// (~/.aihaus/memory/user/**) into the user-scope graph (M050/S04,
+// ADR-260611-E §3). The user scope has its OWN consent marker and its OWN
+// purge path — user memory is NEVER indexed into per-repo DBs
+// (ADR-260515-A preserved).
+const UserConsentMarker = ".aih-graph-user-consent"
+
 // XDGStateRoot returns the canonical aih-graph state directory per platform.
 //
 //	Linux / *BSD:  $XDG_STATE_HOME/aih-graph  (fallback ~/.local/state/aih-graph)
@@ -172,6 +180,135 @@ func PurgeRepo(repoPath string) (string, error) {
 	dir := filepath.Dir(dbPath)
 	if entries, err := os.ReadDir(dir); err == nil && len(entries) == 0 {
 		_ = os.Remove(dir)
+	}
+	return removed, nil
+}
+
+// --- User scope (M050/S04, ADR-260611-A tier C / ADR-260611-E §3) ---------
+//
+// The user-scope graph indexes ~/.aihaus/memory/user/** into a SEPARATE
+// ~/.aihaus/state/user-graph.db. Its consent marker, DB path, and purge path
+// are all distinct from the per-repo machinery above so the two scopes can
+// never bleed into each other.
+
+// UserAihausRoot returns the aihaus-owned user namespace (~/.aihaus). Honors
+// AIH_GRAPH_USER_HOME for explicit override (tests + advanced users) —
+// mirroring the AIH_GRAPH_HOME override on XDGStateRoot.
+func UserAihausRoot() (string, error) {
+	if override := strings.TrimSpace(os.Getenv("AIH_GRAPH_USER_HOME")); override != "" {
+		return override, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".aihaus"), nil
+}
+
+// UserConsentMarkerPath returns the absolute path of the user-scope consent
+// marker (~/.aihaus/.aih-graph-user-consent).
+func UserConsentMarkerPath() (string, error) {
+	root, err := UserAihausRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, UserConsentMarker), nil
+}
+
+// HasUserConsent returns true if the user-scope consent marker exists.
+// Empty files count.
+func HasUserConsent() (bool, error) {
+	p, err := UserConsentMarkerPath()
+	if err != nil {
+		return false, err
+	}
+	_, err = os.Stat(p)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+// CreateUserConsent writes the user-scope consent marker with a short
+// documentation comment. Created by `aih-graph build --user --accept`.
+func CreateUserConsent() error {
+	p, err := UserConsentMarkerPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return fmt.Errorf("create user root %s: %w", filepath.Dir(p), err)
+	}
+	body := []byte(`# aih-graph user-scope consent marker
+#
+# This file marks global user memory (~/.aihaus/memory/user/**) as opted-in
+# for aih-graph indexing into the SEPARATE user-scope graph at
+# ~/.aihaus/state/user-graph.db. User memory is never indexed into per-repo
+# DBs. Remove this file to deny future user-scope builds.
+#
+# Created by 'aih-graph build --user --accept' or manual touch.
+# See ADR-260611-E in pkg/.aihaus/decisions.md (extends ADR-260515-A).
+`)
+	return os.WriteFile(p, body, 0o644)
+}
+
+// UserMemoryRoot returns the user-scope memory source directory
+// (~/.aihaus/memory/user).
+func UserMemoryRoot() (string, error) {
+	root, err := UserAihausRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "memory", "user"), nil
+}
+
+// UserDBPath returns the canonical user-scope graph DB path
+// (~/.aihaus/state/user-graph.db). Creates the state directory if missing.
+func UserDBPath() (string, error) {
+	root, err := UserAihausRoot()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(root, "state")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create user state dir %s: %w", dir, err)
+	}
+	return filepath.Join(dir, "user-graph.db"), nil
+}
+
+// PurgeUser removes the user-scope graph DB (+ WAL/SHM/journal sidecars) and
+// the user-scope consent marker. Returns the paths that were removed.
+// This is the `aih-graph uninstall --user` arm (own purge path per
+// ADR-260611-E §3).
+func PurgeUser() ([]string, error) {
+	var removed []string
+	root, err := UserAihausRoot()
+	if err != nil {
+		return nil, err
+	}
+	dbPath := filepath.Join(root, "state", "user-graph.db")
+	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
+		p := dbPath + suffix
+		if _, err := os.Stat(p); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return removed, err
+		}
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return removed, fmt.Errorf("remove %s: %w", p, err)
+		}
+		removed = append(removed, p)
+	}
+	marker := filepath.Join(root, UserConsentMarker)
+	if _, err := os.Stat(marker); err == nil {
+		if err := os.Remove(marker); err != nil && !os.IsNotExist(err) {
+			return removed, fmt.Errorf("remove %s: %w", marker, err)
+		}
+		removed = append(removed, marker)
 	}
 	return removed, nil
 }
