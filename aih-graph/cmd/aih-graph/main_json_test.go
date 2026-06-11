@@ -316,6 +316,51 @@ func TestRunRefreshJSONReturnsStatusPayload(t *testing.T) {
 	}
 }
 
+func TestRunObsidianExportWritesThreeBrainProjection(t *testing.T) {
+	dbPath, repoPath := seedJSONCommandDB(t)
+	outDir := filepath.Join(t.TempDir(), "vault")
+	userDir := filepath.Join(t.TempDir(), "user-memory")
+	if err := os.MkdirAll(userDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userDir, "preferences.md"), []byte("# Preferences\n\nUse PowerShell-safe commands.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout := captureStdout(t, func() int {
+		return runObsidianExport([]string{
+			"--repo", repoPath,
+			"--db", dbPath,
+			"--out", outDir,
+			"--user-memory", userDir,
+		})
+	})
+	if code != 0 {
+		t.Fatalf("runObsidianExport returned %d, stdout:\n%s", code, stdout)
+	}
+	exportRoot := filepath.Join(outDir, obsidianSafeName(filepath.Base(repoPath)))
+	for _, rel := range []string{
+		"README.md",
+		filepath.Join("code-brain", obsidianSafeName("Symbol")),
+		filepath.Join("repo-memory", obsidianSafeName("Memory")),
+		filepath.Join("user-brain", "preferences.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(exportRoot, rel)); err != nil {
+			t.Fatalf("expected exported path %s: %v", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(exportRoot, "code-brain", obsidianSafeName("Chunk"))); !os.IsNotExist(err) {
+		t.Fatalf("Chunk notes should be skipped by default, stat err=%v", err)
+	}
+	index, err := os.ReadFile(filepath.Join(exportRoot, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(index), "SQLite/aih-graph remains the operational source of truth") {
+		t.Fatalf("expected source-of-truth warning in index, got:\n%s", string(index))
+	}
+}
+
 func seedJSONCommandDB(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()

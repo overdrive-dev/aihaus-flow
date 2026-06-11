@@ -15,7 +15,9 @@
 package main
 
 import (
+	"crypto/sha1"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -81,6 +83,11 @@ Commands:
     --json                Print stable machine-readable output
   status [--repo PATH]    Show memory index freshness and counts
     --json                Print stable machine-readable output
+  obsidian-export         Export a read-only Obsidian markdown projection
+    --repo PATH           Repository path for DB default and export metadata
+    --out PATH            Output vault/folder root (default: .aihaus/state/obsidian-export)
+    --include-chunks      Include Chunk nodes (off by default to avoid note floods)
+    --include-calls       Include Call nodes (off by default to avoid note floods)
   rule-drift              Flag business rules that are unreviewed or have broken code bindings
     --json                Print stable machine-readable output
   mark-stale [--reason R] Mark derived memory stale after repo changes
@@ -2663,6 +2670,458 @@ func commitProps(c types.RepoCommit) map[string]any {
 	}
 }
 
+type obsidianExportNode struct {
+	ID         int64
+	Type       string
+	Identifier string
+	Properties map[string]any
+}
+
+func runObsidianExport(args []string) int {
+	fs := flag.NewFlagSet("obsidian-export", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database (default: privacy.DefaultDBPath for repo)")
+	repoPath := fs.String("repo", ".", "repository path for DB default and export metadata")
+	outDir := fs.String("out", "", "output Obsidian vault/folder root (default: .aihaus/state/obsidian-export)")
+	includeChunks := fs.Bool("include-chunks", false, "include Chunk nodes (can generate many notes)")
+	includeCalls := fs.Bool("include-calls", false, "include Call nodes (can generate many notes)")
+	limit := fs.Int("limit", 5000, "maximum exported graph nodes (0 = no limit)")
+	userMemoryPath := fs.String("user-memory", "", "optional user memory directory to project into user-brain (default: ~/.aihaus/memory/user if present)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+
+	*repoPath = resolveRepoPath(*repoPath)
+	if absRepoPath, err := filepath.Abs(*repoPath); err == nil {
+		*repoPath = absRepoPath
+	}
+	if *outDir == "" {
+		*outDir = filepath.Join(*repoPath, ".aihaus", "state", "obsidian-export")
+	}
+	db, err := openQueryDBForRepo(*dbPath, *repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "obsidian-export: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+
+	nodes, skipped, err := loadObsidianExportNodes(db.SQL(), *includeChunks, *includeCalls, *limit)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "obsidian-export: load nodes: %v\n", err)
+		return 1
+	}
+
+	repoName := filepath.Base(*repoPath)
+	if repoName == "." || repoName == string(filepath.Separator) || repoName == "" {
+		repoName = "repo"
+	}
+	exportRoot := filepath.Join(*outDir, obsidianSafeName(repoName))
+	if err := os.MkdirAll(exportRoot, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "obsidian-export: create output dir: %v\n", err)
+		return 1
+	}
+
+	counts := map[string]int{}
+	for _, n := range nodes {
+		category := obsidianCategoryForType(n.Type)
+		if category == "" {
+			category = "repo-memory"
+		}
+		dir := filepath.Join(exportRoot, category, obsidianSafeName(n.Type))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "obsidian-export: create note dir: %v\n", err)
+			return 1
+		}
+		notePath := filepath.Join(dir, obsidianSafeName(n.Identifier)+".md")
+		body := formatObsidianNodeNote(repoName, n)
+		if err := os.WriteFile(notePath, []byte(body), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "obsidian-export: write note: %v\n", err)
+			return 1
+		}
+		counts[category]++
+	}
+
+	userCount, err := exportUserMemoryProjection(exportRoot, *userMemoryPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "obsidian-export: user memory export: %v\n", err)
+		return 1
+	}
+	counts["user-brain"] += userCount
+
+	if err := writeObsidianIndex(exportRoot, repoName, *repoPath, *dbPath, counts, skipped); err != nil {
+		fmt.Fprintf(os.Stderr, "obsidian-export: write index: %v\n", err)
+		return 1
+	}
+
+	fmt.Printf("obsidian-export: wrote %d graph note(s) to %s\n", len(nodes), exportRoot)
+	if skipped > 0 {
+		fmt.Printf("obsidian-export: skipped %d high-volume node(s); use --include-chunks/--include-calls or --limit 0 if needed\n", skipped)
+	}
+	return 0
+}
+
+func loadObsidianExportNodes(sqlDB *sql.DB, includeChunks, includeCalls bool, limit int) ([]obsidianExportNode, int, error) {
+	rows, err := sqlDB.Query(`
+		SELECT id, type, identifier, properties
+		FROM nodes
+		ORDER BY CASE type
+			WHEN 'Symbol' THEN 1
+			WHEN 'File' THEN 2
+			WHEN 'Test' THEN 3
+			WHEN 'Memory' THEN 4
+			WHEN 'Rule' THEN 5
+			WHEN 'Decision' THEN 6
+			WHEN 'Milestone' THEN 7
+			WHEN 'Story' THEN 8
+			WHEN 'Commit' THEN 9
+			WHEN 'Agent' THEN 10
+			WHEN 'Skill' THEN 11
+			WHEN 'Hook' THEN 12
+			WHEN 'Chunk' THEN 90
+			WHEN 'Call' THEN 91
+			ELSE 99
+		END, type, identifier`)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var out []obsidianExportNode
+	skipped := 0
+	for rows.Next() {
+		var n obsidianExportNode
+		var propsRaw string
+		if err := rows.Scan(&n.ID, &n.Type, &n.Identifier, &propsRaw); err != nil {
+			return nil, skipped, err
+		}
+		if n.Type == "Chunk" && !includeChunks {
+			skipped++
+			continue
+		}
+		if n.Type == "Call" && !includeCalls {
+			skipped++
+			continue
+		}
+		if limit > 0 && len(out) >= limit {
+			skipped++
+			continue
+		}
+		n.Properties = map[string]any{}
+		if strings.TrimSpace(propsRaw) != "" {
+			_ = json.Unmarshal([]byte(propsRaw), &n.Properties)
+		}
+		out = append(out, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, skipped, err
+	}
+	return out, skipped, nil
+}
+
+func obsidianCategoryForType(typ string) string {
+	switch typ {
+	case "File", "Chunk", "Symbol", "Call", "Test":
+		return "code-brain"
+	case "Decision", "Milestone", "Story", "Rule", "Memory", "Commit", "Agent", "Hook", "Skill":
+		return "repo-memory"
+	default:
+		return "repo-memory"
+	}
+}
+
+func obsidianSafeName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		s = "untitled"
+	}
+	sum := sha1.Sum([]byte(s))
+	suffix := hex.EncodeToString(sum[:])[:8]
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(s) {
+		ok := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if ok {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+		if b.Len() >= 72 {
+			break
+		}
+	}
+	base := strings.Trim(b.String(), "-")
+	if base == "" {
+		base = "note"
+	}
+	if len(base) > 72 {
+		base = strings.Trim(base[:72], "-")
+	}
+	return base + "-" + suffix
+}
+
+func formatObsidianNodeNote(repoName string, n obsidianExportNode) string {
+	title := titleFromProperties(n.Properties)
+	if title == "" {
+		title = n.Identifier
+	}
+	var b strings.Builder
+	b.WriteString("---\n")
+	writeYAMLString(&b, "aih_id", n.Type+":"+n.Identifier)
+	writeYAMLString(&b, "aih_repo", repoName)
+	writeYAMLString(&b, "aih_type", n.Type)
+	writeYAMLString(&b, "aih_sync", "export-only")
+	writeYAMLString(&b, "title", title)
+	b.WriteString("---\n\n")
+	b.WriteString("# ")
+	b.WriteString(obsidianHeading(title))
+	b.WriteString("\n\n")
+	b.WriteString("> Generated from aihaus memory. Treat this note as a read-only projection; edit aihaus source memory or code, then export again.\n\n")
+	b.WriteString("## Identity\n\n")
+	b.WriteString("| Field | Value |\n|---|---|\n")
+	b.WriteString("| Type | `")
+	b.WriteString(n.Type)
+	b.WriteString("` |\n")
+	b.WriteString("| Identifier | `")
+	b.WriteString(escapeMarkdownTable(n.Identifier))
+	b.WriteString("` |\n")
+	if path := propString(n.Properties, "file_path"); path != "" {
+		b.WriteString("| File | `")
+		b.WriteString(escapeMarkdownTable(path))
+		b.WriteString("` |\n")
+	}
+	if name := propString(n.Properties, "name"); name != "" {
+		b.WriteString("| Name | `")
+		b.WriteString(escapeMarkdownTable(name))
+		b.WriteString("` |\n")
+	}
+	b.WriteString("\n## Properties\n\n")
+	b.WriteString("| Key | Value |\n|---|---|\n")
+	keys := make([]string, 0, len(n.Properties))
+	for k := range n.Properties {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := obsidianPropertyValue(n.Properties[k])
+		if v == "" {
+			continue
+		}
+		b.WriteString("| `")
+		b.WriteString(escapeMarkdownTable(k))
+		b.WriteString("` | ")
+		b.WriteString(escapeMarkdownTable(v))
+		b.WriteString(" |\n")
+	}
+	if body := firstStringProperty(n.Properties, "body", "text", "content", "description", "summary"); body != "" {
+		b.WriteString("\n## Source Text\n\n")
+		b.WriteString("```text\n")
+		b.WriteString(capString(body, 4000))
+		if len(body) > 4000 {
+			b.WriteString("\n... [truncated by obsidian-export]\n")
+		}
+		b.WriteString("\n```\n")
+	}
+	b.WriteString("\n## aihaus Lookup\n\n")
+	b.WriteString("```bash\n")
+	b.WriteString("aihaus memory context --repo . --type ")
+	b.WriteString(shellQuote(n.Type))
+	b.WriteString(" --json ")
+	b.WriteString(shellQuote(n.Identifier))
+	b.WriteString("\n```\n")
+	return b.String()
+}
+
+func writeYAMLString(b *strings.Builder, key, value string) {
+	encoded, _ := json.Marshal(value)
+	b.WriteString(key)
+	b.WriteString(": ")
+	b.Write(encoded)
+	b.WriteByte('\n')
+}
+
+func obsidianHeading(s string) string {
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "Untitled"
+	}
+	return s
+}
+
+func obsidianPropertyValue(v any) string {
+	switch x := v.(type) {
+	case string:
+		return capString(x, 600)
+	case float64, bool:
+		return fmt.Sprint(x)
+	case []any:
+		parts := make([]string, 0, len(x))
+		for _, item := range x {
+			parts = append(parts, capString(fmt.Sprint(item), 120))
+			if len(parts) >= 12 {
+				parts = append(parts, "...")
+				break
+			}
+		}
+		return strings.Join(parts, ", ")
+	default:
+		if x == nil {
+			return ""
+		}
+		raw, err := json.Marshal(x)
+		if err != nil {
+			return capString(fmt.Sprint(x), 600)
+		}
+		return capString(string(raw), 600)
+	}
+}
+
+func firstStringProperty(props map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if v, ok := props[key].(string); ok && strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func capString(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	for max > 0 && (s[max]&0xc0) == 0x80 {
+		max--
+	}
+	return s[:max]
+}
+
+func escapeMarkdownTable(s string) string {
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", "<br>")
+	s = strings.ReplaceAll(s, "|", "\\|")
+	return s
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func exportUserMemoryProjection(exportRoot, userMemoryPath string) (int, error) {
+	if userMemoryPath == "" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			userMemoryPath = filepath.Join(home, ".aihaus", "memory", "user")
+		}
+	}
+	userDir := filepath.Join(exportRoot, "user-brain")
+	if err := os.MkdirAll(userDir, 0o755); err != nil {
+		return 0, err
+	}
+	if userMemoryPath == "" {
+		return 0, writeUserMemoryReadme(userDir, "", 0)
+	}
+	info, err := os.Stat(userMemoryPath)
+	if err != nil || !info.IsDir() {
+		return 0, writeUserMemoryReadme(userDir, userMemoryPath, 0)
+	}
+	count := 0
+	err = filepath.WalkDir(userMemoryPath, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || strings.ToLower(filepath.Ext(path)) != ".md" {
+			return nil
+		}
+		rel, err := filepath.Rel(userMemoryPath, path)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		dst := filepath.Join(userDir, filepath.ToSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		header := strings.Builder{}
+		header.WriteString("---\n")
+		writeYAMLString(&header, "aih_source", "user-memory")
+		writeYAMLString(&header, "aih_sync", "export-only")
+		writeYAMLString(&header, "aih_source_path", path)
+		header.WriteString("---\n\n")
+		if err := os.WriteFile(dst, append([]byte(header.String()), data...), 0o644); err != nil {
+			return err
+		}
+		count++
+		return nil
+	})
+	if err != nil {
+		return count, err
+	}
+	return count, writeUserMemoryReadme(userDir, userMemoryPath, count)
+}
+
+func writeUserMemoryReadme(userDir, source string, count int) error {
+	var b strings.Builder
+	b.WriteString("# User Brain\n\n")
+	b.WriteString("This folder is the optional Obsidian projection for aihaus global user memory.\n")
+	b.WriteString("It is export-only; aihaus does not read this Obsidian folder as an authority.\n\n")
+	if source == "" {
+		b.WriteString("No user memory directory was configured.\n")
+	} else {
+		b.WriteString("Source: `")
+		b.WriteString(escapeMarkdownTable(source))
+		b.WriteString("`\n\n")
+	}
+	b.WriteString(fmt.Sprintf("Projected notes: %d\n", count))
+	return os.WriteFile(filepath.Join(userDir, "README.md"), []byte(b.String()), 0o644)
+}
+
+func writeObsidianIndex(exportRoot, repoName, repoPath, dbPath string, counts map[string]int, skipped int) error {
+	var b strings.Builder
+	b.WriteString("# aihaus Memory Export\n\n")
+	b.WriteString("This is an Obsidian-compatible, read-only projection of aihaus memory.\n")
+	b.WriteString("SQLite/aih-graph remains the operational source of truth.\n\n")
+	b.WriteString("## Sources\n\n")
+	b.WriteString("- Repo: `")
+	b.WriteString(escapeMarkdownTable(repoPath))
+	b.WriteString("`\n")
+	if dbPath != "" {
+		b.WriteString("- DB: `")
+		b.WriteString(escapeMarkdownTable(dbPath))
+		b.WriteString("`\n")
+	}
+	b.WriteString("- Generated: `")
+	b.WriteString(time.Now().UTC().Format(time.RFC3339))
+	b.WriteString("`\n\n")
+	b.WriteString("## Brains\n\n")
+	b.WriteString("| Brain | Notes |\n|---|---:|\n")
+	for _, key := range []string{"code-brain", "repo-memory", "user-brain"} {
+		b.WriteString("| [[")
+		b.WriteString(key)
+		b.WriteString("]] | ")
+		b.WriteString(fmt.Sprintf("%d", counts[key]))
+		b.WriteString(" |\n")
+	}
+	if skipped > 0 {
+		b.WriteString("\n")
+		b.WriteString(fmt.Sprintf("> Skipped %d high-volume graph nodes. Re-run with `--include-chunks`, `--include-calls`, or `--limit 0` when you need a full projection.\n", skipped))
+	}
+	b.WriteString("\n## Refresh\n\n")
+	b.WriteString("```bash\n")
+	b.WriteString("aihaus memory refresh --repo .\n")
+	b.WriteString("aihaus memory obsidian-export --repo . --out <vault-or-folder>\n")
+	b.WriteString("```\n")
+	if repoName != "" {
+		b.WriteString("\n")
+	}
+	return os.WriteFile(filepath.Join(exportRoot, "README.md"), []byte(b.String()), 0o644)
+}
+
 func keysSorted(m map[string]int) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -2706,6 +3165,8 @@ func main() {
 		os.Exit(runMilestone(args))
 	case "status":
 		os.Exit(runStatus(args))
+	case "obsidian-export", "export-obsidian":
+		os.Exit(runObsidianExport(args))
 	case "rule-drift":
 		os.Exit(runRuleDrift(args))
 	case "mark-stale":

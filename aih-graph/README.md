@@ -31,9 +31,17 @@ aihaus memory impact --type File --depth 1 --limit 40 --json aih-graph/cmd/aih-g
 aihaus memory callers --json ParseRepositoryText
 aihaus memory gotchas --json git checkout
 aihaus memory milestone --json Ollama
+aihaus memory obsidian-export --repo . --out ~/Obsidian/aihaus
 ```
 
 `query`, `context`, `impact`, `callers`, `gotchas`, `milestone`, and `status` support `--json`. Exact graph lookups include node `type`, `identifier`, derived `title`, and stored `properties`. Long string properties are capped in JSON output and marked with `<field>_truncated` plus `<field>_original_bytes`; the SQLite index keeps the complete value. `status --json` includes `embedding_models` counts. `query`, `context`, and `impact` include `freshness`; `context` and `impact` also include `neighborhood_total`, `neighborhood_returned`, and `neighborhood_truncated`; use `--limit N` to bound agent payloads, or `--limit 0` for a full neighborhood. Pass `--repo PATH` when the command runs from outside the indexed repository.
+
+`obsidian-export` writes a read-only Markdown projection for humans. It creates
+`code-brain/`, `repo-memory/`, and `user-brain/` folders under the chosen output
+path. SQLite/aih-graph remains the operational source of truth; every exported
+note is tagged `aih_sync: export-only`. High-volume `Chunk` and `Call` nodes are
+skipped by default; pass `--include-chunks` or `--include-calls` when a complete
+projection is worth the note volume.
 
 This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
 - **Markdown-only extraction** for 6 aihaus typed nodes (Decision/Milestone/Story/Agent/Hook/Skill) — per ADR-260515-C-amend-02
