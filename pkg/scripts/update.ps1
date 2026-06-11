@@ -222,6 +222,7 @@ $workflowSeedFiles = @(
     'artifacts.md',
     'business-rules.md',
     'fan-out.md',
+    'harness.md',
     'parallelism.md',
     'roles.md',
     'routing.md'

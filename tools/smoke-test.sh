@@ -5602,11 +5602,13 @@ check_init_operational_context_discovery() {
   printf '# Workflow\n' > "${tmp_root}/.aihaus/protocols/default.md"
   printf '# Agents\n' > "${tmp_root}/.aihaus/protocols/agents.md"
   printf '# Routing\n' > "${tmp_root}/.aihaus/protocols/routing.md"
+  printf '# Harness\n' > "${tmp_root}/.aihaus/protocols/harness.md"
   printf '# Project\n' > "${tmp_root}/.aihaus/project.md"
   printf '{}\n' > "${tmp_root}/.claude/settings.local.json"
   printf '# Rule\n' > "${tmp_root}/.claude/rules/aihaus-project-memory.md"
   cat > "${tmp_root}/.claude/CLAUDE.md" <<'EOF'
 <!-- AIHAUS:CLAUDE-CONTEXT-START -->
+@../.aihaus/protocols/harness.md
 @../.aihaus/project.md
 @../.aihaus/protocols/default.md
 @../.aihaus/protocols/agents.md
@@ -5700,6 +5702,11 @@ check_project_context_refresh_hook() {
   cp "${PACKAGE_ROOT}/.aihaus/templates/claude/CLAUDE.md" "${tmp_root}/.aihaus/templates/claude/CLAUDE.md"
   cp "${PACKAGE_ROOT}/.aihaus/templates/claude/rules/aihaus-project-memory.md" "${tmp_root}/.aihaus/templates/claude/rules/aihaus-project-memory.md"
   cp "${PACKAGE_ROOT}/.aihaus/templates/business-rules.md" "${tmp_root}/.aihaus/templates/business-rules.md"
+  # M050/S03: the installer seeds protocols/harness.md into target repos
+  # (install.sh protocol seed list); stage it so the bridge's first-position
+  # harness import resolves and the verifier can reach PASS.
+  mkdir -p "${tmp_root}/.aihaus/protocols"
+  cp "${PACKAGE_ROOT}/.aihaus/protocols/harness.md" "${tmp_root}/.aihaus/protocols/harness.md"
   cp "${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/environment-discovery.sh" "${tmp_root}/.aihaus/skills/aih-init/scripts/environment-discovery.sh"
   cp "${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/claude-context-verify.sh" "${tmp_root}/.aihaus/skills/aih-init/scripts/claude-context-verify.sh"
   cat > "${tmp_root}/.claude/settings.local.json" <<'EOF'
@@ -5874,6 +5881,79 @@ check_settings_merge_matcher() {
   fi
 }
 
+# ---- harness.md byte/line caps + delivery wiring (M050/S03, ADR-260611-B) ----
+# BR-U5: protocols/harness.md is the single condensed law — hard cap 2048
+# bytes (wc -c, per Check-57 single-file shape) + <=45 lines, verbatim
+# disposition keywords (covered/gap/conflict/mechanics) + "ask once" +
+# "becomes a rule", both MAIN-SESSION-ONLY fence markers, and first-position
+# import in the CLAUDE.md bridge template. Fixture-fail pair under
+# tools/fixtures/harness-byte-cap/ proves the byte-cap comparison is not
+# green-but-vacuous (BR-P8).
+_harness_caps_ok() {
+  local file="$1" bytes lines
+  bytes=$(wc -c < "$file" | tr -d ' ')
+  lines=$(wc -l < "$file" | tr -d ' ')
+  [[ "$bytes" -le 2048 && "$lines" -le 45 ]]
+}
+
+check_harness_byte_cap() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: protocols/harness.md caps + bridge import + fence (M050/S03, ADR-260611-B)"
+  local harness="${PACKAGE_ROOT}/.aihaus/protocols/harness.md"
+  local template="${PACKAGE_ROOT}/.aihaus/templates/claude/CLAUDE.md"
+  local fixtures="${PACKAGE_ROOT}/../tools/fixtures/harness-byte-cap"
+  if [[ ! -f "$harness" ]]; then
+    _fail "$label" "missing: pkg/.aihaus/protocols/harness.md"
+    return
+  fi
+  local issues=()
+
+  # Byte + line caps (ADR-260611-B: hard cap 2048 bytes, <=45 lines).
+  if ! _harness_caps_ok "$harness"; then
+    issues+=("harness.md exceeds caps: $(wc -c < "$harness" | tr -d ' ')B (max 2048) / $(wc -l < "$harness" | tr -d ' ') lines (max 45)")
+  fi
+
+  # BR-U5 verbatim tokens.
+  local token
+  for token in "covered" "gap" "conflict" "mechanics" "ask once" "becomes a rule"; do
+    if ! grep -Fq "$token" "$harness" 2>/dev/null; then
+      issues+=("BR-U5 token missing verbatim: '${token}'")
+    fi
+  done
+
+  # MAIN-SESSION-ONLY fence pair (S05 strips this span for subagents).
+  grep -Fq '<!-- MAIN-SESSION-ONLY -->' "$harness" 2>/dev/null || \
+    issues+=("opening fence <!-- MAIN-SESSION-ONLY --> missing")
+  grep -Fq '<!-- /MAIN-SESSION-ONLY -->' "$harness" 2>/dev/null || \
+    issues+=("closing fence <!-- /MAIN-SESSION-ONLY --> missing")
+
+  # First-position import in the bridge template (ADR-260611-B delivery path 1).
+  local first_import
+  first_import="$(grep -E '^@' "$template" 2>/dev/null | head -n 1 | tr -d '\r')"
+  if [[ "$first_import" != "@../.aihaus/protocols/harness.md" ]]; then
+    issues+=("bridge template first import is '${first_import:-<none>}' (expected @../.aihaus/protocols/harness.md)")
+  fi
+
+  # Fixture-fail pair (BR-P8 non-vacuity): the oversized fixture MUST fail
+  # the caps helper; the within-cap fixture MUST pass it.
+  if [[ ! -f "${fixtures}/oversized-must-fail.md" || ! -f "${fixtures}/within-cap-must-pass.md" ]]; then
+    issues+=("fixture pair missing under tools/fixtures/harness-byte-cap/")
+  else
+    if _harness_caps_ok "${fixtures}/oversized-must-fail.md"; then
+      issues+=("oversized fixture passed the byte cap — comparison is green-but-vacuous (BR-P8)")
+    fi
+    if ! _harness_caps_ok "${fixtures}/within-cap-must-pass.md"; then
+      issues+=("within-cap fixture failed the caps — cap helper or fixture broken")
+    fi
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -5889,6 +5969,7 @@ check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
 check_eval_run_deterministic
 check_settings_merge_matcher
+check_harness_byte_cap
 
 printf "
 "
