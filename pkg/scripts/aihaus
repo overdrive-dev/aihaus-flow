@@ -58,7 +58,7 @@ _memory() {
     local cmd="$1"
     shift
     case "$cmd" in
-      build|refresh|status|query|context|callers|impact|gotchas|milestone)
+      build|refresh|status|query|context|callers|impact|gotchas|milestone|obsidian-export|export-obsidian)
         local has_db=0 arg repo_root db_path
         for arg in "$@"; do
           [[ "$arg" == "--db" || "$arg" == "-db" || "$arg" == --db=* || "$arg" == -db=* ]] && has_db=1
