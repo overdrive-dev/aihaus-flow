@@ -559,7 +559,7 @@ if [ "$novel_task" = "1" ] && command -v claude >/dev/null 2>&1 && [ -n "$task_d
   path_method="haiku"
 
   task_trunc="$(printf '%s' "$task_description" | head -c 1500)"
-  cohorts_summary=":planner-binding→project.md,workflow,environment,analysis-brief  :planner→project.md,workflow,environment  :doer→project.md,workflow,environment,story-file  :verifier→workflow,environment,story-file,execution  :adversarial-*→workflow,environment,story-file,review-memory"
+  cohorts_summary=":planner-binding->project.md,protocols,business-rules,environment,user-preferences,analysis-brief  :planner->project.md,protocols,business-rules,environment,user-preferences  :doer->project.md,protocols,business-rules,environment,user-preferences,story-file  :verifier->project.md,protocols,business-rules,environment,user-preferences,story-file,execution  :adversarial-*->project.md,protocols,business-rules,environment,user-preferences,story-file,review-memory"
 
   PROMPT="$(cat <<EOF
 SYSTEM: You are context-curator for the aihaus milestone system.
@@ -664,10 +664,13 @@ payload_lines="$(_merge_and_cap "$resolved_static" "$haiku_lines")"
 
 # Fallback to universal minimum if empty.
 if [ -z "$(printf '%s' "$payload_lines" | tr -d '[:space:]')" ]; then
-  payload_lines="HIGH:.aihaus/project.md — Stack and conventions are required context.
-HIGH:.aihaus/workflows/default.md — Workflow gates and protocols are required context.
-HIGH:.aihaus/memory/workflows/environment.md — Runtime, CI/CD, credential locations, and validation commands are required context.
-MED:.aihaus/memory/MEMORY.md — Agent memory index for cross-task context."
+  payload_lines="HIGH:.aihaus/project.md - Stack and conventions are required context.
+HIGH:.aihaus/protocols/default.md - Workflow gates and protocols are required context.
+HIGH:.aihaus/protocols/routing.md - Intent routing decides workflow entry or no-workflow handling.
+HIGH:.aihaus/memory/workflows/business-rules.md - Business rules are the repository behavior contract.
+HIGH:.aihaus/memory/workflows/environment.md - Runtime, CI/CD, credential locations, and validation commands are required context.
+MED:.aihaus/memory/workflows/user-preferences.md - Repository-scoped user preferences shape execution and reporting.
+MED:.aihaus/memory/MEMORY.md - Agent memory index for cross-task context."
   path_method="fallback"
 fi
 

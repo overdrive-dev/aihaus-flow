@@ -189,25 +189,55 @@ for name in skills agents hooks templates; do
   update_aihaus_dir "${name}"
 done
 
-# Repo-local runtime layout. Do not overwrite workflow profiles on update; only
+# Repo-local runtime layout. Do not overwrite protocol profiles on update; only
 # seed missing defaults for existing installs.
 mkdir -p \
   "${AIHAUS}/bin" \
   "${AIHAUS}/state" \
   "${AIHAUS}/runtime" \
   "${AIHAUS}/backups" \
-  "${AIHAUS}/workflows" \
-  "${AIHAUS}/workflows/runs" \
+  "${AIHAUS}/protocols" \
   "${AIHAUS}/memory/workflows" \
   "${AIHAUS}/memory/agents" \
   "${AIHAUS}/memory/reviews" \
   "${AIHAUS}/memory/global" \
   "${AIHAUS}/memory/backend" \
   "${AIHAUS}/memory/frontend"
-for workflow_file in default.md agents.md artifacts.md business-rules.md fan-out.md parallelism.md roles.md routing.md; do
-  if [[ ! -f "${AIHAUS}/workflows/${workflow_file}" && -f "${PKG_AIHAUS}/workflows/${workflow_file}" ]]; then
-    cp "${PKG_AIHAUS}/workflows/${workflow_file}" "${AIHAUS}/workflows/${workflow_file}"
-    echo "  workflow: created .aihaus/workflows/${workflow_file}"
+
+migrate_legacy_workflows_dir() {
+  local old_dir="${AIHAUS}/workflows"
+  local new_dir="${AIHAUS}/protocols"
+  local runtime_runs="${AIHAUS}/runtime/runs"
+  [[ -d "${old_dir}" ]] || return 0
+
+  mkdir -p "${new_dir}" "${AIHAUS}/runtime"
+  local rel src dst
+  for rel in default.md agents.md artifacts.md business-rules.md fan-out.md parallelism.md roles.md routing.md kanban; do
+    src="${old_dir}/${rel}"
+    dst="${new_dir}/${rel}"
+    [[ -e "${src}" ]] || continue
+    if [[ ! -e "${dst}" ]]; then
+      mv "${src}" "${dst}"
+      echo "  migrate: .aihaus/workflows/${rel} -> .aihaus/protocols/${rel}"
+    else
+      echo "  warn: legacy .aihaus/workflows/${rel} left in place; .aihaus/protocols/${rel} already exists"
+    fi
+  done
+  if [[ -d "${old_dir}/runs" && ! -e "${runtime_runs}" ]]; then
+    mv "${old_dir}/runs" "${runtime_runs}"
+    echo "  migrate: .aihaus/workflows/runs -> .aihaus/runtime/runs"
+  elif [[ -d "${old_dir}/runs" ]]; then
+    echo "  warn: legacy .aihaus/workflows/runs left in place; .aihaus/runtime/runs already exists"
+  fi
+  rmdir "${old_dir}" 2>/dev/null || true
+}
+migrate_legacy_workflows_dir
+mkdir -p "${AIHAUS}/runtime/runs"
+
+for protocol_file in default.md agents.md artifacts.md business-rules.md fan-out.md parallelism.md roles.md routing.md; do
+  if [[ ! -f "${AIHAUS}/protocols/${protocol_file}" && -f "${PKG_AIHAUS}/protocols/${protocol_file}" ]]; then
+    cp "${PKG_AIHAUS}/protocols/${protocol_file}" "${AIHAUS}/protocols/${protocol_file}"
+    echo "  protocol: created .aihaus/protocols/${protocol_file}"
   fi
 done
 for rel in \
@@ -281,6 +311,25 @@ EOF
   echo "  memory: appended workflow environment prompts"
 }
 ensure_workflow_environment_prompts "${AIHAUS}/memory/workflows/environment.md"
+
+sync_output_styles() {
+  local src_dir="${PKG_AIHAUS}/output-styles"
+  local dst_dir="${CLAUDE}/output-styles"
+  [[ -d "${src_dir}" ]] || return 0
+
+  mkdir -p "${dst_dir}"
+  local src dst name
+  for src in "${src_dir}/"*.md; do
+    [[ -f "${src}" ]] || continue
+    name="$(basename "${src}")"
+    dst="${dst_dir}/${name}"
+    if [[ ! -f "${dst}" ]] || ! cmp -s "${src}" "${dst}" 2>/dev/null; then
+      cp "${src}" "${dst}"
+      echo "  output-style: refreshed .claude/output-styles/${name}"
+    fi
+  done
+}
+sync_output_styles
 
 seed_claude_context_bridge() {
   local claude_dir="$1"
@@ -847,6 +896,23 @@ if [[ -z "${AIHAUS_SKIP_GRAPH_BINARY:-}" ]]; then
     fi
   fi
 fi
+
+refresh_claude_context_bridge() {
+  local refresh_hook="${AIHAUS}/hooks/project-context-refresh.sh"
+  [[ -f "${refresh_hook}" ]] || return 0
+
+  echo ""
+  echo "  refreshing Claude context bridge..."
+  if CLAUDE_PROJECT_DIR="${TARGET}" \
+    AIHAUS_CONTEXT_REFRESH_QUIET=1 \
+    AIHAUS_CONTEXT_REFRESH_DISCOVERY=0 \
+    bash "${refresh_hook}" --reason update >/dev/null 2>&1; then
+    echo "  ok: Claude context bridge refreshed"
+  else
+    echo "  warn: Claude context bridge refresh failed (run .aihaus/hooks/project-context-refresh.sh manually)"
+  fi
+}
+refresh_claude_context_bridge
 
 # ---- Summary -----------------------------------------------------------------
 echo ""

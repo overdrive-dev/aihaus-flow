@@ -2,7 +2,7 @@
 
 How the pieces fit together: **workflows → their gate hooks → their agents → the agents' lifecycle hooks → the agents' skills.** aihaus 3.0 is specialist agents running *inside* gated workflows, with local memory and role-based access — layered on Claude Code's native primitives.
 
-> Wiring verified against the package on `main`: stages from `pkg/.aihaus/workflows/default.md`, hook → event from `pkg/.aihaus/templates/settings.local.json`, stage owners from `pkg/.aihaus/workflows/agents.md`, and sub-flow → specialist spawns from the `aih-plan` / `aih-feature` / `aih-bugfix` skills.
+> Wiring verified against the package on `main`: stages from `pkg/.aihaus/protocols/default.md`, hook → event from `pkg/.aihaus/templates/settings.local.json`, stage owners from `pkg/.aihaus/protocols/agents.md`, and sub-flow → specialist spawns from the `aih-plan` / `aih-feature` / `aih-bugfix` skills.
 
 ## The map
 
@@ -146,8 +146,8 @@ Every hook is wired in `pkg/.aihaus/templates/settings.local.json`.
 | `/aih-feature` | `implementer`⌖ · `frontend-dev`⌖ · `code-reviewer` · `code-fixer`⌖ · `verifier` · `integration-checker` · `migration-reviewer`* |
 | `/aih-bugfix` | `debugger` · `test-writer` · `code-reviewer` · `code-fixer`⌖ |
 
-*(Shown are the agents the sub-flows actually spawn; the package ships 58 specialist agents in total.)*
+*(Shown are the agents the sub-flows actually spawn; the package ships 59 specialist agents in total.)*
 
 ## The parallelism invariant (ADR-260529-A)
 
-File writes by parallel agents are safe **iff all five hold**: (1) isolated worktree, (2) disjoint Owned-Files, (3) sequential merge-back, (4) single-writer DB, (5) `autonomy-guard` drift catch. Two agents never edit the same file — parallelism comes from sharding work into disjoint file sets. Full contract: [`pkg/.aihaus/workflows/parallelism.md`](../pkg/.aihaus/workflows/parallelism.md).
+File writes by parallel agents are safe **iff all five hold**: (1) isolated worktree, (2) disjoint Owned-Files, (3) sequential merge-back, (4) single-writer DB, (5) `autonomy-guard` drift catch. Two agents never edit the same file — parallelism comes from sharding work into disjoint file sets. Full contract: [`pkg/.aihaus/protocols/parallelism.md`](../pkg/.aihaus/protocols/parallelism.md).

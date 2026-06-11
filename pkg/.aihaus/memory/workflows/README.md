@@ -29,8 +29,8 @@ Do not use it for:
 - database files,
 - one-off command output.
 
-Generated state belongs in `.aihaus/state/`. The workflow profile belongs in
-`.aihaus/workflows/`.
+Generated state belongs in `.aihaus/state/` and `.aihaus/runtime/runs/`. The
+workflow profile belongs in `.aihaus/protocols/`.
 
 Agents should not write this directory directly during a run. They should return
 candidate workflow-memory findings in their report, or emit per-agent memory to

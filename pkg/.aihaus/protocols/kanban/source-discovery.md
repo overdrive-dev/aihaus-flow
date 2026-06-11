@@ -20,7 +20,7 @@ flags are overrides, not the default path.
    - any source hints such as Linear team/project/view names or Notion database
      URLs
 4. Workflow/project files:
-   - `.aihaus/workflows/default.md`
+   - `.aihaus/protocols/default.md`
    - `.aihaus/project.md`
 5. Connected external kanban systems:
    - Linear
@@ -28,7 +28,7 @@ flags are overrides, not the default path.
    - Jira
    - Trello
    - GitHub Issues
-6. Local task files under `.aihaus/workflows/`.
+6. Local task files under `.aihaus/runtime/runs/`.
 7. `$ARGUMENTS` as a single goal brief only when no planned source exists.
 
 ### Source selection

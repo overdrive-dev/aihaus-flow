@@ -77,10 +77,10 @@ check_skills() {
   fi
 }
 
-# ---- Check 2: .aihaus/agents/ has 58 .md files (M050 adds init interview agent) --
+# ---- Check 2: .aihaus/agents/ has 59 .md files (workflow orchestrator added) --
 check_agents() {
   _start_check
-  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 58 .md files"
+  local label="Check ${CHECK_NUMBER}: .aihaus/agents/ has 59 .md files"
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   if [[ ! -d "$agents_root" ]]; then
     _fail "$label" "directory not found: $agents_root"
@@ -88,10 +88,10 @@ check_agents() {
   fi
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -eq 58 ]]; then
+  if [[ "$count" -eq 59 ]]; then
     _pass "$label"
   else
-    _fail "$label" "expected 58 .md files, found $count"
+    _fail "$label" "expected 59 .md files, found $count"
   fi
 }
 
@@ -1065,7 +1065,7 @@ check_purity() {
 # Verifies that exactly 15 aih-* skill directories exist under .aihaus/skills/.
 # Note: Check 1 verifies the NAMED SKILL.md files (15 expected names). In the
 # 3.0 refactor aih-goal (orchestrator) was removed — its kanban/DB substrate
-# relocated to workflows/kanban/, decoupled from goal — and aih-env (env
+# relocated to protocols/kanban/, decoupled from goal — and aih-env (env
 # capture) was added. Check 27 independently verifies the directory count so
 # that unexpected directories (stale renames, extra skill dirs) also cause CI
 # failure. If the count exceeds 15, a stale directory likely remains.
@@ -1091,9 +1091,9 @@ check_skill_count_and_staleness() {
 
 # ---- Check 28: cohort membership round-trip + parse contract (M012/S07 + M027/S10) --
 # Seven sub-assertions covering the 5-cohort taxonomy in cohorts.md (post-M027/S10 fork):
-#   C1 each of the 58 agents appears under exactly one cohort
-#   C2 cohort counts match: planner-binding=4, planner=14, doer=25, verifier=9,
-#      adversarial=6 (total=58); :adversarial-scout + :adversarial-review merged per ADR-260509-Y
+#   C1 each of the 59 agents appears under exactly one cohort
+#   C2 cohort counts match: planner-binding=4, planner=14, doer=26, verifier=9,
+#      adversarial=6 (total=59); :adversarial-scout + :adversarial-review merged per ADR-260509-Y
 #   C3 no :verifier-rich or :investigator or legacy :adversarial-scout or :adversarial-review
 #      cohort name appears in the table (deprecated names forbidden post-M027/S10)
 #   C4 F-006 parse contract: every data row yields NF=7 (awk -F'|' | sort -u == "7")
@@ -1167,15 +1167,15 @@ check_cohort_membership_roundtrip() {
   done
 
   local total_agents="${#_seen_agents[@]}"
-  if [[ "$total_agents" -ne 58 ]]; then
-    problems+=("C1: expected 58 agents in membership table; found ${total_agents}")
+  if [[ "$total_agents" -ne 59 ]]; then
+    problems+=("C1: expected 59 agents in membership table; found ${total_agents}")
   fi
 
   # C2: expected cohort counts (5-cohort post-M027/S10 fork, ADR-260509-Y).
   local -A _expected_counts=(
     [":planner-binding"]=4
     [":planner"]=14
-    [":doer"]=25
+    [":doer"]=26
     [":verifier"]=9
     [":adversarial"]=6
   )
@@ -1811,7 +1811,7 @@ check_context_curator() {
 #   (c) learning-advisor model is haiku (cohort :verifier default)
 #   (d) learning-advisor tools are Read, Grep, Glob (no Write/Edit per ADR-001)
 #   (e) templates/settings.local.json references learning-advisor.sh under SubagentStop
-#   (f) agent count at 58 (init interview agent added after M049)
+#   (f) agent count at 59 (workflow orchestrator added)
 # Note: COMPAT-MATRIX check removed in M015/ADR-M015-A (Cursor support dropped).
 check_learning_advisor() {
   _start_check
@@ -1870,12 +1870,12 @@ check_learning_advisor() {
     fi
   fi
 
-  # (f) agent count at 58 (init interview agent added after M049)
+  # (f) agent count at 59 (workflow orchestrator added)
   local agents_root="${PACKAGE_ROOT}/.aihaus/agents"
   local count
   count=$(find "$agents_root" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')
-  if [[ "$count" -ne 58 ]]; then
-    problems+=("expected 58 agents total (init interview agent added after M049); found ${count}")
+  if [[ "$count" -ne 59 ]]; then
+    problems+=("expected 59 agents total (workflow orchestrator added); found ${count}")
   fi
 
   if [[ ${#problems[@]} -eq 0 ]]; then
@@ -4978,8 +4978,8 @@ check_aih_graph_integration_round_trip() {
   if ! grep -qE "Decisions: [0-9]+ \([0-9]+ are amendments" <<< "${out}"; then
     issues+=("build output missing Decisions line")
   fi
-  if ! grep -qE "Agents:    58 " <<< "${out}"; then
-    issues+=("expected Agents: 58 (Smoke Check 2)")
+  if ! grep -qE "Agents:    59 " <<< "${out}"; then
+    issues+=("expected Agents: 59 (Smoke Check 2)")
   fi
   if ! grep -qE "Skills:    15" <<< "${out}"; then
     issues+=("expected Skills: 15 (Smoke Check 1)")
@@ -5122,9 +5122,9 @@ check_goal_aftermath_regressions() {
   local helper="${hooks_root}/lib/path-helpers.sh"
   local git_add_guard="${hooks_root}/git-add-guard.sh"
   local auto_close="${hooks_root}/manifest-auto-close.sh"
-  local goal_schema="${PACKAGE_ROOT}/.aihaus/workflows/kanban/schema.sql"
-  local goal_init="${PACKAGE_ROOT}/.aihaus/workflows/kanban/init-kanban-db.sh"
-  local workflow_default="${PACKAGE_ROOT}/.aihaus/workflows/default.md"
+  local goal_schema="${PACKAGE_ROOT}/.aihaus/protocols/kanban/schema.sql"
+  local goal_init="${PACKAGE_ROOT}/.aihaus/protocols/kanban/init-kanban-db.sh"
+  local workflow_default="${PACKAGE_ROOT}/.aihaus/protocols/default.md"
   local dev_reviewer="${PACKAGE_ROOT}/.aihaus/agents/workflow-dev-reviewer.md"
   local human_review="${PACKAGE_ROOT}/.aihaus/agents/workflow-human-review.md"
 
@@ -5229,6 +5229,29 @@ check_legacy_hygiene_regressions() {
   if ! grep -Fq 'copy mode overwrites package-managed' "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
     issues+=("update.ps1 missing copy-mode overwrite warning")
   fi
+  [[ -d "${PACKAGE_ROOT}/.aihaus/protocols/kanban" ]] || issues+=("packaged protocols/kanban directory missing")
+  [[ ! -d "${PACKAGE_ROOT}/.aihaus/workflows" ]] || issues+=("legacy packaged workflows directory still exists")
+  if ! grep -Fq 'migrate_legacy_workflows_dir' "${PACKAGE_ROOT}/../pkg/scripts/update.sh"; then
+    issues+=("update.sh missing workflows -> protocols migration")
+  fi
+  if ! grep -Fq 'Migrate-LegacyWorkflowsDir' "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
+    issues+=("update.ps1 missing workflows -> protocols migration")
+  fi
+  if ! grep -Fq 'output-style: refreshed .claude/output-styles/' "${PACKAGE_ROOT}/../pkg/scripts/update.sh"; then
+    issues+=("update.sh missing output-style projection refresh")
+  fi
+  if ! grep -Fq 'output-style: refreshed .claude\output-styles\' "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
+    issues+=("update.ps1 missing output-style projection refresh")
+  fi
+  if ! grep -Fq 'AIHAUS_CONTEXT_REFRESH_DISCOVERY=0' "${PACKAGE_ROOT}/../pkg/scripts/update.sh"; then
+    issues+=("update.sh does not refresh Claude context bridge after package update")
+  fi
+  if ! grep -Fq 'AIHAUS_CONTEXT_REFRESH_DISCOVERY = '\''0'\''' "${PACKAGE_ROOT}/../pkg/scripts/update.ps1"; then
+    issues+=("update.ps1 does not refresh Claude context bridge after package update")
+  fi
+  if ! grep -Fq 'Legacy Claude Agent Memory Placeholders' "$preflight"; then
+    issues+=("legacy-preflight missing empty .claude/agent-memory placeholder handling")
+  fi
   for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '/.aihaus/roles/' '/.aihaus/memory/local/' '*/.aihaus/' '*/.claude/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
     if ! grep -Fxq "$needle" "$fragment"; then
       issues+=("gitignore fragment missing ${needle}")
@@ -5258,13 +5281,14 @@ check_legacy_hygiene_regressions() {
     _fail "$label" "failed to create temp dir"
     return
   }
-  mkdir -p "$tmp_root/.aihaus/state/.claude/audit" "$tmp_root/.gsd" "$tmp_root/.hermes" "$tmp_root/.claude/worktrees/agent-old"
+  mkdir -p "$tmp_root/.aihaus/state/.claude/audit" "$tmp_root/.gsd" "$tmp_root/.hermes" "$tmp_root/.claude/worktrees/agent-old" "$tmp_root/.claude/agent-memory/analyst" "$tmp_root/.claude/agent-memory/reviewer"
   git -C "$tmp_root" init >/dev/null 2>&1 || issues+=("git init failed for legacy-preflight fixture")
   printf 'old hook\n' > "$tmp_root/.aihaus/state/.claude/audit/hook.jsonl"
   printf 'old schema\n' > "$tmp_root/.aihaus/state/schema.sql"
   printf 'legacy gsd\n' > "$tmp_root/.gsd/PROJECT.md"
   printf 'legacy hermes\n' > "$tmp_root/.hermes/report.md"
   printf 'agent worktree\n' > "$tmp_root/.claude/worktrees/agent-old/README.md"
+  printf 'keep populated agent memory\n' > "$tmp_root/.claude/agent-memory/reviewer/MEMORY.md"
   (
     cd "$tmp_root" || exit 1
     bash "$preflight" --fix-safe >/dev/null 2>&1
@@ -5277,6 +5301,15 @@ check_legacy_hygiene_regressions() {
   fi
   if ! compgen -G "$tmp_root/.aihaus/backups/legacy-cleanup/*/.aihaus/state/schema.sql" >/dev/null; then
     issues+=("legacy-preflight backup copy for schema.sql missing")
+  fi
+  if [[ -e "$tmp_root/.claude/agent-memory/analyst" ]]; then
+    issues+=("legacy-preflight did not archive empty .claude/agent-memory placeholder")
+  fi
+  if ! compgen -G "$tmp_root/.aihaus/backups/legacy-cleanup/*/.claude/agent-memory/analyst" >/dev/null; then
+    issues+=("legacy-preflight backup copy for empty agent-memory placeholder missing")
+  fi
+  if [[ ! -e "$tmp_root/.claude/agent-memory/reviewer/MEMORY.md" ]]; then
+    issues+=("legacy-preflight moved populated agent-memory directory")
   fi
   if [[ ! -e "$tmp_root/.gsd/PROJECT.md" || ! -e "$tmp_root/.hermes/report.md" ]]; then
     issues+=("legacy-preflight moved manual-review legacy directories")
@@ -5305,11 +5338,11 @@ check_goal_business_rule_gap_contract() {
   _start_check
   local label="Check ${CHECK_NUMBER}: kanban business-rule gap contract"
   local issues=()
-  local local_kanban="${PACKAGE_ROOT}/.aihaus/workflows/kanban/local-kanban.md"
-  local linear_intake="${PACKAGE_ROOT}/.aihaus/workflows/kanban/linear-intake.md"
-  local run_state="${PACKAGE_ROOT}/.aihaus/workflows/kanban/run-state.md"
+  local local_kanban="${PACKAGE_ROOT}/.aihaus/protocols/kanban/local-kanban.md"
+  local linear_intake="${PACKAGE_ROOT}/.aihaus/protocols/kanban/linear-intake.md"
+  local run_state="${PACKAGE_ROOT}/.aihaus/protocols/kanban/run-state.md"
   local planning_agent="${PACKAGE_ROOT}/.aihaus/agents/workflow-planning-gate.md"
-  local workflow_default="${PACKAGE_ROOT}/.aihaus/workflows/default.md"
+  local workflow_default="${PACKAGE_ROOT}/.aihaus/protocols/default.md"
 
   if ! grep -Fq 'business-rule gap for one task' "$local_kanban"; then
     issues+=("local-kanban annex missing one-task business-rule gap rule")
@@ -5346,7 +5379,7 @@ check_memory_write_boundary_contract() {
   local issues=()
   local file_guard="${PACKAGE_ROOT}/.aihaus/hooks/file-guard.sh"
   local per_agent="${PACKAGE_ROOT}/.aihaus/skills/_shared/per-agent-memory.md"
-  local goal_memory="${PACKAGE_ROOT}/.aihaus/workflows/kanban/memory-promotion.md"
+  local goal_memory="${PACKAGE_ROOT}/.aihaus/protocols/kanban/memory-promotion.md"
   local workflow_agents="${PACKAGE_ROOT}/.aihaus/agents/workflow-"'*.md'
 
   if ! grep -Fq 'Do not whitelist ~/.claude/projects/**/memory' "$file_guard"; then
@@ -5407,7 +5440,9 @@ check_claude_project_context_bridge() {
   else
     grep -Fq 'AIHAUS:CLAUDE-CONTEXT-START' "${context_template}" || issues+=("CLAUDE.md template missing managed marker")
     grep -Fq '@../.aihaus/project.md' "${context_template}" || issues+=("CLAUDE.md template does not import project.md")
-    grep -Fq '@../.aihaus/workflows/default.md' "${context_template}" || issues+=("CLAUDE.md template does not import workflow profile")
+    grep -Fq '@../.aihaus/protocols/default.md' "${context_template}" || issues+=("CLAUDE.md template does not import workflow profile")
+    grep -Fq '@../.aihaus/protocols/routing.md' "${context_template}" || issues+=("CLAUDE.md template does not import routing protocol")
+    grep -Fq 'workflow-orchestrator' "${context_template}" || issues+=("CLAUDE.md template missing orchestrator routing rule")
     grep -Fq '@../.aihaus/memory/workflows/environment.md' "${context_template}" || issues+=("CLAUDE.md template does not import workflow environment memory")
     if grep -Eq '^@\.\./\.aihaus/(decisions|knowledge)\.md[[:space:]]*$' "${context_template}"; then
       issues+=("CLAUDE.md template imports large decisions/knowledge ledgers at startup")
@@ -5421,6 +5456,7 @@ check_claude_project_context_bridge() {
     grep -Fq 'AIHAUS:CLAUDE-RULES-START' "${rule_template}" || issues+=("Claude rule template missing managed marker")
     grep -Fq 'Never store plaintext secrets' "${rule_template}" || issues+=("Claude rule template missing secret-handling rule")
     grep -Fq 'Do not import entire large ledgers into startup context' "${rule_template}" || issues+=("Claude rule template missing large-ledger startup guard")
+    grep -Fq '.aihaus/protocols/routing.md' "${rule_template}" || issues+=("Claude rule template missing routing protocol reference")
   fi
 
   for script in "${PACKAGE_ROOT}/scripts/install.sh" "${PACKAGE_ROOT}/scripts/update.sh"; do
@@ -5448,7 +5484,8 @@ check_claude_project_context_bridge() {
   fi
 
   if [[ -f "${role_defaults}" ]]; then
-    grep -Fq '.aihaus/workflows/default.md' "${role_defaults}" || issues+=("role-defaults missing workflow profile context")
+    grep -Fq '.aihaus/protocols/default.md' "${role_defaults}" || issues+=("role-defaults missing workflow profile context")
+    grep -Fq '.aihaus/protocols/routing.md' "${role_defaults}" || issues+=("role-defaults missing routing protocol context")
     grep -Fq '.aihaus/memory/workflows/environment.md' "${role_defaults}" || issues+=("role-defaults missing workflow environment context")
     if grep -Eq '\.aihaus/(decisions|knowledge)\.md' "${role_defaults}"; then
       issues+=("role-defaults preloads project decisions/knowledge ledgers")
@@ -5458,7 +5495,8 @@ check_claude_project_context_bridge() {
   fi
 
   if [[ -f "${context_hook}" ]]; then
-    grep -Fq '.aihaus/workflows/default.md' "${context_hook}" || issues+=("context-inject fallback missing workflow profile")
+    grep -Fq '.aihaus/protocols/default.md' "${context_hook}" || issues+=("context-inject fallback missing workflow profile")
+    grep -Fq '.aihaus/protocols/routing.md' "${context_hook}" || issues+=("context-inject fallback missing routing protocol")
     grep -Fq '.aihaus/memory/workflows/environment.md' "${context_hook}" || issues+=("context-inject fallback missing workflow environment")
     if grep -Eq 'payload_lines="HIGH:\.aihaus/(decisions|knowledge)\.md|cohorts_summary=.*(decisions|knowledge)\.md' "${context_hook}"; then
       issues+=("context-inject fallback/cohort summary preloads project decisions/knowledge ledgers")
@@ -5540,15 +5578,29 @@ check_init_operational_context_discovery() {
     _fail "$label" "failed to create temp dir"
     return
   }
-  mkdir -p "${tmp_root}/.aihaus/memory/workflows" "${tmp_root}/.aihaus/project" "${tmp_root}/.claude/rules"
+  mkdir -p "${tmp_root}/.aihaus/memory/workflows" "${tmp_root}/.aihaus/protocols" "${tmp_root}/.aihaus/project" "${tmp_root}/.claude/rules"
   printf '# Env\n' > "${tmp_root}/.aihaus/memory/workflows/environment.md"
+  printf '# Business Rules\n' > "${tmp_root}/.aihaus/memory/workflows/business-rules.md"
+  printf '# Rules\n' > "${tmp_root}/.aihaus/memory/workflows/rules.md"
+  printf '# User Preferences\n' > "${tmp_root}/.aihaus/memory/workflows/user-preferences.md"
+  printf '# Gotchas\n' > "${tmp_root}/.aihaus/memory/workflows/gotchas.md"
+  printf '# Workflow\n' > "${tmp_root}/.aihaus/protocols/default.md"
+  printf '# Agents\n' > "${tmp_root}/.aihaus/protocols/agents.md"
+  printf '# Routing\n' > "${tmp_root}/.aihaus/protocols/routing.md"
   printf '# Project\n' > "${tmp_root}/.aihaus/project.md"
   printf '{}\n' > "${tmp_root}/.claude/settings.local.json"
   printf '# Rule\n' > "${tmp_root}/.claude/rules/aihaus-project-memory.md"
   cat > "${tmp_root}/.claude/CLAUDE.md" <<'EOF'
 <!-- AIHAUS:CLAUDE-CONTEXT-START -->
 @../.aihaus/project.md
+@../.aihaus/protocols/default.md
+@../.aihaus/protocols/agents.md
+@../.aihaus/protocols/routing.md
 @../.aihaus/memory/workflows/environment.md
+@../.aihaus/memory/workflows/business-rules.md
+@../.aihaus/memory/workflows/rules.md
+@../.aihaus/memory/workflows/user-preferences.md
+@../.aihaus/memory/workflows/gotchas.md
 <!-- AIHAUS:CLAUDE-CONTEXT-END -->
 EOF
   printf 'version: 0.2\n' > "${tmp_root}/buildspec.yml"
@@ -5596,7 +5648,7 @@ check_project_context_refresh_hook() {
   grep -Fq '*/node_modules' "${PACKAGE_ROOT}/.aihaus/skills/aih-init/scripts/environment-discovery.sh" || issues+=("environment discovery does not prune nested node_modules")
   grep -Fq '.aihaus/memory/workflows/business-rules.md' "${PACKAGE_ROOT}/.aihaus/templates/claude/CLAUDE.md" || issues+=("Claude context template does not import workflow business-rules memory")
   grep -Fq '.aihaus/memory/workflows/business-rules.md' "${PACKAGE_ROOT}/.aihaus/templates/claude/rules/aihaus-project-memory.md" || issues+=("Claude memory rule does not mention business-rules memory")
-  if grep -Eq 'BR-[0-9]+' "${PACKAGE_ROOT}/.aihaus/workflows/default.md"; then
+  if grep -Eq 'BR-[0-9]+' "${PACKAGE_ROOT}/.aihaus/protocols/default.md"; then
     issues+=("default workflow references concrete BR-* ids not present in installed ledgers")
   fi
 
@@ -5690,7 +5742,7 @@ _No active milestones yet._
 EOF
 
   CLAUDE_PROJECT_DIR="${tmp_root}" bash "${refresh_hook}" --reason smoke --force >/dev/null 2>&1 || issues+=("project-context-refresh fixture failed")
-  [[ -f "${tmp_root}/.aihaus/workflows/default.md" ]] || issues+=("refresh hook did not seed workflow profile")
+  [[ -f "${tmp_root}/.aihaus/protocols/default.md" ]] || issues+=("refresh hook did not seed workflow profile")
   [[ -f "${tmp_root}/.aihaus/memory/workflows/rules.md" ]] || issues+=("refresh hook did not seed workflow rules memory")
   [[ -f "${tmp_root}/.aihaus/memory/workflows/business-rules.md" ]] || issues+=("refresh hook did not seed business-rules memory")
   [[ -f "${tmp_root}/.aihaus/roles/online-actions.conf" ]] || issues+=("refresh hook did not seed local online-actions config")
@@ -5732,17 +5784,17 @@ check_eval_run_deterministic() {
   _start_check
   local label="Check ${CHECK_NUMBER}: eval-run.sh deterministic eval — good passes, bad fails (3.0/S6)"
   local eval_script="${PACKAGE_ROOT}/.aihaus/eval/eval-run.sh"
-  local schema="${PACKAGE_ROOT}/.aihaus/workflows/kanban/schema.sql"
+  local schema="${PACKAGE_ROOT}/.aihaus/protocols/kanban/schema.sql"
   if [[ ! -f "$eval_script" ]]; then _fail "$label" "eval-run.sh missing"; return; fi
   if ! bash -n "$eval_script" >/dev/null 2>&1; then _fail "$label" "eval-run.sh not parseable"; return; fi
   if ! command -v sqlite3 >/dev/null 2>&1; then _pass "$label (skipped: sqlite3 unavailable)"; return; fi
   local issues=()
   local d
   d="$(_mktemp_dir aih-eval)" || { _fail "$label" "mktemp failed"; return; }
-  mkdir -p "$d/.aihaus/state" "$d/.aihaus/workflows/runs/r/evidence" 2>/dev/null || true
+  mkdir -p "$d/.aihaus/state" "$d/.aihaus/runtime/runs/r/evidence" 2>/dev/null || true
   sqlite3 "$d/.aihaus/state/kanban.db" < "$schema" >/dev/null 2>&1 || true
-  printf 'ev\n' > "$d/.aihaus/workflows/runs/r/evidence/EV-1.md" 2>/dev/null || true
-  sqlite3 "$d/.aihaus/state/kanban.db" "INSERT INTO gate_events (id,task_id,stage,verdict,evidence_path,created_at) VALUES('G1','T1','testes','PASS','.aihaus/workflows/runs/r/evidence/EV-1.md','t');" >/dev/null 2>&1 || true
+  printf 'ev\n' > "$d/.aihaus/runtime/runs/r/evidence/EV-1.md" 2>/dev/null || true
+  sqlite3 "$d/.aihaus/state/kanban.db" "INSERT INTO gate_events (id,task_id,stage,verdict,evidence_path,created_at) VALUES('G1','T1','testes','PASS','.aihaus/runtime/runs/r/evidence/EV-1.md','t');" >/dev/null 2>&1 || true
   bash "$eval_script" --project "$d" >/dev/null 2>&1 || issues+=("good fixture should pass (exit 0) but eval failed")
   sqlite3 "$d/.aihaus/state/kanban.db" "INSERT INTO gate_events (id,task_id,stage,verdict,created_at) VALUES('G2','T1','testes','MAYBE','t');" >/dev/null 2>&1 || true
   if bash "$eval_script" --project "$d" >/dev/null 2>&1; then

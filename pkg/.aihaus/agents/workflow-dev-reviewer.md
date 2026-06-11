@@ -19,7 +19,7 @@ You are the dev-environment workflow reviewer.
 
 Before acting, read:
 
-1. `.aihaus/workflows/default.md`
+1. `.aihaus/protocols/default.md`
 2. `.aihaus/project.md`
 3. `.aihaus/memory/workflows/README.md`
 4. relevant `.aihaus/memory/workflows/*.md` files when present

@@ -3,7 +3,7 @@
 This is your project's **living business-rules ledger** — the premises agents decide
 from autonomously. It is incremental: every request that resolves a genuine open
 premise adds or updates a rule here. The contract, schema, and gates are documented in
-`.aihaus/workflows/business-rules.md`.
+`.aihaus/protocols/business-rules.md`.
 
 > **How an agent uses this file:** decide every contract-*covered* question from these
 > rules (citing the rule ID when it affects behavior); return to a human only on a

@@ -862,8 +862,8 @@ foreach ($dir in @(
     (Join-Path $TargetAihaus 'state'),
     (Join-Path $TargetAihaus 'runtime'),
     (Join-Path $TargetAihaus 'backups'),
-    (Join-Path $TargetAihaus 'workflows'),
-    (Join-Path $TargetAihaus 'workflows\runs'),
+    (Join-Path $TargetAihaus 'protocols'),
+    (Join-Path $TargetAihaus 'runtime\runs'),
     (Join-Path $TargetAihaus 'memory\workflows'),
     (Join-Path $TargetAihaus 'memory\agents'),
     (Join-Path $TargetAihaus 'memory\reviews'),
@@ -884,11 +884,11 @@ $workflowSeedFiles = @(
     'routing.md'
 )
 foreach ($workflowFile in $workflowSeedFiles) {
-    $src = Join-Path $PkgAihaus (Join-Path 'workflows' $workflowFile)
-    $dst = Join-Path $TargetAihaus (Join-Path 'workflows' $workflowFile)
+    $src = Join-Path $PkgAihaus (Join-Path 'protocols' $workflowFile)
+    $dst = Join-Path $TargetAihaus (Join-Path 'protocols' $workflowFile)
     if (-not (Test-Path -LiteralPath $dst) -and (Test-Path -LiteralPath $src)) {
         Copy-Item -LiteralPath $src -Destination $dst
-        Write-Host "  workflow: created .aihaus\workflows\$workflowFile"
+        Write-Host "  protocol: created .aihaus\protocols\$workflowFile"
     }
 }
 $memorySeedFiles = @(

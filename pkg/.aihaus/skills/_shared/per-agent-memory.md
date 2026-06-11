@@ -92,5 +92,5 @@ durable facts, and the orchestrator applies them during memory promotion.
 
 See `pkg/.aihaus/skills/aih-milestone/completion-protocol.md` Step 4.7b for
 the milestone application algorithm and
-`pkg/.aihaus/workflows/kanban/memory-promotion.md` for the workflow-run
+`pkg/.aihaus/protocols/kanban/memory-promotion.md` for the workflow-run
 application algorithm.

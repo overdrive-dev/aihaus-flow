@@ -3,7 +3,7 @@
 How aihaus artifacts are stored and consumed **without failure**. Workflow agents
 and the actions (sub-flows + native `/goal` runs) MUST follow this before producing
 or reading any artifact. Much of this is already enforced by
-`workflows/kanban/run-state.md` (projection rules) and `workflows/kanban/db-schema.md`
+`protocols/kanban/run-state.md` (projection rules) and `protocols/kanban/db-schema.md`
 (sync safety + schema); this file is the single consolidated contract.
 
 ## Two trees (strict division)
@@ -19,7 +19,7 @@ Writing a workflow artifact into `.claude/` (or reading workflow state from it) 
 | Class | Path | Scope | Authority |
 |---|---|---|---|
 | Operational state | `.aihaus/state/kanban.db` | local | **AUTHORITY (state)** |
-| Readable projection | `.aihaus/workflows/runs/<YYMMDD-slug>/` (GOAL/TASKS/RUN-MANIFEST/tasks/) | local | derived from DB |
+| Readable projection | `.aihaus/runtime/runs/<YYMMDD-slug>/` (GOAL/TASKS/RUN-MANIFEST/tasks/) | local | derived from DB |
 | Per-task evidence | `runs/<slug>/evidence/<task-id>/` | local (heavy) | referenced by DB |
 | Durable knowledge (incl. business rules) | `.aihaus/decisions.md`, `.aihaus/knowledge.md`, `.aihaus/project.md`, `.aihaus/memory/**` (except `local/`) | **project (committed)** | **AUTHORITY (knowledge)** |
 | Local memory | `.aihaus/memory/local/**` (incl. `environment-online.md`) | local (gitignored) | private authority |
@@ -55,7 +55,7 @@ Scope is encoded in the **path**, and `.gitignore` enforces it:
 
 - **project (committed):** business-rules doc, `decisions.md`, `knowledge.md`,
   `project.md`, `memory/**` except `memory/local/`.
-- **local (gitignored):** `memory/local/**`, `state/`, `workflows/runs/` evidence,
+- **local (gitignored):** `memory/local/**`, `state/`, `runtime/runs/` evidence,
   `audit/`.
 
 Writing a project-scoped fact into a local path (or vice versa) is a scope bug —

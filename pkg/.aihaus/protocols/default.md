@@ -6,7 +6,9 @@ moving tasks between stages.
 
 ## Source of Truth
 
-- Workflow state starts local-first in `.aihaus/workflows/`.
+- Workflow protocols live in `.aihaus/protocols/`.
+- Workflow state starts local-first in `.aihaus/state/` and
+  `.aihaus/runtime/runs/`.
 - External tools such as Linear, Jira, Trello, Notion, or GitHub Issues are sync
   targets, not required storage for the first implementation.
 - Durable learned behavior belongs in `.aihaus/memory/workflows/`, not in this
@@ -66,7 +68,7 @@ Playwright E2E runs later at `homolog`.
 ## Online Boundary
 
 `homolog` and `prod` are the **online** stages and may be driven only by a
-profile holding the `devops` role (see `.aihaus/workflows/roles.md`);
+profile holding the `devops` role (see `.aihaus/protocols/roles.md`);
 `role-guard.sh` enforces it. Everything up to and including `testes` is
 offline-local (Docker).
 
@@ -161,7 +163,7 @@ The runner must:
 - register every discovered or imported task in the local kanban before
   planning,
 - search the local kanban for related tasks before creating new local tasks,
-- create readable evidence packages under `.aihaus/workflows/runs/`,
+- create readable evidence packages under `.aihaus/runtime/runs/`,
 - evaluate planning before TDD for every task,
 - persist task-specific planning questions and answers as structured contracts,
 - continue ready tasks when other tasks are blocked,

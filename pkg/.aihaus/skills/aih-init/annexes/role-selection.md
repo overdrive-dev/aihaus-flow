@@ -1,7 +1,7 @@
 # Role Selection (aih-init)
 
 Establishes the install's **role profile** → `.aihaus/.profile`. Roles are the
-capability profiles defined in `.aihaus/workflows/roles.md` (`pm`, `builder`,
+capability profiles defined in `.aihaus/protocols/roles.md` (`pm`, `builder`,
 `dev`, `qa`, `devops`). Roles are **additive** — a profile may hold several
 (e.g. `builder,devops`). The `devops` role is the only one that may cross the
 staging→prod "online" boundary; the role-guard PreToolUse hook enforces it.
@@ -13,7 +13,7 @@ staging→prod "online" boundary; the role-guard PreToolUse hook enforces it.
 
 2. **Ask (interactive only).** Ask exactly ONE question:
    > "Quais roles este install deve ter? (separe por vírgula)
-   >  `pm` · `builder` · `dev` · `qa` · `devops` — veja `.aihaus/workflows/roles.md`"
+   >  `pm` · `builder` · `dev` · `qa` · `devops` — veja `.aihaus/protocols/roles.md`"
 
 3. **Validate.** Accept a comma/space-separated subset of
    `{pm,builder,dev,qa,devops}`. Reject any unknown token by re-listing the
@@ -28,7 +28,7 @@ staging→prod "online" boundary; the role-guard PreToolUse hook enforces it.
 5. **Non-interactive / no answer.** Do NOT write `.aihaus/.profile`. The
    role-guard stays out of scope (absent sentinel → exit 0). Print:
    > "No role profile set — role-guard stays out of scope. Set roles later by
-   >  writing `.aihaus/.profile` (see `.aihaus/workflows/roles.md`)."
+   >  writing `.aihaus/.profile` (see `.aihaus/protocols/roles.md`)."
 
 ## Notes
 

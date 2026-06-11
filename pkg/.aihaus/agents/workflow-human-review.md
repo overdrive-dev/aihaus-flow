@@ -18,7 +18,7 @@ You are the human-review handoff agent.
 
 Before acting, read:
 
-1. `.aihaus/workflows/default.md`
+1. `.aihaus/protocols/default.md`
 2. `.aihaus/project.md`
 3. `.aihaus/memory/workflows/README.md`
 4. relevant task evidence files from the current goal or milestone

@@ -3,36 +3,57 @@
   "_schema": 1,
   ":planner-binding": [
     {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack, conventions, and milestone history inform planning scope."},
-    {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Stage gates and source-sync rules shape task planning."},
+    {"tier": "HIGH", "path": ".aihaus/protocols/default.md", "rationale": "Stage gates and source-sync rules shape task planning."},
+    {"tier": "HIGH", "path": ".aihaus/protocols/routing.md", "rationale": "Intent routing decides workflow entry or no-workflow handling."},
+    {"tier": "HIGH", "path": ".aihaus/memory/workflows/business-rules.md", "rationale": "Business rules are the decision contract for scope and behavior."},
     {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Runtime, CI/CD, credential locations, and validation commands are project-specific."},
+    {"tier": "MED", "path": ".aihaus/memory/workflows/user-preferences.md", "rationale": "Repository-scoped user preferences shape planning and handoff style."},
     {"tier": "HIGH", "path": "<analysis-brief>", "rationale": "Analyst brief is the primary input to binding-tier planners."}
   ],
   ":planner": [
     {"tier": "MED",  "path": ".aihaus/project.md", "rationale": "Stack and conventions provide grounding for research and analysis."},
-    {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Stage gates and workflow protocols define how planned work moves."},
+    {"tier": "HIGH", "path": ".aihaus/protocols/default.md", "rationale": "Stage gates and workflow protocols define how planned work moves."},
+    {"tier": "HIGH", "path": ".aihaus/protocols/routing.md", "rationale": "Intent routing decides workflow entry or no-workflow handling."},
+    {"tier": "HIGH", "path": ".aihaus/memory/workflows/business-rules.md", "rationale": "Business rules prevent plans from inventing product behavior."},
     {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Environment and CI/CD facts prevent generic validation plans."},
+    {"tier": "MED",  "path": ".aihaus/memory/workflows/user-preferences.md", "rationale": "Repository-scoped user preferences shape planning and handoff style."},
     {"tier": "MED",  "path": "<analysis-brief>", "rationale": "Prior analysis brief gives context on what has already been investigated."}
   ],
   ":doer": [
     {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack, conventions, and verification commands required for implementation."},
-    {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Stage gates define required handoff and validation evidence."},
+    {"tier": "HIGH", "path": ".aihaus/protocols/default.md", "rationale": "Stage gates define required handoff and validation evidence."},
+    {"tier": "HIGH", "path": ".aihaus/protocols/routing.md", "rationale": "Intent routing decides whether work continues, starts a workflow, or stays inline."},
+    {"tier": "HIGH", "path": ".aihaus/memory/workflows/business-rules.md", "rationale": "Business rules constrain implementation behavior."},
     {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Runtime, test credentials, deploy jobs, and smoke commands are required execution context."},
+    {"tier": "MED",  "path": ".aihaus/memory/workflows/user-preferences.md", "rationale": "Repository-scoped user preferences shape implementation and reporting style."},
     {"tier": "HIGH", "path": "<story-file>", "rationale": "Story spec and acceptance criteria define the implementation target."}
   ],
   ":verifier": [
-    {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Workflow gates define pass, skip, block, and evidence semantics."},
+    {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack, commands, and conventions are required verification context."},
+    {"tier": "HIGH", "path": ".aihaus/protocols/default.md", "rationale": "Workflow gates define pass, skip, block, and evidence semantics."},
+    {"tier": "MED",  "path": ".aihaus/protocols/routing.md", "rationale": "Routing context explains why verification belongs to a workflow or inline path."},
+    {"tier": "HIGH", "path": ".aihaus/memory/workflows/business-rules.md", "rationale": "Business rules define the behavioral contract being verified."},
     {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Verification depends on dev URLs, CI jobs, credentials, and smoke commands."},
+    {"tier": "MED",  "path": ".aihaus/memory/workflows/user-preferences.md", "rationale": "Repository-scoped user preferences shape verification reporting."},
     {"tier": "HIGH", "path": "<story-file>", "rationale": "Acceptance criteria are the ground truth for verification verdicts."},
     {"tier": "MED",  "path": "<execution-dir>", "rationale": "Execution artifacts and prior summaries provide evidence for verification."}
   ],
   ":adversarial-scout": [
-    {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Workflow gates reveal missing planning and validation obligations."},
+    {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack and conventions expose invalid assumptions in plans."},
+    {"tier": "HIGH", "path": ".aihaus/protocols/default.md", "rationale": "Workflow gates reveal missing planning and validation obligations."},
+    {"tier": "MED",  "path": ".aihaus/protocols/routing.md", "rationale": "Routing context exposes invalid workflow entry assumptions."},
+    {"tier": "HIGH", "path": ".aihaus/memory/workflows/business-rules.md", "rationale": "Business rules are the main source for product-contract contradictions."},
     {"tier": "MED",  "path": ".aihaus/memory/workflows/environment.md", "rationale": "Environment facts often expose unvalidated assumptions."},
+    {"tier": "MED",  "path": ".aihaus/memory/workflows/user-preferences.md", "rationale": "Repository-scoped user preferences can make a plan unacceptable."},
     {"tier": "HIGH", "path": "<story-file>", "rationale": "Story spec is the scope boundary for adversarial plan review."}
   ],
   ":adversarial-review": [
-    {"tier": "HIGH", "path": ".aihaus/workflows/default.md", "rationale": "Review must enforce workflow evidence and handoff gates."},
+    {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack and conventions are required review context."},
+    {"tier": "HIGH", "path": ".aihaus/protocols/default.md", "rationale": "Review must enforce workflow evidence and handoff gates."},
+    {"tier": "MED",  "path": ".aihaus/protocols/routing.md", "rationale": "Routing context explains intended workflow ownership."},
+    {"tier": "HIGH", "path": ".aihaus/memory/workflows/business-rules.md", "rationale": "Business rules anchor behavior-affecting review findings."},
     {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Review and Playwright checks depend on runtime and credential context."},
+    {"tier": "MED",  "path": ".aihaus/memory/workflows/user-preferences.md", "rationale": "Repository-scoped user preferences shape review tone and acceptance."},
     {"tier": "MED",  "path": ".aihaus/memory/reviews", "rationale": "Prior review findings inform adversarial review patterns."}
   ]
 }

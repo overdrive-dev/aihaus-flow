@@ -11,7 +11,7 @@ set -euo pipefail
 #
 # NOTE: this PRODUCT role (builder/dev/qa/devops/pm) is distinct from the agent
 # COHORT roles (:planner/:doer/...) in lib/role-defaults.json. Decision surface:
-# pkg/.aihaus/workflows/roles.md.
+# pkg/.aihaus/protocols/roles.md.
 #
 # Opt-out: AIHAUS_ROLE_GUARD=0. Audit: .claude/audit/role-guard.jsonl.
 

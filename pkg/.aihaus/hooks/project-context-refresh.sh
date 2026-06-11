@@ -85,14 +85,47 @@ copy_or_seed() {
 }
 
 ensure_block() {
-  local file="$1" marker="$2" source_file="$3"
+  local file="$1" start_marker="$2" end_marker="$3" source_file="$4"
   [ -f "$source_file" ] || return 0
   if [ ! -f "$file" ]; then
     mkdir -p "$(dirname "$file")" 2>/dev/null || return 0
     cp "$source_file" "$file" 2>/dev/null && repair_count=$((repair_count + 1))
     return 0
   fi
-  if grep -Fq "$marker" "$file" 2>/dev/null; then
+
+  local tmp
+  tmp="${file}.tmp.$$"
+  if grep -Fq "$start_marker" "$file" 2>/dev/null && grep -Fq "$end_marker" "$file" 2>/dev/null; then
+    if awk -v start="$start_marker" -v end="$end_marker" -v source="$source_file" '
+      BEGIN {
+        while ((getline line < source) > 0) {
+          if (index(line, start) > 0) in_source = 1
+          if (in_source) block = block line ORS
+          if (in_source && index(line, end) > 0) break
+        }
+        close(source)
+      }
+      {
+        if (index($0, start) > 0) {
+          printf "%s", block
+          skipping = 1
+          next
+        }
+        if (skipping) {
+          if (index($0, end) > 0) skipping = 0
+          next
+        }
+        print
+      }
+    ' "$file" > "$tmp" 2>/dev/null; then
+      if cmp -s "$file" "$tmp" 2>/dev/null; then
+        rm -f "$tmp" 2>/dev/null || true
+      else
+        mv "$tmp" "$file" 2>/dev/null && repair_count=$((repair_count + 1))
+      fi
+    else
+      rm -f "$tmp" 2>/dev/null || true
+    fi
     return 0
   fi
   { printf '\n\n'; cat "$source_file"; } >> "$file" 2>/dev/null && repair_count=$((repair_count + 1))
@@ -112,29 +145,6 @@ scrub_large_claude_imports() {
     sub(/\r$/, "", line)
     if (line != "@../.aihaus/decisions.md" && line != "@../.aihaus/knowledge.md") print $0
   }' "$file" > "$tmp" 2>/dev/null; then
-    mv "$tmp" "$file" 2>/dev/null && repair_count=$((repair_count + 1))
-  else
-    rm -f "$tmp" 2>/dev/null || true
-  fi
-}
-
-ensure_line_before_marker() {
-  local file="$1" needle="$2" marker="$3"
-  [ -f "$file" ] || return 0
-  grep -Fq "$needle" "$file" 2>/dev/null && return 0
-
-  local tmp
-  tmp="${file}.tmp.$$"
-  if awk -v needle="$needle" -v marker="$marker" '
-    index($0, marker) > 0 && inserted == 0 {
-      print needle
-      inserted = 1
-    }
-    { print }
-    END {
-      if (inserted == 0) print needle
-    }
-  ' "$file" > "$tmp" 2>/dev/null; then
     mv "$tmp" "$file" 2>/dev/null && repair_count=$((repair_count + 1))
   else
     rm -f "$tmp" 2>/dev/null || true
@@ -216,11 +226,9 @@ PY
 template_dir="${aihaus_dir}/templates"
 copy_or_seed "${template_dir}/claude/CLAUDE.md" "${claude_dir}/CLAUDE.md" "Claude Project Context"
 copy_or_seed "${template_dir}/claude/rules/aihaus-project-memory.md" "${claude_dir}/rules/aihaus-project-memory.md" "aihaus Project Memory Rule"
-ensure_block "${claude_dir}/CLAUDE.md" "AIHAUS:CLAUDE-CONTEXT-START" "${template_dir}/claude/CLAUDE.md"
-ensure_block "${claude_dir}/rules/aihaus-project-memory.md" "AIHAUS:CLAUDE-RULES-START" "${template_dir}/claude/rules/aihaus-project-memory.md"
+ensure_block "${claude_dir}/CLAUDE.md" "AIHAUS:CLAUDE-CONTEXT-START" "AIHAUS:CLAUDE-CONTEXT-END" "${template_dir}/claude/CLAUDE.md"
+ensure_block "${claude_dir}/rules/aihaus-project-memory.md" "AIHAUS:CLAUDE-RULES-START" "AIHAUS:CLAUDE-RULES-END" "${template_dir}/claude/rules/aihaus-project-memory.md"
 scrub_large_claude_imports "${claude_dir}/CLAUDE.md"
-ensure_line_before_marker "${claude_dir}/CLAUDE.md" "@../.aihaus/memory/workflows/business-rules.md" "AIHAUS:CLAUDE-CONTEXT-END"
-ensure_line_before_marker "${claude_dir}/rules/aihaus-project-memory.md" "- \`.aihaus/memory/workflows/business-rules.md\` for accepted project business rules; if a behavior-affecting premise is absent, record the gap before deciding." "AIHAUS:CLAUDE-RULES-END"
 
 copy_or_seed "${aihaus_dir}/templates/knowledge.md" "${aihaus_dir}/knowledge.md" "Knowledge Base"
 copy_or_seed "${aihaus_dir}/templates/decisions.md" "${aihaus_dir}/decisions.md" "Architectural Decision Records"
@@ -232,18 +240,25 @@ This repository has not yet generated its project context. Run `/aih-init` to
 inventory architecture, commands, schemas, components, tests, and conventions.
 EOF
 
-write_if_missing "${aihaus_dir}/workflows/default.md" <<'EOF'
+write_if_missing "${aihaus_dir}/protocols/default.md" <<'EOF'
 # aihaus Workflow Profile
 
 This repository has not yet customized its workflow profile. Run `/aih-init`
 or copy the package workflow profile here before relying on stage movement.
 EOF
 
-write_if_missing "${aihaus_dir}/workflows/agents.md" <<'EOF'
+write_if_missing "${aihaus_dir}/protocols/agents.md" <<'EOF'
 # Workflow Agents
 
 This repository has not yet customized workflow agent responsibilities. Run
 `/aih-init` or copy the package workflow agent profile here.
+EOF
+
+write_if_missing "${aihaus_dir}/protocols/routing.md" <<'EOF'
+# aihaus Routing
+
+This repository has not yet customized intent routing. Run `/aih-init` or copy
+the package routing profile here before relying on workflow orchestration.
 EOF
 
 write_if_missing "${aihaus_dir}/memory/MEMORY.md" <<'EOF'
