@@ -23,7 +23,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -42,7 +44,11 @@ import (
 //
 // (Go's -X only works on string vars, not consts — keeping this as var is
 // load-bearing for release pipeline correctness.)
-var version = "0.1.6"
+//
+// 0.2.0-dev: M050/S04 tier-A capability set (rule / why verbs, --types
+// multi-type filter, SHA staleness in rule-drift, build --user). The
+// aih-graph-v0.2.0 tag itself is cut at S09.
+var version = "0.2.0-dev"
 
 const jsonPropertyStringLimit = 4000
 const embedInputStringLimit = 4000
@@ -58,6 +64,10 @@ Commands:
   build <repo-path>       Extract aihaus graph from repo
     --dry-run             Print extraction summary without persisting
     --accept-all-repos    Bypass consent gate for this run
+    --user                Build the user-scope graph from ~/.aihaus/memory/user/**
+                          into ~/.aihaus/state/user-graph.db (own consent marker;
+                          never mixed into per-repo DBs)
+    --accept              With --user: record user-scope consent (creates marker)
   refresh [--repo PATH]   Rebuild repository memory index
     --json                Print stable machine-readable output
   query "<question>"      Query the graph (default: hybrid)
@@ -65,8 +75,16 @@ Commands:
     --bfs                 Structural BFS only (no embeddings needed)
     --semantic            Vector similarity (cosine) ranking
     --budget N            Token cap on returned context
+    --type T              Restrict to a single node type (back-compat)
+    --types T1,T2         Comma-separated multi-type filter (supersedes --type)
     --json                Print stable machine-readable output
     --limit N             Maximum JSON BFS result nodes (default 80; 0 = all)
+  rule <BR-id>            Show one business rule + its code bindings (implements/
+                          relates/decided_by edges) and review freshness
+    --json                Print stable machine-readable output
+  why <ref>               Reverse lookup: rules/decisions bound to a file path,
+                          symbol (file.go:Name or bare name), or BR-id
+    --json                Print stable machine-readable output
   context <node-or-topic> Show exact-node neighborhood or hybrid retrieval
     --repo PATH           Repository path for DB default and freshness checks
     --json                Print stable machine-readable output
@@ -88,10 +106,15 @@ Commands:
     --out PATH            Output vault/folder root (default: .aihaus/state/obsidian-export)
     --include-chunks      Include Chunk nodes (off by default to avoid note floods)
     --include-calls       Include Call nodes (off by default to avoid note floods)
-  rule-drift              Flag business rules that are unreviewed or have broken code bindings
+  rule-drift              Flag business rules that are unreviewed, have broken
+                          code bindings, or are SHA-stale (bound files changed
+                          since last-reviewed commit)
+    --repo PATH           Repository path for DB default and git staleness checks
     --json                Print stable machine-readable output
   mark-stale [--reason R] Mark derived memory stale after repo changes
   uninstall [--purge]     Remove aih-graph state (single .db file delete)
+    --user                Remove the user-scope graph (~/.aihaus/state/
+                          user-graph.db) + its consent marker
   version                 Print version
   help                    Show this help
 
@@ -151,8 +174,13 @@ func runBuild(args []string) int {
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
 	dbPath := fs.String("db", "", "path to SQLite database file (default: XDG state dir, per-repo isolated)")
 	acceptAll := fs.Bool("accept-all-repos", false, "bypass consent gate for this run")
+	userScope := fs.Bool("user", false, "build the user-scope graph from ~/.aihaus/memory/user/** into ~/.aihaus/state/user-graph.db")
+	acceptUser := fs.Bool("accept", false, "with --user: record user-scope consent (creates the marker)")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if *userScope {
+		return runBuildUser(*dbPath, *acceptUser, *dryRun)
 	}
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "build: <repo-path> required")
@@ -703,6 +731,91 @@ func runBuild(args []string) int {
 	return 0
 }
 
+// runBuildUser implements `build --user` (M050/S04, ADR-260611-A tier C /
+// ADR-260611-E §3): indexes ~/.aihaus/memory/user/** into the SEPARATE
+// user-scope graph at ~/.aihaus/state/user-graph.db. The user scope carries
+// its OWN consent marker (~/.aihaus/.aih-graph-user-consent) and its OWN
+// purge path (`uninstall --user`). Per-repo DBs NEVER absorb cross-repo or
+// user-scope data — the ADR-260515-A privacy contract is preserved by
+// construction (separate source dir, separate DB, separate consent).
+func runBuildUser(dbPath string, accept, dryRun bool) int {
+	consented, err := privacy.HasUserConsent()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build --user: consent check: %v\n", err)
+		return 1
+	}
+	if !consented {
+		if !accept {
+			markerPath, _ := privacy.UserConsentMarkerPath()
+			fmt.Fprintf(os.Stderr, "build --user: refusing — no user-scope consent marker at %s\n", markerPath)
+			fmt.Fprintln(os.Stderr, "             create the marker manually OR pass --accept (records consent)")
+			return 2
+		}
+		if err := privacy.CreateUserConsent(); err != nil {
+			fmt.Fprintf(os.Stderr, "build --user: record consent: %v\n", err)
+			return 1
+		}
+		markerPath, _ := privacy.UserConsentMarkerPath()
+		fmt.Fprintf(os.Stderr, "build --user: consent recorded at %s\n", markerPath)
+	}
+
+	if dbPath == "" {
+		dbPath, err = privacy.UserDBPath()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "build --user: resolve user db path: %v\n", err)
+			return 1
+		}
+	}
+	userRoot, err := privacy.UserMemoryRoot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build --user: resolve user memory root: %v\n", err)
+		return 1
+	}
+	memories, err := extract.ParseUserMemoryDir(userRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build --user: parse user memory: %v\n", err)
+		return 1
+	}
+
+	fmt.Println("aih-graph build --user")
+	fmt.Printf("  source: %s\n", userRoot)
+	fmt.Printf("  db: %s\n", dbPath)
+	fmt.Printf("  Memories: %d\n", len(memories))
+	if dryRun {
+		fmt.Println("(dry-run: nothing persisted)")
+		return 0
+	}
+
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build --user: open db %s: %v\n", dbPath, err)
+		return 1
+	}
+	defer db.Close()
+	if err := resetDerivedIndex(db); err != nil {
+		fmt.Fprintf(os.Stderr, "build --user: reset derived index: %v\n", err)
+		return 1
+	}
+	persisted := 0
+	for _, m := range memories {
+		if _, err := db.UpsertNode("Memory", m.Identifier, memoryProps(m)); err != nil {
+			fmt.Fprintf(os.Stderr, "build --user: upsert memory %s: %v\n", m.Identifier, err)
+			return 1
+		}
+		persisted++
+	}
+	fmt.Printf("Persisted %d nodes to %s\n", persisted, dbPath)
+
+	// Same search pipeline as repo builds: BM25 always; Ollama embeddings when
+	// the local server is available. Only the memories slice is populated.
+	if err := runBM25Pipeline(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, memories, nil, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "build --user: bm25: %v\n", err)
+		return 1
+	}
+	runOllamaEmbeddingPipeline(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, memories, nil, nil)
+	return 0
+}
+
 func runRefresh(args []string) int {
 	fs := flag.NewFlagSet("refresh", flag.ExitOnError)
 	repoPath := fs.String("repo", ".", "repository path")
@@ -1048,6 +1161,7 @@ func runQuery(args []string) int {
 	hybrid := fs.Bool("hybrid", false, "hybrid mode: KNN top-K + 1-hop edge expansion per match")
 	depth := fs.Int("depth", 1, "BFS depth (hops outward from root)")
 	typ := fs.String("type", "", "restrict root match (BFS) or candidate type (semantic/hybrid) to a node type")
+	typesCSV := fs.String("types", "", "comma-separated multi-type filter (e.g. Rule,Decision); supersedes --type")
 	topK := fs.Int("top", 10, "semantic/hybrid: number of top matches to return")
 	limit := fs.Int("limit", 80, "maximum JSON BFS result nodes (0 = no limit)")
 	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
@@ -1056,7 +1170,7 @@ func runQuery(args []string) int {
 	}
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "query: <identifier-or-text> required")
-		fmt.Fprintln(os.Stderr, "usage: aih-graph query [--bfs|--semantic|--hybrid] [--type T] [--depth N] [--top K] [--repo PATH] [--db PATH] [--json] <identifier-or-text>")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph query [--bfs|--semantic|--hybrid] [--type T] [--types T1,T2] [--depth N] [--top K] [--repo PATH] [--db PATH] [--json] <identifier-or-text>")
 		return 2
 	}
 	// Default mode: hybrid free-text retrieval; exact graph traversal is
@@ -1064,6 +1178,7 @@ func runQuery(args []string) int {
 	if !*semantic && !*bfs && !*hybrid {
 		*hybrid = true
 	}
+	typeFilters := splitTypesFilter(*typesCSV, *typ)
 
 	*repoPath = resolveRepoPath(*repoPath)
 	freshness := loadMemoryFreshness(*repoPath)
@@ -1076,24 +1191,33 @@ func runQuery(args []string) int {
 
 	if *hybrid {
 		if *jsonOut {
-			return runQueryHybridJSON(db, fs.Arg(0), *typ, *topK, freshness)
+			return runQueryHybridJSON(db, fs.Arg(0), typeFilters, *topK, freshness)
 		}
-		return runHybrid(db, fs.Arg(0), *typ, *topK)
+		return runHybrid(db, fs.Arg(0), typeFilters, *topK)
 	}
 	if *semantic {
 		if *jsonOut {
-			return runQuerySemanticJSON(db, fs.Arg(0), *typ, *topK, freshness)
+			return runQuerySemanticJSON(db, fs.Arg(0), typeFilters, *topK, freshness)
 		}
-		return runSemantic(db, fs.Arg(0), *typ, *topK)
+		return runSemantic(db, fs.Arg(0), typeFilters, *topK)
 	}
 
-	// BFS mode.
+	// BFS mode: the root match is a single (type, identifier) lookup — a
+	// multi-type filter does not map onto it.
+	if len(typeFilters) > 1 {
+		fmt.Fprintln(os.Stderr, "query: --types with multiple types is not supported in --bfs mode (use --type T)")
+		return 2
+	}
+	bfsType := ""
+	if len(typeFilters) == 1 {
+		bfsType = typeFilters[0]
+	}
 	identifier := fs.Arg(0)
 	eng := query.New(db.SQL())
-	results, err := eng.BFS(*typ, identifier, *depth)
+	results, err := eng.BFS(bfsType, identifier, *depth)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			fmt.Fprintf(os.Stderr, "query: no node matches identifier %q (type filter=%q)\n", identifier, *typ)
+			fmt.Fprintf(os.Stderr, "query: no node matches identifier %q (type filter=%q)\n", identifier, bfsType)
 			return 1
 		}
 		fmt.Fprintf(os.Stderr, "query: %v\n", err)
@@ -1106,7 +1230,7 @@ func runQuery(args []string) int {
 			Command:          "query",
 			Query:            identifier,
 			Mode:             "bfs",
-			TypeFilter:       *typ,
+			TypeFilter:       strings.Join(typeFilters, ","),
 			Depth:            *depth,
 			Freshness:        freshness,
 			ResultCount:      len(resultsJSON),
@@ -1126,27 +1250,46 @@ func runQuery(args []string) int {
 	return 0
 }
 
+// splitTypesFilter merges the `--types` (comma-separated, supersedes) and
+// `--type` (single value, back-compat) flags into a normalized type-filter
+// slice. nil means "no filter" (scan all types).
+func splitTypesFilter(typesCSV, single string) []string {
+	if strings.TrimSpace(typesCSV) != "" {
+		var out []string
+		for _, t := range strings.Split(typesCSV, ",") {
+			if t = strings.TrimSpace(t); t != "" {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
+	if t := strings.TrimSpace(single); t != "" {
+		return []string{t}
+	}
+	return nil
+}
+
 // runSemantic executes a --semantic query. It uses stored Ollama embeddings
 // when available, otherwise falls back to BM25/FTS5 lexical ranking.
-func runSemantic(db *storage.DB, queryText, typeFilter string, topK int) int {
-	rows, err := db.IterateEmbeddings(typeFilter)
+func runSemantic(db *storage.DB, queryText string, typeFilters []string, topK int) int {
+	rows, err := db.IterateEmbeddings(typeFilters)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
 		return 1
 	}
 	if len(rows) == 0 {
-		return runSemanticBM25(db, queryText, typeFilter, topK)
+		return runSemanticBM25(db, queryText, typeFilters, topK)
 	}
 	embedder, err := resolveEmbedder()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: %v\n", err)
-		return runSemanticBM25(db, queryText, typeFilter, topK)
+		return runSemanticBM25(db, queryText, typeFilters, topK)
 	}
 
 	queryVec, err := embedder.Embed(embedInputText(queryText))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: embed query: %v\n", err)
-		return runSemanticBM25(db, queryText, typeFilter, topK)
+		return runSemanticBM25(db, queryText, typeFilters, topK)
 	}
 
 	candidates := make([]embed.Candidate, 0, len(rows))
@@ -1182,33 +1325,33 @@ func runSemantic(db *storage.DB, queryText, typeFilter string, topK int) int {
 	return 0
 }
 
-func runQuerySemanticJSON(db *storage.DB, queryText, typeFilter string, topK int, freshness memoryFreshness) int {
-	rows, err := db.IterateEmbeddings(typeFilter)
+func runQuerySemanticJSON(db *storage.DB, queryText string, typeFilters []string, topK int, freshness memoryFreshness) int {
+	rows, err := db.IterateEmbeddings(typeFilters)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
 		return 1
 	}
 	if len(rows) == 0 {
-		return runQueryBM25JSON(db, "semantic_bm25", queryText, typeFilter, topK, freshness)
+		return runQueryBM25JSON(db, "semantic_bm25", queryText, typeFilters, topK, freshness)
 	}
-	return runQueryVectorJSON(db, "semantic_vector", queryText, typeFilter, topK, false, freshness)
+	return runQueryVectorJSON(db, "semantic_vector", queryText, typeFilters, topK, false, freshness)
 }
 
-func runQueryHybridJSON(db *storage.DB, queryText, typeFilter string, topK int, freshness memoryFreshness) int {
-	embRows, err := db.IterateEmbeddings(typeFilter)
+func runQueryHybridJSON(db *storage.DB, queryText string, typeFilters []string, topK int, freshness memoryFreshness) int {
+	embRows, err := db.IterateEmbeddings(typeFilters)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
 		return 1
 	}
 	if len(embRows) == 0 {
-		return runQueryBM25JSON(db, "hybrid_bm25", queryText, typeFilter, topK, freshness)
+		return runQueryBM25JSON(db, "hybrid_bm25", queryText, typeFilters, topK, freshness)
 	}
-	return runQueryVectorJSON(db, "hybrid_vector", queryText, typeFilter, topK, true, freshness)
+	return runQueryVectorJSON(db, "hybrid_vector", queryText, typeFilters, topK, true, freshness)
 }
 
-func runQueryBM25JSON(db *storage.DB, mode, queryText, typeFilter string, topK int, freshness memoryFreshness) int {
+func runQueryBM25JSON(db *storage.DB, mode, queryText string, typeFilters []string, topK int, freshness memoryFreshness) int {
 	eng := query.New(db.SQL())
-	matches, err := bm25MatchesForJSON(db, eng, queryText, typeFilter, topK)
+	matches, err := bm25MatchesForJSON(db, eng, queryText, typeFilters, topK)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: bm25 json: %v\n", err)
 		return 1
@@ -1221,25 +1364,25 @@ func runQueryBM25JSON(db *storage.DB, mode, queryText, typeFilter string, topK i
 		Command:     "query",
 		Query:       queryText,
 		Mode:        mode,
-		TypeFilter:  typeFilter,
+		TypeFilter:  strings.Join(typeFilters, ","),
 		Freshness:   freshness,
 		ResultCount: len(matches),
 		Matches:     matches,
 	})
 }
 
-func runQueryVectorJSON(db *storage.DB, mode, queryText, typeFilter string, topK int, includeNeighbors bool, freshness memoryFreshness) int {
+func runQueryVectorJSON(db *storage.DB, mode, queryText string, typeFilters []string, topK int, includeNeighbors bool, freshness memoryFreshness) int {
 	embedder, err := resolveEmbedder()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: %v\n", err)
-		return runQueryBM25JSON(db, vectorFallbackMode(mode), queryText, typeFilter, topK, freshness)
+		return runQueryBM25JSON(db, vectorFallbackMode(mode), queryText, typeFilters, topK, freshness)
 	}
 	queryVec, err := embedder.Embed(embedInputText(queryText))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: embed query: %v\n", err)
-		return runQueryBM25JSON(db, vectorFallbackMode(mode), queryText, typeFilter, topK, freshness)
+		return runQueryBM25JSON(db, vectorFallbackMode(mode), queryText, typeFilters, topK, freshness)
 	}
-	rows, err := db.IterateEmbeddings(typeFilter)
+	rows, err := db.IterateEmbeddings(typeFilters)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
 		return 1
@@ -1298,7 +1441,7 @@ func runQueryVectorJSON(db *storage.DB, mode, queryText, typeFilter string, topK
 		Command:     "query",
 		Query:       queryText,
 		Mode:        mode,
-		TypeFilter:  typeFilter,
+		TypeFilter:  strings.Join(typeFilters, ","),
 		Freshness:   freshness,
 		ResultCount: len(out),
 		Matches:     out,
@@ -1342,7 +1485,7 @@ func runContext(args []string) int {
 	node, err := resolveNode(eng, target, *typ)
 	if err != nil {
 		if *jsonOut {
-			matches, err := bm25MatchesForJSON(db, eng, target, *typ, *topK)
+			matches, err := bm25MatchesForJSON(db, eng, target, splitTypesFilter("", *typ), *topK)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "context: bm25 fallback: %v\n", err)
 				return 1
@@ -1361,7 +1504,7 @@ func runContext(args []string) int {
 		}
 		printFreshnessWarning(freshness)
 		fmt.Printf("No exact node for %q; showing hybrid memory matches.\n", target)
-		return runHybrid(db, target, *typ, *topK)
+		return runHybrid(db, target, splitTypesFilter("", *typ), *topK)
 	}
 	results, err := eng.BFS(node.Type, node.Identifier, *depth)
 	if err != nil {
@@ -1713,9 +1856,9 @@ func runGotchas(args []string) int {
 	}
 	defer db.Close()
 	if *jsonOut {
-		return runBM25SearchJSON(db, "gotchas", queryText, "Memory", *topK)
+		return runBM25SearchJSON(db, "gotchas", queryText, []string{"Memory"}, *topK)
 	}
-	return runHybrid(db, queryText, "Memory", *topK)
+	return runHybrid(db, queryText, []string{"Memory"}, *topK)
 }
 
 func runMilestone(args []string) int {
@@ -1738,25 +1881,34 @@ func runMilestone(args []string) int {
 	defer db.Close()
 	queryText := strings.Join(fs.Args(), " ")
 	if *jsonOut {
-		return runBM25SearchJSON(db, "milestone", queryText, "", *topK)
+		return runBM25SearchJSON(db, "milestone", queryText, nil, *topK)
 	}
-	return runHybrid(db, queryText, "", *topK)
+	return runHybrid(db, queryText, nil, *topK)
 }
+
+// reviewedSHARe matches a `last-reviewed:` value that looks like a git commit
+// SHA (7..40 hex chars) — the staleness anchor per the rule record schema in
+// pkg/.aihaus/protocols/business-rules.md.
+var reviewedSHARe = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
 
 // runRuleDrift reports business rules whose binding is suspect (BRC-S3,
 // ADR-260531-A): a rule is flagged when it was never reviewed (last_reviewed
-// empty or "-") or when its declared implements: refs outnumber the code edges
-// that actually resolved (a dangling binding — code moved/renamed/removed). The
-// dangling-binding signal is the load-bearing staleness catch: a rule whose
-// `implements` ref no longer points at real code is the contract going stale.
+// empty or "-"), when its declared implements: refs outnumber the code edges
+// that actually resolved (a dangling binding — code moved/renamed/removed),
+// or — M050/S04 — when the files its implements: refs point at have commits
+// newer than the last-reviewed SHA (sha-stale). The SHA check degrades
+// gracefully outside a git repo (or with an unknown SHA): it simply never
+// fires; never-reviewed/dangling-binding behavior is unchanged.
 func runRuleDrift(args []string) int {
 	fs := flag.NewFlagSet("rule-drift", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
+	repoPath := fs.String("repo", ".", "repository path for DB default and git staleness checks")
 	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	db, err := openQueryDB(*dbPath)
+	*repoPath = resolveRepoPath(*repoPath)
+	db, err := openQueryDBForRepo(*dbPath, *repoPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "rule-drift: open db: %v\n", err)
 		return 1
@@ -1785,12 +1937,15 @@ func runRuleDrift(args []string) int {
 	rows.Close()
 
 	type ruleDrift struct {
-		Rule          string `json:"rule"`
-		Reason        string `json:"reason"`
-		LastReviewed  string `json:"last_reviewed"`
-		DeclaredLinks int    `json:"declared_links"`
-		BoundLinks    int    `json:"bound_links"`
+		Rule          string   `json:"rule"`
+		Reason        string   `json:"reason"`
+		LastReviewed  string   `json:"last_reviewed"`
+		DeclaredLinks int      `json:"declared_links"`
+		BoundLinks    int      `json:"bound_links"`
+		StaleFiles    []string `json:"stale_files,omitempty"`
+		NewerCommits  []string `json:"newer_commits,omitempty"`
 	}
+	inGitRepo := isGitRepo(*repoPath)
 	var drifts []ruleDrift
 	for _, r := range ruleRows {
 		var p struct {
@@ -1809,6 +1964,29 @@ func runRuleDrift(args []string) int {
 		if len(p.Implements) > bound {
 			drifts = append(drifts, ruleDrift{Rule: r.ident, Reason: "dangling-binding", LastReviewed: lr, DeclaredLinks: len(p.Implements), BoundLinks: bound})
 		}
+
+		// SHA staleness (M050/S04): bound files changed since the reviewed SHA.
+		if inGitRepo && reviewedSHARe.MatchString(lr) {
+			files := ruleBoundFiles(p.Implements)
+			if len(files) == 0 {
+				continue
+			}
+			newer, err := gitCommitsSince(*repoPath, lr, files)
+			if err != nil || len(newer) == 0 {
+				// Unknown SHA / git error → degrade silently (no positive
+				// staleness evidence); zero newer commits → fresh.
+				continue
+			}
+			drifts = append(drifts, ruleDrift{
+				Rule:          r.ident,
+				Reason:        "sha-stale",
+				LastReviewed:  lr,
+				DeclaredLinks: len(p.Implements),
+				BoundLinks:    bound,
+				StaleFiles:    files,
+				NewerCommits:  newer,
+			})
+		}
 	}
 
 	if *jsonOut {
@@ -1821,10 +1999,505 @@ func runRuleDrift(args []string) int {
 			fmt.Printf("  [never-reviewed]   %s\n", d.Rule)
 		case "dangling-binding":
 			fmt.Printf("  [dangling-binding] %s — %d declared, %d bound to code\n", d.Rule, d.DeclaredLinks, d.BoundLinks)
+		case "sha-stale":
+			fmt.Printf("  [sha-stale]        %s — %d commit(s) touch bound files since %s\n", d.Rule, len(d.NewerCommits), d.LastReviewed)
+			for _, c := range d.NewerCommits {
+				fmt.Printf("                     %s\n", c)
+			}
 		}
 	}
 	if len(drifts) == 0 {
 		fmt.Println("  no drift detected")
+	}
+	return 0
+}
+
+// ruleBoundFiles maps a rule's declared implements: refs onto the file paths
+// git should watch. Symbol/Test refs are "<relpath>:<name>" → the relpath
+// part; plain file refs pass through. Duplicates are dropped, order preserved.
+func ruleBoundFiles(refs []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, ref := range refs {
+		file := strings.TrimSpace(ref)
+		if i := strings.LastIndex(file, ":"); i > 0 {
+			file = file[:i]
+		}
+		if file == "" || seen[file] {
+			continue
+		}
+		seen[file] = true
+		out = append(out, file)
+	}
+	return out
+}
+
+// isGitRepo reports whether repoPath is inside a git work tree. False when
+// the git binary is missing — every git-backed feature then degrades to a
+// no-op (graceful outside-a-repo behavior).
+func isGitRepo(repoPath string) bool {
+	return exec.Command("git", "-C", repoPath, "rev-parse", "--git-dir").Run() == nil
+}
+
+// gitCommitsSince returns "shortsha subject" lines for commits in
+// (sha, HEAD] that touch any of files. Errors (unknown SHA, no git, not a
+// repo) surface to the caller, which treats them as "no staleness evidence".
+func gitCommitsSince(repoPath, sha string, files []string) ([]string, error) {
+	args := []string{"-C", repoPath, "log", "--format=%h %s", sha + "..HEAD", "--"}
+	args = append(args, files...)
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return nil, err
+	}
+	var commits []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			commits = append(commits, line)
+		}
+	}
+	return commits, nil
+}
+
+// ruleBindingJSON is one resolved edge off a Rule node: implements →
+// Symbol|File|Test, relates → Rule, decided_by → Decision.
+type ruleBindingJSON struct {
+	Edge string   `json:"edge"`
+	Node jsonNode `json:"node"`
+}
+
+// ruleReviewJSON summarizes a rule's freshness for the `rule` verb. State is
+// "reviewed", "never-reviewed", or "dangling-binding" (declared implements:
+// refs that did not resolve to indexed code).
+type ruleReviewJSON struct {
+	State         string `json:"state"`
+	LastReviewed  string `json:"last_reviewed,omitempty"`
+	DeclaredLinks int    `json:"declared_links"`
+	BoundLinks    int    `json:"bound_links"`
+}
+
+// ruleVerbJSON is the stable payload of `aih-graph rule <BR-id> --json` —
+// the rule → implementing code + tests direction promised at
+// pkg/.aihaus/protocols/business-rules.md (Residence §).
+type ruleVerbJSON struct {
+	Command            string            `json:"command"`
+	ID                 string            `json:"id"`
+	Rule               jsonNode          `json:"rule"`
+	Status             string            `json:"status,omitempty"`
+	Domain             string            `json:"domain,omitempty"`
+	Statement          string            `json:"statement,omitempty"`
+	Scenarios          []string          `json:"scenarios,omitempty"`
+	Bindings           []ruleBindingJSON `json:"bindings"`
+	DeclaredImplements []string          `json:"declared_implements,omitempty"`
+	DeclaredRelates    []string          `json:"declared_relates,omitempty"`
+	DeclaredDecidedBy  []string          `json:"declared_decided_by,omitempty"`
+	Review             ruleReviewJSON    `json:"review"`
+	Freshness          memoryFreshness   `json:"freshness"`
+}
+
+// whyRuleJSON is one rule that binds the queried ref, with the edge that
+// reached it and the rule's own decided_by chain.
+type whyRuleJSON struct {
+	Edge      string     `json:"edge"`
+	Rule      jsonNode   `json:"rule"`
+	DecidedBy []jsonNode `json:"decided_by,omitempty"`
+}
+
+// whyJSON is the stable payload of `aih-graph why <ref> --json` — the
+// code → rules-it-serves direction promised at
+// pkg/.aihaus/protocols/business-rules.md (Residence §).
+type whyJSON struct {
+	Command   string          `json:"command"`
+	Ref       string          `json:"ref"`
+	Resolved  []jsonNode      `json:"resolved"`
+	RuleCount int             `json:"rule_count"`
+	Rules     []whyRuleJSON   `json:"rules"`
+	Decisions []jsonNode      `json:"decisions,omitempty"`
+	Freshness memoryFreshness `json:"freshness"`
+}
+
+// loadRuleBindings returns the outbound rule edges (implements / relates /
+// decided_by) of a Rule node with their target nodes, ordered for stable
+// output.
+func loadRuleBindings(db *storage.DB, ruleNodeID int64) ([]ruleBindingJSON, error) {
+	rows, err := db.SQL().Query(`
+		SELECT e.type, n.id, n.type, n.identifier, n.properties
+		FROM edges e
+		JOIN nodes n ON n.id = e.to_id
+		WHERE e.from_id = ? AND e.type IN ('implements','relates','decided_by')
+		ORDER BY e.type, n.type, n.identifier
+	`, ruleNodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ruleBindingJSON
+	for rows.Next() {
+		var (
+			edge       string
+			n          query.Node
+			propsBytes []byte
+		)
+		if err := rows.Scan(&edge, &n.ID, &n.Type, &n.Identifier, &propsBytes); err != nil {
+			return nil, err
+		}
+		if len(propsBytes) > 0 {
+			_ = json.Unmarshal(propsBytes, &n.Properties)
+		}
+		out = append(out, ruleBindingJSON{Edge: edge, Node: nodeForJSON(n)})
+	}
+	return out, rows.Err()
+}
+
+// runRule implements `aih-graph rule <BR-id>` (M050/S04): resolve one Rule
+// node from the indexed ledger and print it with its bindings + freshness.
+// Closes documented-but-unimplemented hole 5
+// (pkg/.aihaus/protocols/business-rules.md Residence §).
+func runRule(args []string) int {
+	fs := flag.NewFlagSet("rule", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database")
+	repoPath := fs.String("repo", ".", "repository path for DB default and freshness checks")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "rule: <BR-id> required")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph rule [--repo PATH] [--db PATH] [--json] <BR-id>")
+		return 2
+	}
+	*repoPath = resolveRepoPath(*repoPath)
+	freshness := loadMemoryFreshness(*repoPath)
+	db, err := openQueryDBForRepo(*dbPath, *repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rule: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+
+	id := fs.Arg(0)
+	eng := query.New(db.SQL())
+	node, err := eng.GetByIdentifier("Rule", id)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rule: no Rule node matches %q (is the ledger indexed? run `aih-graph refresh`)\n", id)
+		return 1
+	}
+	bindings, err := loadRuleBindings(db, node.ID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rule: load bindings: %v\n", err)
+		return 1
+	}
+
+	declaredImplements := propStringSlice(node.Properties, "implements")
+	declaredRelates := propStringSlice(node.Properties, "relates")
+	declaredDecidedBy := propStringSlice(node.Properties, "decided_by")
+	boundImplements := 0
+	for _, b := range bindings {
+		if b.Edge == "implements" {
+			boundImplements++
+		}
+	}
+	lastReviewed := strings.TrimSpace(propString(node.Properties, "last_reviewed"))
+	review := ruleReviewJSON{
+		State:         "reviewed",
+		LastReviewed:  lastReviewed,
+		DeclaredLinks: len(declaredImplements),
+		BoundLinks:    boundImplements,
+	}
+	if lastReviewed == "" || lastReviewed == "-" {
+		review.State = "never-reviewed"
+	} else if len(declaredImplements) > boundImplements {
+		review.State = "dangling-binding"
+	}
+
+	if *jsonOut {
+		if bindings == nil {
+			bindings = []ruleBindingJSON{}
+		}
+		return writeJSON(ruleVerbJSON{
+			Command:            "rule",
+			ID:                 id,
+			Rule:               nodeForJSON(*node),
+			Status:             propString(node.Properties, "status"),
+			Domain:             propString(node.Properties, "domain"),
+			Statement:          propString(node.Properties, "statement"),
+			Scenarios:          propStringSlice(node.Properties, "scenarios"),
+			Bindings:           bindings,
+			DeclaredImplements: declaredImplements,
+			DeclaredRelates:    declaredRelates,
+			DeclaredDecidedBy:  declaredDecidedBy,
+			Review:             review,
+			Freshness:          freshness,
+		})
+	}
+
+	printFreshnessWarning(freshness)
+	fmt.Printf("%s — %s\n", node.Identifier, titleFromProperties(node.Properties))
+	if s := propString(node.Properties, "status"); s != "" {
+		fmt.Printf("  status: %s\n", s)
+	}
+	if d := propString(node.Properties, "domain"); d != "" {
+		fmt.Printf("  domain: %s\n", d)
+	}
+	if st := propString(node.Properties, "statement"); st != "" {
+		fmt.Printf("  statement: %s\n", st)
+	}
+	fmt.Printf("  review: %s", review.State)
+	if review.LastReviewed != "" {
+		fmt.Printf(" (last-reviewed %s)", review.LastReviewed)
+	}
+	fmt.Println()
+	if scenarios := propStringSlice(node.Properties, "scenarios"); len(scenarios) > 0 {
+		fmt.Println("  scenarios:")
+		for _, s := range scenarios {
+			fmt.Printf("    - %s\n", s)
+		}
+	}
+	if len(bindings) > 0 {
+		fmt.Println("  bindings:")
+		for _, b := range bindings {
+			fmt.Printf("    [%s] %-8s %s\n", b.Edge, b.Node.Type, b.Node.Identifier)
+		}
+	}
+	if unresolved := unresolvedRefs(declaredImplements, bindings, "implements"); len(unresolved) > 0 {
+		fmt.Println("  declared but unresolved (dangling):")
+		for _, ref := range unresolved {
+			fmt.Printf("    [implements] %s\n", ref)
+		}
+	}
+	return 0
+}
+
+// unresolvedRefs returns declared refs with no matching resolved binding of
+// the given edge type (identifier match).
+func unresolvedRefs(declared []string, bindings []ruleBindingJSON, edge string) []string {
+	resolved := map[string]bool{}
+	for _, b := range bindings {
+		if b.Edge == edge {
+			resolved[b.Node.Identifier] = true
+		}
+	}
+	var out []string
+	for _, ref := range declared {
+		if !resolved[ref] {
+			out = append(out, ref)
+		}
+	}
+	return out
+}
+
+// propStringSlice reads a []string-shaped property (stored as JSON array).
+func propStringSlice(props map[string]any, key string) []string {
+	items, ok := props[key].([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, item := range items {
+		if s, ok := item.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// resolveWhyTargets resolves a `why` ref to candidate target nodes: exact
+// Symbol/File/Test/Decision/Rule identifiers first, then bare-name Symbol
+// matches (e.g. "Submit" → "order.go:Submit").
+func resolveWhyTargets(eng *query.Engine, ref string) []query.Node {
+	var out []query.Node
+	seen := map[int64]bool{}
+	add := func(n *query.Node) {
+		if n != nil && !seen[n.ID] {
+			seen[n.ID] = true
+			out = append(out, *n)
+		}
+	}
+	for _, typ := range []string{"Symbol", "File", "Test", "Decision", "Rule"} {
+		if n, err := eng.GetByIdentifier(typ, ref); err == nil {
+			add(n)
+		}
+	}
+	if symbols, err := eng.ListByType("Symbol"); err == nil {
+		for i := range symbols {
+			if propString(symbols[i].Properties, "name") == ref {
+				add(&symbols[i])
+			}
+		}
+	}
+	return out
+}
+
+// runWhy implements `aih-graph why <ref>` (M050/S04): reverse lookup from a
+// file path, symbol, or BR-id to the rules/decisions bound to it — "why does
+// this code behave this way". Inbound Rule-[implements|relates|decided_by]→X
+// edges are walked, plus each rule's own decided_by chain.
+func runWhy(args []string) int {
+	fs := flag.NewFlagSet("why", flag.ExitOnError)
+	dbPath := fs.String("db", "", "path to SQLite database")
+	repoPath := fs.String("repo", ".", "repository path for DB default and freshness checks")
+	jsonOut := fs.Bool("json", false, "print stable machine-readable output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "why: <file|symbol|BR-id> required")
+		fmt.Fprintln(os.Stderr, "usage: aih-graph why [--repo PATH] [--db PATH] [--json] <file|symbol|BR-id>")
+		return 2
+	}
+	*repoPath = resolveRepoPath(*repoPath)
+	freshness := loadMemoryFreshness(*repoPath)
+	db, err := openQueryDBForRepo(*dbPath, *repoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "why: open db: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+
+	ref := fs.Arg(0)
+	eng := query.New(db.SQL())
+	targets := resolveWhyTargets(eng, ref)
+	if len(targets) == 0 {
+		fmt.Fprintf(os.Stderr, "why: no node matches ref %q (try a file path, \"file:Symbol\", or a BR-id)\n", ref)
+		return 1
+	}
+
+	seenRules := map[int64]bool{}
+	seenDecisions := map[int64]bool{}
+	rules := []whyRuleJSON{}
+	decisions := []jsonNode{}
+	addDecision := func(n query.Node) {
+		if !seenDecisions[n.ID] {
+			seenDecisions[n.ID] = true
+			decisions = append(decisions, nodeForJSON(n))
+		}
+	}
+	addRule := func(edge string, n query.Node) error {
+		if seenRules[n.ID] {
+			return nil
+		}
+		seenRules[n.ID] = true
+		entry := whyRuleJSON{Edge: edge, Rule: nodeForJSON(n)}
+		// decided_by chain of the rule itself.
+		chain, err := loadRuleBindings(db, n.ID)
+		if err != nil {
+			return err
+		}
+		for _, b := range chain {
+			if b.Edge == "decided_by" {
+				entry.DecidedBy = append(entry.DecidedBy, b.Node)
+				if d, err := eng.GetByIdentifier(b.Node.Type, b.Node.Identifier); err == nil {
+					addDecision(*d)
+				}
+			}
+		}
+		rules = append(rules, entry)
+		return nil
+	}
+
+	for _, target := range targets {
+		// Inbound edges FROM Rule nodes onto the target — implements (code),
+		// relates (rule↔rule), decided_by (rule↔decision; a Decision target
+		// yields the rules it decided).
+		rows, err := db.SQL().Query(`
+			SELECT e.type, r.id, r.type, r.identifier, r.properties
+			FROM edges e
+			JOIN nodes r ON r.id = e.from_id
+			WHERE e.to_id = ? AND r.type = 'Rule'
+			ORDER BY e.type, r.identifier
+		`, target.ID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "why: query inbound rule edges: %v\n", err)
+			return 1
+		}
+		type inbound struct {
+			edge string
+			node query.Node
+		}
+		var inbounds []inbound
+		for rows.Next() {
+			var (
+				edge       string
+				n          query.Node
+				propsBytes []byte
+			)
+			if err := rows.Scan(&edge, &n.ID, &n.Type, &n.Identifier, &propsBytes); err != nil {
+				rows.Close()
+				fmt.Fprintf(os.Stderr, "why: scan inbound rule edge: %v\n", err)
+				return 1
+			}
+			if len(propsBytes) > 0 {
+				_ = json.Unmarshal(propsBytes, &n.Properties)
+			}
+			inbounds = append(inbounds, inbound{edge: edge, node: n})
+		}
+		rows.Close()
+		for _, in := range inbounds {
+			if err := addRule(in.edge, in.node); err != nil {
+				fmt.Fprintf(os.Stderr, "why: load rule chain: %v\n", err)
+				return 1
+			}
+		}
+
+		// A Rule target (BR-id ref) also answers with its own outbound
+		// neighborhood: relates → rules, decided_by → decisions.
+		if target.Type == "Rule" {
+			bindings, err := loadRuleBindings(db, target.ID)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "why: load rule bindings: %v\n", err)
+				return 1
+			}
+			for _, b := range bindings {
+				switch b.Edge {
+				case "relates":
+					if n, err := eng.GetByIdentifier("Rule", b.Node.Identifier); err == nil {
+						if err := addRule("relates", *n); err != nil {
+							fmt.Fprintf(os.Stderr, "why: load rule chain: %v\n", err)
+							return 1
+						}
+					}
+				case "decided_by":
+					if d, err := eng.GetByIdentifier(b.Node.Type, b.Node.Identifier); err == nil {
+						addDecision(*d)
+					}
+				}
+			}
+		}
+	}
+
+	if *jsonOut {
+		resolved := make([]jsonNode, 0, len(targets))
+		for _, t := range targets {
+			resolved = append(resolved, nodeForJSON(t))
+		}
+		return writeJSON(whyJSON{
+			Command:   "why",
+			Ref:       ref,
+			Resolved:  resolved,
+			RuleCount: len(rules),
+			Rules:     rules,
+			Decisions: decisions,
+			Freshness: freshness,
+		})
+	}
+
+	printFreshnessWarning(freshness)
+	fmt.Printf("why %s\n", ref)
+	for _, t := range targets {
+		fmt.Printf("  resolved: %-8s %s\n", t.Type, t.Identifier)
+	}
+	if len(rules) == 0 && len(decisions) == 0 {
+		fmt.Println("  no rules or decisions bound to this ref")
+		return 0
+	}
+	for _, r := range rules {
+		fmt.Printf("  [%s] %-10s %s", r.Edge, r.Rule.Identifier, r.Rule.Title)
+		fmt.Println()
+		for _, d := range r.DecidedBy {
+			fmt.Printf("       decided_by %s %s\n", d.Identifier, d.Title)
+		}
+	}
+	for _, d := range decisions {
+		fmt.Printf("  [decision] %s %s\n", d.Identifier, d.Title)
 	}
 	return 0
 }
@@ -1952,13 +2625,32 @@ func clearStaleMarker(repoPath string) {
 // runUninstall implements the M036 uninstall subcommand. Modes:
 //
 //	--purge        delete ALL aih-graph state (entire XDG state root)
+//	--user         delete the user-scope graph (~/.aihaus/state/user-graph.db)
+//	               + its consent marker (M050/S04, ADR-260611-E own purge path)
 //	<repo-path>    delete the .db for that specific repo only
 //	(no args)      print where state lives + exit 0
 func runUninstall(args []string) int {
 	fs := flag.NewFlagSet("uninstall", flag.ExitOnError)
 	purgeAll := fs.Bool("purge", false, "delete ALL aih-graph state (every repo)")
+	userScope := fs.Bool("user", false, "delete the user-scope graph + its consent marker")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+
+	if *userScope {
+		removed, err := privacy.PurgeUser()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "uninstall: %v\n", err)
+			return 1
+		}
+		if len(removed) == 0 {
+			fmt.Println("uninstall: no user-scope state to remove")
+			return 0
+		}
+		for _, p := range removed {
+			fmt.Printf("uninstall: removed %s\n", p)
+		}
+		return 0
 	}
 
 	if *purgeAll {
@@ -2006,8 +2698,8 @@ func runUninstall(args []string) int {
 // runHybridBM25 executes --hybrid via FTS5 BM25 ranking + 1-hop edge
 // expansion per match. Mirrors runHybrid's vector path but sources matches
 // from FTS5 instead of vector KNN. Same edge-expansion logic.
-func runHybridBM25(db *storage.DB, queryText, typeFilter string, topK int) int {
-	matches, err := db.QueryFTS5(buildFTS5Query(queryText), topK, typeFilter)
+func runHybridBM25(db *storage.DB, queryText string, typeFilters []string, topK int) int {
+	matches, err := db.QueryFTS5(buildFTS5Query(queryText), topK, typeFilters)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: bm25 hybrid: %v\n", err)
 		return 1
@@ -2046,9 +2738,9 @@ func runHybridBM25(db *storage.DB, queryText, typeFilter string, topK int) int {
 // runSemanticBM25 executes --semantic via FTS5 BM25 lexical ranking.
 // Query syntax follows SQLite FTS5: phrases, OR/AND, prefix*. We pre-process
 // the user query to make it FTS5-safe (escape stray quotes, OR-join terms).
-func runSemanticBM25(db *storage.DB, queryText, typeFilter string, topK int) int {
+func runSemanticBM25(db *storage.DB, queryText string, typeFilters []string, topK int) int {
 	fts5Query := buildFTS5Query(queryText)
-	matches, err := db.QueryFTS5(fts5Query, topK, typeFilter)
+	matches, err := db.QueryFTS5(fts5Query, topK, typeFilters)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: bm25: %v\n", err)
 		return 1
@@ -2120,24 +2812,24 @@ func buildFTS5Query(raw string) string {
 // runHybrid executes a --hybrid query: rank top-K by stored Ollama embeddings,
 // then expand 1-hop edges per match. It falls back to BM25 when no embeddings
 // are stored yet.
-func runHybrid(db *storage.DB, queryText, typeFilter string, topK int) int {
-	rows, err := db.IterateEmbeddings(typeFilter)
+func runHybrid(db *storage.DB, queryText string, typeFilters []string, topK int) int {
+	rows, err := db.IterateEmbeddings(typeFilters)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: scan embeddings: %v\n", err)
 		return 1
 	}
 	if len(rows) == 0 {
-		return runHybridBM25(db, queryText, typeFilter, topK)
+		return runHybridBM25(db, queryText, typeFilters, topK)
 	}
 	embedder, err := resolveEmbedder()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: %v\n", err)
-		return runHybridBM25(db, queryText, typeFilter, topK)
+		return runHybridBM25(db, queryText, typeFilters, topK)
 	}
 	queryVec, err := embedder.Embed(embedInputText(queryText))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "query: embed: %v\n", err)
-		return runHybridBM25(db, queryText, typeFilter, topK)
+		return runHybridBM25(db, queryText, typeFilters, topK)
 	}
 	candidates := make([]embed.Candidate, 0, len(rows))
 	idMap := map[int64]struct{ typ, identifier string }{}
@@ -2304,9 +2996,9 @@ func writeJSON(v any) int {
 	return 0
 }
 
-func runBM25SearchJSON(db *storage.DB, command, queryText, typeFilter string, topK int) int {
+func runBM25SearchJSON(db *storage.DB, command, queryText string, typeFilters []string, topK int) int {
 	eng := query.New(db.SQL())
-	matches, err := bm25MatchesForJSON(db, eng, queryText, typeFilter, topK)
+	matches, err := bm25MatchesForJSON(db, eng, queryText, typeFilters, topK)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: bm25 json: %v\n", command, err)
 		return 1
@@ -2318,7 +3010,7 @@ func runBM25SearchJSON(db *storage.DB, command, queryText, typeFilter string, to
 	return writeJSON(searchJSON{
 		Command:     command,
 		Query:       queryText,
-		TypeFilter:  typeFilter,
+		TypeFilter:  strings.Join(typeFilters, ","),
 		ResultCount: len(matches),
 		Matches:     matches,
 	})
@@ -2405,8 +3097,8 @@ func bfsByTypeForJSON(results []query.BFSResult, typ string, limit int) []jsonBF
 	return out
 }
 
-func bm25MatchesForJSON(db *storage.DB, eng *query.Engine, queryText, typeFilter string, topK int) ([]bm25MatchJSON, error) {
-	matches, err := db.QueryFTS5(buildFTS5Query(queryText), topK, typeFilter)
+func bm25MatchesForJSON(db *storage.DB, eng *query.Engine, queryText string, typeFilters []string, topK int) ([]bm25MatchJSON, error) {
+	matches, err := db.QueryFTS5(buildFTS5Query(queryText), topK, typeFilters)
 	if err != nil {
 		return nil, err
 	}
@@ -3169,6 +3861,10 @@ func main() {
 		os.Exit(runObsidianExport(args))
 	case "rule-drift":
 		os.Exit(runRuleDrift(args))
+	case "rule":
+		os.Exit(runRule(args))
+	case "why":
+		os.Exit(runWhy(args))
 	case "mark-stale":
 		os.Exit(runMarkStale(args))
 	case "uninstall":

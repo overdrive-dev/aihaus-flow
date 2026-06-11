@@ -108,9 +108,13 @@ function Repair-GraphArgs([string[]]$GraphArgs) {
 function Add-DefaultGraphDbArgs([string[]]$GraphArgs) {
     if (-not $GraphArgs -or $GraphArgs.Count -lt 1) { return $GraphArgs }
     $cmd=$GraphArgs[0]
-    if ($cmd -notin @("build","refresh","status","query","context","callers","impact","gotchas","milestone","rule-drift","obsidian-export","export-obsidian")) { return $GraphArgs }
+    # db-pin allowlist (BR-P3): every query verb pins --db to the repo DB unless
+    # the caller passed one. --user scope is exempt -- the user-scope graph lives
+    # at ~/.aihaus/state/user-graph.db (ADR-260611-E), never the per-repo DB.
+    if ($cmd -notin @("build","refresh","status","query","context","callers","impact","gotchas","milestone","rule","why","rule-drift","obsidian-export","export-obsidian")) { return $GraphArgs }
     foreach ($arg in $GraphArgs) {
         if ($arg -eq "--db" -or $arg -eq "-db" -or $arg -like "--db=*" -or $arg -like "-db=*") { return $GraphArgs }
+        if ($arg -eq "--user") { return $GraphArgs }
     }
     $repoRoot = if ($env:AIH_GRAPH_REPO) { $env:AIH_GRAPH_REPO } elseif ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
     for ($i = 0; $i -lt $GraphArgs.Count; $i++) {

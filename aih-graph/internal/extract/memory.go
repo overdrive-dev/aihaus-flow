@@ -70,6 +70,46 @@ func ParseMarkdownMemory(repoRoot string) ([]types.MarkdownMemory, error) {
 	return out, nil
 }
 
+// ParseUserMemoryDir extracts markdown memory sections from a user-scope
+// memory directory (e.g. ~/.aihaus/memory/user) for `aih-graph build --user`
+// (M050/S04, ADR-260611-E). Identifiers are prefixed `user/<rel-path>`; the
+// category is fixed to "user". Returns an empty slice (nil error) when the
+// directory does not exist — a fresh machine has no user memory yet.
+func ParseUserMemoryDir(userRoot string) ([]types.MarkdownMemory, error) {
+	if _, err := os.Stat(userRoot); os.IsNotExist(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	var out []types.MarkdownMemory
+	err := filepath.WalkDir(userRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if strings.ToLower(filepath.Ext(path)) != ".md" {
+			return nil
+		}
+		rel, err := filepath.Rel(userRoot, path)
+		if err != nil {
+			return err
+		}
+		items, err := parseMemoryFile(path, "user/"+filepath.ToSlash(rel), "user")
+		if err != nil {
+			return err
+		}
+		out = append(out, items...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Identifier < out[j].Identifier })
+	return out, nil
+}
+
 type memoryRoot struct {
 	abs      string
 	category string

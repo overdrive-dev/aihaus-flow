@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -42,26 +43,26 @@ type EmbeddingRow struct {
 }
 
 // IterateEmbeddings yields all rows with non-NULL embeddings. The optional
-// typeFilter argument restricts to a single node type (e.g. "Decision"); pass
-// "" to scan all.
-func (d *DB) IterateEmbeddings(typeFilter string) ([]EmbeddingRow, error) {
-	var (
-		rows *sql.Rows
-		err  error
-	)
-	if typeFilter == "" {
-		rows, err = d.sql.Query(`
-			SELECT id, type, identifier, embedding, COALESCE(content_sha, '')
-			FROM nodes
-			WHERE embedding IS NOT NULL
-		`)
-	} else {
-		rows, err = d.sql.Query(`
-			SELECT id, type, identifier, embedding, COALESCE(content_sha, '')
-			FROM nodes
-			WHERE embedding IS NOT NULL AND type = ?
-		`, typeFilter)
+// typeFilters argument restricts to the given node types (e.g.
+// ["Rule", "Decision"]); pass nil (or an empty slice) to scan all.
+//
+// F15 (M050/S04): the signature was widened from a single `typeFilter string`
+// to `typeFilters []string` — multi-type restriction is expanded into a SQL
+// `type IN (...)` clause HERE at the storage layer (not post-filtered by
+// callers), so candidate sets stay correct for KNN ranking.
+func (d *DB) IterateEmbeddings(typeFilters []string) ([]EmbeddingRow, error) {
+	q := `
+		SELECT id, type, identifier, embedding, COALESCE(content_sha, '')
+		FROM nodes
+		WHERE embedding IS NOT NULL`
+	var args []any
+	if len(typeFilters) > 0 {
+		q += " AND type IN (?" + strings.Repeat(",?", len(typeFilters)-1) + ")"
+		for _, t := range typeFilters {
+			args = append(args, t)
+		}
 	}
+	rows, err := d.sql.Query(q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("iterate embeddings: %w", err)
 	}
