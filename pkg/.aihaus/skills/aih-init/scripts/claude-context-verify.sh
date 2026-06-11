@@ -70,6 +70,7 @@ if [[ -f "${CLAUDE_DIR}/CLAUDE.md" ]]; then
   done < <(grep -E '^@' "${CLAUDE_DIR}/CLAUDE.md" 2>/dev/null || true)
 
   for required_import in \
+    "../.aihaus/protocols/harness.md" \
     "../.aihaus/project.md" \
     "../.aihaus/protocols/default.md" \
     "../.aihaus/protocols/agents.md" \

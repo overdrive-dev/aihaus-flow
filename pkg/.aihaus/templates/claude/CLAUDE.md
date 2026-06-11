@@ -26,6 +26,7 @@ The orchestrator may choose no workflow. Otherwise it maps the user's intent to
 the correct aihaus workflow entry and returns the next action for the main
 session to run.
 
+@../.aihaus/protocols/harness.md
 @../.aihaus/project.md
 @../.aihaus/protocols/default.md
 @../.aihaus/protocols/agents.md
