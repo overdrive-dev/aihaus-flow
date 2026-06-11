@@ -31,6 +31,8 @@ jobs:
         run: go vet ./...
       - name: go build
         run: go build -o bin/aih-graph ./cmd/aih-graph
+      - name: go test
+        run: go test ./...
       - name: smoke — version + help
         run: |
           ./bin/aih-graph version

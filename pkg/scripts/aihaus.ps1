@@ -108,7 +108,7 @@ function Repair-GraphArgs([string[]]$GraphArgs) {
 function Add-DefaultGraphDbArgs([string[]]$GraphArgs) {
     if (-not $GraphArgs -or $GraphArgs.Count -lt 1) { return $GraphArgs }
     $cmd=$GraphArgs[0]
-    if ($cmd -notin @("build","refresh","status","query","context","callers","impact","gotchas","milestone","obsidian-export","export-obsidian")) { return $GraphArgs }
+    if ($cmd -notin @("build","refresh","status","query","context","callers","impact","gotchas","milestone","rule-drift","obsidian-export","export-obsidian")) { return $GraphArgs }
     foreach ($arg in $GraphArgs) {
         if ($arg -eq "--db" -or $arg -eq "-db" -or $arg -like "--db=*" -or $arg -like "-db=*") { return $GraphArgs }
     }
