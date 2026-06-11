@@ -38,22 +38,14 @@
     {"tier": "HIGH", "path": "<story-file>", "rationale": "Acceptance criteria are the ground truth for verification verdicts."},
     {"tier": "MED",  "path": "<execution-dir>", "rationale": "Execution artifacts and prior summaries provide evidence for verification."}
   ],
-  ":adversarial-scout": [
-    {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack and conventions expose invalid assumptions in plans."},
-    {"tier": "HIGH", "path": ".aihaus/protocols/default.md", "rationale": "Workflow gates reveal missing planning and validation obligations."},
-    {"tier": "MED",  "path": ".aihaus/protocols/routing.md", "rationale": "Routing context exposes invalid workflow entry assumptions."},
-    {"tier": "HIGH", "path": ".aihaus/memory/workflows/business-rules.md", "rationale": "Business rules are the main source for product-contract contradictions."},
-    {"tier": "MED",  "path": ".aihaus/memory/workflows/environment.md", "rationale": "Environment facts often expose unvalidated assumptions."},
-    {"tier": "MED",  "path": ".aihaus/memory/workflows/user-preferences.md", "rationale": "Repository-scoped user preferences can make a plan unacceptable."},
-    {"tier": "HIGH", "path": "<story-file>", "rationale": "Story spec is the scope boundary for adversarial plan review."}
-  ],
-  ":adversarial-review": [
-    {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack and conventions are required review context."},
-    {"tier": "HIGH", "path": ".aihaus/protocols/default.md", "rationale": "Review must enforce workflow evidence and handoff gates."},
-    {"tier": "MED",  "path": ".aihaus/protocols/routing.md", "rationale": "Routing context explains intended workflow ownership."},
-    {"tier": "HIGH", "path": ".aihaus/memory/workflows/business-rules.md", "rationale": "Business rules anchor behavior-affecting review findings."},
-    {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Review and Playwright checks depend on runtime and credential context."},
-    {"tier": "MED",  "path": ".aihaus/memory/workflows/user-preferences.md", "rationale": "Repository-scoped user preferences shape review tone and acceptance."},
+  ":adversarial": [
+    {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack and conventions expose invalid assumptions in plans and ground review findings."},
+    {"tier": "HIGH", "path": ".aihaus/protocols/default.md", "rationale": "Workflow gates reveal missing planning, validation, and handoff obligations."},
+    {"tier": "MED",  "path": ".aihaus/protocols/routing.md", "rationale": "Routing context exposes invalid workflow entry and ownership assumptions."},
+    {"tier": "HIGH", "path": ".aihaus/memory/workflows/business-rules.md", "rationale": "Business rules are the main source for product-contract contradictions and anchor behavior-affecting review findings."},
+    {"tier": "HIGH", "path": ".aihaus/memory/workflows/environment.md", "rationale": "Review and Playwright checks depend on runtime and credential context; environment facts expose unvalidated assumptions."},
+    {"tier": "MED",  "path": ".aihaus/memory/workflows/user-preferences.md", "rationale": "Repository-scoped user preferences shape review tone and can make a plan unacceptable."},
+    {"tier": "HIGH", "path": "<story-file>", "rationale": "Story spec is the scope boundary for adversarial plan review."},
     {"tier": "MED",  "path": ".aihaus/memory/reviews", "rationale": "Prior review findings inform adversarial review patterns."}
   ]
 }

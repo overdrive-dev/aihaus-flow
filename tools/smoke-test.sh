@@ -851,7 +851,14 @@ else:
   rm -rf "$tmpdir"
 
   if [[ "$match" != "match" ]]; then
-    eval "${issues_ref}+=(\"${label_prefix} [${path_label}]: ${match}\")"
+    # Single-quote-escape before eval: mismatch details embed raw JSON whose
+    # quote pairing inverts inside the eval'd double-quoted append, leaving
+    # metacharacters (e.g. the `|` in a widened matcher) unquoted -> eval
+    # syntax error -> the issue is silently dropped and the caller sees an
+    # empty issues array (observed as Check 96 false vacuity report, M050/S02).
+    local safe_msg
+    safe_msg=$(printf '%s' "${label_prefix} [${path_label}]: ${match}" | tr '\n' ' ' | sed "s/'/'\\\\''/g")
+    eval "${issues_ref}+=('${safe_msg}')"
   fi
 }
 
@@ -1680,13 +1687,21 @@ check_backfill_script() {
     problems+=("backfill-milestone-history.sh failed bash -n syntax check")
   fi
 
-  # (d) if milestones dir exists, script produces >= 12 M0NN rows
+  # (d) if milestones dir exists, script produces >= min(12, local M0NN
+  #     milestone-dir count) rows. M050/S02 hardening (SKILL-EVOLUTION
+  #     proposal 1): the old unconditional >= 12 assertion failed on any
+  #     fresh dogfood machine whose FIRST local milestone created the dir
+  #     (environment coupling, not a package defect). Machines with >= 12
+  #     local milestone dirs keep the strong assertion unchanged.
   local milestones_root="${PACKAGE_ROOT}/../.aihaus/milestones"
   if [[ -d "$milestones_root" ]]; then
-    local row_count
+    local dir_count required row_count
+    dir_count=$(find "$milestones_root" -mindepth 1 -maxdepth 1 -type d -name 'M[0-9][0-9][0-9]*' 2>/dev/null | wc -l | tr -d ' ')
+    [[ -z "$dir_count" ]] && dir_count=0
+    required=$(( dir_count < 12 ? dir_count : 12 ))
     row_count=$(bash "$script" 2>/dev/null | grep -cE '^\| M[0-9]{3} \|' || echo "0")
-    if [[ "$row_count" -lt 12 ]]; then
-      problems+=("backfill-milestone-history.sh produced only ${row_count} M0NN rows (expected >= 12)")
+    if [[ "$row_count" -lt "$required" ]]; then
+      problems+=("backfill-milestone-history.sh produced only ${row_count} M0NN rows (expected >= ${required} = min(12, ${dir_count} local milestone dirs))")
     fi
   fi
 
@@ -5804,6 +5819,61 @@ check_eval_run_deterministic() {
   if [[ ${#issues[@]} -eq 0 ]]; then _pass "$label"; else _fail "$label" "${issues[@]}"; fi
 }
 
+# ---- merge-settings.sh propagates widened SessionStart matcher (M050/S02) ----
+# F11/BR-P8: position-paired template-wins merge must propagate the widened
+# SessionStart matcher (startup|resume|clear|compact) into an existing overlay
+# carrying the old startup-only matcher. Fixture-fail pair (02) deliberately
+# expects the stale startup-only shape and MUST mismatch — proving the
+# comparison is matcher-sensitive (not green-but-vacuous).
+check_settings_merge_matcher() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: merge-settings.sh propagates widened SessionStart matcher (M050/S02)"
+  local helper="${PACKAGE_ROOT}/scripts/lib/merge-settings.sh"
+  local fixtures_base="${PACKAGE_ROOT}/../tools/fixtures/settings-merge-matcher"
+  [[ -f "$helper" ]] || { _fail "$label" "missing helper: $helper"; return; }
+  [[ -d "$fixtures_base" ]] || { _fail "$label" "missing fixture dir: tools/fixtures/settings-merge-matcher/"; return; }
+
+  local py_bin
+  py_bin="$(command -v python3 || command -v python || command -v py)"
+  if [[ -z "$py_bin" ]]; then
+    _fail "$label" "python required"
+    return
+  fi
+
+  local issues=()
+
+  # Pass pair: merged output must equal expected (carries widened matcher).
+  # Run under default path AND AIHAUS_FORCE_PYTHON_MERGE=1 (Check 82 family).
+  _check_merge_hooks_fixture "${fixtures_base}/01-matcher-widen" "fixture-01-matcher-widen" "$helper" "$py_bin" "0" "issues"
+  _check_merge_hooks_fixture "${fixtures_base}/01-matcher-widen" "fixture-01-matcher-widen" "$helper" "$py_bin" "1" "issues"
+
+  # Fixture-fail pair (BR-P8 non-vacuity): expected deliberately keeps the old
+  # startup-only matcher; the comparison MUST report a mismatch. If it matches,
+  # the matcher comparison is green-but-vacuous. Exercised under BOTH paths
+  # (default AND AIHAUS_FORCE_PYTHON_MERGE=1), mirroring the pass pair / Check 82.
+  local fail_fix="${fixtures_base}/02-stale-matcher-must-mismatch"
+  if [[ ! -f "${fail_fix}.base.json" || ! -f "${fail_fix}.overlay.json" || ! -f "${fail_fix}.expected.json" ]]; then
+    issues+=("fixture-02-stale: missing fixture files")
+  else
+    local fp fp_label
+    for fp in 0 1; do
+      fp_label="default"
+      [[ "$fp" = "1" ]] && fp_label="python"
+      local fail_issues=()
+      _check_merge_hooks_fixture "$fail_fix" "fixture-02-stale" "$helper" "$py_bin" "$fp" "fail_issues"
+      if [[ ${#fail_issues[@]} -eq 0 ]]; then
+        issues+=("fixture-02-stale [${fp_label}]: merge result matched the stale startup-only expected — matcher comparison is green-but-vacuous (BR-P8)")
+      fi
+    done
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -5818,6 +5888,7 @@ check_project_context_refresh_hook
 check_aih_graph_build_smoke
 check_aih_graph_integration_round_trip
 check_eval_run_deterministic
+check_settings_merge_matcher
 
 printf "
 "

@@ -152,17 +152,21 @@ _rotate_audit_if_needed() {
 _write_audit() {
   local target_agent="$1" cohort="$2" static_or_haiku="$3" \
         payload_bytes="$4" truncated="$5" duration_ms="$6" \
-        milestone="${7:-}" story="${8:-}" cache_hit="${9:-false}"
+        milestone="${7:-}" story="${8:-}" cache_hit="${9:-false}" \
+        memory_packet="${10:-skipped}"
   mkdir -p "$(dirname "$AUDIT_LOG")" 2>/dev/null || return 0
   _rotate_audit_if_needed
   local ts; ts="$(ts_iso)"
   # Escape quotes in string fields.
   _eq() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-  printf '{"ts":"%s","milestone":"%s","story":"%s","target_agent":"%s","cohort":"%s","static_or_haiku":"%s","payload_bytes":%s,"truncated":"%s","duration_ms":%s,"cache_hit":%s}\n' \
+  # memory_packet (M050/S02, additive): "present" when the native memory
+  # packet (M048 two-call path) made it into the payload, else "skipped".
+  # context-inject.sh remains the sole writer of this JSONL (BR-P5/ADR-001).
+  printf '{"ts":"%s","milestone":"%s","story":"%s","target_agent":"%s","cohort":"%s","static_or_haiku":"%s","payload_bytes":%s,"truncated":"%s","duration_ms":%s,"cache_hit":%s,"memory_packet":"%s"}\n' \
     "$ts" "$(_eq "$milestone")" "$(_eq "$story")" "$(_eq "$target_agent")" \
     "$(_eq "$cohort")" "$(_eq "$static_or_haiku")" \
     "${payload_bytes:-0}" "${truncated:-false}" "${duration_ms:-0}" \
-    "${cache_hit}" \
+    "${cache_hit}" "$(_eq "$memory_packet")" \
     >> "$AUDIT_LOG" 2>/dev/null || true
 }
 
@@ -315,9 +319,15 @@ if [ -f "$INJECT_CACHE" ]; then
 fi
 
 if [ "$_inject_cache_hit" = "true" ] && [ -n "$_inject_cache_payload" ]; then
+  # memory_packet on cache-hit: no memory CLI call happens this invocation;
+  # derive from whether the cached payload carries the M048 packet marker.
+  _cache_memory_packet="skipped"
+  case "$_inject_cache_payload" in
+    *"Native repository memory (auto-injected, M048)"*) _cache_memory_packet="present" ;;
+  esac
   _write_audit "$target_agent_name" "$cohort" "cache-hit" \
     "${#_inject_cache_payload}" "false" "0" \
-    "$(basename "${milestone_dir:-}")" "$story_id" "true"
+    "$(basename "${milestone_dir:-}")" "$story_id" "true" "$_cache_memory_packet"
   # Emit cached payload directly.
   if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
     py_bin="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo "")"
@@ -475,7 +485,18 @@ import json, sys
 f, key = sys.argv[1], sys.argv[2]
 with open(f, encoding='utf-8') as fh:
     d = json.load(fh)
-entries = d.get(key, d.get(':doer', []))
+entries = d.get(key)
+if entries is None and key.startswith(':adversarial'):
+    # M050/S02: merged :adversarial cohort (M027/ADR-260509-Y) must resolve
+    # even against a stale role-defaults.json still carrying the pre-M027
+    # :adversarial-scout/:adversarial-review keys (and vice versa). Never
+    # fall through to :doer for adversarial agents.
+    for alias in (':adversarial', ':adversarial-review', ':adversarial-scout'):
+        entries = d.get(alias)
+        if entries is not None:
+            break
+if entries is None:
+    entries = d.get(':doer', [])
 for e in entries:
     tier = e.get('tier','MED')
     path = e.get('path','')
@@ -483,8 +504,14 @@ for e in entries:
     print(f"{tier}:{path} — {rationale}")
 PYEOF
   elif command -v jq >/dev/null 2>&1; then
+    # M050/S02: same merged-:adversarial fall-through as the python path —
+    # legacy pre-M027 keys resolve before the :doer default, both directions.
     jq -r --arg k "$cohort_key" '
-      .[$k] // .[":doer"] // [] |
+      (.[$k] //
+        (if ($k | startswith(":adversarial"))
+         then (.[":adversarial"] // .[":adversarial-review"] // .[":adversarial-scout"])
+         else null end) //
+        .[":doer"] // []) |
       .[] |
       (.tier + ":" + .path + " — " + .rationale)
     ' "$ROLE_DEFAULTS_JSON" 2>/dev/null
@@ -559,7 +586,7 @@ if [ "$novel_task" = "1" ] && command -v claude >/dev/null 2>&1 && [ -n "$task_d
   path_method="haiku"
 
   task_trunc="$(printf '%s' "$task_description" | head -c 1500)"
-  cohorts_summary=":planner-binding->project.md,protocols,business-rules,environment,user-preferences,analysis-brief  :planner->project.md,protocols,business-rules,environment,user-preferences  :doer->project.md,protocols,business-rules,environment,user-preferences,story-file  :verifier->project.md,protocols,business-rules,environment,user-preferences,story-file,execution  :adversarial-*->project.md,protocols,business-rules,environment,user-preferences,story-file,review-memory"
+  cohorts_summary=":planner-binding->project.md,protocols,business-rules,environment,user-preferences,analysis-brief  :planner->project.md,protocols,business-rules,environment,user-preferences  :doer->project.md,protocols,business-rules,environment,user-preferences,story-file  :verifier->project.md,protocols,business-rules,environment,user-preferences,story-file,execution  :adversarial->project.md,protocols,business-rules,environment,user-preferences,story-file,review-memory"
 
   PROMPT="$(cat <<EOF
 SYSTEM: You are context-curator for the aihaus milestone system.
@@ -686,6 +713,11 @@ HIGH:.aihaus/memory/local/environment-online.md — Online (staging/prod) env: d
 esac
 
 memory_context_section="$(_build_memory_context)"
+# memory_packet (M050/S02): "present" iff the two-call memory path (status +
+# query) produced a non-empty packet; every failure/opt-out path in
+# _build_memory_context returns empty -> "skipped".
+memory_packet="skipped"
+[ -n "$memory_context_section" ] && memory_packet="present"
 [ -n "$memory_context_section" ] && memory_context_section="${memory_context_section}"$'\n'
 
 # ---------------------------------------------------------------------------
@@ -755,7 +787,7 @@ fi
 # ---------------------------------------------------------------------------
 _write_audit "$target_agent_name" "$cohort" "$path_method" \
   "$payload_bytes" "$truncated" "$duration_ms" \
-  "$(basename "${milestone_dir:-}")" "$story_id" "false"
+  "$(basename "${milestone_dir:-}")" "$story_id" "false" "$memory_packet"
 
 # ---------------------------------------------------------------------------
 # 14. Emit SubagentStart hook output (additionalContext)
