@@ -3,7 +3,7 @@
 The workflow stores readable run artifacts under:
 
 ```text
-.aihaus/workflows/runs/[YYMMDD]-[slug]/
+.aihaus/runtime/runs/[YYMMDD]-[slug]/
 ```
 
 The operational task cache and journal live in `.aihaus/state/kanban.db`.

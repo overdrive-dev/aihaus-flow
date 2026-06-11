@@ -169,8 +169,7 @@ foreach ($dir in @(
     (Join-Path $Aihaus 'state'),
     (Join-Path $Aihaus 'runtime'),
     (Join-Path $Aihaus 'backups'),
-    (Join-Path $Aihaus 'workflows'),
-    (Join-Path $Aihaus 'workflows\runs'),
+    (Join-Path $Aihaus 'protocols'),
     (Join-Path $Aihaus 'memory\workflows'),
     (Join-Path $Aihaus 'memory\agents'),
     (Join-Path $Aihaus 'memory\reviews'),
@@ -180,6 +179,43 @@ foreach ($dir in @(
 )) {
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
 }
+
+function Migrate-LegacyWorkflowsDir {
+    $oldDir = Join-Path $Aihaus 'workflows'
+    $newDir = Join-Path $Aihaus 'protocols'
+    $runtimeRuns = Join-Path $Aihaus 'runtime\runs'
+    if (-not (Test-Path -LiteralPath $oldDir -PathType Container)) { return }
+
+    New-Item -ItemType Directory -Path $newDir -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $Aihaus 'runtime') -Force | Out-Null
+
+    foreach ($rel in @('default.md','agents.md','artifacts.md','business-rules.md','fan-out.md','parallelism.md','roles.md','routing.md','kanban')) {
+        $src = Join-Path $oldDir $rel
+        $dst = Join-Path $newDir $rel
+        if (-not (Test-Path -LiteralPath $src)) { continue }
+        if (-not (Test-Path -LiteralPath $dst)) {
+            Move-Item -LiteralPath $src -Destination $dst
+            Write-Host "  migrate: .aihaus\workflows\$rel -> .aihaus\protocols\$rel"
+        } else {
+            Write-Host "  warn: legacy .aihaus\workflows\$rel left in place; .aihaus\protocols\$rel already exists" -ForegroundColor Yellow
+        }
+    }
+
+    $oldRuns = Join-Path $oldDir 'runs'
+    if ((Test-Path -LiteralPath $oldRuns -PathType Container) -and -not (Test-Path -LiteralPath $runtimeRuns)) {
+        Move-Item -LiteralPath $oldRuns -Destination $runtimeRuns
+        Write-Host "  migrate: .aihaus\workflows\runs -> .aihaus\runtime\runs"
+    } elseif (Test-Path -LiteralPath $oldRuns -PathType Container) {
+        Write-Host "  warn: legacy .aihaus\workflows\runs left in place; .aihaus\runtime\runs already exists" -ForegroundColor Yellow
+    }
+
+    try {
+        Remove-Item -LiteralPath $oldDir -ErrorAction Stop
+    } catch {}
+}
+Migrate-LegacyWorkflowsDir
+New-Item -ItemType Directory -Path (Join-Path $Aihaus 'runtime\runs') -Force | Out-Null
+
 $workflowSeedFiles = @(
     'default.md',
     'agents.md',
@@ -191,11 +227,11 @@ $workflowSeedFiles = @(
     'routing.md'
 )
 foreach ($workflowFile in $workflowSeedFiles) {
-    $src = Join-Path $PkgAihaus (Join-Path 'workflows' $workflowFile)
-    $dst = Join-Path $Aihaus (Join-Path 'workflows' $workflowFile)
+    $src = Join-Path $PkgAihaus (Join-Path 'protocols' $workflowFile)
+    $dst = Join-Path $Aihaus (Join-Path 'protocols' $workflowFile)
     if (-not (Test-Path -LiteralPath $dst) -and (Test-Path -LiteralPath $src)) {
         Copy-Item -LiteralPath $src -Destination $dst
-        Write-Host "  workflow: created .aihaus\workflows\$workflowFile"
+        Write-Host "  protocol: created .aihaus\protocols\$workflowFile"
     }
 }
 $memorySeedFiles = @(
@@ -276,6 +312,31 @@ function Ensure-WorkflowEnvironmentPrompts {
     Write-Host "  memory: appended workflow environment prompts"
 }
 Ensure-WorkflowEnvironmentPrompts -EnvironmentFile (Join-Path $Aihaus 'memory\workflows\environment.md')
+
+function Sync-OutputStyles {
+    $srcDir = Join-Path $PkgAihaus 'output-styles'
+    if (-not (Test-Path -LiteralPath $srcDir)) { return }
+
+    $dstDir = Join-Path $Claude 'output-styles'
+    New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
+
+    Get-ChildItem -LiteralPath $srcDir -Filter '*.md' -File | ForEach-Object {
+        $dst = Join-Path $dstDir $_.Name
+        $copy = $true
+        if (Test-Path -LiteralPath $dst) {
+            try {
+                $copy = (Get-FileHash -LiteralPath $_.FullName).Hash -ne (Get-FileHash -LiteralPath $dst).Hash
+            } catch {
+                $copy = $true
+            }
+        }
+        if ($copy) {
+            Copy-Item -LiteralPath $_.FullName -Destination $dst -Force
+            Write-Host "  output-style: refreshed .claude\output-styles\$($_.Name)"
+        }
+    }
+}
+Sync-OutputStyles
 
 function Ensure-ClaudeContextBridge {
     param([string]$ClaudeDir)
@@ -1263,6 +1324,34 @@ if (-not $env:AIHAUS_SKIP_GRAPH_BINARY) {
         }
     }
 }
+
+function Refresh-ClaudeContextBridge {
+    $refreshHook = Join-Path $Aihaus 'hooks\project-context-refresh.sh'
+    $bashCmd = Get-Command bash -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $refreshHook) -or -not $bashCmd) { return }
+
+    Write-Host ""
+    Write-Host "  refreshing Claude context bridge..."
+    $oldProjectDir = $env:CLAUDE_PROJECT_DIR
+    $oldQuiet = $env:AIHAUS_CONTEXT_REFRESH_QUIET
+    $oldDiscovery = $env:AIHAUS_CONTEXT_REFRESH_DISCOVERY
+    try {
+        $env:CLAUDE_PROJECT_DIR = $Target
+        $env:AIHAUS_CONTEXT_REFRESH_QUIET = '1'
+        $env:AIHAUS_CONTEXT_REFRESH_DISCOVERY = '0'
+        & bash $refreshHook --reason update *> $null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  ok: Claude context bridge refreshed"
+        } else {
+            Write-Host "  warn: Claude context bridge refresh failed (run .aihaus/hooks/project-context-refresh.sh manually)" -ForegroundColor Yellow
+        }
+    } finally {
+        if ($null -eq $oldProjectDir) { Remove-Item Env:\CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue } else { $env:CLAUDE_PROJECT_DIR = $oldProjectDir }
+        if ($null -eq $oldQuiet) { Remove-Item Env:\AIHAUS_CONTEXT_REFRESH_QUIET -ErrorAction SilentlyContinue } else { $env:AIHAUS_CONTEXT_REFRESH_QUIET = $oldQuiet }
+        if ($null -eq $oldDiscovery) { Remove-Item Env:\AIHAUS_CONTEXT_REFRESH_DISCOVERY -ErrorAction SilentlyContinue } else { $env:AIHAUS_CONTEXT_REFRESH_DISCOVERY = $oldDiscovery }
+    }
+}
+Refresh-ClaudeContextBridge
 
 # ---- Summary -----------------------------------------------------------------
 Write-Host ""

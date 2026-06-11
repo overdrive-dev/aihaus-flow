@@ -429,24 +429,24 @@ else
 fi
 
 # Repo-local runtime layout. Package-owned source stays in AIHAUS_HOME; target
-# repos receive only runtime/state defaults and editable workflow profiles.
+# repos receive only runtime/state defaults and editable protocol profiles.
 mkdir -p \
   "${TARGET}/.aihaus/bin" \
   "${TARGET}/.aihaus/state" \
   "${TARGET}/.aihaus/runtime" \
   "${TARGET}/.aihaus/backups" \
-  "${TARGET}/.aihaus/workflows" \
-  "${TARGET}/.aihaus/workflows/runs" \
+  "${TARGET}/.aihaus/protocols" \
+  "${TARGET}/.aihaus/runtime/runs" \
   "${TARGET}/.aihaus/memory/workflows" \
   "${TARGET}/.aihaus/memory/agents" \
   "${TARGET}/.aihaus/memory/reviews" \
   "${TARGET}/.aihaus/memory/global" \
   "${TARGET}/.aihaus/memory/backend" \
   "${TARGET}/.aihaus/memory/frontend"
-for workflow_file in default.md agents.md artifacts.md business-rules.md fan-out.md parallelism.md roles.md routing.md; do
-  if [[ ! -f "${TARGET}/.aihaus/workflows/${workflow_file}" && -f "${PKG_AIHAUS}/workflows/${workflow_file}" ]]; then
-    cp "${PKG_AIHAUS}/workflows/${workflow_file}" "${TARGET}/.aihaus/workflows/${workflow_file}"
-    echo "  workflow: created .aihaus/workflows/${workflow_file}"
+for protocol_file in default.md agents.md artifacts.md business-rules.md fan-out.md parallelism.md roles.md routing.md; do
+  if [[ ! -f "${TARGET}/.aihaus/protocols/${protocol_file}" && -f "${PKG_AIHAUS}/protocols/${protocol_file}" ]]; then
+    cp "${PKG_AIHAUS}/protocols/${protocol_file}" "${TARGET}/.aihaus/protocols/${protocol_file}"
+    echo "  protocol: created .aihaus/protocols/${protocol_file}"
   fi
 done
 for rel in \

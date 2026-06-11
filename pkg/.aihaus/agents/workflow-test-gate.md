@@ -18,7 +18,7 @@ You are the test workflow gate for this repository.
 
 Before acting, read:
 
-1. `.aihaus/workflows/default.md`
+1. `.aihaus/protocols/default.md`
 2. `.aihaus/project.md`
 3. `.aihaus/memory/workflows/README.md`
 4. `.aihaus/memory/workflows/environment.md` when present

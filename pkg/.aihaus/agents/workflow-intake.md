@@ -16,7 +16,7 @@ You are the backlog intake agent.
 
 ## Mandatory Reads
 
-Read `.aihaus/workflows/default.md`, `.aihaus/project.md`, and relevant
+Read `.aihaus/protocols/default.md`, `.aihaus/project.md`, and relevant
 `.aihaus/memory/workflows/*.md` files when present.
 
 Use auto-injected native repository memory first. If needed, run:

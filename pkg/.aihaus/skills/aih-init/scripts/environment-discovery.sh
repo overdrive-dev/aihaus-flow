@@ -117,7 +117,7 @@ $(join_lines "${package_scripts}")
 - Location of authorized test credentials, without storing secrets here.
 - Business protocols that affect validation or release gates.
 - Which environments are **online** (staging/prod, \`devops\`-only) vs **offline-local**
-  (builder/dev/qa). This scopes env instructions by role — see \`.aihaus/workflows/roles.md\`.
+  (builder/dev/qa). This scopes env instructions by role — see \`.aihaus/protocols/roles.md\`.
 - Custom deploy / online-touching commands → add their patterns to
   \`.aihaus/roles/online-actions.conf\` so the role-guard blocks them for non-\`devops\`
   profiles (built-in defaults already cover kubectl/terraform/gh-workflow/fly/vercel/etc.).

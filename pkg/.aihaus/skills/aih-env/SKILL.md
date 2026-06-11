@@ -43,7 +43,7 @@ anything already answered in the source and skip its question:
   `.env` vault / password manager). **Locations and named test roles only.**
 - **Env-var locations** — which file or secret store holds env vars per environment.
 - **Env access by role** — which roles reach which environments. The **online
-  boundary** (staging → prod) is **devops-only** (`workflows/roles.md` +
+  boundary** (staging → prod) is **devops-only** (`.aihaus/protocols/roles.md` +
   `role-guard.sh`); builder/dev/qa stay offline-local.
 - **Validation + deploy** — unit/integration command, Playwright/browser command +
   dev URL, CI job names, deploy path and promotion gates.

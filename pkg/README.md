@@ -171,7 +171,7 @@ Captured at `/aih-init`, your profile is one of five — and the staging→prod 
 
 ## The Engine
 
-Under the native-first surface sits a file-driven engine: **58 specialist agents** and **15 intent-based skills**.
+Under the native-first surface sits a file-driven engine: **59 specialist agents** and **15 intent-based skills**.
 
 - **Thin coordinator, specialist workforce.** The skill running a command is a coordinator: it spawns a specialist, reads the file that specialist writes, and picks the next one. Heavy work stays in subagent contexts — your main window stays clean.
 - **Files as the handoff protocol.** Agents never "talk to each other"; coordination is through files (`PLAN.md`, `REVIEW.md`, `VERIFICATION.md`, …). One writer per file. The payoff: a full audit trail, clean resumes, zero write races (ADR-001).
@@ -231,9 +231,9 @@ your-project/
 ├── .aihaus/                          # aihaus workspace
 │   ├── skills/                       # 15 intent-based commands
 │   │   └── _shared/autonomy-protocol.md
-│   ├── agents/                       # 58 specialist agent definitions
+│   ├── agents/                       # 59 specialist agent definitions
 │   ├── hooks/                        # lifecycle + protocol hooks (incl. role-guard.sh)
-│   ├── workflows/                    # stage workflow + kanban substrate + parallelism contract
+│   ├── protocols/                    # workflow protocols + kanban substrate + parallelism contract
 │   ├── memory/                       # local markdown memory (project.md, environment.md, …)
 │   ├── decisions.md                  # Architecture Decision Records (binding)
 │   └── knowledge.md                  # Accumulated lessons

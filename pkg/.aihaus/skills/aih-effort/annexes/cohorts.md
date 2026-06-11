@@ -111,11 +111,12 @@ Members (alphabetical):
 - workflow-execution-review
 - workflow-human-review
 - workflow-intake
+- workflow-orchestrator
 - workflow-planning-gate
 - workflow-tdd-gate
 - workflow-test-gate
 
-**Count: 25**
+**Count: 26**
 
 ---
 
@@ -192,7 +193,7 @@ Members (alphabetical):
 
 ---
 
-## Membership table (58 agents)
+## Membership table (59 agents)
 
 **Parse contract (F-006 — binding per ADR-M012-A).** This table has exactly
 5 data columns. The header is `| # | Agent | Cohort | Model | Effort |`.
@@ -264,11 +265,12 @@ cohort (or per-agent override for `:adversarial` max-tier members).
 | 53 | workflow-execution-review | :doer             | sonnet | high  |
 | 54 | workflow-human-review    | :doer             | sonnet | high  |
 | 55 | workflow-intake          | :doer             | sonnet | high  |
-| 56 | workflow-planning-gate   | :doer             | sonnet | high  |
-| 57 | workflow-tdd-gate        | :doer             | sonnet | high  |
-| 58 | workflow-test-gate       | :doer             | sonnet | high  |
+| 56 | workflow-orchestrator    | :doer             | sonnet | high  |
+| 57 | workflow-planning-gate   | :doer             | sonnet | high  |
+| 58 | workflow-tdd-gate        | :doer             | sonnet | high  |
+| 59 | workflow-test-gate       | :doer             | sonnet | high  |
 
-**Totals:** :planner-binding=4 · :planner=14 · :doer=25 · :verifier=9 · :adversarial=6 · Sum=58
+**Totals:** :planner-binding=4 - :planner=14 - :doer=26 - :verifier=9 - :adversarial=6 - Sum=59
 
 ---
 

@@ -8,8 +8,9 @@ workflow-sync work, check the repo-local context sources:
 
 - `.aihaus/project.md` for stack, architecture, conventions, and project-owned
   operating notes.
-- `.aihaus/workflows/default.md` and `.aihaus/workflows/agents.md` for stage
-  gates and agent responsibilities.
+- `.aihaus/protocols/default.md`, `.aihaus/protocols/agents.md`, and
+  `.aihaus/protocols/routing.md` for stage gates, agent responsibilities, and
+  top-level intent routing.
 - `.aihaus/memory/workflows/environment.md` for runtime location, CI/CD,
   CodeBuild or deploy jobs, test credential locations, dev URLs, and validation
   commands.

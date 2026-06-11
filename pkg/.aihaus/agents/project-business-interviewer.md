@@ -32,7 +32,7 @@ Read these files if they exist:
 1. `.aihaus/project.md`
 2. `.aihaus/init/environment-discovery.md`
 3. `.aihaus/memory/workflows/environment.md`
-4. `.aihaus/workflows/default.md`
+4. `.aihaus/protocols/default.md`
 5. `README.md`, `docs/**`, and issue/task templates when present
 
 Do not read plaintext secret files. If you find a credential reference, record

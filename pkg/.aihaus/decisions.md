@@ -5366,3 +5366,297 @@ Reverting removes `workflows/business-rules.md`, `templates/business-rules.md`, 
 - ADR-260529-A — parallel worktree safety (the build shards by Owned-Files)
 - ADR-260511-A / 260511-C — `calibrate-guard` (extended into the rule-gate)
 - ADR-260515-B — aih-graph Node/Edge model (the `Rule` node extends it)
+
+## ADR-260611-A — 3-tier memory model: code graph · project ledgers · global user preferences
+
+**Status:** Accepted
+**Date:** 2026-06-11
+**Milestone:** M050
+
+### Context
+
+aihaus has ~10 fragmented memory surfaces with no declared ownership model: per-repo aih-graph DBs, the BR ledger, `decisions.md`/`knowledge.md`/`project.md`, per-agent MEMORY.md scratch, the kanban DB, the CLAUDE.md bridge, the output-style law, and repo-scoped user preferences. Agents cannot answer "who owns this memory, who may write it, and which wins on conflict." M050 needs a closed taxonomy before the harness can describe it in one line per tier.
+
+### Decision
+
+Exactly **three memory tiers**, no more:
+
+- **Tier A — code/concept graph (rebuildable index).** Per-repo `.aihaus/state/aih-graph.db` plus the new user-scope `~/.aihaus/state/user-graph.db` (S04 `build --user`). Never authoritative: every tier-A row derives from tier-B/tier-C markdown or from code, and the DB can be deleted and rebuilt at any time (BR-P6, extends BR-F3/ADR-260531-A).
+- **Tier B — project memory (source of truth).** The markdown ledgers — with the **business-rules ledger as the apex autonomy tier** (agents decide from it) — plus `decisions.md`, `knowledge.md`, `project.md`, `.aihaus/memory/**`, and the operational kanban DB. **No tier-B path moves this cycle** (BR-P6).
+- **Tier C — global user preferences (user-owned).** `~/.aihaus/memory/user/preferences.md`, written exclusively through `aihaus prefs add` (ADR-260611-C/E), surfaced via a gitignored repo mirror and a bounded packet excerpt.
+
+**Ownership / writer / reader matrix:**
+
+| Tier | Canonical store | Sanctioned writers | Readers | Rebuildable |
+|------|-----------------|--------------------|---------|-------------|
+| A | `.aihaus/state/aih-graph.db`; `~/.aihaus/state/user-graph.db` | `aih-graph build`/refresh hooks only | `aihaus memory` verbs; `context-inject.sh` packet | YES — derived index |
+| B | markdown ledgers (BR ledger apex) + `kanban.db` | humans; orchestrator via the memory-promotion ritual; kanban via `aihaus kanban` verbs (S07); manifest via `manifest-append.sh` | all agents (injection + queries) | NO — source of truth |
+| C | `~/.aihaus/memory/user/preferences.md` | `aihaus prefs add` ONLY (BR-P7) | bridge (via mirror); `context-inject.sh` excerpt; `aih-graph build --user` | NO — user-owned (its index is) |
+
+**Precedence rule: repo overrides global.** On conflict, tier-B (project) beats tier-C (user preference); tier-A never decides anything — it only retrieves. Within tier B, `protocols/business-rules.md` is canonical-on-conflict over any condensed restatement (BR-U5). The harness states this precedence in one line.
+
+### Consequences
+
+**Positive:** every memory surface has exactly one home, one writer set, and one conflict rule; hooks and agents can cite the tier instead of re-deriving ownership; the rebuildable/source-of-truth split keeps ADR-001 files-as-state intact.
+
+**Negative:** per-agent MEMORY.md scratch and runtime caches must be classified as tier-B-adjacent scratch (promoted only via the ritual, F12) — discipline, not enforcement, this cycle.
+
+**Neutral:** `pkg/.aihaus/memory/MEMORY.md` deletion stays dropped (F6) — deferred behind the consumer-scrub precondition recorded at S09 closeout.
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| Fourth tier for per-agent scratch | Rejected | Scratch is a promotion *source*, not a tier; a 4th tier re-fragments the model M050 exists to collapse |
+| Move tier-B ledgers under `protocols/` | Rejected (BR-P6) | Path moves break ≥10 live consumers mid-transition; no tier-B path moves this cycle |
+| Index user memory into per-repo DBs | Rejected | Violates the ADR-260515-A privacy contract; user scope gets its own DB + consent marker (ADR-260611-E) |
+| Global-overrides-repo precedence | Rejected | Project contracts are reviewed/committed; personal defaults must not silently override team rules |
+
+### Rollback
+
+Reverting returns to the implicit pre-M050 surface sprawl. Tier-A DBs need no migration (rebuildable); tier-C files remain inert user files; no tier-B content moved, so nothing to move back.
+
+### References
+
+- ADR-260531-A — Business-Rules Contract (BR-F3 residence rule this ADR extends)
+- ADR-260515-A — aih-graph privacy contract (per-scope DB + consent)
+- BR-P6, BR-P7 — `.aihaus/plans/260611-one-harness-three-tiers/BUSINESS-RULES.md`
+- ADR-260611-B/C/E — delivery, chokepoints, tier-C store
+
+## ADR-260611-B — Harness delivery: one ≤2048B file, first-position import + verbatim subagent inline
+
+**Status:** Accepted
+**Date:** 2026-06-11
+**Milestone:** M050
+
+### Context
+
+The autonomy law lives in an opt-in output-style (`output-styles/aihaus-contract.md`, body already 2001B); the CLAUDE.md bridge serves only the main session; subagents get advisory path lists. There is no single document every session and every subagent is guaranteed to carry. A harness only works if it is small enough to never be trimmed and is delivered on both paths unconditionally.
+
+### Decision
+
+**One harness file: `pkg/.aihaus/protocols/harness.md`** — ≤45 lines, authored ≤1.85KB (~200B headroom), hard smoke-failing cap **2048 bytes** with a fixture-fail pair (S03).
+
+**Two delivery paths:**
+1. **Main session:** `@../.aihaus/protocols/harness.md` as the **FIRST import** inside the existing `AIHAUS:CLAUDE-CONTEXT-START/END` markers of the CLAUDE.md bridge template. Propagation rides `ensure_block()` (`project-context-refresh.sh:87-131`) + `seed_claude_context_bridge()`; `_scrub_large_claude_imports` strips only decisions/knowledge imports, so the harness import survives. Zero new propagation code.
+2. **Subagents:** `context-inject.sh` v2 inlines the harness body **verbatim** (fence stripped) as a trim-exempt section on every SubagentStart (S05). The `<!-- MAIN-SESSION-ONLY -->` span (orchestrator-routing lines) is stripped for subagents. The harness **never yields to budget pressure** (F8; see ADR-260611-F for the yield order).
+
+**Language convention (BR-U2, binding on all future harness edits):** the harness is authored in **English prose with PT-BR stage tokens preserved verbatim** as untranslated enum literals (entendimento, planejamento, …) and the EN gate 4-enum (`PASS|SKIPPED|BLOCKED-TO-PLANNING|BLOCKED`) verbatim. Recorded here so future edits don't re-litigate it.
+
+**Condensation rules (BR-U5, binding):** the law is condensed, not lifted verbatim. The condensation MUST preserve: the **four disposition keywords** (covered → cite BR-id / gap → **ask once** / conflict → surface / mechanics → decide), the phrases "ask **once**" and "the answer **becomes a rule**" **verbatim**, and the ~60B sentence declaring `protocols/business-rules.md` **canonical-on-conflict**. The 2048B cap stands. `output-styles/aihaus-contract.md` is thinned to a pointer at the harness — no second copy of the law to drift.
+
+### Consequences
+
+**Positive:** one law, one byte-budgeted artifact, two guaranteed deliveries; the citation obligation S07 validates and the digest S08 seeds both derive from a single source.
+
+**Negative:** the 2048B cap forces ongoing editorial discipline — every future addition to the harness must displace something.
+
+**Neutral:** the subagent path's behavior inside isolation worktrees is gated by the S05 canary (BR-P9); the canary fact lands in its own slice ADR.
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| Verbatim autonomy law in the harness | Rejected (F5) | Existing contract body is already 2001B; verbatim + tier map + gates cannot fit 2048B |
+| `skills:` frontmatter preload for subagents | Rejected | Empirically non-functional under Task-tool spawn (ADR-260517-A) |
+| Keep the law in the output-style only | Rejected | Opt-in ≠ harness; subagents never see output-styles |
+| `@~` home import for global reach | Rejected | Bridge imports stay repo-relative; global reach is the S08 GLOBAL-HARNESS digest (ADR-260611-E) |
+
+### Rollback
+
+Revert the S03 PR: delete `harness.md`, restore the full output-style body, drop the bridge import line (next refresh removes it from overlays via `ensure_block()`). Subagent inlining reverts with the S05 PR independently.
+
+### References
+
+- BR-U2, BR-U5 — calibration decisions 2026-06-11
+- ADR-260517-A — why preload is not the delivery path
+- ADR-260611-A (tier map the harness states), ADR-260611-F (yield order)
+
+## ADR-260611-C — Deterministic write chokepoints: `aihaus prefs add` + `aihaus kanban gate|question|answer`
+
+**Status:** Accepted
+**Date:** 2026-06-11
+**Milestone:** M050
+
+### Context
+
+Two memory surfaces are written today without any sanctioned path: user preferences (no global store exists at all) and the kanban DB (free-form `sqlite3` writes from agent bodies — verified hole 7; the writers are workflow-intake / workflow-planning-gate / stage leads, not the routing-only orchestrator). Free-form writes mean no shape validation, no audit row, and no evidence stream for any future enforcement decision.
+
+### Decision
+
+Two wrapper verbs become the sanctioned write paths, both shells (BR-P3):
+
+1. **`aihaus prefs add` — the SOLE tier-C write path (BR-P7).** Format-validated, lock-file-atomic append to `~/.aihaus/memory/user/preferences.md`. Lock semantics: bash = `mkdir`-based lock + temp file + atomic `mv`; PowerShell = `[System.IO.File]::Open` exclusive + temp + `Move-Item`. Own audit JSONL (single writer, BR-P5). Direct agent Write/Edit to `~/.aihaus/memory/**` stays file-guard-blocked — **no carve-outs** (the PreToolUse payload carries no agent identity, so a carve-out cannot be scoped safely).
+2. **`aihaus kanban gate|question|answer` — the sanctioned kanban write path.** Writes target `.aihaus/state/kanban.db`. Validation is **warn-only** this cycle (BR-P8/U3): verdict must be the 4-enum `PASS|SKIPPED|BLOCKED-TO-PLANNING|BLOCKED` (byte-matching `eval-run.sh:40-41`); `rules_cited` element grammar is `BR-F?[0-9]+ | GAP:pq-<id> | MECHANICS`, **comma-separated**, defined **normatively in `protocols/kanban/db-schema.md`** (byte-stable; the `F?` is load-bearing so founding rules BR-F1..F4 match). Malformed shape ⇒ stderr warn + `warn-allow` audit row + exit 0 — never a block.
+3. **Persistence is JSONL-only this cycle (BR-P10):** validated writes and warns land in `.claude/audit/rule-cite.jsonl`, keyed `(task_id, stage, created_at)`, the wrapper being its sole writer. **`gate_events` schema untouched** — the additive `rules_cited` column + `init-kanban-db.sh` migration is paid only in the future enforce-flip ADR (ADR-260611-D).
+4. **Raw-write deterrence:** `bash-guard.sh` gains a warn-only pattern for raw `sqlite3 .aihaus/state/kanban.db` writes (branch-switch soft-warn shape), with its own audited `AIHAUS_*=0` opt-out (BR-P4). Kanban-writing agent bodies are re-pointed at the wrapper verbs (enumerated by grep at execution time).
+
+### Consequences
+
+**Positive:** every gate write now produces a validated, keyed audit row — the exact evidence stream BR-U3 requires; the future flip is one `exit 0` → `exit 2` because observability is already wired; concurrent `prefs add` is safe on both shells.
+
+**Negative:** two new verbs × two shells × fixtures is real surface; the kanban wrapper adds a hop to every gate write.
+
+**Neutral:** warn-only means raw sqlite3 still works this cycle — deterrence is advisory until the flip ADR.
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| `rules_cited` as a `gate_events` column now | Rejected (F3/BR-P10) | Migration cost before the enforce-flip earns it; JSONL gives the same evidence |
+| Blocking citation gate in `phase-advance.sh` | Rejected | `phase-advance.sh` never writes gate_events — wrong chokepoint |
+| file-guard carve-out for `~/.aihaus/memory/**` | Rejected (BR-P7) | No agent identity in the PreToolUse payload; a carve-out would open the path to every actor |
+| Hard memory-gate on PreToolUse Write\|Edit | Rejected | Violates the observe-before-enforce posture (BR-P8/U3) |
+
+### Rollback
+
+Revert the S06/S07 PRs: verbs disappear, `gate_events` was never touched, `rule-cite.jsonl` remains as inert history. Agent bodies fall back to their previous write instructions (restored by the same revert).
+
+### References
+
+- BR-P5, BR-P7, BR-P8, BR-P10, BR-U3 — plan business rules
+- ADR-004 — single-writer discipline (extended to both new JSONLs)
+- ADR-260611-D — the flip policy this evidence stream feeds
+- `protocols/kanban/db-schema.md` — normative grammar home
+
+## ADR-260611-D — Observe→enforce standing policy (BR-U3): flips are never automatic
+
+**Status:** Accepted
+**Date:** 2026-06-11
+**Milestone:** M050
+
+### Context
+
+M050 ships several new validation surfaces (kanban `rules_cited` shape, raw-sqlite3 deterrence, memory-read audit). aihaus's history (M005→M027 autonomy stack, M029 calibrate-guard) shows that gates shipped blocking-first produce false-positive lockouts, and gates shipped without observability produce dead code. A standing policy must govern how any M050 warn-only surface may ever become enforcing.
+
+### Decision
+
+**BR-U3 is encoded as standing policy, verbatim in substance:** warn-only→enforce flips are **never automatic**. Each flip requires:
+
+1. **Its own ADR** + explicit **maintainer sign-off** — no flip rides a refactor, a release, or a smoke-check change.
+2. **Evidence: ≥1 full release window of `rule-cite.jsonl`** from the **primary dogfood machine** (machine-local evidence accepted this cycle).
+3. **Quantitative bar: citation coverage ≥80% of gate writes** with **no recurring false-warn class** in the window.
+4. **The `gate_events` column migration is paid only in that flip ADR** — schema stays untouched until enforcement actually earns the migration (BR-P10).
+
+Until a flip ADR exists, every M050 validation path keeps the warn-only contract: every decision branch (allow / warn / bypass) emits its audit row BEFORE exiting; all exits are 0; every primitive has an audited `AIHAUS_*=0` opt-out (BR-P4); every gate ships a fixture-fail smoke pair proving non-vacuity (BR-P8).
+
+This policy governs (at minimum): the kanban wrapper validation, the bash-guard raw-sqlite3 pattern, and the memory-read audit (ADR-260611-C/F). It deliberately does NOT govern pre-existing enforcing guards (file-guard, git-add-guard, role-guard, flow-guard) — their posture is grandfathered.
+
+### Consequences
+
+**Positive:** observability always precedes enforcement; the flip becomes a one-line change (`exit 0`→`exit 2`) backed by quantified evidence; maintainers can adopt M050 with zero new blocking risk.
+
+**Negative:** bad gate writes are only warned about for at least one full release window — the cost of never lying about enforcement.
+
+**Neutral:** the ≥80% bar is measured by the S07 eval citation-coverage report over `rule-cite.jsonl`; "recurring false-warn class" is judged by the maintainer at flip-ADR time.
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| Auto-flip after N clean releases | Rejected (BR-U3) | Flips are judgment calls on evidence, not timers |
+| Ship the kanban gate blocking-first | Rejected | M029 precedent: gates without observed baselines produce dead code or lockouts |
+| Per-gate ad-hoc flip criteria | Rejected | One standing policy, uniformly applied, is auditable; ad-hoc criteria drift |
+
+### Rollback
+
+Reverting this ADR removes the standing policy; each warn-only surface would then need its own posture decision. No code change — this ADR constrains future ADRs, not current runtime.
+
+### References
+
+- BR-U3 — user-confirmed 2026-06-11 (A3)
+- BR-P4, BR-P8, BR-P10 — fail-open, fixture-pair, JSONL-only rules
+- ADR-260611-C — the surfaces this policy governs
+- `pkg/.aihaus/eval/eval-run.sh` — citation-coverage report (S07)
+
+## ADR-260611-E — Tier-C global preference store: `~/.aihaus/memory/user/preferences.md` + consent surfaces
+
+**Status:** Accepted
+**Date:** 2026-06-11
+**Milestone:** M050
+
+### Context
+
+User preferences exist only repo-scoped today; nothing follows the user across repos, and global-skills-only installs run with zero harness (verified hole 9). Any global reach into `$HOME` needs explicit consent surfaces — aihaus's standing checklist requires every new `$HOME` write to name its opt-out env, its uninstall arm, and its release-note line in the same slice.
+
+### Decision
+
+1. **Store:** `~/.aihaus/memory/user/preferences.md`, seeded create-if-absent at install time from `templates/user-preferences-global.md` (never clobbered). Entry grammar: `- PREF-<n> [YYYY-MM-DD] (<workflow|style|tooling|communication|other>) <text>`, ids max-scan allocated, validated by `aihaus prefs add` — the sole write path (ADR-260611-C). Seed opt-out env: **`AIHAUS_SKIP_TIER_C_SEED=1`**; uninstall purge arm removes the file; the write is named in release notes (standing checklist satisfied — `~/.aihaus/**` is the aihaus-owned namespace, so no consent *triple* is required for the seed itself, per BR-U1).
+2. **GLOBAL-HARNESS seed (BR-U1 consent triple, default-on):** install/update write an idempotent `AIHAUS:GLOBAL-HARNESS-START/END` marker block into `~/.claude/CLAUDE.md` (autonomy-law digest + overlay nudge + tier-C pointer). Consent triple: **`--no-global-harness` flag + `AIHAUS_SKIP_GLOBAL_HARNESS=1` env + marker-block removal in `uninstall.sh --purge-user-global`** (+ PS parity), and the write named in release notes. `.targets` enrollment honors the same env.
+3. **Privacy separation (ADR-260515-A preserved):** user memory is indexed only into a **separate `~/.aihaus/state/user-graph.db`** via `aih-graph build --user`, gated by its **own consent marker** with its own purge path. User memory is NEVER indexed into per-repo DBs.
+4. **Repo surfacing: gitignored mirror over `@~` imports.** `project-context-refresh.sh` mirrors the global file into `.aihaus/memory/local/user-preferences-global.md` on its 900s cadence; the CLAUDE.md bridge imports the **mirror**. Home-path imports (`@~`) are rejected. Subagents get a ≤1.5KB excerpt in the packet (first yield victim, ADR-260611-F).
+5. **Precedence:** tier-C never overrides tier-B — repo beats global (ADR-260611-A).
+
+### Consequences
+
+**Positive:** preferences follow the user across every repo; global-skills-only installs finally carry the law's digest; all `$HOME` writes are consented, named, and purgeable.
+
+**Negative:** the mirror introduces ≤900s staleness for the main-session view (the `prefs add` audit row timestamps the truth); three consent surfaces (seed env, GLOBAL-HARNESS triple, graph consent marker) must be documented together or users will conflate them.
+
+**Neutral:** the mirror lives in `.aihaus/memory/local/` — survival-by-location (the refresh loop only touches `skills/`, `agents/`, `hooks/`, `templates/`), no sidecar machinery.
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| `@~` home import in the bridge | Rejected | Portability + privacy: a committed template must not hard-reference `$HOME` paths |
+| Index user prefs into per-repo DBs | Rejected | ADR-260515-A privacy contract; user scope gets its own DB + consent |
+| Opt-in (default-off) GLOBAL-HARNESS seed | Rejected (BR-U1) | Hole 9 stays open for the users who need it most; default-on with a full consent triple is the calibrated balance |
+| Per-repo prefs only (status quo) | Rejected | The tier-C gap is exactly what M050 closes |
+
+### Rollback
+
+`uninstall.sh --purge-user-global` (and env opt-outs) already encode the rollback: marker block removed, prefs file + user-graph.db purged on the purge arm. Reverting the S06/S08 PRs removes the seed/mirror/excerpt code; user files remain inert until manually deleted.
+
+### References
+
+- BR-U1 — user-confirmed consent decision (A1, 2026-06-11)
+- ADR-260515-A — per-scope DB + consent marker contract
+- ADR-260611-A (precedence), ADR-260611-C (sole write path), ADR-260611-F (excerpt yield)
+- Standing checklist — `$HOME` writes name opt-out + uninstall arm + release-note line in the same slice
+
+## ADR-260611-F — Injection receipts + read-audit: single-writer observability for memory delivery
+
+**Status:** Accepted
+**Date:** 2026-06-11
+**Milestone:** M050
+
+### Context
+
+Today nothing records what was actually injected into a subagent, whether the agent read it, or what was dropped under budget pressure. The SubagentStart hook can silently inject nothing (19s worst-case vs 10s timeout — verified hole 3). PLAN/PATTERNS left one ambiguity: S05's receipts and S08's auditor could be read as co-writers of one file, which would violate BR-P5. The PM resolved it; this ADR binds the resolution.
+
+### Decision
+
+1. **Receipts:** `context-inject.sh` is the **SOLE writer** of `.claude/audit/memory-read.jsonl` — one row per inlined artifact per spawn (artifact id, source path, bytes, truncated flag, `memory_packet: present|skipped`, yield disposition). Receipt rows are the delivery ground truth (BR-P5 resolution).
+2. **Read-audit:** `memory-read-audit.sh` (SubagentStop, NEW) **reads** the receipts + transcript evidence and **writes verdicts to its OWN JSONL** (`memory-read-audit.jsonl`): `read|partial|unread|indeterminate`. It never writes the receipts file; `warning-recurrence.sh` likewise only reads it in aggregation. One writer per file, aggregators read-only.
+3. **Observe-only:** the auditor never blocks, exits 0 on every path, and carries the audited `AIHAUS_MEMORY_READ_AUDIT=0` bypass (BR-P4). Any future enforcement is governed by ADR-260611-D.
+4. **Small-budget yield order (F8, binding on context-inject v2):** below the `:verifier` 1500-token threshold, fixed sections yield strictly in order — **(1) tier-C excerpt drops first → (2) memory-packet cap shrinks 6KB→2KB → (3) the harness NEVER yields.** Documented in `context-budget.conf` comments; every yield is visible in the receipt row's yield disposition. Degradation is always recorded, never silent.
+5. **Worktree contexts:** per the S05 canary outcome, context is emitted but cache/receipt/audit writes are suppressed — single-writer discipline is preserved across worktree boundaries.
+
+### Consequences
+
+**Positive:** "did the harness reach the agent" becomes a queryable fact; budget pressure produces ordered, observable degradation instead of silent truncation; the receipts stream is the substrate for any future read-enforcement decision.
+
+**Negative:** two more JSONL files to rotate/inspect; transcript-based read evidence is heuristic — `indeterminate` verdicts are expected and acceptable.
+
+**Neutral:** receipts in worktree contexts are intentionally absent (suppressed writes); the read-audit join treats absence as `indeterminate`, not `unread`.
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| One shared JSONL for receipts + verdicts | Rejected (BR-P5) | Two writers, one file — the exact anti-pattern ADR-004 exists to prevent |
+| Hard memory-gate on PreToolUse Write\|Edit ("no edit before read") | Rejected | Blocking posture forbidden this cycle (BR-P8/U3); read evidence is heuristic |
+| Harness yields under extreme budgets | Rejected (F8) | The harness is the one artifact whose delivery is unconditional — that is what "harness" means |
+| Receipts inside the existing context-inject audit JSONL | Rejected | Different cardinality (per-artifact vs per-spawn) and different consumers; separate file keeps both schemas stable |
+
+### Rollback
+
+Revert the S05/S08 PRs: receipts stop accumulating, the auditor is unwired from SubagentStop and removed from the smoke Check 3 allowlist; existing JSONL history remains inert. The yield order reverts with context-inject v2.
+
+### References
+
+- BR-P4, BR-P5 — fail-open + single-writer rules
+- ADR-004 — single-writer discipline (lineage)
+- ADR-260611-B (the harness this protects), ADR-260611-D (flip policy for any future enforcement)
+- `.aihaus/milestones/M050-260611-one-harness-three-tiers/execution/architecture.md` §4-5 — receipt schema + canary decision tree

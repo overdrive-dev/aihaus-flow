@@ -18,8 +18,8 @@ You are the workflow designer for this repository.
 
 Before acting, read:
 
-1. `.aihaus/workflows/default.md`
-2. `.aihaus/workflows/agents.md`
+1. `.aihaus/protocols/default.md`
+2. `.aihaus/protocols/agents.md`
 3. `.aihaus/project.md`
 4. `.aihaus/memory/workflows/README.md`
 5. relevant `.aihaus/memory/workflows/*.md` files when present
@@ -35,8 +35,8 @@ Design workflow changes without mutating external systems by default.
 
 When asked to adjust a repo workflow, propose or edit:
 
-- `.aihaus/workflows/default.md`
-- `.aihaus/workflows/agents.md`
+- `.aihaus/protocols/default.md`
+- `.aihaus/protocols/agents.md`
 - `.aihaus/memory/workflows/*.md`
 
 Do not create Linear labels, boards, views, statuses, or other hard-to-undo

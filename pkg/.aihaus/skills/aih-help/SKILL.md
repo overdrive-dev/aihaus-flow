@@ -185,7 +185,7 @@ All artifacts live under `.aihaus/`:
 - `.aihaus/milestones/drafts/[slug]/` — In-progress milestone drafts (CONTEXT.md, STATUS.md, CONVERSATION.md)
 - `.aihaus/milestones/drafts/.archive/` — Drafts that have been promoted to milestones
 - `.aihaus/milestones/[M0XX]-[slug]/` — Full milestone artifacts + RUN-MANIFEST.md checkpoint
-- `.aihaus/workflows/runs/[YYMMDD]-[slug]/` — Workflow-run task state, gate logs, and evidence packages
+- `.aihaus/runtime/runs/[YYMMDD]-[slug]/` — Workflow-run task state, gate logs, and evidence packages
 - `.aihaus/features/[YYMMDD]-[slug]/` — Feature summaries + RUN-MANIFEST.md
 - `.aihaus/bugfixes/[YYMMDD]-[slug]/` — Bugfix summaries + RUN-MANIFEST.md
 - `.aihaus/memory/` — Persistent agent memory

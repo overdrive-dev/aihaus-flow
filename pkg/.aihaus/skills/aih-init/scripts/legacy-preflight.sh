@@ -102,8 +102,39 @@ manual_review() {
 archive_safe ".aihaus/.claude" "nested audit/cache directory created by old relative hook paths"
 archive_safe ".aihaus/state/.claude" "nested audit/cache directory created by old relative hook paths"
 archive_safe ".aihaus/plans/.claude" "nested audit/cache directory created by old relative hook paths"
-archive_safe ".aihaus/state/schema.sql" "old ad hoc kanban schema (now packaged at workflows/kanban/)"
-archive_safe ".aihaus/state/import_tasks.py" "old ad hoc kanban import helper (now packaged at workflows/kanban/)"
+archive_safe ".aihaus/state/schema.sql" "old ad hoc kanban schema (now packaged at protocols/kanban/)"
+archive_safe ".aihaus/state/import_tasks.py" "old ad hoc kanban import helper (now packaged at protocols/kanban/)"
+
+append ""
+append "## Legacy Claude Agent Memory Placeholders"
+append ""
+if [ -d ".claude/agent-memory" ]; then
+  found_empty_agent_memory=0
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    found_empty_agent_memory=1
+    SAFE_FOUND=$((SAFE_FOUND + 1))
+    if has_tracked_files "$rel"; then
+      TRACKED_SKIPPED=$((TRACKED_SKIPPED + 1))
+      append "- skip tracked dir \`$rel\` - empty legacy Claude native agent-memory placeholder"
+      continue
+    fi
+    if [ "$FIX_SAFE" -ne 1 ]; then
+      append "- found disposable dir \`$rel\` - empty legacy Claude native agent-memory placeholder"
+      continue
+    fi
+    dst="${BACKUP_DIR}/${rel}"
+    mkdir -p "$(dirname "$dst")"
+    mv -- "$rel" "$dst"
+    ARCHIVED=$((ARCHIVED + 1))
+    append "- archived dir \`$rel\` -> \`${dst}\` - empty legacy Claude native agent-memory placeholder"
+  done < <(find ".claude/agent-memory" -mindepth 1 -maxdepth 1 -type d -empty 2>/dev/null | sort)
+  if [ "$found_empty_agent_memory" -eq 0 ]; then
+    append "- none found"
+  fi
+else
+  append "- none found"
+fi
 
 append ""
 append "## Manual Review Artifacts"

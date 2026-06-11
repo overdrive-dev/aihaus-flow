@@ -38,7 +38,7 @@ Prefer the packaged initializer; do not generate ad hoc `schema.sql` or
 `import_tasks.py` under `.aihaus/state/`:
 
 ```bash
-bash .aihaus/workflows/kanban/init-kanban-db.sh .aihaus/state/kanban.db
+bash .aihaus/protocols/kanban/init-kanban-db.sh .aihaus/state/kanban.db
 ```
 
 If the packaged initializer is unavailable, create the DB with `sqlite3` from
