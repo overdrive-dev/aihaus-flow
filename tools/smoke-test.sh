@@ -5064,8 +5064,18 @@ check_m048_memory_integration_contract() {
     if ! grep -Fq 'Native repository memory (auto-injected, M048)' "${context_hook}"; then
       issues+=("context-inject.sh: missing automatic native memory packet")
     fi
-    if ! grep -Fq '_run_memory_with_timeout query --repo "$PROJECT_ROOT"' "${context_hook}" || ! grep -Fq -- '--json --top "$AIHAUS_MEMORY_QUERY_TOP"' "${context_hook}"; then
-      issues+=("context-inject.sh: missing automatic aihaus memory query")
+    # M050/S05: ONE batched `aihaus memory packet` call replaces the M048
+    # status+query pair (12s internal timeout / 15s settings belt). The old
+    # two-call shape must be gone (its presence would mean the 19s-vs-10s
+    # SubagentStart overrun regressed).
+    if ! grep -Fq '_run_memory_with_timeout packet --repo "$PROJECT_ROOT"' "${context_hook}" || ! grep -Fq -- '--task "$query_text" --json' "${context_hook}"; then
+      issues+=("context-inject.sh: missing single batched aihaus memory packet call (M050/S05)")
+    fi
+    if grep -Fq '_run_memory_with_timeout query --repo' "${context_hook}" || grep -Fq '_run_memory_with_timeout status --repo' "${context_hook}"; then
+      issues+=("context-inject.sh: legacy two-call memory path resurfaced (M050/S05 regression)")
+    fi
+    if ! grep -Fq 'timeout 12s "${AIHAUS_MEMORY_CMD[@]}"' "${context_hook}"; then
+      issues+=("context-inject.sh: packet internal timeout must be 12s (M050/S05)")
     fi
     if ! grep -Fq 'local combined="${target_agent_name:-}|${cohort:-}|${_active_profile:-}|${task_description:-}"' "${context_hook}"; then
       issues+=("context-inject.sh: cache key must include task-specific context (+ active profile, S4)")

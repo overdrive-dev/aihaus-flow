@@ -16,11 +16,18 @@
 #   checked at hook entry) mirrors M011 autonomy-guard.sh shape.
 #
 # Audit: .claude/audit/context-inject.jsonl (ADR-M011-A rotation).
+# Receipts: .claude/audit/memory-read.jsonl (M050/S05, ADR-260611-F) — one row
+#   per inlined artifact per spawn; context-inject.sh is the SOLE writer (BR-P5).
 # Cache: .claude/audit/context-inject.cache (M016-S07 5-min memoization).
 #   Cache key: hash(target_agent_name | cohort_name | task_description).
 #   Cache hit skips S05 warning-recurrence read + S06 budget parse.
 #   Cache invalidated at milestone close (completion-protocol Step 6.5).
-# Architecture ref: M013 architecture.md §2.1, §4.1, §9.
+# M050/S05 v2: ONE batched `aihaus memory packet` call (12s internal / 15s
+#   settings belt) replaces the M048 two-call path; the aihaus harness is
+#   inlined VERBATIM and trim-exempt (ADR-260611-B); F8 yield order governs
+#   small budgets (ADR-260611-F); worktree contexts emit context but suppress
+#   all writes (ADR-260611-G canary result).
+# Architecture ref: M013 architecture.md §2.1, §4.1, §9; M050 architecture.md §2.3/§4/§5.
 set -uo pipefail
 
 # ---------------------------------------------------------------------------
@@ -38,9 +45,12 @@ if [ "${AIHAUS_CONTEXT_INJECT:-1}" = "0" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Worktree refusal (ADR-001 / architecture §9 — writes audit from
-#    orchestrator process only; worktree agents don't fire context-inject
-#    for their own sub-spawns because they use Task tool inside worktree)
+# 2. Submodule refusal (ADR-001 / architecture §9). NOTE (M050/S05 canary,
+#    ADR-260611-G): `git rev-parse --show-superproject-working-tree` returns
+#    EMPTY (exit 0) inside a LINKED WORKTREE — this check is a SUBMODULE check
+#    and is a confirmed no-op for worktrees (plan B1 misdiagnosis corrected).
+#    It stays for its real purpose: refusing to run from a submodule checkout.
+#    Worktree handling is section 3b below.
 # ---------------------------------------------------------------------------
 if command -v git >/dev/null 2>&1; then
   SUPER="$(git rev-parse --show-superproject-working-tree 2>/dev/null || true)"
@@ -56,8 +66,56 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo ".")"
 # shellcheck source=lib/path-helpers.sh
 . "${SCRIPT_DIR}/lib/path-helpers.sh"
 PROJECT_ROOT="$(aihaus_project_root)"
-AUDIT_LOG="$(aihaus_project_path "${AIHAUS_CONTEXT_INJECT_LOG:-.claude/audit/context-inject.jsonl}")"
-INJECT_CACHE="$(aihaus_project_path "${AIHAUS_CONTEXT_INJECT_CACHE:-.claude/audit/context-inject.cache}")"
+
+# ---------------------------------------------------------------------------
+# 3a. Worktree detection + main-repo anchor rewrite (M050/S05, ADR-260611-G
+#     canary branch (a)). Canary facts (live-CC, BR-P9): a worktree-isolated
+#     subagent's cwd is <main>/.claude/worktrees/agent-<id>; CLAUDE_PROJECT_DIR
+#     is EMPTY in the subagent's own env (aihaus_project_root then falls back
+#     to git toplevel / pwd — the worktree path); paths arrive forward-slashed
+#     even on Windows Git Bash (backslashes normalized defensively anyway);
+#     `git rev-parse --git-common-dir` reliably resolves <main>/.git from
+#     inside the worktree (M047-style anchor rewrite). `.aihaus/` is absent in
+#     worktrees unless carried via .worktreeinclude (canary branch (b)).
+#     In worktree contexts: context IS emitted from main-repo paths, but ALL
+#     writes (audit + cache + receipts) are suppressed — single-writer
+#     discipline (ADR-001 / BR-P5).
+# ---------------------------------------------------------------------------
+AIHAUS_INJECT_WORKTREE_CONTEXT=0
+_pr_norm="${PROJECT_ROOT//\\//}"
+case "$_pr_norm" in
+  */.claude/worktrees/*)
+    AIHAUS_INJECT_WORKTREE_CONTEXT=1
+    _main_root=""
+    if command -v git >/dev/null 2>&1; then
+      _common_dir="$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null || true)"
+      _common_dir="${_common_dir//\\//}"
+      if [ -n "$_common_dir" ]; then
+        if aihaus_is_abs_path "$_common_dir"; then
+          _main_root="$(dirname "$_common_dir")"
+        else
+          # Relative --git-common-dir: resolve against the worktree root.
+          _main_root="$(cd "$PROJECT_ROOT/$_common_dir/.." 2>/dev/null && pwd || true)"
+        fi
+      fi
+    fi
+    # Fallback: strip everything from /.claude/worktrees/ onward (M047 shape).
+    if [ -z "$_main_root" ] || [ ! -d "$_main_root" ]; then
+      _main_root="${_pr_norm%%/.claude/worktrees/*}"
+    fi
+    [ -n "$_main_root" ] && [ -d "$_main_root" ] && PROJECT_ROOT="$_main_root"
+    ;;
+esac
+
+# Anchor on the (possibly rewritten) PROJECT_ROOT — not on cwd helpers, which
+# would re-resolve into the worktree.
+_anchor_path() {
+  local p="${1:-}"
+  if aihaus_is_abs_path "$p"; then printf '%s\n' "$p"; else printf '%s/%s\n' "$PROJECT_ROOT" "$p"; fi
+}
+AUDIT_LOG="$(_anchor_path "${AIHAUS_CONTEXT_INJECT_LOG:-.claude/audit/context-inject.jsonl}")"
+INJECT_CACHE="$(_anchor_path "${AIHAUS_CONTEXT_INJECT_CACHE:-.claude/audit/context-inject.cache}")"
+RECEIPTS_LOG="$(_anchor_path "${AIHAUS_MEMORY_READ_LOG:-.claude/audit/memory-read.jsonl}")"
 ROLE_DEFAULTS_JSON="${SCRIPT_DIR}/lib/role-defaults.json"
 COHORTS_MD_REL=".aihaus/skills/aih-effort/annexes/cohorts.md"
 BUDGET_CONF="${SCRIPT_DIR}/context-budget.conf"
@@ -66,6 +124,11 @@ AIHAUS_MEMORY_CONTEXT_MAX_BYTES="${AIHAUS_MEMORY_CONTEXT_MAX_BYTES:-6000}"
 AIHAUS_MEMORY_QUERY_TOP="${AIHAUS_MEMORY_QUERY_TOP:-3}"
 
 ts_iso() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
+
+# Pure-bash JSON string escape into a named variable — zero forks (M050/S05;
+# Windows Git Bash pays ~10-15ms per fork, and receipt rows escape 7 fields
+# each). Usage: _jesc <out_var_name> <value>
+_jesc() { local s="${2-}"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; printf -v "$1" '%s' "$s"; }
 
 # ---------------------------------------------------------------------------
 # 3b. Per-cohort token budget loading (M016-S06)
@@ -84,8 +147,11 @@ _load_budget_file() {
   [ -f "$fpath" ] || return 0
   while IFS= read -r raw_line; do
     # Strip CRLF and leading/trailing whitespace; skip blank + comment lines.
+    # Pure-bash trim (M050/S05): the previous sed-per-line forked once per
+    # conf line — ~35 lines × 2 files × ~13ms on Windows Git Bash.
     local line="${raw_line%$'\r'}"
-    line="$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
     [[ -z "$line" || "$line" == \#* ]] && continue
     # Agent override: agent:architect=5000
     if [[ "$line" =~ ^agent:([A-Za-z0-9_-]+)=([0-9]+)$ ]]; then
@@ -150,6 +216,9 @@ _rotate_audit_if_needed() {
 }
 
 _write_audit() {
+  # M050/S05: suppressed entirely in worktree contexts — the orchestrator
+  # process is the sole writer of this JSONL (ADR-001 / BR-P5 / ADR-260611-G).
+  [ "$AIHAUS_INJECT_WORKTREE_CONTEXT" = "1" ] && return 0
   local target_agent="$1" cohort="$2" static_or_haiku="$3" \
         payload_bytes="$4" truncated="$5" duration_ms="$6" \
         milestone="${7:-}" story="${8:-}" cache_hit="${9:-false}" \
@@ -157,17 +226,59 @@ _write_audit() {
   mkdir -p "$(dirname "$AUDIT_LOG")" 2>/dev/null || return 0
   _rotate_audit_if_needed
   local ts; ts="$(ts_iso)"
-  # Escape quotes in string fields.
-  _eq() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-  # memory_packet (M050/S02, additive): "present" when the native memory
-  # packet (M048 two-call path) made it into the payload, else "skipped".
-  # context-inject.sh remains the sole writer of this JSONL (BR-P5/ADR-001).
+  # Escape quotes in string fields (fork-free _jesc, M050/S05).
+  local e_ms e_st e_ag e_co e_sh e_mp
+  _jesc e_ms "$milestone"; _jesc e_st "$story"; _jesc e_ag "$target_agent"
+  _jesc e_co "$cohort"; _jesc e_sh "$static_or_haiku"; _jesc e_mp "$memory_packet"
+  # memory_packet (M050/S02; real single-call outcome since M050/S05):
+  # "present" when the batched memory packet made it into the payload, else
+  # "skipped". context-inject.sh remains the sole writer (BR-P5/ADR-001).
   printf '{"ts":"%s","milestone":"%s","story":"%s","target_agent":"%s","cohort":"%s","static_or_haiku":"%s","payload_bytes":%s,"truncated":"%s","duration_ms":%s,"cache_hit":%s,"memory_packet":"%s"}\n' \
-    "$ts" "$(_eq "$milestone")" "$(_eq "$story")" "$(_eq "$target_agent")" \
-    "$(_eq "$cohort")" "$(_eq "$static_or_haiku")" \
+    "$ts" "$e_ms" "$e_st" "$e_ag" "$e_co" "$e_sh" \
     "${payload_bytes:-0}" "${truncated:-false}" "${duration_ms:-0}" \
-    "${cache_hit}" "$(_eq "$memory_packet")" \
+    "${cache_hit}" "$e_mp" \
     >> "$AUDIT_LOG" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# 4a. Injection receipts (M050/S05, ADR-260611-F) — one JSONL row per inlined
+#     artifact per spawn → .claude/audit/memory-read.jsonl.
+#     context-inject.sh is the SOLE writer of this file (BR-P5; S08's
+#     memory-read-audit.sh reads it and writes verdicts to its OWN JSONL).
+#     Suppressed entirely in worktree contexts (ADR-260611-G).
+# ---------------------------------------------------------------------------
+_rotate_receipts_if_needed() {
+  [ -f "$RECEIPTS_LOG" ] || return 0
+  local bytes lines
+  bytes="$(stat -c%s "$RECEIPTS_LOG" 2>/dev/null || stat -f%z "$RECEIPTS_LOG" 2>/dev/null || echo 0)"
+  if [ "$bytes" -ge 10485760 ]; then
+    mv -f "$RECEIPTS_LOG" "$RECEIPTS_LOG.old" 2>/dev/null || true
+    return 0
+  fi
+  lines="$(wc -l < "$RECEIPTS_LOG" 2>/dev/null | tr -d ' ')"
+  if [ -n "$lines" ] && [ "$lines" -ge 10000 ]; then
+    mv -f "$RECEIPTS_LOG" "$RECEIPTS_LOG.old" 2>/dev/null || true
+  fi
+}
+
+_RECEIPT_TS=""
+
+_write_receipt() {
+  [ "$AIHAUS_INJECT_WORKTREE_CONTEXT" = "1" ] && return 0
+  local artifact="$1" source_path="$2" bytes="${3:-0}" r_truncated="${4:-false}"
+  mkdir -p "$(dirname "$RECEIPTS_LOG")" 2>/dev/null || return 0
+  _rotate_receipts_if_needed
+  # One ts_iso fork per spawn, not per row (M050/S05 Windows fork economy).
+  [ -z "$_RECEIPT_TS" ] && _RECEIPT_TS="$(ts_iso)"
+  local e_ag e_co e_ar e_sp e_mp e_ya e_se
+  _jesc e_ag "${target_agent_name:-}"; _jesc e_co "${cohort:-}"
+  _jesc e_ar "$artifact"; _jesc e_sp "$source_path"
+  _jesc e_mp "${memory_packet:-skipped}"; _jesc e_ya "${yield_applied:-none}"
+  _jesc e_se "${session_id:-}"
+  printf '{"ts":"%s","event":"inject-receipt","agent":"%s","cohort":"%s","artifact":"%s","source":"%s","bytes":%s,"truncated":%s,"memory_packet":"%s","budget_tokens":%s,"yield_applied":"%s","session":"%s"}\n' \
+    "$_RECEIPT_TS" "$e_ag" "$e_co" "$e_ar" "$e_sp" "${bytes}" "${r_truncated}" \
+    "$e_mp" "${token_budget:-0}" "$e_ya" "$e_se" \
+    >> "$RECEIPTS_LOG" 2>/dev/null || true
 }
 
 # ---------------------------------------------------------------------------
@@ -191,6 +302,8 @@ compute_hash() {
 }
 
 append_cache_entry() {
+  # M050/S05: suppressed in worktree contexts (ADR-001 / ADR-260611-G).
+  [ "$AIHAUS_INJECT_WORKTREE_CONTEXT" = "1" ] && return 0
   local entry="$1"
   mkdir -p "$(dirname "$INJECT_CACHE")" 2>/dev/null || return 0
   local now; now="$(date +%s 2>/dev/null || echo 0)"
@@ -203,6 +316,8 @@ append_cache_entry() {
 }
 
 _rotate_cache_if_needed() {
+  # M050/S05: rotation is a write — suppressed in worktree contexts.
+  [ "$AIHAUS_INJECT_WORKTREE_CONTEXT" = "1" ] && return 0
   [ -f "$INJECT_CACHE" ] || return 0
   local bytes lines
   bytes="$(stat -c%s "$INJECT_CACHE" 2>/dev/null || stat -f%z "$INJECT_CACHE" 2>/dev/null || echo 0)"
@@ -222,6 +337,7 @@ _rotate_cache_if_needed() {
 INPUT="$(cat)"
 task_description=""
 target_agent_name=""
+session_id=""
 
 if command -v jq >/dev/null 2>&1; then
   task_description="$(printf '%s' "$INPUT" | jq -r '
@@ -236,10 +352,16 @@ if command -v jq >/dev/null 2>&1; then
     .name //
     empty
   ' 2>/dev/null || echo "")"
+  session_id="$(printf '%s' "$INPUT" | jq -r '
+    .session_id //
+    .hook_input.session_id //
+    empty
+  ' 2>/dev/null || echo "")"
 fi
 # Fallback: grep from raw JSON when jq unavailable or returns empty.
 [ -z "$task_description" ] && task_description="$(printf '%s' "$INPUT" | grep -o '"task_description":"[^"]*"' | head -1 | sed 's/.*":"\(.*\)"/\1/' 2>/dev/null || echo "")"
 [ -z "$target_agent_name" ] && target_agent_name="$(printf '%s' "$INPUT" | grep -o '"agent_name":"[^"]*"' | head -1 | sed 's/.*":"\(.*\)"/\1/' 2>/dev/null || echo "")"
+[ -z "$session_id" ] && session_id="$(printf '%s' "$INPUT" | grep -o '"session_id":"[^"]*"' | head -1 | sed 's/.*":"\(.*\)"/\1/' 2>/dev/null || echo "")"
 
 # Extract optional milestone_dir and story_id from task description heuristics.
 milestone_dir=""
@@ -260,7 +382,8 @@ _resolve_cohort() {
   for candidate in \
     "${CLAUDE_PROJECT_DIR:-.}/${COHORTS_MD_REL}" \
     "$(git rev-parse --show-toplevel 2>/dev/null || echo ".")/${COHORTS_MD_REL}" \
-    "$(dirname "$SCRIPT_DIR")/${COHORTS_MD_REL}"; do
+    "$(dirname "$SCRIPT_DIR")/${COHORTS_MD_REL}" \
+    "$(dirname "$SCRIPT_DIR")/${COHORTS_MD_REL#.aihaus/}"; do
     if [ -f "$candidate" ]; then
       cohorts_md="$candidate"
       break
@@ -301,7 +424,7 @@ _inject_cache_payload=""
 INJECT_MSG_HASH="$(compute_hash)"
 _inject_now_unix="$(date +%s 2>/dev/null || echo 0)"
 _rotate_cache_if_needed
-mkdir -p "$(dirname "$INJECT_CACHE")" 2>/dev/null || true
+[ "$AIHAUS_INJECT_WORKTREE_CONTEXT" = "1" ] || mkdir -p "$(dirname "$INJECT_CACHE")" 2>/dev/null || true
 
 if [ -f "$INJECT_CACHE" ]; then
   while IFS='|' read -r c_ts c_hash c_payload_b64; do
@@ -319,6 +442,9 @@ if [ -f "$INJECT_CACHE" ]; then
 fi
 
 if [ "$_inject_cache_hit" = "true" ] && [ -n "$_inject_cache_payload" ]; then
+  # M050/S05 receipts on cache-hit: intentionally NOT re-written. The original
+  # assembly (≤5 min ago, same hash key) already wrote one receipt row per
+  # artifact; the audit row below records cache_hit=true for the join.
   # memory_packet on cache-hit: no memory CLI call happens this invocation;
   # derive from whether the cached payload carries the M048 packet marker.
   _cache_memory_packet="skipped"
@@ -373,11 +499,11 @@ _cap_text() {
 }
 
 _resolve_aihaus_memory_cmd() {
+  # M050/S05: the registry/AIHAUS_HOME-resolved shim is trusted FIRST; a PATH
+  # `aihaus` is only the last resort. Field evidence (S05 dogfood): an
+  # unrelated npm package also installs an `aihaus` bin — trusting PATH first
+  # burned the full packet timeout on every spawn.
   AIHAUS_MEMORY_CMD=()
-  if command -v aihaus >/dev/null 2>&1; then
-    AIHAUS_MEMORY_CMD=(aihaus memory)
-    return 0
-  fi
 
   local roots=() reg root pkg_candidate
   [[ -n "${AIHAUS_HOME:-}" ]] && roots+=("$AIHAUS_HOME")
@@ -405,68 +531,117 @@ _resolve_aihaus_memory_cmd() {
       return 0
     fi
   done
+
+  if command -v aihaus >/dev/null 2>&1; then
+    AIHAUS_MEMORY_CMD=(aihaus memory)
+    return 0
+  fi
   return 1
 }
 
 _run_memory_with_timeout() {
+  # M050/S05: 12s internal timeout sized to the SINGLE batched packet call
+  # (was 2×8s in the M048 two-call path — the structural 19s-vs-10s overrun).
+  # Settings belt: 15s on the SubagentStart hook entry.
   if command -v timeout >/dev/null 2>&1; then
-    timeout 8s "${AIHAUS_MEMORY_CMD[@]}" "$@"
+    timeout 12s "${AIHAUS_MEMORY_CMD[@]}" "$@"
   else
     "${AIHAUS_MEMORY_CMD[@]}" "$@"
   fi
 }
 
-_build_memory_context() {
+# M050/S05: ONE batched `aihaus memory packet` call replaces the M048
+# status+query pair. Fetch and framing are split so the F8 yield order can
+# re-frame the same packet under a smaller cap (6KB → 2KB) without a refetch.
+MEMORY_PACKET_JSON=""
+MEMORY_PACKET_QUERY=""
+MEMORY_PACKET_SOURCE=""
+
+_fetch_memory_packet() {
   [ "$AIHAUS_MEMORY_INJECT" = "0" ] && return 0
   _resolve_aihaus_memory_cmd || return 0
 
-  local query_text status_json query_json section
+  local query_text packet_json
   local db_args=()
   if [[ -n "${AIH_GRAPH_DB:-}" ]]; then
     db_args+=(--db "$AIH_GRAPH_DB")
+    MEMORY_PACKET_SOURCE="$AIH_GRAPH_DB"
   else
     local default_db="$PROJECT_ROOT/.aihaus/state/aih-graph.db"
-    mkdir -p "$(dirname "$default_db")" 2>/dev/null || true
+    [ "$AIHAUS_INJECT_WORKTREE_CONTEXT" = "1" ] || mkdir -p "$(dirname "$default_db")" 2>/dev/null || true
     db_args+=(--db "$default_db")
+    MEMORY_PACKET_SOURCE="$default_db"
   fi
   query_text="${task_description:-${target_agent_name:-repository context}}"
   query_text="$(printf '%s' "$query_text" | tr '\n' ' ' | head -c 600)"
+  MEMORY_PACKET_QUERY="$query_text"
 
-  status_json="$(_run_memory_with_timeout status --repo "$PROJECT_ROOT" "${db_args[@]}" --json 2>/dev/null || true)"
-  query_json="$(_run_memory_with_timeout query --repo "$PROJECT_ROOT" "${db_args[@]}" --json --top "$AIHAUS_MEMORY_QUERY_TOP" "$query_text" 2>/dev/null || true)"
+  packet_json="$(_run_memory_with_timeout packet --repo "$PROJECT_ROOT" "${db_args[@]}" --task "$query_text" --json 2>/dev/null || true)"
 
-  if [ -z "$status_json" ] && [ -z "$query_json" ]; then
-    return 0
-  fi
-  [ -z "$status_json" ] && status_json='{"state":"unavailable"}'
-  [ -z "$query_json" ] && query_json='{"result_count":0}'
+  # Packet failure/timeout → fail-open: section stays empty, the audit row
+  # reports memory_packet: skipped (BR-P4 — degradation, never silence).
+  case "$packet_json" in
+    "{"*) MEMORY_PACKET_JSON="$packet_json" ;;
+    *) return 0 ;;
+  esac
+}
 
-  local status_max=1800 query_max
-  query_max=$(( AIHAUS_MEMORY_CONTEXT_MAX_BYTES - status_max - 1200 ))
-  [ "$query_max" -lt 1000 ] && query_max=1000
-  status_json="$(printf '%s' "$status_json" | _cap_text "$status_max")"
-  query_json="$(printf '%s' "$query_json" | _cap_text "$query_max")"
-
-  section="$(cat <<EOF
+_frame_memory_section() {
+  local cap="${1:-$AIHAUS_MEMORY_CONTEXT_MAX_BYTES}"
+  [ -z "$MEMORY_PACKET_JSON" ] && return 0
+  local body
+  body="$(printf '%s' "$MEMORY_PACKET_JSON" | _cap_text "$cap")"
+  cat <<EOF
 
 ## Native repository memory (auto-injected, M048)
 
-This memory packet was loaded automatically by context-inject.sh. Use targeted \`aihaus memory ... --json\` only when this packet is insufficient.
+This memory packet was loaded automatically by context-inject.sh (M050/S05: one batched \`aihaus memory packet\` call — status + Rule/Decision slice + top matches). Use targeted \`aihaus memory ... --json\` only when this packet is insufficient.
 
-Query: ${query_text}
+Query: ${MEMORY_PACKET_QUERY}
 
-Status:
+Packet:
 \`\`\`json
-${status_json}
-\`\`\`
-
-Relevant memory:
-\`\`\`json
-${query_json}
+${body}
 \`\`\`
 EOF
-)"
-  printf '%s' "$section"
+}
+
+# ---------------------------------------------------------------------------
+# 6c-bis. aihaus harness inline (M050/S05, ADR-260611-B/F)
+#     The harness body is inlined VERBATIM (MAIN-SESSION-ONLY span stripped —
+#     the orchestrator-routing lines are meaningless inside a subagent) as a
+#     trim-exempt section. The harness NEVER yields to budget pressure (F8).
+# ---------------------------------------------------------------------------
+HARNESS_SOURCE_PATH=""
+
+_resolve_harness_path() {  # sets HARNESS_SOURCE_PATH (runs in main shell)
+  local cand
+  for cand in \
+    "$(dirname "$SCRIPT_DIR")/protocols/harness.md" \
+    "$PROJECT_ROOT/.aihaus/protocols/harness.md" \
+    "$PROJECT_ROOT/pkg/.aihaus/protocols/harness.md"; do
+    [ -f "$cand" ] && { HARNESS_SOURCE_PATH="$cand"; return 0; }
+  done
+  return 0
+}
+
+_build_harness_section() {
+  [ -z "$HARNESS_SOURCE_PATH" ] && return 0
+  local body
+  # Span-delete the <!-- MAIN-SESSION-ONLY --> fence (inverted ensure_block()
+  # awk technique per ADR-260611-B), then cap at the 2048B harness byte cap.
+  body="$(awk '
+    /<!-- MAIN-SESSION-ONLY -->/ { skip=1; next }
+    /<!-- \/MAIN-SESSION-ONLY -->/ { skip=0; next }
+    !skip { print }
+  ' "$HARNESS_SOURCE_PATH" 2>/dev/null | _cap_text 2048)"
+  [ -z "$(printf '%s' "$body" | tr -d '[:space:]')" ] && return 0
+  cat <<EOF
+
+## aihaus harness (auto-injected, M050 — binding; never trimmed)
+
+${body}
+EOF
 }
 
 # ---------------------------------------------------------------------------
@@ -529,17 +704,25 @@ static_lines="$(_get_static_paths "$cohort")"
 _is_novel_task() {
   local task="$1" defaults="$2"
   # Novel if task mentions none of the default paths.
-  local novel=1
+  # M050/S05: pure-bash extraction — the previous sed pattern keyed on the
+  # em-dash separator, whose byte encoding differs between the script (UTF-8)
+  # and Windows python pipe output (cp1252), so it never matched on Windows
+  # and the haiku probe fired on EVERY spawn (+3-4s). The path has no spaces,
+  # so splitting at the first space is encoding-immune (and fork-free).
+  local novel=1 line path_part base
+  local task_lc="${task,,}"
   while IFS= read -r line; do
     [ -z "$line" ] && continue
-    # Extract path portion (after colon, before dash).
-    local path_part; path_part="$(printf '%s' "$line" | sed 's/^[A-Z]*://; s/ —.*//' 2>/dev/null || echo "")"
+    # Extract path portion: strip rationale (first space) then TIER: prefix.
+    path_part="${line%% *}"
+    path_part="${path_part#*:}"
     [ -z "$path_part" ] && continue
     # Strip template tokens.
     [[ "$path_part" == *"<"* ]] && continue
-    # Check if path basename appears in task description.
-    local basename; basename="$(basename "$path_part" 2>/dev/null)"
-    if printf '%s' "$task" | grep -qiF "$basename" 2>/dev/null; then
+    # Check if path basename appears in task description (case-insensitive).
+    base="${path_part##*/}"
+    [ -z "$base" ] && continue
+    if [[ "$task_lc" == *"${base,,}"* ]]; then
       novel=0
       break
     fi
@@ -558,7 +741,7 @@ novel_task="0"
 #     Graceful degradation: file absent / empty / jq missing → skip silently.
 #     No new audit write — preserves ADR-M013-A single-writer discipline.
 # ---------------------------------------------------------------------------
-RECURRENCE_LOG="$(aihaus_project_path ".claude/audit/warning-recurrence.jsonl")"
+RECURRENCE_LOG="$(_anchor_path ".claude/audit/warning-recurrence.jsonl")"
 recurring_warnings_section=""
 if [ -f "$RECURRENCE_LOG" ] && command -v jq >/dev/null 2>&1; then
   # Build bullets: one per qualifying row, grouped by source_agent annotation.
@@ -626,8 +809,10 @@ _resolve_templates() {
   local out=""
   while IFS= read -r line; do
     [ -z "$line" ] && continue
+    # M050/S05: pure-bash token tests (each grep forked a process per line on
+    # Windows Git Bash; ~10-15ms each across 3 tokens × N lines).
     # Resolve <story-file>
-    if printf '%s' "$line" | grep -q '<story-file>'; then
+    if [[ "$line" == *'<story-file>'* ]]; then
       if [ -n "$m_dir" ] && [ -n "$s_id" ]; then
         local sf="${m_dir}/stories/${s_id}.md"
         line="${line//<story-file>/$sf}"
@@ -636,7 +821,7 @@ _resolve_templates() {
       fi
     fi
     # Resolve <analysis-brief>
-    if printf '%s' "$line" | grep -q '<analysis-brief>'; then
+    if [[ "$line" == *'<analysis-brief>'* ]]; then
       if [ -n "$m_dir" ]; then
         line="${line//<analysis-brief>/${m_dir}/execution/analysis-brief.md}"
       else
@@ -644,7 +829,7 @@ _resolve_templates() {
       fi
     fi
     # Resolve <execution-dir>
-    if printf '%s' "$line" | grep -q '<execution-dir>'; then
+    if [[ "$line" == *'<execution-dir>'* ]]; then
       if [ -n "$m_dir" ]; then
         line="${line//<execution-dir>/${m_dir}/execution/}"
       else
@@ -671,7 +856,11 @@ _merge_and_cap() {
     local l="$1"
     [ -z "$l" ] && return
     [ "$count" -ge 12 ] && return
-    local path_key; path_key="$(printf '%s' "$l" | sed 's/^[A-Z]*://; s/ —.*//' 2>/dev/null || echo "$l")"
+    # M050/S05: pure-bash path-key extraction (encoding-immune, fork-free —
+    # same defect class as _is_novel_task: sed keyed on the em-dash byte).
+    local path_key="${l%% *}"
+    path_key="${path_key#*:}"
+    [ -z "$path_key" ] && path_key="$l"
     for s in "${seen[@]:-}"; do [ "$s" = "$path_key" ] && return; done
     seen+=("$path_key")
     merged="${merged}${l}
@@ -712,16 +901,29 @@ HIGH:.aihaus/memory/local/environment-online.md — Online (staging/prod) env: d
     ;;
 esac
 
-memory_context_section="$(_build_memory_context)"
-# memory_packet (M050/S02): "present" iff the two-call memory path (status +
-# query) produced a non-empty packet; every failure/opt-out path in
-# _build_memory_context returns empty -> "skipped".
+# M050/S05: single batched packet fetch (one `aihaus memory packet` call).
+_fetch_memory_packet
+memory_context_section="$(_frame_memory_section "$AIHAUS_MEMORY_CONTEXT_MAX_BYTES")"
+# memory_packet (M050/S02, real single-call outcome since S05): "present" iff
+# the batched packet call produced a JSON payload; every failure/timeout/
+# opt-out path leaves it empty -> "skipped" (fail-open, exit 0 — BR-P4).
 memory_packet="skipped"
 [ -n "$memory_context_section" ] && memory_packet="present"
 [ -n "$memory_context_section" ] && memory_context_section="${memory_context_section}"$'\n'
 
+# M050/S05: aihaus harness — verbatim, trim-exempt (ADR-260611-B).
+_resolve_harness_path
+harness_section="$(_build_harness_section)"
+[ -n "$harness_section" ] && harness_section="${harness_section}"$'\n'
+
+# Tier-C user-preferences excerpt SLOT (M050/S05): wired EMPTY here; S06
+# populates it with a ≤1.5KB excerpt of ~/.aihaus/memory/user/preferences.md.
+# It is the FIRST F8 yield victim (ADR-260611-F).
+tier_c_excerpt_section=""
+
 # ---------------------------------------------------------------------------
 # 12. Build additionalContext block with per-cohort budget enforcement (M016-S06)
+#     + F8 yield order on small budgets (M050/S05, ADR-260611-F)
 # ---------------------------------------------------------------------------
 header="## Required pre-read (context-inject.sh, M013)
 
@@ -737,36 +939,61 @@ token_budget="$(_resolve_budget "$target_agent_name" "$cohort")"
 char_budget=$(( token_budget * 4 ))
 
 # Priority-ordered assembly (highest priority first so trim-from-end is safe):
-#   1. recurring_warnings_section  (S05 feedback loop — actionable, high signal)
-#   2. memory_context_section      (M048 repository memory packet)
-#   3. payload_lines               (file list — core context)
+#   1. harness_section             (M050/S05 — binding law, NEVER trimmed)
+#   2. recurring_warnings_section  (S05 feedback loop — actionable, high signal)
+#   3. tier_c_excerpt_section      (S06 slot — first F8 yield victim)
+#   4. memory_context_section      (M050 batched repository memory packet)
+#   5. payload_lines               (file list — core context)
 # Footer appended last (lowest priority if we must trim).
-full_context="${header}${recurring_warnings_section}${memory_context_section}${payload_lines}${footer}"
-
-payload_bytes=${#full_context}
+_assemble_context() {
+  full_context="${header}${harness_section}${recurring_warnings_section}${tier_c_excerpt_section}${memory_context_section}${payload_lines}${footer}"
+  payload_bytes=${#full_context}
+}
+yield_applied="none"
 truncated="false"
+_assemble_context
 
 # Phase 1 — shed LOW-tier file lines if over budget.
 if [ "$payload_bytes" -gt "$char_budget" ]; then
-  trimmed_lines="$(printf '%s' "$payload_lines" | grep -v '^LOW:')"
-  full_context="${header}${recurring_warnings_section}${memory_context_section}${trimmed_lines}${footer}"
-  payload_bytes=${#full_context}
+  payload_lines="$(printf '%s' "$payload_lines" | grep -v '^LOW:')"
   truncated="true"
+  _assemble_context
 fi
 
-# Phase 2 — hard char-cap: truncate payload_lines to fit within budget.
-#   Preserves recurring_warnings + header/footer; drops tail of file list.
+# Phase 2 — F8 yield order (M050/S05, ADR-260611-F): below the :verifier
+# 1500-token threshold, fixed sections yield strictly in order —
+#   (1) tier-C excerpt drops first
+#   (2) memory-packet cap shrinks 6KB → 2KB
+#   (3) the harness NEVER yields (trim-exempt at any budget).
+if [ "$payload_bytes" -gt "$char_budget" ] && [ "$token_budget" -le 1500 ]; then
+  if [ -n "$tier_c_excerpt_section" ]; then
+    tier_c_excerpt_section=""
+    yield_applied="tier_c_dropped"
+    truncated="true"
+    _assemble_context
+  fi
+  if [ "$payload_bytes" -gt "$char_budget" ] && [ -n "$memory_context_section" ]; then
+    memory_context_section="$(_frame_memory_section 2048)"
+    [ -n "$memory_context_section" ] && memory_context_section="${memory_context_section}"$'\n'
+    yield_applied="packet_shrunk"
+    truncated="true"
+    _assemble_context
+  fi
+fi
+
+# Phase 3 — hard char-cap: truncate payload_lines to fit within budget.
+#   Preserves the trim-exempt fixed set (header + harness + recurring_warnings
+#   + tier-C + packet + footer); drops tail of file list. The harness is part
+#   of local_fixed and therefore NEVER truncated here (F8 invariant 3).
 if [ "$payload_bytes" -gt "$char_budget" ]; then
-  # Budget consumed by fixed parts (header + recurring_warnings + footer).
-  local_fixed="${header}${recurring_warnings_section}${memory_context_section}${footer}"
+  local_fixed="${header}${harness_section}${recurring_warnings_section}${tier_c_excerpt_section}${memory_context_section}${footer}"
   fixed_bytes=${#local_fixed}
   remaining=$(( char_budget - fixed_bytes ))
   if [ "$remaining" -lt 0 ]; then remaining=0; fi
   # Truncate payload_lines to remaining chars.
-  trimmed_lines="$(printf '%s' "$payload_lines" | head -c "$remaining")"
-  full_context="${header}${recurring_warnings_section}${memory_context_section}${trimmed_lines}${footer}"
-  payload_bytes=${#full_context}
+  payload_lines="$(printf '%s' "$payload_lines" | head -c "$remaining")"
   truncated="true"
+  _assemble_context
 fi
 
 # ---------------------------------------------------------------------------
@@ -788,6 +1015,26 @@ fi
 _write_audit "$target_agent_name" "$cohort" "$path_method" \
   "$payload_bytes" "$truncated" "$duration_ms" \
   "$(basename "${milestone_dir:-}")" "$story_id" "false" "$memory_packet"
+
+# ---------------------------------------------------------------------------
+# 13b. Injection receipts (M050/S05, ADR-260611-F) — one row per inlined
+#      artifact → .claude/audit/memory-read.jsonl (sole writer: this hook;
+#      suppressed in worktree contexts together with audit + cache above).
+# ---------------------------------------------------------------------------
+if [ -n "$harness_section" ]; then
+  _write_receipt "harness" "$HARNESS_SOURCE_PATH" "${#harness_section}" "false"
+fi
+if [ "$memory_packet" = "present" ]; then
+  _write_receipt "memory_packet" "$MEMORY_PACKET_SOURCE" "${#memory_context_section}" \
+    "$([ "$yield_applied" = "packet_shrunk" ] && echo true || echo false)"
+fi
+if [ -n "$recurring_warnings_section" ]; then
+  _write_receipt "warnings" "$RECURRENCE_LOG" "${#recurring_warnings_section}" "false"
+fi
+if [ -n "$tier_c_excerpt_section" ]; then
+  _write_receipt "tier_c_excerpt" "user-preferences-excerpt" "${#tier_c_excerpt_section}" "false"
+fi
+_write_receipt "path_list" "$ROLE_DEFAULTS_JSON" "${#payload_lines}" "$truncated"
 
 # ---------------------------------------------------------------------------
 # 14. Emit SubagentStart hook output (additionalContext)

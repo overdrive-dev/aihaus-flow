@@ -42,10 +42,101 @@ Verbs:
   install       Install aihaus into the current directory
   update        Update aihaus in the current directory
   memory        Query repository memory (delegates to aih-graph)
+                memory packet --task "<text>" --json — batched context packet
+                (status + Rule/Decision slice + top matches in ONE call; M050/S05)
   update --all  Update all registered installs (requires Z9 registry)
   self-update   Update the central aihaus clone from origin (requires Z9)
   --help, -h    Show this message
 EOF
+}
+
+# ---------------------------------------------------------------------------
+# memory packet (M050/S05, ADR-260611-F) — single batched invocation chain.
+# Composes three aih-graph calls into ONE shim call so the SubagentStart hook
+# makes exactly one `aihaus memory packet` invocation (12s internal hook
+# timeout / 15s settings belt). Output shape (architecture.md §4.4):
+#   {"status":<status --json>,"rules":<query --types Rule,Decision --top 5>,
+#    "matches":<query --top 3>,"degraded":bool,"elapsed_ms":N}
+# ---------------------------------------------------------------------------
+declare -a GRAPH_RUN=()
+
+_resolve_graph_run() {  # mirrors _memory discovery chain, without exec
+  GRAPH_RUN=()
+  local ext="" c
+  case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) ext=".exe" ;;
+  esac
+  local candidates=()
+  [[ -n "${AIH_GRAPH_BIN:-}" ]] && candidates+=("${AIH_GRAPH_BIN}")
+  candidates+=("$PWD/.aihaus/bin/aih-graph${ext}")
+  for c in "${candidates[@]}"; do
+    [[ -x "${c}" ]] && GRAPH_RUN=("${c}") && return 0
+  done
+  if [[ -f "${AIHAUS_HOME}/aih-graph/go.mod" ]] && command -v go >/dev/null 2>&1; then
+    local go_tmp_root="${AIH_GRAPH_GO_TMP:-${AIHAUS_HOME}/tmp/aih-graph-go}"
+    mkdir -p "${go_tmp_root}/tmp" "${go_tmp_root}/cache" 2>/dev/null || true
+    export AIH_GRAPH_CALLER_CWD="${PWD}"
+    export GOTMPDIR="${go_tmp_root}/tmp"
+    export GOCACHE="${go_tmp_root}/cache"
+    GRAPH_RUN=(go -C "${AIHAUS_HOME}/aih-graph" run ./cmd/aih-graph)
+    return 0
+  fi
+  [[ -x "${AIHAUS_HOME}/aih-graph/bin/aih-graph${ext}" ]] && \
+    GRAPH_RUN=("${AIHAUS_HOME}/aih-graph/bin/aih-graph${ext}") && return 0
+  [[ -x "$HOME/.aihaus/bin/aih-graph${ext}" ]] && \
+    GRAPH_RUN=("$HOME/.aihaus/bin/aih-graph${ext}") && return 0
+  command -v aih-graph >/dev/null 2>&1 && GRAPH_RUN=(aih-graph) && return 0
+  return 1
+}
+
+_now_ms() {
+  local t
+  t="$(date +%s%3N 2>/dev/null || echo "")"
+  [[ "$t" =~ ^[0-9]+$ ]] || t=$(( $(date +%s 2>/dev/null || echo 0) * 1000 ))
+  printf '%s' "$t"
+}
+
+_memory_packet() {
+  # Receives the db-pinned graph args minus the leading verb.
+  local task="" db="" repo=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --task)   task="${2:-}"; shift 2 || break ;;
+      --task=*) task="${1#--task=}"; shift ;;
+      --db|-db)   db="${2:-}"; shift 2 || break ;;
+      --db=*)   db="${1#--db=}"; shift ;;
+      -db=*)    db="${1#-db=}"; shift ;;
+      --repo)   repo="${2:-}"; shift 2 || break ;;
+      --repo=*) repo="${1#--repo=}"; shift ;;
+      --json)   shift ;;  # packet output is always JSON
+      *)        shift ;;
+    esac
+  done
+  if [[ -z "${task}" ]]; then
+    echo 'aihaus memory packet: --task "<text>" required' >&2
+    exit 2
+  fi
+  [[ -z "${repo}" ]] && repo="${AIH_GRAPH_REPO:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+  _resolve_graph_run || {
+    echo "aihaus memory: aih-graph not found. Install it with: bash pkg/scripts/install-aih-graph-binary.sh" >&2
+    exit 1
+  }
+  local db_args=()
+  [[ -n "${db}" ]] && db_args=(--db "${db}")
+  local start_ms end_ms degraded="false"
+  local status_json rules_json matches_json
+  start_ms="$(_now_ms)"
+  status_json="$("${GRAPH_RUN[@]}" status --repo "${repo}" "${db_args[@]}" --json 2>/dev/null || true)"
+  rules_json="$("${GRAPH_RUN[@]}" query --repo "${repo}" "${db_args[@]}" --types Rule,Decision --top 5 --json "${task}" 2>/dev/null || true)"
+  matches_json="$("${GRAPH_RUN[@]}" query --repo "${repo}" "${db_args[@]}" --top 3 --json "${task}" 2>/dev/null || true)"
+  end_ms="$(_now_ms)"
+  # Defensive: any sub-payload that is empty or non-JSON degrades to {}.
+  case "${status_json}" in  "{"*) : ;; *) status_json='{}';  degraded="true" ;; esac
+  case "${rules_json}" in   "{"*) : ;; *) rules_json='{}';   degraded="true" ;; esac
+  case "${matches_json}" in "{"*) : ;; *) matches_json='{}'; degraded="true" ;; esac
+  printf '{"status":%s,"rules":%s,"matches":%s,"degraded":%s,"elapsed_ms":%s}\n' \
+    "${status_json}" "${rules_json}" "${matches_json}" "${degraded}" "$(( end_ms - start_ms ))"
+  exit 0
 }
 
 _memory() {
@@ -58,11 +149,13 @@ _memory() {
     local cmd="$1"
     shift
     case "$cmd" in
-      build|refresh|status|query|context|callers|impact|gotchas|milestone|rule|why|rule-drift|obsidian-export|export-obsidian)
+      build|refresh|status|query|context|callers|impact|gotchas|milestone|rule|why|rule-drift|obsidian-export|export-obsidian|packet)
         # db-pin allowlist (BR-P3): every query verb pins --db to the repo DB
         # unless the caller passed one. --user scope is exempt — the user-scope
         # graph lives at ~/.aihaus/state/user-graph.db (ADR-260611-E), never
-        # the per-repo DB.
+        # the per-repo DB. `packet` (M050/S05) joins the allowlist to inherit
+        # --db defaulting, then is intercepted below (shim-composed verb —
+        # aih-graph itself does not know it).
         local has_db=0 user_scope=0 arg repo_root db_path
         for arg in "$@"; do
           [[ "$arg" == "--db" || "$arg" == "-db" || "$arg" == --db=* || "$arg" == -db=* ]] && has_db=1
@@ -93,6 +186,11 @@ _memory() {
         graph_args=("$cmd" "$@")
         ;;
     esac
+  fi
+  # M050/S05: `packet` is composed by the shim (ONE shim call → three
+  # aih-graph invocations), never forwarded to the binary.
+  if [[ "${graph_args[0]:-}" == "packet" ]]; then
+    _memory_packet "${graph_args[@]:1}"
   fi
   local candidates=()
   [[ -n "${AIH_GRAPH_BIN:-}" ]] && candidates+=("${AIH_GRAPH_BIN}")

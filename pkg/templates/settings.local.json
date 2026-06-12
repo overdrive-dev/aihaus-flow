@@ -213,7 +213,7 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/context-inject.sh",
-            "timeout": 10,
+            "timeout": 15,
             "statusMessage": "Injecting context..."
           }
         ]

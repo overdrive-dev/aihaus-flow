@@ -5660,3 +5660,59 @@ Revert the S05/S08 PRs: receipts stop accumulating, the auditor is unwired from 
 - ADR-004 — single-writer discipline (lineage)
 - ADR-260611-B (the harness this protects), ADR-260611-D (flip policy for any future enforcement)
 - `.aihaus/milestones/M050-260611-one-harness-three-tiers/execution/architecture.md` §4-5 — receipt schema + canary decision tree
+
+## ADR-260611-G — S05 worktree canary result + composite delivery path
+
+**Status:** Accepted
+**Date:** 2026-06-11
+**Milestone:** M050/S05
+
+### Context
+
+S05 (context-inject v2) was canary-gated by BR-P9: no implementation before the live-CC worktree fact was recorded. The plan's ASSUMPTIONS carried B1 — the belief that `context-inject.sh:45-50` was a worktree early-exit that needed relaxing. CHECK F4 flagged B1 as a misdiagnosis hypothesis; the architecture (§5) pre-specified both canary outcomes so the slice could not stall. The canary (ADR-260517-A live method: spawn an `isolation: worktree` agent, observe) ran on 2026-06-11 before any S05 code.
+
+### Decision
+
+**Canary facts (observed live, recorded verbatim):**
+
+1. A worktree-isolated subagent's cwd is `<repo>/.claude/worktrees/agent-<id>`; the `*/.claude/worktrees/*` glob MATCHES — paths arrive forward-slashed even on Windows Git Bash (`pwd -W` is also forward-slashed; backslashes are normalized defensively anyway).
+2. `CLAUDE_PROJECT_DIR` is EMPTY in the subagent's own bash env — it is set only for the parent session's hook executor. `aihaus_project_root()` therefore falls back to git toplevel / pwd, which resolve to the worktree path.
+3. `git rev-parse --show-superproject-working-tree` returns EMPTY with exit 0 inside a linked worktree — the existing check at `context-inject.sh:45-50` is a confirmed no-op there. **B1 misdiagnosis proven:** that check is a SUBMODULE check, not a worktree check; there was never an early-exit to relax. The check stays for its real (submodule) purpose.
+4. `git rev-parse --git-common-dir` reliably returns `<main-repo>/.git` from inside the worktree — the M047 `resolve_manifest_path()`-style anchor rewrite applies.
+5. `.aihaus/` does NOT exist inside worktrees (gitignored; `.worktreeinclude` previously listed only 5 sidecar files) — the hook scripts themselves are absent where a bg-session worktree would fire them.
+
+**Composite delivery path — outcomes (a) AND (b) both implemented:**
+
+- **(a) PROJECT_ROOT-anchored worktree detection + git-common-dir rewrite** in `context-inject.sh` (section 3a): normalize backslashes, match `*/.claude/worktrees/*` on the resolved project root, rewrite the anchor to the main repo via the parent of `--git-common-dir` (fallback: M047 prefix-strip). Context (harness + packet + path list) is emitted from main-repo paths; `_write_audit` + `append_cache_entry` + `_write_receipt` are SUPPRESSED in worktree contexts — single-writer discipline preserved (ADR-001 / BR-P5 / ADR-260611-F §5).
+- **(b) `.worktreeinclude` carries the hook substrate:** `.aihaus/hooks/`, `.aihaus/hooks/lib/`, `.aihaus/hooks/context-budget.conf` added to the repo-root `.worktreeinclude`, and a NEW `pkg/.aihaus/templates/.worktreeinclude` template seeds the full list for installs. The installer has no existing seed seam for repo-root files (everything seeds under `.aihaus/` or `.claude/`) — wiring the template into install.sh/install.ps1 is deferred to S08's installer story rather than forcing a new seam here.
+
+**Correction trail:** plan ASSUMPTIONS B1 (worktree early-exit hypothesis) → CHECK F4 (misdiagnosis flag) → this ADR (live-canary disproof + composite fix). The `:45-50` submodule check is annotated in-file so the misreading does not recur.
+
+### Consequences
+
+**Positive:** subagent context delivery works identically inside and outside worktrees; bg-session worktrees carry the hook scripts; no writes ever originate from a worktree context (receipts/cache/audit stay single-writer); the B1 misdiagnosis is permanently corrected in the ledger.
+
+**Negative:** worktree spawns produce no receipts by design — S08's read-auditor must treat their absence as `indeterminate`, not `unread` (already specified in ADR-260611-F §Neutral).
+
+**Neutral:** the template `.worktreeinclude` ships in pkg/ but is not yet installer-seeded (S08 scope).
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| Relax the `:45-50` check (plan B1) | Rejected — disproven | It is a submodule check; a no-op in linked worktrees (canary fact 3) |
+| Outcome (a) only | Rejected | Hook scripts are absent in worktrees (fact 5); detection alone cannot run where the script does not exist |
+| Outcome (b) only | Rejected | Carrying scripts without the anchor rewrite would emit worktree-local paths and write into the worktree (single-writer violation) |
+| `BASH_SOURCE`-anchored detection | Rejected | The hook may execute from a carried worktree copy; PROJECT_ROOT (normalized) is the canonical anchor per architecture §5 |
+
+### Rollback
+
+Revert the S05 PR: context-inject v2 reverts to the M048 two-call path, the `.worktreeinclude` additions and template disappear, and worktree spawns return to status-quo (no injection from worktree contexts). No data migration involved.
+
+### References
+
+- BR-P5, BR-P9 — single-writer + canary-first rules
+- ADR-260517-A — live-canary method
+- ADR-260611-B/F — harness delivery + receipts/yield contracts this slice implements
+- M047 (`lib/manifest-helpers.sh:resolve_manifest_path`) — anchor-rewrite lineage
+- `.aihaus/milestones/M050-260611-one-harness-three-tiers/execution/architecture.md` §5 — canary decision tree

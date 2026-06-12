@@ -1,0 +1,12 @@
+# .worktreeinclude — gitignore-syntax list of untracked sidecars copied into
+# every native Claude Code worktree (.claude/worktrees/<id>/) so isolated
+# agents resolve relative sidecar + hook paths (M043/S1 + M050/S05
+# ADR-260611-G canary branch (b)). Lives at the repo root of installs.
+.aihaus/.effort
+.aihaus/.install-source
+.aihaus/.calibration
+.aihaus/auto.sh
+.aihaus/auto.ps1
+.aihaus/hooks/
+.aihaus/hooks/lib/
+.aihaus/hooks/context-budget.conf
