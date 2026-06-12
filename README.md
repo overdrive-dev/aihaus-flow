@@ -17,7 +17,7 @@
 **Describe a feature in plain language. It auto-routes to the right sub-flow, drives it through gated stages on a local kanban, builds it in isolated worktrees with adversarial review, and verifies the result — while everything it knows about your project stays on your machine.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.42.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.43.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![aihaus 3.0](https://img.shields.io/badge/aihaus-3.0%20·%20native--first-7c3aed?style=for-the-badge)](#whats-new-in-30)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
@@ -310,6 +310,12 @@ aihaus feedback export                           # bundle gate stats + warnings 
 ---
 
 ## ✨ What's new in 3.0
+
+**v0.43.0 — role system removed (ADR-260612-A):**
+
+- The pm/builder/dev/qa/devops profile taxonomy, `role-guard.sh`, `.aihaus/.profile`, role capture in `/aih-init`, and role-scoped context are **gone**. Requests route on intent alone.
+- **`flow-guard.sh` is the sole online/deploy gate** — deploy and online commands require an active tracked flow (promotion-boundary determinism), not a privileged profile.
+- `lib/role-defaults.json` → `lib/cohort-defaults.json` (it was always cohort machinery); cohorts — the agent model/effort/context-budget system — are unaffected.
 
 **v0.42.0 — One Harness, Three Memory Tiers (M050):**
 
