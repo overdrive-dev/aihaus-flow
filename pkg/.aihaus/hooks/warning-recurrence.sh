@@ -19,6 +19,13 @@
 # Single-writer: this hook is the SOLE writer of .claude/audit/warning-recurrence.jsonl
 # (ADR-M016-A writer-table row). Mirrors ADR-M011-A rotation discipline.
 #
+# M050/S08 (ADR-260611-F): the aggregation pass additionally READS (never
+# writes) .claude/audit/memory-read-verdicts.jsonl — sole writer:
+# memory-read-audit.sh — and folds repeat-unread offenders (>= 3 unread
+# verdicts per agent) into the clustering as `memory-unread` rows. The
+# receipts JSONL (.claude/audit/memory-read.jsonl, sole writer:
+# context-inject.sh) is likewise never written here (BR-P5).
+#
 # Opt-out:        AIHAUS_WARNING_RECURRENCE=0
 # Recursion guard: AIHAUS_WARNING_RECURRENCE_ACTIVE=1
 # Writer:         .claude/audit/warning-recurrence.jsonl
@@ -132,14 +139,36 @@ if [ -f "$MILESTONE_GUARD" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 9. Early-exit if LEARNING-WARNINGS.jsonl absent or no rows for milestone
+# 8b. Memory-read verdicts fold (M050/S08, ADR-260611-F) — READ-ONLY input.
+#     Reads .claude/audit/memory-read-verdicts.jsonl (sole writer:
+#     memory-read-audit.sh) and collects repeat-unread offenders — agents with
+#     >= 3 "unread" verdicts — to fold into the cluster write below. This hook
+#     NEVER writes the verdicts JSONL or the receipts JSONL
+#     (.claude/audit/memory-read.jsonl) — aggregators read-only (BR-P5).
+#     Output lines: "<count> <agent>".
 # ---------------------------------------------------------------------------
-if [ ! -f "$WARNINGS_LOG" ]; then
+VERDICTS_LOG="$(aihaus_project_path "${AIHAUS_MEMORY_READ_VERDICTS_LOG:-.claude/audit/memory-read-verdicts.jsonl}")"
+UNREAD_OFFENDERS=""
+if [ -f "$VERDICTS_LOG" ] && command -v jq >/dev/null 2>&1; then
+  UNREAD_OFFENDERS="$(jq -r '
+    select(.event == "memory-read-audit" and .verdict == "unread" and ((.agent // "") != "")) | .agent
+  ' "$VERDICTS_LOG" 2>/dev/null | sort | uniq -c | awk '$1 >= 3 {print $1, $2}' || true)"
+fi
+
+# ---------------------------------------------------------------------------
+# 9. Early-exit if LEARNING-WARNINGS.jsonl absent or no rows for milestone
+#    (M050/S08: the verdicts fold proceeds even without learning-warnings rows)
+# ---------------------------------------------------------------------------
+if [ ! -f "$WARNINGS_LOG" ] && [ -z "$UNREAD_OFFENDERS" ]; then
   exit 0
 fi
 
 # Check if any rows exist for this milestone (best-effort grep; fail-safe)
-if ! grep -q "\"milestone\":\"${MILESTONE_ID}\"" "$WARNINGS_LOG" 2>/dev/null; then
+HAVE_MILESTONE_ROWS=0
+if [ -f "$WARNINGS_LOG" ] && grep -q "\"milestone\":\"${MILESTONE_ID}\"" "$WARNINGS_LOG" 2>/dev/null; then
+  HAVE_MILESTONE_ROWS=1
+fi
+if [ "$HAVE_MILESTONE_ROWS" -eq 0 ] && [ -z "$UNREAD_OFFENDERS" ]; then
   # No rows for this milestone; still touch the guard so we don't re-run
   touch "$MILESTONE_GUARD" 2>/dev/null || true
   exit 0
@@ -283,7 +312,7 @@ while IFS= read -r row; do
 done < <(grep "\"milestone\":\"${MILESTONE_ID}\"" "$WARNINGS_LOG" 2>/dev/null || true)
 
 TOTAL_NEW="${#ROW_UUIDS[@]}"
-if [ "$TOTAL_NEW" -eq 0 ]; then
+if [ "$TOTAL_NEW" -eq 0 ] && [ -z "$UNREAD_OFFENDERS" ]; then
   touch "$MILESTONE_GUARD" 2>/dev/null || true
   exit 0
 fi
@@ -391,6 +420,43 @@ for (( i=0; i < TOTAL_NEW; i++ )); do
     cluster_uuids+=("[\"${new_uuid}\"]")
   fi
 done
+
+# ---------------------------------------------------------------------------
+# 15b. Fold repeat-unread offenders into the clustering (M050/S08).
+#      Deterministic cluster id memory-unread-<agent>; recurrence_count is the
+#      verdict count (idempotent overwrite — the verdicts JSONL is the source
+#      of truth, read-only here). These rows ride the existing >=3 surface in
+#      context-inject.sh section 8b unchanged.
+# ---------------------------------------------------------------------------
+if [ -n "$UNREAD_OFFENDERS" ]; then
+  while read -r u_count u_agent; do
+    [ -z "${u_agent:-}" ] && continue
+    case "$u_count" in (''|*[!0-9]*) continue ;; esac
+    u_id="memory-unread-${u_agent}"
+    u_sum="agent completed ${u_count} run(s) with verdict=unread in memory-read-verdicts.jsonl — injected memory context shows no read evidence (M050/S08 observe-only)"
+    u_idx=-1
+    for (( j=0; j < ${#cluster_ids[@]}; j++ )); do
+      if [ "${cluster_ids[$j]}" = "$u_id" ]; then
+        u_idx="$j"
+        break
+      fi
+    done
+    if [ "$u_idx" -ge 0 ]; then
+      cluster_counts[$u_idx]="$u_count"
+      cluster_reps[$u_idx]="$u_sum"
+      cluster_last[$u_idx]="$MILESTONE_ID"
+    else
+      cluster_ids+=("$u_id")
+      cluster_cats+=("memory-unread")
+      cluster_agents+=("$u_agent")
+      cluster_reps+=("$u_sum")
+      cluster_counts+=("$u_count")
+      cluster_first+=("$MILESTONE_ID")
+      cluster_last+=("$MILESTONE_ID")
+      cluster_uuids+=("[]")
+    fi
+  done <<< "$UNREAD_OFFENDERS"
+fi
 
 # ---------------------------------------------------------------------------
 # 16. Write aggregate rows to warning-recurrence.jsonl (in-place rewrite)

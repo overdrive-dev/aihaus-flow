@@ -713,6 +713,14 @@ _refresh_user_global_skills() {
 
 _refresh_user_global_skills
 
+# ---- ~/.aihaus/.targets enrollment (M050/S08, hole 8 / F9) -------------------
+# Pre-existing installs enroll on their next update: append-dedupe this repo's
+# absolute path to ~/.aihaus/.targets (format consumed by `aihaus update --all`).
+# Honors AIHAUS_SKIP_GLOBAL_HARNESS=1 (BR-U1).
+# shellcheck source=lib/global-harness.sh
+source "$(dirname "$0")/lib/global-harness.sh"
+register_aihaus_target "${TARGET}"
+
 # ---- Migrate memory README seeds (legacy compatibility) ----------------------
 # Default update now seeds memory starter files non-destructively. Keep this
 # flag as a narrow README-only alias for older workflows that still pass it.

@@ -262,6 +262,17 @@
             "statusMessage": "Releasing worktree lock (L1)..."
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/memory-read-audit.sh",
+            "timeout": 15,
+            "statusMessage": "Auditing memory reads (observe-only)..."
+          }
+        ]
       }
     ],
     "SessionEnd": [

@@ -19,7 +19,7 @@ DSP_MIN_CLAUDE_VERSION="2.1.126"
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--target <path>] [--copy] [--update] [--package <path>] [--force] [--force-project-skills]
+Usage: install.sh [--target <path>] [--copy] [--update] [--package <path>] [--force] [--force-project-skills] [--no-global-harness]
 
 Installs aihaus into a target git repository (Claude Code only).
 
@@ -33,6 +33,9 @@ Options:
   --force-project-skills  Always create .claude/skills junction even when
                           user-global skills (~/.claude/skills/aih-init) exist
                           (env: FORCE_PROJECT_SKILLS=1)
+  --no-global-harness     Skip seeding the AIHAUS:GLOBAL-HARNESS block into
+                          ~/.claude/CLAUDE.md (env: AIHAUS_SKIP_GLOBAL_HARNESS=1,
+                          which also skips ~/.aihaus/.targets enrollment — BR-U1)
   -h, --help              Show this message
 EOF
 }
@@ -49,6 +52,7 @@ UPDATE="0"
 FORCE="0"
 PACKAGE_FLAG=""  # V5: --package <path> override (tier 1 of discovery chain)
 FORCE_PROJECT_SKILLS="${FORCE_PROJECT_SKILLS:-0}"  # M024/S02: env-var opt-out for skill-junction conditional
+NO_GLOBAL_HARNESS="0"  # M050/S08: --no-global-harness flag (BR-U1 consent triple leg 1)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -79,6 +83,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --force-project-skills)
       FORCE_PROJECT_SKILLS="1"
+      shift
+      ;;
+    --no-global-harness)
+      NO_GLOBAL_HARNESS="1"
       shift
       ;;
     -h|--help)
@@ -332,6 +340,14 @@ seed_tier_c_preferences() {
 }
 
 # ---------------------------------------------------------------------------
+# M050/S08 (ADR-260611-E §2 / BR-U1): GLOBAL-HARNESS seed + .targets registry
+# helpers. Sourced before the dogfood arm — hole 9 is specifically the
+# global-skills-only path that exits below.
+# ---------------------------------------------------------------------------
+# shellcheck source=lib/global-harness.sh
+source "${SCRIPT_DIR}/lib/global-harness.sh"
+
+# ---------------------------------------------------------------------------
 # V5 (M022/Z3): Dogfood mode check — I-04, L9
 # Must run BEFORE per-repo install logic. If we are inside the aihaus package
 # directory, emit a one-liner and exit 0. Never git-pull. Never self-symlink.
@@ -340,7 +356,11 @@ if is_dogfood_cwd; then
   echo "info: you are inside the aihaus package; run 'aihaus self-update' to refresh from origin"
   # Still attempt user-global skill install if aihaus_home resolves (cwd IS the pkg).
   # The per-repo overlay is skipped; only user-global symlinks are created.
-  RESOLVED_HOME="${PKG_ROOT}"
+  # M050/S08 (Concern-B fix extended to the dogfood arm): AIHAUS_HOME is the
+  # REPO ROOT containing pkg/, not PKG_ROOT (= repo-root/pkg — would resolve
+  # skills at repo-root/pkg/pkg/.aihaus/skills, never exists, and pin a broken
+  # registry path). Mirrors the M024/S02 per-repo-arm fix at Step 10/11.
+  RESOLVED_HOME="$(cd "${PKG_ROOT}/.." && pwd)"
   install_user_global_skills "${RESOLVED_HOME}"
   # Write registry so future invocations use this clone directly (tier 3).
   mkdir -p "$HOME/.aihaus"
@@ -348,6 +368,9 @@ if is_dogfood_cwd; then
   echo "  registry: ~/.aihaus/.install-source -> ${RESOLVED_HOME}"
   # M050/S06: tier-C seed on the global-bootstrap arm (before the dogfood exit).
   seed_tier_c_preferences
+  # M050/S08 (hole 9, BR-U1): GLOBAL-HARNESS seed on the global-bootstrap arm —
+  # global-skills-only installs must not run with zero harness.
+  seed_global_harness
   echo ""
   echo "aihaus user-global skills installed (dogfood mode; per-repo overlay skipped)."
   exit 0
@@ -753,6 +776,15 @@ echo "  registry: ~/.aihaus/.install-source -> ${AIHAUS_RESOLVED}"
 # Step 11.5: tier-C global user-preferences seed (M050/S06, ADR-260611-E) —
 # per-repo arm call site (the dogfood arm seeds + exits earlier).
 seed_tier_c_preferences
+
+# Step 11.6: GLOBAL-HARNESS seed (M050/S08, ADR-260611-E §2 / BR-U1) —
+# per-repo arm call site (the dogfood arm seeds + exits earlier; each
+# invocation hits exactly one arm).
+seed_global_harness
+
+# Step 11.7: ~/.aihaus/.targets enrollment (M050/S08, hole 8 / F9) —
+# append-dedupe this repo's absolute path; consumed by `aihaus update --all`.
+register_aihaus_target "${TARGET}"
 
 # Step 12: idempotent .gitignore injection (soft-fail per LD-3)
 # Manual fallback: pkg/.aihaus/templates/gitignore-fragment

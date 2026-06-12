@@ -109,7 +109,56 @@ if [ -d "$HOME/.claude/skills/aih-install" ] && [ ! -d "$PWD/.aihaus" ]; then
   PREINSTALL_PRIME=" aihaus is available globally; per-repo overlay not active in this directory — type /aih-install to enable."
 fi
 
-ADDITIONAL_CONTEXT="aihaus status: ${PLANNING_STATUS:-no artifacts yet}. Use /aih-init to bootstrap project.md, /aih-plan to scope work, /aih-milestone to build, /aih-help for all commands.${STASH_NOTICE}${PREINSTALL_PRIME}"
+# --- M050/S08: bounded memory-status packet (main-session parity) ----------
+# One `aihaus memory packet` call — the same single batched invocation
+# context-inject.sh v2 makes for subagents (ADR-260611-F §4.4) — with the
+# same fail-open + cap discipline: 12s timeout, AIHAUS_MEMORY_CONTEXT_MAX_BYTES
+# cap (default 6000), every failure path leaves the section empty (BR-P4).
+# The one-line status output above stays FIRST in additionalContext.
+# Opt-out: AIHAUS_MEMORY_INJECT=0 (shared with context-inject.sh).
+MEMORY_PACKET_SECTION=""
+if [ "${AIHAUS_MEMORY_INJECT:-1}" != "0" ] && [ -d "$CLAUDE_PROJECT_DIR/.aihaus" ]; then
+  _mp_cap="${AIHAUS_MEMORY_CONTEXT_MAX_BYTES:-6000}"
+  _mp_cmd=()
+  _mp_reg_root=""
+  if [ -f "$HOME/.aihaus/.install-source" ]; then
+    _mp_reg_root="$(head -n1 "$HOME/.aihaus/.install-source" 2>/dev/null | tr -d '[:space:]' || true)"
+  fi
+  for _mp_root in "${AIHAUS_HOME:-}" "$_mp_reg_root" "$CLAUDE_PROJECT_DIR"; do
+    [ -z "$_mp_root" ] && continue
+    if [ -f "$_mp_root/pkg/scripts/aihaus" ]; then
+      _mp_cmd=(bash "$_mp_root/pkg/scripts/aihaus" memory packet)
+      break
+    fi
+    if [ -f "$_mp_root/scripts/aihaus" ]; then
+      _mp_cmd=(bash "$_mp_root/scripts/aihaus" memory packet)
+      break
+    fi
+  done
+  if [ "${#_mp_cmd[@]}" -eq 0 ] && command -v aihaus >/dev/null 2>&1; then
+    _mp_cmd=(aihaus memory packet)
+  fi
+  if [ "${#_mp_cmd[@]}" -gt 0 ]; then
+    _mp_task="session start: project status, active business rules, recent decisions"
+    if command -v timeout >/dev/null 2>&1; then
+      _mp_json="$(timeout 12s "${_mp_cmd[@]}" --repo "$CLAUDE_PROJECT_DIR" --task "$_mp_task" --json 2>/dev/null || true)"
+    else
+      _mp_json="$("${_mp_cmd[@]}" --repo "$CLAUDE_PROJECT_DIR" --task "$_mp_task" --json 2>/dev/null || true)"
+    fi
+    case "${_mp_json:-}" in
+      "{"*)
+        if [ "${#_mp_json}" -gt "$_mp_cap" ]; then
+          _mp_json="$(printf '%s' "$_mp_json" | head -c "$_mp_cap" || true)
+... [truncated by session-start.sh]"
+        fi
+        MEMORY_PACKET_SECTION="$(printf '\n\n## Memory status (aihaus memory packet — M050/S08 main-session parity)\n\n%s' "$_mp_json")"
+        ;;
+    esac
+  fi
+fi
+# ----------------------------------------------------------------------------
+
+ADDITIONAL_CONTEXT="aihaus status: ${PLANNING_STATUS:-no artifacts yet}. Use /aih-init to bootstrap project.md, /aih-plan to scope work, /aih-milestone to build, /aih-help for all commands.${STASH_NOTICE}${PREINSTALL_PRIME}${MEMORY_PACKET_SECTION}"
 
 json_escape() {
   local s="${1:-}"

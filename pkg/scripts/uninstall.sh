@@ -10,6 +10,9 @@
 #                          (R4 readlink validation — ADR-260504-A FR-06 + FR-21).
 #                          Also purges tier-C global user preferences (M050/S06 /
 #                          ADR-260611-E): ~/.aihaus/memory/user/ + prefs-audit JSONL.
+#                          Also removes the AIHAUS:GLOBAL-HARNESS marker block from
+#                          ~/.claude/CLAUDE.md (M050/S08, BR-U1 — only the block,
+#                          never the user's other content).
 #   -h, --help             Show usage
 set -euo pipefail
 
@@ -28,6 +31,9 @@ Options:
                        Also purges tier-C global user preferences (M050/S06,
                        ADR-260611-E): ~/.aihaus/memory/user/ and the prefs
                        audit JSONL ~/.aihaus/state/prefs-audit.jsonl.
+                       Also removes the AIHAUS:GLOBAL-HARNESS marker block from
+                       ~/.claude/CLAUDE.md (M050/S08, BR-U1 — only the block,
+                       never the user's other content).
   -h, --help           Show this message
 EOF
 }
@@ -237,6 +243,11 @@ purge_tier_c() {
 if [[ "${PURGE_USER_GLOBAL}" == "1" ]]; then
   purge_user_global || true
   purge_tier_c || true
+  # M050/S08 (BR-U1 leg 3): strip the AIHAUS:GLOBAL-HARNESS marker block from
+  # ~/.claude/CLAUDE.md — only the block, never the user's other content.
+  # shellcheck source=lib/global-harness.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/global-harness.sh"
+  remove_global_harness || true
   touched="1"
 fi
 

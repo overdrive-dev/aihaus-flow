@@ -146,6 +146,7 @@ check_hooks() {
     tdd-guard.sh
     aih-graph-refresh.sh
     project-context-refresh.sh
+    memory-read-audit.sh
   )
   local missing=()
   for hook in "${EXPECTED_HOOKS[@]}"; do
@@ -6375,6 +6376,217 @@ check_kanban_chokepoint() {
   fi
 }
 
+# ---- Check 100: GLOBAL-HARNESS seed + .targets + feedback export (M050/S08) ----
+# BR-U1 consent triple + hole 8/9 closure. Sub-arms:
+#   (0) fixture-fail pair (BR-P8) — the seed predicate must match
+#       tools/fixtures/global-harness/seeded.md and MUST NOT match unseeded.md,
+#       proving the seed assertion below is not green-but-vacuous;
+#   (a) seed behavior under a TEMP HOME (Check 98 temp-home discipline — the
+#       real ~/.claude/CLAUDE.md and ~/.aihaus are NEVER touched): create-on-
+#       absent, append-below-user-content, idempotent re-run (byte-identical),
+#       AIHAUS_SKIP_GLOBAL_HARNESS=1 opt-out, purge removes ONLY the block;
+#   (b) ~/.aihaus/.targets append-dedupe + env opt-out (hole 8 / F9);
+#   (c) static wiring — both install arms + uninstall purge arm + update.sh
+#       enrollment + PowerShell parity (BR-P3) + memory-read-audit.sh wired
+#       into BOTH settings templates' SubagentStop arrays (F14 companion);
+#   (d) `aihaus feedback export` three-section contract — sections ALWAYS
+#       present; empty sources carry explicit "(none" markers; populated
+#       sources render content (never silently absent).
+check_global_harness_and_feedback() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: GLOBAL-HARNESS seed + .targets registry + feedback export (M050/S08)"
+  local issues=()
+  local repo_root shim fixture_dir gh_lib
+  repo_root="$(cd "${PACKAGE_ROOT}/.." && pwd)"
+  shim="${PACKAGE_ROOT}/scripts/aihaus"
+  gh_lib="${PACKAGE_ROOT}/scripts/lib/global-harness.sh"
+  fixture_dir="${repo_root}/tools/fixtures/global-harness"
+
+  [[ -f "$gh_lib" ]] || { _fail "$label" "missing lib: pkg/scripts/lib/global-harness.sh"; return; }
+  [[ -f "${fixture_dir}/seeded.md" && -f "${fixture_dir}/unseeded.md" ]] || {
+    _fail "$label" "fixtures missing under tools/fixtures/global-harness/ (seeded.md + unseeded.md)"
+    return
+  }
+
+  # ---- (0) fixture-fail pair (BR-P8 non-vacuity) ----------------------------
+  local seed_predicate='AIHAUS:GLOBAL-HARNESS-START'
+  grep -Fq "$seed_predicate" "${fixture_dir}/seeded.md" || \
+    issues+=("fixture-fail pair: predicate missed seeded.md — the seed assertion is broken")
+  if grep -Fq "$seed_predicate" "${fixture_dir}/unseeded.md"; then
+    issues+=("fixture-fail pair: predicate matched unseeded.md — seed check green-but-vacuous (BR-P8)")
+  fi
+
+  # ---- (a) seed behavior under TEMP HOME ------------------------------------
+  local tmp_home claude_md sha_1 sha_2
+  tmp_home="$(_mktemp_dir global-harness-home)" || { _fail "$label" "mktemp failed"; return; }
+  claude_md="${tmp_home}/.claude/CLAUDE.md"
+
+  # Pre-existing user content must survive seed AND purge.
+  mkdir -p "${tmp_home}/.claude"
+  printf '# user notes — must survive seed and purge\n' > "$claude_md"
+
+  HOME="$tmp_home" bash -c 'source "$1" && seed_global_harness' _ "$gh_lib" >/dev/null 2>&1 || \
+    issues+=("seed: seed_global_harness exited non-zero")
+  grep -Fq "$seed_predicate" "$claude_md" 2>/dev/null || \
+    issues+=("seed: GLOBAL-HARNESS block missing from temp ~/.claude/CLAUDE.md")
+  grep -Fq '/aih-install' "$claude_md" 2>/dev/null || \
+    issues+=("seed: overlay nudge (/aih-install) missing from the block")
+  grep -Fq '~/.aihaus/memory/user/preferences.md' "$claude_md" 2>/dev/null || \
+    issues+=("seed: tier-C pointer missing from the block")
+  grep -Fq 'user notes — must survive' "$claude_md" 2>/dev/null || \
+    issues+=("seed: pre-existing user content was clobbered")
+
+  # Idempotent re-run: byte-identical, markers appear exactly once.
+  sha_1="$(sha256sum "$claude_md" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$claude_md" 2>/dev/null | awk '{print $1}')"
+  HOME="$tmp_home" bash -c 'source "$1" && seed_global_harness' _ "$gh_lib" >/dev/null 2>&1 || \
+    issues+=("seed: idempotent re-run exited non-zero")
+  sha_2="$(sha256sum "$claude_md" 2>/dev/null | awk '{print $1}' || shasum -a 256 "$claude_md" 2>/dev/null | awk '{print $1}')"
+  [[ -n "$sha_1" && "$sha_1" == "$sha_2" ]] || \
+    issues+=("seed: re-run mutated ~/.claude/CLAUDE.md (not idempotent)")
+  local marker_count
+  marker_count="$(grep -Fc "$seed_predicate" "$claude_md" 2>/dev/null)" || true
+  [[ "${marker_count:-0}" -eq 1 ]] || \
+    issues+=("seed: expected exactly 1 start marker after re-run, found ${marker_count:-0}")
+
+  # Env opt-out (BR-U1 leg 2): a fresh home must stay unseeded.
+  local tmp_home2
+  tmp_home2="$(_mktemp_dir global-harness-optout)" || { _fail "$label" "mktemp failed (opt-out arm)"; return; }
+  HOME="$tmp_home2" AIHAUS_SKIP_GLOBAL_HARNESS=1 bash -c 'source "$1" && seed_global_harness' _ "$gh_lib" >/dev/null 2>&1 || \
+    issues+=("opt-out: seed_global_harness exited non-zero under AIHAUS_SKIP_GLOBAL_HARNESS=1")
+  if [[ -f "${tmp_home2}/.claude/CLAUDE.md" ]]; then
+    issues+=("opt-out: AIHAUS_SKIP_GLOBAL_HARNESS=1 still seeded ~/.claude/CLAUDE.md")
+  fi
+  # Flag leg (BR-U1 leg 1): NO_GLOBAL_HARNESS=1 (what --no-global-harness sets).
+  HOME="$tmp_home2" NO_GLOBAL_HARNESS=1 bash -c 'source "$1" && seed_global_harness' _ "$gh_lib" >/dev/null 2>&1 || \
+    issues+=("opt-out: seed_global_harness exited non-zero under NO_GLOBAL_HARNESS=1")
+  if [[ -f "${tmp_home2}/.claude/CLAUDE.md" ]]; then
+    issues+=("opt-out: --no-global-harness (NO_GLOBAL_HARNESS=1) still seeded ~/.claude/CLAUDE.md")
+  fi
+
+  # Purge (BR-U1 leg 3): block removed, user content preserved.
+  HOME="$tmp_home" bash -c 'source "$1" && remove_global_harness' _ "$gh_lib" >/dev/null 2>&1 || \
+    issues+=("purge: remove_global_harness exited non-zero")
+  if grep -Fq "$seed_predicate" "$claude_md" 2>/dev/null; then
+    issues+=("purge: GLOBAL-HARNESS block still present after remove_global_harness")
+  fi
+  grep -Fq 'user notes — must survive' "$claude_md" 2>/dev/null || \
+    issues+=("purge: user content removed — purge must strip ONLY the block")
+  # Whole-file case: when the seed was the entire file, purge removes the file.
+  local tmp_home3
+  tmp_home3="$(_mktemp_dir global-harness-wholefile)" || { _fail "$label" "mktemp failed (whole-file arm)"; return; }
+  HOME="$tmp_home3" bash -c 'source "$1" && seed_global_harness' _ "$gh_lib" >/dev/null 2>&1 || true
+  HOME="$tmp_home3" bash -c 'source "$1" && remove_global_harness' _ "$gh_lib" >/dev/null 2>&1 || true
+  if [[ -f "${tmp_home3}/.claude/CLAUDE.md" ]] && \
+     grep -Fq "$seed_predicate" "${tmp_home3}/.claude/CLAUDE.md" 2>/dev/null; then
+    issues+=("purge: whole-file seed not removed on purge")
+  fi
+
+  # ---- (b) .targets append-dedupe (hole 8 / F9) ------------------------------
+  local targets_file="${tmp_home}/.aihaus/.targets"
+  HOME="$tmp_home" bash -c 'source "$1" && register_aihaus_target "$2"' _ "$gh_lib" "/tmp/fixture-repo-a" >/dev/null 2>&1 || \
+    issues+=(".targets: register_aihaus_target exited non-zero")
+  HOME="$tmp_home" bash -c 'source "$1" && register_aihaus_target "$2"' _ "$gh_lib" "/tmp/fixture-repo-a" >/dev/null 2>&1 || true
+  HOME="$tmp_home" bash -c 'source "$1" && register_aihaus_target "$2"' _ "$gh_lib" "/tmp/fixture-repo-b" >/dev/null 2>&1 || true
+  HOME="$tmp_home" AIHAUS_SKIP_GLOBAL_HARNESS=1 bash -c 'source "$1" && register_aihaus_target "$2"' _ "$gh_lib" "/tmp/fixture-repo-c" >/dev/null 2>&1 || true
+  if [[ ! -f "$targets_file" ]]; then
+    issues+=(".targets: registry file not created at temp ~/.aihaus/.targets")
+  else
+    local line_count_a total_lines
+    line_count_a="$(grep -Fxc "/tmp/fixture-repo-a" "$targets_file" 2>/dev/null)" || true
+    [[ "${line_count_a:-0}" -eq 1 ]] || \
+      issues+=(".targets: append-dedupe broken — repo-a appears ${line_count_a:-0}x (expected 1)")
+    grep -Fxq "/tmp/fixture-repo-b" "$targets_file" 2>/dev/null || \
+      issues+=(".targets: second distinct repo not appended")
+    if grep -Fxq "/tmp/fixture-repo-c" "$targets_file" 2>/dev/null; then
+      issues+=(".targets: AIHAUS_SKIP_GLOBAL_HARNESS=1 did not skip enrollment (BR-U1)")
+    fi
+    total_lines="$(wc -l < "$targets_file" 2>/dev/null | tr -d ' ')" || true
+    [[ "${total_lines:-0}" -eq 2 ]] || \
+      issues+=(".targets: expected 2 lines (one per repo, deduped), found ${total_lines:-0}")
+  fi
+
+  rm -rf "$tmp_home" "$tmp_home2" "$tmp_home3" 2>/dev/null || true
+
+  # ---- (c) static wiring (both shells — BR-P3; F14 settings companion) ------
+  grep -Fq 'seed_global_harness' "${PACKAGE_ROOT}/scripts/install.sh" || \
+    issues+=("install.sh: seed_global_harness not wired")
+  grep -Fq -- '--no-global-harness' "${PACKAGE_ROOT}/scripts/install.sh" || \
+    issues+=("install.sh: --no-global-harness flag missing (BR-U1 leg 1)")
+  grep -Fq 'register_aihaus_target "${TARGET}"' "${PACKAGE_ROOT}/scripts/install.sh" || \
+    issues+=("install.sh: .targets enrollment not wired")
+  grep -Fq 'register_aihaus_target "${TARGET}"' "${PACKAGE_ROOT}/scripts/update.sh" || \
+    issues+=("update.sh: .targets enrollment not wired (F9 — pre-existing installs enroll on update)")
+  grep -Fq 'remove_global_harness' "${PACKAGE_ROOT}/scripts/uninstall.sh" || \
+    issues+=("uninstall.sh: GLOBAL-HARNESS purge not wired (BR-U1 leg 3)")
+  grep -Fq 'Ensure-GlobalHarness' "${PACKAGE_ROOT}/scripts/install.ps1" || \
+    issues+=("install.ps1: Ensure-GlobalHarness missing (BR-P3)")
+  grep -Fq 'NoGlobalHarness' "${PACKAGE_ROOT}/scripts/install.ps1" || \
+    issues+=("install.ps1: -NoGlobalHarness switch missing (BR-P3)")
+  grep -Fq 'Register-AihausTarget' "${PACKAGE_ROOT}/scripts/install.ps1" || \
+    issues+=("install.ps1: Register-AihausTarget missing (BR-P3)")
+  grep -Fq 'Register-AihausTarget' "${PACKAGE_ROOT}/scripts/update.ps1" || \
+    issues+=("update.ps1: Register-AihausTarget missing (BR-P3)")
+  grep -Fq 'Remove-GlobalHarness' "${PACKAGE_ROOT}/scripts/uninstall.ps1" || \
+    issues+=("uninstall.ps1: Remove-GlobalHarness missing (BR-P3)")
+  # Dogfood arm ordering: the seed must fire BEFORE the dogfood early exit
+  # (hole 9 is exactly the global-skills-only path).
+  awk '/^if is_dogfood_cwd; then$/,/^fi$/' "${PACKAGE_ROOT}/scripts/install.sh" | \
+    grep -Fq 'seed_global_harness' || \
+    issues+=("install.sh: dogfood arm exits without seeding GLOBAL-HARNESS (hole 9 open)")
+  # memory-read-audit.sh wired into BOTH settings templates (F14 companion;
+  # union-by-command merge makes the new entry update-safe — ADR-260514-B).
+  local tmpl
+  for tmpl in "${PACKAGE_ROOT}/.aihaus/templates/settings.local.json" "${PACKAGE_ROOT}/templates/settings.local.json"; do
+    grep -Fq 'memory-read-audit.sh' "$tmpl" 2>/dev/null || \
+      issues+=("settings template missing memory-read-audit.sh SubagentStop entry: ${tmpl#${repo_root}/}")
+  done
+
+  # ---- (d) feedback-export three-section contract ----------------------------
+  local proj fb_out rc
+  proj="$(_mktemp_dir feedback-export-proj)" || { _fail "$label" "mktemp failed (feedback arm)"; return; }
+  mkdir -p "${proj}/.aihaus/runtime"
+  fb_out="${proj}/.aihaus/runtime/evolution-export.md"
+  rc=0
+  CLAUDE_PROJECT_DIR="$proj" AIHAUS_HOME="$repo_root" bash "$shim" feedback export >/dev/null 2>&1 || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    issues+=("feedback export (empty sources) exited ${rc} (expected 0)")
+  elif [[ ! -f "$fb_out" ]]; then
+    issues+=("feedback export did not write .aihaus/runtime/evolution-export.md")
+  else
+    local section
+    for section in '## Gate-churn stats' '## Recurring warnings' '## Evolution proposals'; do
+      grep -Fq "$section" "$fb_out" || \
+        issues+=("feedback export: section '${section}' silently absent (strengthened AC)")
+    done
+    local none_count
+    none_count="$(grep -c '(none' "$fb_out" 2>/dev/null)" || true
+    [[ "${none_count:-0}" -ge 3 ]] || \
+      issues+=("feedback export: expected explicit (none) markers for all 3 empty sources, found ${none_count:-0}")
+  fi
+  # Populated sources must render (never silently absent / never stuck on (none)).
+  mkdir -p "${proj}/.claude/audit" "${proj}/.aihaus/milestones/M099-fixture/execution"
+  printf '{"hash":"fixture-hash","category":"compat","source_agent":"implementer","summary_representative":"fixture recurring warning row","recurrence_count":4,"first_seen_milestone":"M098","last_seen_milestone":"M099","warning_uuids":[],"schema_version":1}\n' \
+    > "${proj}/.claude/audit/warning-recurrence.jsonl"
+  printf '# Agent Evolution\n\n- proposal: fixture evolution row\n' \
+    > "${proj}/.aihaus/milestones/M099-fixture/execution/AGENT-EVOLUTION.md"
+  rc=0
+  CLAUDE_PROJECT_DIR="$proj" AIHAUS_HOME="$repo_root" bash "$shim" feedback export >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -eq 0 ]] || issues+=("feedback export (populated sources) exited ${rc}")
+  if command -v jq >/dev/null 2>&1; then
+    grep -Fq 'fixture recurring warning row' "$fb_out" 2>/dev/null || \
+      issues+=("feedback export: populated warning-recurrence row not rendered")
+  fi
+  grep -Fq 'AGENT-EVOLUTION.md' "$fb_out" 2>/dev/null || \
+    issues+=("feedback export: evolution proposal ledger not listed")
+  rm -rf "$proj" 2>/dev/null || true
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -6393,6 +6605,7 @@ check_settings_merge_matcher
 check_harness_byte_cap
 check_prefs_lock
 check_kanban_chokepoint
+check_global_harness_and_feedback
 
 printf "
 "

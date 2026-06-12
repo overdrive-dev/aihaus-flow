@@ -85,4 +85,46 @@ if [ -x "$AUTOCLOSE_HOOK" ]; then
   fi
 fi
 
+# --- M050/S08 (F12): native-scratch harvest — CANDIDATES ONLY (BR-P6) -------
+# Diffs each .claude/agent-memory/<name>/MEMORY.md (native CC subagent scratch)
+# against a last-seen snapshot and appends the changed content to
+# .aihaus/runtime/memory-candidates/<name>.md. The ORCHESTRATOR promotes
+# candidates via the memory-promotion ritual (protocols/kanban/
+# memory-promotion.md routes); NO hook writes tier-B committed memory.
+# .aihaus/runtime/ is gitignored — candidates never land in the repo history
+# from here. Fail-open on every path. Opt-out: AIHAUS_MEMORY_HARVEST=0.
+if [ "${AIHAUS_MEMORY_HARVEST:-1}" != "0" ]; then
+  AGENT_MEM_ROOT="$CLAUDE_PROJECT_DIR/.claude/agent-memory"
+  CAND_DIR="$CLAUDE_PROJECT_DIR/.aihaus/runtime/memory-candidates"
+  SNAP_DIR="$CAND_DIR/.last-seen"
+  if [ -d "$AGENT_MEM_ROOT" ] && [ -d "$CLAUDE_PROJECT_DIR/.aihaus" ]; then
+    mkdir -p "$CAND_DIR" "$SNAP_DIR" 2>/dev/null || true
+    for mem_file in "$AGENT_MEM_ROOT"/*/MEMORY.md; do
+      [ -f "$mem_file" ] || continue
+      agent_name="$(basename "$(dirname "$mem_file")")"
+      snap_file="$SNAP_DIR/${agent_name}.md"
+      cand_file="$CAND_DIR/${agent_name}.md"
+      # Unchanged since last harvest — skip.
+      if [ -f "$snap_file" ] && cmp -s "$mem_file" "$snap_file" 2>/dev/null; then
+        continue
+      fi
+      # Changed content: added lines vs the snapshot; whole file on first sight.
+      if [ -f "$snap_file" ]; then
+        changed="$(diff "$snap_file" "$mem_file" 2>/dev/null | sed -n 's/^> //p' || true)"
+      else
+        changed="$(cat "$mem_file" 2>/dev/null || true)"
+      fi
+      if [ -n "$(printf '%s' "$changed" | tr -d '[:space:]')" ]; then
+        {
+          printf '\n## Candidate %s (session %s)\n\n' "$(ts_iso)" "$SESSION_ID"
+          printf 'Source: .claude/agent-memory/%s/MEMORY.md — changed lines since last harvest. Promote via the memory-promotion ritual; hooks never write tier-B memory (F12 / BR-P6).\n\n' "$agent_name"
+          printf '%s\n' "$changed"
+        } >> "$cand_file" 2>/dev/null || true
+      fi
+      # Refresh the snapshot regardless (deletions also advance last-seen).
+      cp -f "$mem_file" "$snap_file" 2>/dev/null || true
+    done
+  fi
+fi
+
 exit 0

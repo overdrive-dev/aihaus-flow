@@ -53,7 +53,13 @@ Verbs:
                 ADR-260611-C): gate_events / planning_questions /
                 planning_answers rows. Gate validation is WARN-ONLY this cycle
                 (ADR-260611-D). Grammar: .aihaus/protocols/kanban/db-schema.md
-  update --all  Update all registered installs (requires Z9 registry)
+  feedback export
+                Produce .aihaus/runtime/evolution-export.md (M050/S08): gate-churn
+                stats (kanban.db gate_events) + recurring warnings
+                (warning-recurrence.jsonl) + evolution proposals
+                (milestones/*/execution/{AGENT,SKILL}-EVOLUTION.md). Sections
+                always present; empty sources carry explicit "(none)" markers.
+  update --all  Update all registered installs (~/.aihaus/.targets registry)
   self-update   Update the central aihaus clone from origin (requires Z9)
   --help, -h    Show this message
 EOF
@@ -620,6 +626,122 @@ _kanban() {
   esac
 }
 
+# ---------------------------------------------------------------------------
+# feedback (M050/S08) — evolution-feedback export. Produces
+# .aihaus/runtime/evolution-export.md with THREE sections, each ALWAYS
+# present (never silently absent): empty sources carry an explicit "(none —
+# <reason>)" marker. Read-only over every source (BR-P5 — kanban.db,
+# warning-recurrence.jsonl and the EVOLUTION ledgers keep their own writers).
+#   1. Gate-churn stats        — kanban.db gate_events (sqlite3 + DB required)
+#   2. Recurring warnings      — .claude/audit/warning-recurrence.jsonl
+#   3. Evolution proposals     — .aihaus/milestones/*/execution/{AGENT,SKILL}-EVOLUTION.md
+# ---------------------------------------------------------------------------
+_feedback_export() {
+  local repo out ts
+  repo="${CLAUDE_PROJECT_DIR:-$PWD}"
+  out="${repo}/.aihaus/runtime/evolution-export.md"
+  mkdir -p "$(dirname "$out")" 2>/dev/null || {
+    echo "aihaus feedback export: cannot create $(dirname "$out")" >&2
+    exit 1
+  }
+  ts="$(date -u +%FT%TZ 2>/dev/null || echo "1970-01-01T00:00:00Z")"
+
+  # --- Section 1: gate-churn stats (kanban.db gate_events) -------------------
+  local gate_section="(none — no kanban.db at .aihaus/state/kanban.db)"
+  local db="${repo}/.aihaus/state/kanban.db"
+  if [[ -f "$db" ]]; then
+    if command -v sqlite3 >/dev/null 2>&1; then
+      local gate_rows totals
+      gate_rows="$(sqlite3 -separator ' | ' "$db" \
+        "SELECT stage, verdict, COUNT(*) FROM gate_events GROUP BY stage, verdict ORDER BY stage, verdict;" 2>/dev/null || true)"
+      if [[ -n "$gate_rows" ]]; then
+        totals="$(sqlite3 -separator ' ' "$db" \
+          "SELECT COUNT(*), COUNT(DISTINCT task_id) FROM gate_events;" 2>/dev/null || true)"
+        gate_section="| stage | verdict | count |
+|-------|---------|-------|
+$(printf '%s\n' "$gate_rows" | awk -F' \\| ' '{printf "| %s | %s | %s |\n", $1, $2, $3}')
+
+Totals: ${totals%% *} gate event(s) across ${totals##* } distinct task(s)."
+      else
+        gate_section="(none — kanban.db present but gate_events is empty)"
+      fi
+    else
+      gate_section="(none — kanban.db present but sqlite3 unavailable)"
+    fi
+  fi
+
+  # --- Section 2: recurring warnings (warning-recurrence.jsonl) --------------
+  local warn_section="(none — no .claude/audit/warning-recurrence.jsonl)"
+  local recurrence_log="${repo}/.claude/audit/warning-recurrence.jsonl"
+  if [[ -f "$recurrence_log" ]]; then
+    if command -v jq >/dev/null 2>&1; then
+      local warn_rows
+      warn_rows="$(jq -r '
+        "- [" + (.category // "unknown") + "] " + (.source_agent // "unknown") +
+        " (x" + ((.recurrence_count // 0) | tostring) + ", " +
+        (.first_seen_milestone // "?") + " -> " + (.last_seen_milestone // "?") + "): " +
+        ((.summary_representative // "") | .[0:200])
+      ' "$recurrence_log" 2>/dev/null || true)"
+      if [[ -n "$warn_rows" ]]; then
+        warn_section="$warn_rows"
+      else
+        warn_section="(none — warning-recurrence.jsonl present but empty)"
+      fi
+    else
+      # jq-less fallback: surface the raw rows rather than dropping the section.
+      warn_section="jq unavailable — raw rows (first 50):
+
+\`\`\`
+$(head -50 "$recurrence_log" 2>/dev/null || true)
+\`\`\`"
+    fi
+  fi
+
+  # --- Section 3: evolution proposals (milestone EVOLUTION ledgers) ----------
+  local evo_section="" evo_file evo_rel evo_lines
+  for evo_file in "${repo}"/.aihaus/milestones/*/execution/AGENT-EVOLUTION.md \
+                  "${repo}"/.aihaus/milestones/*/execution/SKILL-EVOLUTION.md; do
+    [[ -f "$evo_file" ]] || continue
+    evo_rel="${evo_file#"${repo}"/}"
+    evo_lines="$(wc -l < "$evo_file" 2>/dev/null | tr -d ' ' || echo 0)"
+    evo_section="${evo_section}- \`${evo_rel}\` (${evo_lines} lines)
+"
+  done
+  [[ -z "$evo_section" ]] && evo_section="(none — no .aihaus/milestones/*/execution/{AGENT,SKILL}-EVOLUTION.md found)"
+
+  cat > "$out" <<EXPORT_EOF
+# Evolution export (aihaus feedback export, M050/S08)
+
+Generated: ${ts}
+Repo: ${repo}
+Sources are read-only; this file is regenerated on every run.
+
+## Gate-churn stats
+
+${gate_section}
+
+## Recurring warnings
+
+${warn_section}
+
+## Evolution proposals
+
+${evo_section}
+EXPORT_EOF
+  echo "feedback: wrote ${out}"
+  exit 0
+}
+
+_feedback() {
+  local sub="${1:-}"; shift || true
+  case "${sub}" in
+    export) _feedback_export "$@" ;;
+    *)
+      echo 'aihaus feedback: unknown sub-verb. Usage: aihaus feedback export' >&2
+      exit 2 ;;
+  esac
+}
+
 VERB="${1:-}"; shift || true
 case "${VERB}" in --help|-h|"") _help; exit 0 ;; esac
 
@@ -633,7 +755,7 @@ case "${VERB}" in
     if [[ "${1:-}" == "--all" ]]; then shift
       reg="$HOME/.aihaus/.targets"
       if [[ ! -f "${reg}" ]]; then
-        echo "aihaus update --all: registry not yet populated (~/.aihaus/.targets; written by Z9 on next install)." >&2
+        echo "aihaus update --all: registry not yet populated (~/.aihaus/.targets; written by install/update since M050/S08 — run an install or update on a repo first)." >&2
         exit 1; fi
       rc=0
       while IFS= read -r t || [[ -n "${t}" ]]; do
@@ -649,6 +771,8 @@ case "${VERB}" in
     _prefs "$@" ;;
   kanban)
     _kanban "$@" ;;
+  feedback)
+    _feedback "$@" ;;
   self-update)
     _dogfood_dirty
     exec bash "${AIHAUS_HOME}/pkg/scripts/update.sh" --self "$@" ;;

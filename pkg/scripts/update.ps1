@@ -1354,6 +1354,36 @@ function Refresh-ClaudeContextBridge {
 }
 Refresh-ClaudeContextBridge
 
+# ---- ~\.aihaus\.targets enrollment (M050/S08, hole 8 / F9) --------------------
+# Pre-existing installs enroll on their next update: append-dedupe this repo's
+# absolute path to ~\.aihaus\.targets (consumed by `aihaus update --all`).
+# Honors AIHAUS_SKIP_GLOBAL_HARNESS=1 (BR-U1). PowerShell parity of
+# pkg/scripts/lib/global-harness.sh register_aihaus_target (BR-P3).
+function Register-AihausTarget {
+    param([string]$RepoPath)
+    if ([string]::IsNullOrWhiteSpace($RepoPath)) { return }
+    if ($env:AIHAUS_SKIP_GLOBAL_HARNESS -eq '1') {
+        Write-Host "  targets: enrollment skipped (AIHAUS_SKIP_GLOBAL_HARNESS=1)"
+        return
+    }
+    try {
+        $regDir = Join-Path $env:USERPROFILE '.aihaus'
+        if (-not (Test-Path -LiteralPath $regDir)) {
+            New-Item -ItemType Directory -Path $regDir -Force | Out-Null
+        }
+        $reg = Join-Path $regDir '.targets'
+        if (Test-Path -LiteralPath $reg) {
+            $existing = @(Get-Content -LiteralPath $reg -ErrorAction SilentlyContinue)
+            if ($existing -contains $RepoPath) { return }
+        }
+        [System.IO.File]::AppendAllText($reg, $RepoPath + "`n")
+        Write-Host "  targets: registered $RepoPath in ~\.aihaus\.targets (consumed by 'aihaus update --all')"
+    } catch {
+        # Non-fatal: registry enrollment is best-effort.
+    }
+}
+Register-AihausTarget -RepoPath $Target
+
 # ---- Summary -----------------------------------------------------------------
 Write-Host ""
 Write-Host "Updated $countSkills skills, $countAgents agents, $countHooks hooks"
