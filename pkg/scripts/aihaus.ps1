@@ -46,7 +46,13 @@ Verbs:
                 ADR-260611-C): gate_events / planning_questions /
                 planning_answers rows. Gate validation is WARN-ONLY this cycle
                 (ADR-260611-D). Grammar: .aihaus/protocols/kanban/db-schema.md
-  update --all  Update all registered installs (requires Z9 registry)
+  feedback export
+                Produce .aihaus/runtime/evolution-export.md (M050/S08): gate-churn
+                stats (kanban.db gate_events) + recurring warnings
+                (warning-recurrence.jsonl) + evolution proposals
+                (milestones/*/execution/{AGENT,SKILL}-EVOLUTION.md). Sections
+                always present; empty sources carry explicit "(none)" markers.
+  update --all  Update all registered installs (~\.aihaus\.targets registry)
   self-update   Update the central aihaus clone from origin (requires Z9)
   --help, -h    Show this message
 '@ | Write-Host }
@@ -546,6 +552,127 @@ function Invoke-Kanban([string]$HomePath,[string[]]$KanArgs) {
     exit 0
 }
 
+# ---------------------------------------------------------------------------
+# feedback (M050/S08) -- evolution-feedback export. Produces
+# .aihaus/runtime/evolution-export.md with THREE sections, each ALWAYS present
+# (never silently absent): empty sources carry an explicit "(none -- <reason>)"
+# marker. Read-only over every source (BR-P5). BR-P3 parity with the bash shim
+# _feedback()/_feedback_export().
+# ---------------------------------------------------------------------------
+function Invoke-Feedback([string]$HomePath,[string[]]$FbArgs) {
+    $sub = if ($FbArgs -and $FbArgs.Count -ge 1) { $FbArgs[0] } else { "" }
+    if ($sub -ne "export") {
+        Write-Host 'aihaus feedback: unknown sub-verb. Usage: aihaus feedback export' -ForegroundColor Red
+        exit 2
+    }
+    $repo = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
+    $outDir = Join-Path $repo '.aihaus\runtime'
+    $out = Join-Path $outDir 'evolution-export.md'
+    try {
+        if (-not (Test-Path -LiteralPath $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
+    } catch {
+        Write-Host "aihaus feedback export: cannot create $outDir" -ForegroundColor Red
+        exit 1
+    }
+    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+
+    # --- Section 1: gate-churn stats (kanban.db gate_events) ------------------
+    $gateSection = "(none -- no kanban.db at .aihaus/state/kanban.db)"
+    $db = Join-Path $repo '.aihaus\state\kanban.db'
+    if (Test-Path -LiteralPath $db) {
+        $sqlite = Get-Command sqlite3 -ErrorAction SilentlyContinue
+        if ($sqlite) {
+            $gateRows = @()
+            try {
+                $gateRows = @(& $sqlite.Source -separator ' | ' $db "SELECT stage, verdict, COUNT(*) FROM gate_events GROUP BY stage, verdict ORDER BY stage, verdict;" 2>$null | Where-Object { $_ })
+            } catch { $gateRows = @() }
+            if ($gateRows.Count -gt 0) {
+                $totals = ""
+                try { $totals = (& $sqlite.Source -separator ' ' $db "SELECT COUNT(*), COUNT(DISTINCT task_id) FROM gate_events;" 2>$null | Out-String).Trim() } catch { $totals = "" }
+                $tableLines = @('| stage | verdict | count |', '|-------|---------|-------|')
+                foreach ($row in $gateRows) {
+                    $parts = $row -split ' \| '
+                    if ($parts.Count -ge 3) { $tableLines += ('| ' + $parts[0] + ' | ' + $parts[1] + ' | ' + $parts[2] + ' |') }
+                }
+                $totalEvents = ($totals -split ' ')[0]
+                $totalTasks = ($totals -split ' ')[-1]
+                $gateSection = ($tableLines -join "`n") + "`n`nTotals: $totalEvents gate event(s) across $totalTasks distinct task(s)."
+            } else {
+                $gateSection = "(none -- kanban.db present but gate_events is empty)"
+            }
+        } else {
+            $gateSection = "(none -- kanban.db present but sqlite3 unavailable)"
+        }
+    }
+
+    # --- Section 2: recurring warnings (warning-recurrence.jsonl) -------------
+    $warnSection = "(none -- no .claude/audit/warning-recurrence.jsonl)"
+    $recurrenceLog = Join-Path $repo '.claude\audit\warning-recurrence.jsonl'
+    if (Test-Path -LiteralPath $recurrenceLog) {
+        $warnLines = @()
+        foreach ($line in (Get-Content -LiteralPath $recurrenceLog -ErrorAction SilentlyContinue)) {
+            if (-not $line.Trim()) { continue }
+            try {
+                $rowObj = $line | ConvertFrom-Json
+                $cat = if ($rowObj.category) { $rowObj.category } else { "unknown" }
+                $agent = if ($rowObj.source_agent) { $rowObj.source_agent } else { "unknown" }
+                $cnt = if ($rowObj.recurrence_count) { $rowObj.recurrence_count } else { 0 }
+                $first = if ($rowObj.first_seen_milestone) { $rowObj.first_seen_milestone } else { "?" }
+                $last = if ($rowObj.last_seen_milestone) { $rowObj.last_seen_milestone } else { "?" }
+                $summary = if ($rowObj.summary_representative) { $rowObj.summary_representative } else { "" }
+                if ($summary.Length -gt 200) { $summary = $summary.Substring(0, 200) }
+                $warnLines += ("- [$cat] $agent (x$cnt, $first -> $last): $summary")
+            } catch { }
+        }
+        if ($warnLines.Count -gt 0) {
+            $warnSection = $warnLines -join "`n"
+        } else {
+            $warnSection = "(none -- warning-recurrence.jsonl present but empty)"
+        }
+    }
+
+    # --- Section 3: evolution proposals (milestone EVOLUTION ledgers) ---------
+    $evoLines = @()
+    $msRoot = Join-Path $repo '.aihaus\milestones'
+    if (Test-Path -LiteralPath $msRoot) {
+        foreach ($evoName in @('AGENT-EVOLUTION.md','SKILL-EVOLUTION.md')) {
+            # NOTE: wildcard goes in -Path (not -Filter) -- PS 5.1 returns 0 results
+            # when -Filter is combined with a wildcarded directory path.
+            foreach ($evoFile in (Get-ChildItem -Path (Join-Path $msRoot "*\execution\$evoName") -File -ErrorAction SilentlyContinue)) {
+                $rel = $evoFile.FullName.Substring($repo.Length).TrimStart('\','/') -replace '\\','/'
+                $lineCount = 0
+                try { $lineCount = @(Get-Content -LiteralPath $evoFile.FullName -ErrorAction SilentlyContinue).Count } catch { $lineCount = 0 }
+                $evoLines += ('- `' + $rel + '` (' + $lineCount + ' lines)')
+            }
+        }
+    }
+    $evoSection = if ($evoLines.Count -gt 0) { ($evoLines | Sort-Object) -join "`n" } else { "(none -- no .aihaus/milestones/*/execution/{AGENT,SKILL}-EVOLUTION.md found)" }
+
+    $doc = @"
+# Evolution export (aihaus feedback export, M050/S08)
+
+Generated: $ts
+Repo: $repo
+Sources are read-only; this file is regenerated on every run.
+
+## Gate-churn stats
+
+$gateSection
+
+## Recurring warnings
+
+$warnSection
+
+## Evolution proposals
+
+$evoSection
+"@
+    $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+    [System.IO.File]::WriteAllText($out, ($doc -replace "`r`n", "`n") + "`n", $utf8NoBom)
+    Write-Host "feedback: wrote $out"
+    exit 0
+}
+
 if ($Verb -in @("--help","-h","")) { Show-Help; exit 0 }
 $h=Resolve-Home
 if (-not $h) { Write-Host "aihaus: package not found. Set AIHAUS_HOME or reinstall." -ForegroundColor Red; exit 1 }
@@ -555,7 +682,7 @@ switch ($Verb) {
   "update" {
       if ($Rest -and $Rest[0] -eq "--all") {
           $reg=Join-Path $env:USERPROFILE ".aihaus\.targets"
-          if (!(Test-Path $reg)) { Write-Host "aihaus update --all: registry not yet populated (Z9 writes on next install)." -ForegroundColor Yellow; exit 1 }
+          if (!(Test-Path $reg)) { Write-Host "aihaus update --all: registry not yet populated (~\.aihaus\.targets; written by install/update since M050/S08 -- run an install or update on a repo first)." -ForegroundColor Yellow; exit 1 }
           $rc=0; $extra=if($Rest.Count -gt 1){$Rest[1..($Rest.Count-1)]}else{@()}
           foreach ($t in (Get-Content -LiteralPath $reg)) { if(!$t.Trim()){continue}
               Write-Host "aihaus update: $t"
@@ -565,6 +692,7 @@ switch ($Verb) {
   "memory"      { Invoke-Memory $h $Rest }
   "prefs"       { Invoke-Prefs $h $Rest }
   "kanban"      { Invoke-Kanban $h $Rest }
+  "feedback"    { Invoke-Feedback $h $Rest }
   "self-update" { Test-DogfoodDirty; Invoke-Sh (Join-Path $h "pkg\scripts\update.sh") (Join-Path $h "pkg\scripts\update.ps1") (@("--self")+$Rest) }
   default       { Write-Host "aihaus: unknown verb '$Verb'" -ForegroundColor Red; Write-Host "Run 'aihaus --help' for usage." -ForegroundColor Red; exit 2 }
 }

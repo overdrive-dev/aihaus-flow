@@ -18,6 +18,7 @@ param(
     [switch]$Update,
     [switch]$Force,
     [switch]$ForceProjectSkills,
+    [switch]$NoGlobalHarness,
     [switch]$Help
 )
 
@@ -30,7 +31,7 @@ $DspMinVersion = '2.1.126'
 
 function Show-Usage {
     @'
-Usage: install.ps1 [-Target <path>] [-Package <path>] [-Copy] [-Update] [-Force] [-ForceProjectSkills]
+Usage: install.ps1 [-Target <path>] [-Package <path>] [-Copy] [-Update] [-Force] [-ForceProjectSkills] [-NoGlobalHarness]
 
 Installs aihaus into a target git repository (Claude Code only).
 
@@ -42,6 +43,9 @@ Options:
   -Force                Overwrite existing .aihaus/ without prompting
   -ForceProjectSkills   Always create .claude\skills junction even when
                         user-global skills (~/.claude/skills/aih-init) exist
+  -NoGlobalHarness      Skip seeding the AIHAUS:GLOBAL-HARNESS block into
+                        ~\.claude\CLAUDE.md (env: AIHAUS_SKIP_GLOBAL_HARNESS=1,
+                        which also skips ~\.aihaus\.targets enrollment -- BR-U1)
   -Help                 Show this message
 '@ | Write-Host
 }
@@ -719,6 +723,100 @@ function Ensure-TierCPreferences {
 }
 
 # ============================================================================
+# M050/S08 (ADR-260611-E section 2 / BR-U1): GLOBAL-HARNESS seed +
+# ~\.aihaus\.targets registry. PowerShell parity of
+# pkg/scripts/lib/global-harness.sh (BR-P3 -- same PR, same semantics).
+# Seed: idempotent ensure_block() shape on ~\.claude\CLAUDE.md -- create file
+# if absent; span-replace when markers exist; append otherwise. Content =
+# autonomy-law digest (condensed from pkg/.aihaus/protocols/harness.md, NOT
+# the whole file) + overlay nudge + tier-C pointer. Default-ON; consent
+# triple = -NoGlobalHarness flag + AIHAUS_SKIP_GLOBAL_HARNESS=1 env +
+# uninstall.ps1 -PurgeUserGlobal marker-block removal (+ release-note line).
+# ============================================================================
+function Get-GlobalHarnessBlock {
+    @'
+<!-- AIHAUS:GLOBAL-HARNESS-START -->
+## aihaus harness (global digest)
+
+- Decide from the repo's business-rules ledger (`.aihaus/memory/workflows/business-rules.md`): **covered** — decide alone, cite the BR-id when behavior is affected; **gap** — the only TRUE blocker: ask **once**, the answer **becomes a rule**; **conflict** — surface it, ask which wins, record the resolution as a rule; **mechanics** — decide alone, no citation.
+- Autonomy = contract coverage. No option menus for covered decisions.
+- Memory tiers: A = code/concept graph (`aihaus memory ... --json`, retrieval only); B = project memory (source of truth: ledger apex + decisions.md + knowledge.md + project.md); C = global user preferences at `~/.aihaus/memory/user/preferences.md` (write only via `aihaus prefs add`). Repo overrides global on conflict.
+- Stage gates record one verdict — `PASS|SKIPPED|BLOCKED-TO-PLANNING|BLOCKED` — plus warn-only `rules_cited`.
+- Repo without an aihaus overlay (no `.aihaus/`)? Run `/aih-install` to enable per-repo memory + enforcement.
+- Full harness (canonical when installed): `.aihaus/protocols/harness.md`. Seeded by aihaus install; removed by `uninstall.sh --purge-user-global`.
+<!-- AIHAUS:GLOBAL-HARNESS-END -->
+'@
+}
+
+function Ensure-GlobalHarness {
+    if ($NoGlobalHarness -or $env:AIHAUS_SKIP_GLOBAL_HARNESS -eq '1') {
+        Write-Host "  global-harness: seed skipped (-NoGlobalHarness / AIHAUS_SKIP_GLOBAL_HARNESS=1)"
+        return
+    }
+    try {
+        $claudeMd = Join-Path $env:USERPROFILE '.claude\CLAUDE.md'
+        $claudeDir = Split-Path -Parent $claudeMd
+        if (-not (Test-Path -LiteralPath $claudeDir)) {
+            New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+        }
+        $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+        $block = (Get-GlobalHarnessBlock) -replace "`r`n", "`n"
+        if (-not (Test-Path -LiteralPath $claudeMd)) {
+            [System.IO.File]::WriteAllText($claudeMd, $block + "`n", $utf8NoBom)
+            Write-Host "  global-harness: created ~\.claude\CLAUDE.md (AIHAUS:GLOBAL-HARNESS block)"
+            return
+        }
+        $content = [System.IO.File]::ReadAllText($claudeMd)
+        $startMarker = '<!-- AIHAUS:GLOBAL-HARNESS-START -->'
+        $endMarker = '<!-- AIHAUS:GLOBAL-HARNESS-END -->'
+        $startIdx = $content.IndexOf($startMarker)
+        $endIdx = $content.IndexOf($endMarker)
+        if ($startIdx -ge 0 -and $endIdx -ge 0) {
+            # Span-replace between markers (ensure_block shape) -- idempotent refresh.
+            $newContent = $content.Substring(0, $startIdx) + $block + $content.Substring($endIdx + $endMarker.Length)
+            if ($newContent -ne $content) {
+                [System.IO.File]::WriteAllText($claudeMd, $newContent, $utf8NoBom)
+                Write-Host "  global-harness: refreshed AIHAUS:GLOBAL-HARNESS block in ~\.claude\CLAUDE.md"
+            } else {
+                Write-Host "  global-harness: ~\.claude\CLAUDE.md block up to date (no-op)"
+            }
+        } else {
+            [System.IO.File]::AppendAllText($claudeMd, "`n`n" + $block + "`n", $utf8NoBom)
+            Write-Host "  global-harness: appended AIHAUS:GLOBAL-HARNESS block to ~\.claude\CLAUDE.md"
+        }
+    } catch {
+        Write-Host "  warn: global-harness seed failed ($($_.Exception.Message)) -- non-fatal" -ForegroundColor Yellow
+    }
+}
+
+# Register-AihausTarget -- APPEND-dedupe one absolute repo path per line to
+# ~\.aihaus\.targets (M050/S08, hole 8 / F9; consumed by `aihaus update --all`).
+# Honors AIHAUS_SKIP_GLOBAL_HARNESS=1 (BR-U1).
+function Register-AihausTarget {
+    param([string]$RepoPath)
+    if ([string]::IsNullOrWhiteSpace($RepoPath)) { return }
+    if ($env:AIHAUS_SKIP_GLOBAL_HARNESS -eq '1') {
+        Write-Host "  targets: enrollment skipped (AIHAUS_SKIP_GLOBAL_HARNESS=1)"
+        return
+    }
+    try {
+        $regDir = Join-Path $env:USERPROFILE '.aihaus'
+        if (-not (Test-Path -LiteralPath $regDir)) {
+            New-Item -ItemType Directory -Path $regDir -Force | Out-Null
+        }
+        $reg = Join-Path $regDir '.targets'
+        if (Test-Path -LiteralPath $reg) {
+            $existing = @(Get-Content -LiteralPath $reg -ErrorAction SilentlyContinue)
+            if ($existing -contains $RepoPath) { return }
+        }
+        [System.IO.File]::AppendAllText($reg, $RepoPath + "`n")
+        Write-Host "  targets: registered $RepoPath in ~\.aihaus\.targets (consumed by 'aihaus update --all')"
+    } catch {
+        # Non-fatal: registry enrollment is best-effort.
+    }
+}
+
+# ============================================================================
 # V5 (M022/Z4): Dogfood mode check -- I-04, L9
 # Must run BEFORE per-repo install logic. If we are inside the aihaus package
 # directory, emit a one-liner and return. Never git-pull. Never self-junction.
@@ -727,7 +825,12 @@ function Ensure-TierCPreferences {
 if (Test-DogfoodCwd) {
     Write-Host "info: you are inside the aihaus package; run 'aihaus self-update' to refresh from origin"
     # Still install user-global skills (cwd IS the pkg clone).
-    $resolvedHome = $PkgRoot
+    # M050/S08 (Concern-B fix extended to the dogfood arm): AIHAUS_HOME is the
+    # REPO ROOT containing pkg\, not $PkgRoot (= repo-root\pkg -- would resolve
+    # skills at repo-root\pkg\pkg\.aihaus\skills, never exists: Get-ChildItem
+    # threw under $ErrorActionPreference='Stop' and the arm died BEFORE the
+    # registry write + tier-C seed + GLOBAL-HARNESS seed). Mirrors M024/S02.
+    $resolvedHome = (Resolve-Path (Join-Path $PkgRoot '..')).Path
     Write-Host ""
     Write-Host "  installing user-global skills..."
     Install-UserGlobalSkills -AihausHome $resolvedHome
@@ -741,6 +844,9 @@ if (Test-DogfoodCwd) {
     Write-Host "  registry: $env:USERPROFILE\.aihaus\.install-source -> $resolvedHome"
     # M050/S06: tier-C seed on the global-bootstrap arm (before the dogfood exit).
     Ensure-TierCPreferences
+    # M050/S08 (hole 9, BR-U1): GLOBAL-HARNESS seed on the global-bootstrap arm --
+    # global-skills-only installs must not run with zero harness.
+    Ensure-GlobalHarness
     Write-Host ""
     Write-Host "aihaus user-global skills installed (dogfood mode; per-repo overlay skipped)."
     exit 0
@@ -1562,6 +1668,15 @@ if (-not $Update) {
 # Step 11.5: tier-C global user-preferences seed (M050/S06, ADR-260611-E) --
 # per-repo arm call site (the dogfood arm seeds + exits earlier).
 Ensure-TierCPreferences
+
+# Step 11.6: GLOBAL-HARNESS seed (M050/S08, ADR-260611-E section 2 / BR-U1) --
+# per-repo arm call site (the dogfood arm seeds + exits earlier; each
+# invocation hits exactly one arm).
+Ensure-GlobalHarness
+
+# Step 11.7: ~\.aihaus\.targets enrollment (M050/S08, hole 8 / F9) --
+# append-dedupe this repo's absolute path; consumed by `aihaus update --all`.
+Register-AihausTarget -RepoPath $Target
 
 # Step 12: idempotent .gitignore injection (soft-fail per LD-3)
 # Manual fallback: pkg\.aihaus\templates\gitignore-fragment

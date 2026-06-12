@@ -35,6 +35,9 @@ Options:
                         Also purges tier-C global user preferences (M050/S06,
                         ADR-260611-E): ~\.aihaus\memory\user\ and the prefs
                         audit JSONL ~\.aihaus\state\prefs-audit.jsonl.
+                        Also removes the AIHAUS:GLOBAL-HARNESS marker block from
+                        ~\.claude\CLAUDE.md (M050/S08, BR-U1 -- only the block,
+                        never the user's other content).
   -Help                 Show this message
 '@ | Write-Host
 }
@@ -269,10 +272,49 @@ function Invoke-PurgeTierC {
     $script:Touched = $true
 }
 
+# ---------------------------------------------------------------------------
+# GLOBAL-HARNESS purge (M050/S08, BR-U1 leg 3): strip ONLY the
+# AIHAUS:GLOBAL-HARNESS marker span from ~\.claude\CLAUDE.md -- never the
+# user's other content. Deletes the file only when nothing but whitespace
+# remains (i.e. the seed was the entire file). PowerShell parity of
+# pkg/scripts/lib/global-harness.sh remove_global_harness (BR-P3).
+# ---------------------------------------------------------------------------
+function Remove-GlobalHarness {
+    $claudeMd = Join-Path $env:USERPROFILE '.claude\CLAUDE.md'
+    if (-not (Test-Path -LiteralPath $claudeMd)) {
+        Write-Host "  global-harness: nothing to remove"
+        return
+    }
+    try {
+        $content = [System.IO.File]::ReadAllText($claudeMd)
+        $startMarker = '<!-- AIHAUS:GLOBAL-HARNESS-START -->'
+        $endMarker = '<!-- AIHAUS:GLOBAL-HARNESS-END -->'
+        $startIdx = $content.IndexOf($startMarker)
+        $endIdx = $content.IndexOf($endMarker)
+        if ($startIdx -lt 0 -or $endIdx -lt 0) {
+            Write-Host "  global-harness: nothing to remove"
+            return
+        }
+        $newContent = $content.Substring(0, $startIdx) + $content.Substring($endIdx + $endMarker.Length)
+        if ([string]::IsNullOrWhiteSpace($newContent)) {
+            Remove-Item -Force -LiteralPath $claudeMd
+            Write-Host "  removed user-global: ~\.claude\CLAUDE.md (file contained only the GLOBAL-HARNESS block)"
+        } else {
+            $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+            [System.IO.File]::WriteAllText($claudeMd, $newContent, $utf8NoBom)
+            Write-Host "  removed user-global: AIHAUS:GLOBAL-HARNESS block from ~\.claude\CLAUDE.md (other content preserved)"
+        }
+        $script:Touched = $true
+    } catch {
+        Write-Host "  warn: global-harness removal failed ($($_.Exception.Message)) -- non-fatal" -ForegroundColor Yellow
+    }
+}
+
 # Invoke user-global purge if flag was set.
 if ($PurgeUserGlobal) {
     Invoke-PurgeUserGlobal
     Invoke-PurgeTierC
+    Remove-GlobalHarness
 }
 
 # Settings cleanup: only remove keys listed in _aihaus_managed marker
