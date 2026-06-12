@@ -48,6 +48,11 @@ Verbs:
                 Append a global user preference (tier C, M050/S06) to
                 ~/.aihaus/memory/user/preferences.md — the SOLE write path
                 (ADR-260611-C). Topics: workflow|style|tooling|communication|other
+  kanban gate|question|answer
+                Sanctioned write path for .aihaus/state/kanban.db (M050/S07,
+                ADR-260611-C): gate_events / planning_questions /
+                planning_answers rows. Gate validation is WARN-ONLY this cycle
+                (ADR-260611-D). Grammar: .aihaus/protocols/kanban/db-schema.md
   update --all  Update all registered installs (requires Z9 registry)
   self-update   Update the central aihaus clone from origin (requires Z9)
   --help, -h    Show this message
@@ -363,6 +368,258 @@ _prefs() {
   esac
 }
 
+# ---------------------------------------------------------------------------
+# kanban (M050/S07, ADR-260611-C) — the sanctioned write path for
+# .aihaus/state/kanban.db (gate_events / planning_questions / planning_answers).
+# The verdict 4-enum + rules_cited grammar are NORMATIVE in
+# .aihaus/protocols/kanban/db-schema.md; the citation obligation itself is the
+# harness gate law (protocols/harness.md §Gates) — cited here, not restated.
+# Gate validation is WARN-ONLY this cycle (ADR-260611-D): malformed shape ⇒
+# stderr warn + "warn-allow" audit row + exit 0 — never a block. Every decision
+# path (allow / warn-allow / bypass) emits its row BEFORE exiting
+# (calibrate-guard decision-ladder shape; bash-guard soft-warn shape).
+# .claude/audit/rule-cite.jsonl — THIS wrapper is its SOLE writer (BR-P5),
+# rows keyed (task_id, stage, created_at). gate_events schema UNTOUCHED
+# (BR-P10): rules_cited persists JSONL-only until the enforce-flip ADR.
+# Audited validation bypass: AIHAUS_KANBAN_GATE_VALIDATE=0 (BR-P4, never silent).
+# ---------------------------------------------------------------------------
+_KANBAN_TS() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
+
+_kanban_repo() { printf '%s' "${CLAUDE_PROJECT_DIR:-$PWD}"; }
+
+_kanban_require_sqlite3() {
+  command -v sqlite3 >/dev/null 2>&1 && return 0
+  echo "aihaus kanban: sqlite3 not found — the kanban DB requires it (same prerequisite as init-kanban-db.sh). Install sqlite3 and retry." >&2
+  exit 127
+}
+
+_kanban_db_ensure() {  # _kanban_db_ensure <db_path> — same mkdir guard as the memory db-pin
+  local db="$1" repo schema
+  mkdir -p "$(dirname "$db")" 2>/dev/null || true
+  [[ -f "$db" ]] && return 0
+  repo="$(_kanban_repo)"
+  for schema in "${repo}/.aihaus/protocols/kanban/schema.sql" \
+                "${AIHAUS_HOME}/pkg/.aihaus/protocols/kanban/schema.sql"; do
+    if [[ -f "$schema" ]]; then
+      sqlite3 "$db" < "$schema" 2>/dev/null || true
+      return 0
+    fi
+  done
+  echo "aihaus kanban: no kanban.db at ${db} and no packaged schema.sql found — run .aihaus/protocols/kanban/init-kanban-db.sh first." >&2
+  exit 1
+}
+
+_kanban_sql() { printf '%s' "$1" | sed "s/'/''/g"; }
+
+_kanban_json_str() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+_kanban_next_id() {  # _kanban_next_id <db> <table> <prefix> — max-scan allocation
+  local db="$1" table="$2" prefix="$3" max
+  max="$(sqlite3 "$db" "SELECT COALESCE(MAX(CAST(substr(id, $(( ${#prefix} + 1 ))) AS INTEGER)), 0) FROM ${table} WHERE id GLOB '${prefix}[0-9]*';" 2>/dev/null | tr -d '[:space:]' || true)"
+  case "$max" in (''|*[!0-9]*) max=0 ;; esac
+  printf '%s' $(( max + 1 ))
+}
+
+_kanban_gate() {
+  local task="" stage="" verdict="" rules="" reason="" evidence="" db=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --task)       task="${2:-}"; shift 2 || break ;;
+      --task=*)     task="${1#--task=}"; shift ;;
+      --stage)      stage="${2:-}"; shift 2 || break ;;
+      --stage=*)    stage="${1#--stage=}"; shift ;;
+      --verdict)    verdict="${2:-}"; shift 2 || break ;;
+      --verdict=*)  verdict="${1#--verdict=}"; shift ;;
+      --rules)      rules="${2:-}"; shift 2 || break ;;
+      --rules=*)    rules="${1#--rules=}"; shift ;;
+      --reason)     reason="${2:-}"; shift 2 || break ;;
+      --reason=*)   reason="${1#--reason=}"; shift ;;
+      --evidence)   evidence="${2:-}"; shift 2 || break ;;
+      --evidence=*) evidence="${1#--evidence=}"; shift ;;
+      --db)         db="${2:-}"; shift 2 || break ;;
+      --db=*)       db="${1#--db=}"; shift ;;
+      *)            shift ;;
+    esac
+  done
+  if [[ -z "$task" || -z "$stage" || -z "$verdict" ]]; then
+    echo 'aihaus kanban gate: --task <id> --stage <stage> --verdict "<verdict>" required ([--rules <csv>] [--reason <text>] [--evidence <path>] [--db <path>])' >&2
+    exit 2
+  fi
+
+  # --- Shape validation (WARN-ONLY; grammar normative in db-schema.md) ------
+  local validation="ok" warn_reason="" decision="allow" opt_out="false"
+  if [[ "${AIHAUS_KANBAN_GATE_VALIDATE:-1}" == "0" ]]; then
+    decision="bypass"; opt_out="true"
+  else
+    if ! printf '%s' "$verdict" | grep -qE '^(PASS|SKIPPED|BLOCKED-TO-PLANNING|BLOCKED)(:.*)?$'; then
+      validation="warn"
+      warn_reason="verdict '${verdict}' not in 4-enum PASS|SKIPPED|BLOCKED-TO-PLANNING|BLOCKED"
+    fi
+    if [[ -z "$rules" ]]; then
+      validation="warn"
+      warn_reason="${warn_reason:+${warn_reason}; }rules_cited missing — cite per the harness gate law (protocols/harness.md)"
+    else
+      local _ifs_save="$IFS" el bad=""
+      IFS=','
+      for el in $rules; do
+        el="${el#"${el%%[![:space:]]*}"}"; el="${el%"${el##*[![:space:]]}"}"
+        [[ -z "$el" ]] && { bad="${bad:+${bad} }'<empty>'"; continue; }
+        printf '%s' "$el" | grep -qE '^(BR-F?[0-9]+|GAP:pq-[A-Za-z0-9][A-Za-z0-9_-]*|MECHANICS)$' || bad="${bad:+${bad} }'${el}'"
+      done
+      IFS="$_ifs_save"
+      if [[ -n "$bad" ]]; then
+        validation="warn"
+        warn_reason="${warn_reason:+${warn_reason}; }rules_cited element(s) ${bad} not in grammar BR-F?[0-9]+ | GAP:pq-<id> | MECHANICS"
+      fi
+    fi
+    [[ "$validation" == "warn" ]] && decision="warn-allow"
+  fi
+  if [[ "$decision" == "warn-allow" ]]; then
+    echo "aihaus kanban gate: WARN — ${warn_reason}. Recorded warn-allow; the write proceeds (warn-only this cycle, ADR-260611-D). Grammar: .aihaus/protocols/kanban/db-schema.md. Audited bypass: AIHAUS_KANBAN_GATE_VALIDATE=0." >&2
+  fi
+
+  # --- Persist the kanban row (gate_events schema UNTOUCHED — BR-P10) -------
+  _kanban_require_sqlite3
+  local repo; repo="$(_kanban_repo)"
+  [[ -z "$db" ]] && db="${repo}/.aihaus/state/kanban.db"
+  _kanban_db_ensure "$db"
+  local created_at gid reason_sql="NULL" evidence_sql="NULL"
+  created_at="$(_KANBAN_TS)"
+  gid="$(printf 'GATE-%03d' "$(_kanban_next_id "$db" gate_events "GATE-")")"
+  [[ -n "$reason" ]] && reason_sql="'$(_kanban_sql "$reason")'"
+  [[ -n "$evidence" ]] && evidence_sql="'$(_kanban_sql "$evidence")'"
+  if ! sqlite3 "$db" "INSERT INTO gate_events (id, task_id, stage, verdict, reason, evidence_path, created_at) VALUES ('$(_kanban_sql "$gid")', '$(_kanban_sql "$task")', '$(_kanban_sql "$stage")', '$(_kanban_sql "$verdict")', ${reason_sql}, ${evidence_sql}, '${created_at}');" 2>/dev/null; then
+    echo "aihaus kanban gate: failed to write gate_events row to ${db}." >&2
+    exit 1
+  fi
+
+  # --- Citation row → rule-cite.jsonl (SOLE writer — BR-P5) -----------------
+  local audit_dir="${repo}/.claude/audit" rules_json="" warn_json="null" el2
+  mkdir -p "$audit_dir" 2>/dev/null || true
+  if [[ -n "$rules" ]]; then
+    local _ifs_save2="$IFS"
+    IFS=','
+    for el2 in $rules; do
+      el2="${el2#"${el2%%[![:space:]]*}"}"; el2="${el2%"${el2##*[![:space:]]}"}"
+      [[ -z "$el2" ]] && continue
+      rules_json="${rules_json:+${rules_json},}\"$(_kanban_json_str "$el2")\""
+    done
+    IFS="$_ifs_save2"
+  fi
+  [[ -n "$warn_reason" ]] && warn_json="\"$(_kanban_json_str "$warn_reason")\""
+  printf '{"ts":"%s","event":"kanban-gate","task_id":"%s","stage":"%s","created_at":"%s","verdict":"%s","rules_cited":[%s],"validation":"%s","warn_reason":%s,"decision":"%s","opt_out":%s,"shell":"bash"}\n' \
+    "${created_at}" "$(_kanban_json_str "$task")" "$(_kanban_json_str "$stage")" "${created_at}" \
+    "$(_kanban_json_str "$verdict")" "${rules_json}" "${validation}" "${warn_json}" "${decision}" "${opt_out}" \
+    >> "${audit_dir}/rule-cite.jsonl" 2>/dev/null || true
+  echo "kanban: gate ${verdict%%:*} recorded for ${task}@${stage} (${gid}; decision ${decision})"
+  exit 0
+}
+
+_kanban_question() {
+  local task="" question="" reason="" qid="" source_kind="local" source_ref="" db=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --task)          task="${2:-}"; shift 2 || break ;;
+      --task=*)        task="${1#--task=}"; shift ;;
+      --question)      question="${2:-}"; shift 2 || break ;;
+      --question=*)    question="${1#--question=}"; shift ;;
+      --reason)        reason="${2:-}"; shift 2 || break ;;
+      --reason=*)      reason="${1#--reason=}"; shift ;;
+      --id)            qid="${2:-}"; shift 2 || break ;;
+      --id=*)          qid="${1#--id=}"; shift ;;
+      --source-kind)   source_kind="${2:-}"; shift 2 || break ;;
+      --source-kind=*) source_kind="${1#--source-kind=}"; shift ;;
+      --source-ref)    source_ref="${2:-}"; shift 2 || break ;;
+      --source-ref=*)  source_ref="${1#--source-ref=}"; shift ;;
+      --db)            db="${2:-}"; shift 2 || break ;;
+      --db=*)          db="${1#--db=}"; shift ;;
+      *)               shift ;;
+    esac
+  done
+  if [[ -z "$task" || -z "$question" ]]; then
+    echo 'aihaus kanban question: --task <id> --question "<one task-specific business-rule gap>" required ([--reason <text>] [--id pq-<n>] [--source-kind <kind>] [--source-ref <ref>] [--db <path>])' >&2
+    exit 2
+  fi
+  if [[ -n "$qid" ]] && ! printf '%s' "$qid" | grep -qE '^pq-[A-Za-z0-9][A-Za-z0-9_-]*$'; then
+    echo "aihaus kanban question: --id '${qid}' must match pq-<id> (grammar: .aihaus/protocols/kanban/db-schema.md)." >&2
+    exit 2
+  fi
+  _kanban_require_sqlite3
+  local repo; repo="$(_kanban_repo)"
+  [[ -z "$db" ]] && db="${repo}/.aihaus/state/kanban.db"
+  _kanban_db_ensure "$db"
+  [[ -z "$qid" ]] && qid="$(printf 'pq-%03d' "$(_kanban_next_id "$db" planning_questions "pq-")")"
+  local asked_at reason_sql="NULL" sref_sql="NULL"
+  asked_at="$(_KANBAN_TS)"
+  [[ -n "$reason" ]] && reason_sql="'$(_kanban_sql "$reason")'"
+  [[ -n "$source_ref" ]] && sref_sql="'$(_kanban_sql "$source_ref")'"
+  if ! sqlite3 "$db" "INSERT INTO planning_questions (id, task_id, question, reason, status, source_kind, source_ref, asked_at) VALUES ('$(_kanban_sql "$qid")', '$(_kanban_sql "$task")', '$(_kanban_sql "$question")', ${reason_sql}, 'open', '$(_kanban_sql "$source_kind")', ${sref_sql}, '${asked_at}');" 2>/dev/null; then
+    echo "aihaus kanban question: failed to write planning_questions row to ${db} (duplicate id ${qid}?)." >&2
+    exit 1
+  fi
+  echo "kanban: planning question ${qid} recorded for ${task} (status open)"
+  exit 0
+}
+
+_kanban_answer() {
+  local qid="" answer="" source_kind="local" source_ref="" db=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --question)      qid="${2:-}"; shift 2 || break ;;
+      --question=*)    qid="${1#--question=}"; shift ;;
+      --answer)        answer="${2:-}"; shift 2 || break ;;
+      --answer=*)      answer="${1#--answer=}"; shift ;;
+      --source-kind)   source_kind="${2:-}"; shift 2 || break ;;
+      --source-kind=*) source_kind="${1#--source-kind=}"; shift ;;
+      --source-ref)    source_ref="${2:-}"; shift 2 || break ;;
+      --source-ref=*)  source_ref="${1#--source-ref=}"; shift ;;
+      --db)            db="${2:-}"; shift 2 || break ;;
+      --db=*)          db="${1#--db=}"; shift ;;
+      *)               shift ;;
+    esac
+  done
+  if [[ -z "$qid" || -z "$answer" ]]; then
+    echo 'aihaus kanban answer: --question <pq-id> --answer "<text>" required ([--source-kind <kind>] [--source-ref <ref>] [--db <path>]). A "no-rule:<reason>" answer records an explicit promotion waiver.' >&2
+    exit 2
+  fi
+  _kanban_require_sqlite3
+  local repo; repo="$(_kanban_repo)"
+  [[ -z "$db" ]] && db="${repo}/.aihaus/state/kanban.db"
+  _kanban_db_ensure "$db"
+  local exists
+  exists="$(sqlite3 "$db" "SELECT count(*) FROM planning_questions WHERE id = '$(_kanban_sql "$qid")';" 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ "$exists" == "0" ]]; then
+    echo "aihaus kanban answer: question ${qid} not found in ${db} — record it first via: aihaus kanban question" >&2
+    exit 4
+  fi
+  local aid answered_at qstatus="answered" sref_sql="NULL"
+  case "$answer" in no-rule:*) qstatus="waived" ;; esac
+  aid="$(printf 'pa-%03d' "$(_kanban_next_id "$db" planning_answers "pa-")")"
+  answered_at="$(_KANBAN_TS)"
+  [[ -n "$source_ref" ]] && sref_sql="'$(_kanban_sql "$source_ref")'"
+  if ! sqlite3 "$db" "INSERT INTO planning_answers (id, question_id, answer, source_kind, source_ref, answered_at) VALUES ('$(_kanban_sql "$aid")', '$(_kanban_sql "$qid")', '$(_kanban_sql "$answer")', '$(_kanban_sql "$source_kind")', ${sref_sql}, '${answered_at}'); UPDATE planning_questions SET status = '${qstatus}', answered_at = '${answered_at}' WHERE id = '$(_kanban_sql "$qid")';" 2>/dev/null; then
+    echo "aihaus kanban answer: failed to write planning_answers row to ${db}." >&2
+    exit 1
+  fi
+  echo "kanban: answer ${aid} recorded for ${qid} (question status ${qstatus})"
+  if [[ "$qstatus" == "answered" ]]; then
+    echo "kanban: promote it to a DRAFT business rule carrying 'Source: ${qid}' per .aihaus/protocols/kanban/memory-promotion.md (the eval planning-answer-promotion join checks this)"
+  fi
+  exit 0
+}
+
+_kanban() {
+  local sub="${1:-}"; shift || true
+  case "${sub}" in
+    gate)     _kanban_gate "$@" ;;
+    question) _kanban_question "$@" ;;
+    answer)   _kanban_answer "$@" ;;
+    *)
+      echo 'aihaus kanban: unknown sub-verb. Usage: aihaus kanban gate|question|answer (grammar: .aihaus/protocols/kanban/db-schema.md, ADR-260611-C)' >&2
+      exit 2 ;;
+  esac
+}
+
 VERB="${1:-}"; shift || true
 case "${VERB}" in --help|-h|"") _help; exit 0 ;; esac
 
@@ -390,6 +647,8 @@ case "${VERB}" in
     _memory "$@" ;;
   prefs)
     _prefs "$@" ;;
+  kanban)
+    _kanban "$@" ;;
   self-update)
     _dogfood_dirty
     exec bash "${AIHAUS_HOME}/pkg/scripts/update.sh" --self "$@" ;;

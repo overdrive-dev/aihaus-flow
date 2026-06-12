@@ -82,6 +82,18 @@ Do not skip the Playwright dev-review plan for UI or flow work. If the dev URL,
 auth, or data setup is unknown, return `BLOCKED-TO-PLANNING` with the missing
 business-facing validation detail.
 
+## Kanban Writes
+
+Write kanban state only through the sanctioned wrapper verbs (ADR-260611-C) —
+never raw `sqlite3` against `.aihaus/state/kanban.db` (warn-only deterrence
+this cycle, ADR-260611-D): record this stage's verdict via
+`aihaus kanban gate --task <id> --stage testes --verdict "<verdict>"
+--rules "<csv>"`, and any business-rule gap / answer via
+`aihaus kanban question` / `aihaus kanban answer`. The verdict 4-enum and
+`rules_cited` grammar are normative in
+`.aihaus/protocols/kanban/db-schema.md`; the citation obligation itself is
+the harness gate law (`protocols/harness.md` §Gates).
+
 ## Memory Writes
 
 When you learn durable test behavior, include a `## Memory Candidate` section

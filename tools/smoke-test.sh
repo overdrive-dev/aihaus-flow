@@ -6172,6 +6172,209 @@ check_prefs_lock() {
   fi
 }
 
+# ---- Check 99: aihaus kanban chokepoint + promotion join (M050/S07, ADR-260611-C/D) ----
+# Kanban write chokepoint: `aihaus kanban gate|question|answer` is the sanctioned
+# write path; gate validation is WARN-ONLY (4-enum + rules_cited grammar, normative
+# in protocols/kanban/db-schema.md) and persists citations JSONL-only to
+# .claude/audit/rule-cite.jsonl (sole writer — BR-P5); gate_events schema untouched
+# (BR-P10). Sub-arms:
+#   (a) static contract — byte-stable grammar literals in db-schema.md, eval join
+#       + coverage report wired, bash-guard raw-write warn + audited opt-out,
+#       promotion route + agent sections present, schema.sql untouched;
+#   (b) wrapper grammar/audit arm — valid gate (BR-F1 must match — the F? is
+#       load-bearing), malformed verdict + malformed rules_cited are warn-allow
+#       exit-0 (never a block), audited validation bypass. Runs with a STUBBED
+#       sqlite3 when the real binary is absent (Check 63/95/98 skip-not-fail
+#       precedent) so the validation + rule-cite layers always run;
+#   (c) promotion-join arm (real sqlite3 only) — answered question + ledger
+#       fixture pair under tools/fixtures/kanban-promotion/: Source-carrying
+#       ledger must PASS, token-missing ledger must FAIL (fixture-fail, BR-P8),
+#       no-rule:<reason> waiver exempt;
+#   (d) PowerShell parity arm (BR-P3) — skips (not fails) without a pwsh host
+#       or without real sqlite3, mirroring Check 63.
+check_kanban_chokepoint() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aihaus kanban gate|question|answer + rule-cite + promotion join (M050/S07)"
+  local issues=()
+  local repo_root shim shim_ps1 eval_script db_doc guard promo fixture_dir
+  repo_root="$(cd "${PACKAGE_ROOT}/.." && pwd)"
+  shim="${PACKAGE_ROOT}/scripts/aihaus"
+  shim_ps1="${PACKAGE_ROOT}/scripts/aihaus.ps1"
+  eval_script="${PACKAGE_ROOT}/.aihaus/eval/eval-run.sh"
+  db_doc="${PACKAGE_ROOT}/.aihaus/protocols/kanban/db-schema.md"
+  guard="${PACKAGE_ROOT}/.aihaus/hooks/bash-guard.sh"
+  promo="${PACKAGE_ROOT}/.aihaus/protocols/kanban/memory-promotion.md"
+  fixture_dir="${repo_root}/tools/fixtures/kanban-promotion"
+
+  # ---- (a) static contract --------------------------------------------------
+  grep -Fq '_kanban_gate' "$shim" 2>/dev/null || issues+=("bash shim missing _kanban_gate (BR-P3)")
+  grep -Fq 'Invoke-Kanban' "$shim_ps1" 2>/dev/null || issues+=("ps1 shim missing Invoke-Kanban (BR-P3 — both shells in the same PR)")
+  grep -Fq 'PASS|SKIPPED|BLOCKED-TO-PLANNING|BLOCKED' "$db_doc" 2>/dev/null || \
+    issues+=("db-schema.md missing byte-stable 4-enum literal (normative grammar home)")
+  grep -Fq 'BR-F?[0-9]+ | GAP:pq-<id> | MECHANICS' "$db_doc" 2>/dev/null || \
+    issues+=("db-schema.md missing byte-stable rules_cited grammar literal")
+  grep -Fq 'rule-cite.jsonl' "$db_doc" 2>/dev/null || issues+=("db-schema.md missing rule-cite.jsonl row schema")
+  grep -Fq 'planning-answer-promotion' "$eval_script" 2>/dev/null || issues+=("eval-run.sh missing planning-answer-promotion join")
+  grep -Fq 'citation-coverage' "$eval_script" 2>/dev/null || issues+=("eval-run.sh missing citation-coverage report")
+  grep -Fq 'Source: pq-<id>' "$eval_script" 2>/dev/null || issues+=("eval-run.sh missing the byte-stable Source: pq-<id> token")
+  grep -Fq 'AIHAUS_KANBAN_WRITE_WARN' "$guard" 2>/dev/null || issues+=("bash-guard.sh missing AIHAUS_KANBAN_WRITE_WARN audited opt-out (BR-P4)")
+  grep -Fq 'kanban\.db' "$guard" 2>/dev/null || issues+=("bash-guard.sh missing raw kanban.db write warn pattern")
+  grep -Fq 'Source: pq-<id>' "$promo" 2>/dev/null || issues+=("memory-promotion.md missing the planning-answer promotion route")
+  grep -Fq 'Source: pq-<id>' "${PACKAGE_ROOT}/.aihaus/agents/workflow-planning-gate.md" 2>/dev/null || \
+    issues+=("workflow-planning-gate.md missing draft-BR scaffolding (Source: pq-<id>)")
+  grep -Fq 'DRAFT' "${PACKAGE_ROOT}/.aihaus/agents/workflow-human-review.md" 2>/dev/null || \
+    issues+=("workflow-human-review.md missing DRAFT->accepted confirmation step")
+  # BR-P10: gate_events schema byte-untouched — no rules_cited column this cycle.
+  if grep -Fq 'rules_cited' "${PACKAGE_ROOT}/.aihaus/protocols/kanban/schema.sql" 2>/dev/null; then
+    issues+=("schema.sql gained rules_cited — BR-P10 violated (citation persistence is JSONL-only until the flip ADR)")
+  fi
+  local fx
+  for fx in ledger-with-source.md ledger-missing-source.md; do
+    [[ -f "${fixture_dir}/${fx}" ]] || issues+=("fixture missing: tools/fixtures/kanban-promotion/${fx}")
+  done
+  if [[ ${#issues[@]} -gt 0 ]]; then
+    _fail "$label" "${issues[@]}"
+    return
+  fi
+
+  # ---- (b) wrapper grammar/audit arm (stubbed sqlite3 when absent) ----------
+  local have_sqlite=0
+  command -v sqlite3 >/dev/null 2>&1 && have_sqlite=1
+  local proj1 run_path="$PATH" rc cite warn_err
+  proj1="$(_mktemp_dir kanban-choke1)" || { _fail "$label" "mktemp failed"; return; }
+  if [[ "$have_sqlite" -eq 0 ]]; then
+    mkdir -p "${proj1}/.stub-bin"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "${proj1}/.stub-bin/sqlite3"
+    chmod +x "${proj1}/.stub-bin/sqlite3"
+    run_path="${proj1}/.stub-bin:${PATH}"
+  fi
+  cite="${proj1}/.claude/audit/rule-cite.jsonl"
+  warn_err="${proj1}/warn.err"
+
+  # Valid gate incl. BR-F1 (the F? in BR-F?[0-9]+ is load-bearing — founding rules must match).
+  rc=0
+  PATH="$run_path" CLAUDE_PROJECT_DIR="$proj1" AIHAUS_HOME="$repo_root" bash "$shim" kanban gate \
+    --task T-1 --stage tdd --verdict PASS --rules "BR-F1,BR-12,GAP:pq-001,MECHANICS" >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -eq 0 ]] || issues+=("valid gate exit ${rc} (expected 0)")
+  [[ -f "$cite" ]] || issues+=("rule-cite.jsonl not created by a valid gate write (BR-P5 citation row)")
+  grep -q '"event":"kanban-gate".*"task_id":"T-1".*"stage":"tdd".*"verdict":"PASS".*"validation":"ok".*"decision":"allow"' "$cite" 2>/dev/null || \
+    issues+=("valid gate: allow row missing/malformed — BR-F1 must satisfy BR-F?[0-9]+ (CHECK F3)")
+  grep -q '"rules_cited":\["BR-F1","BR-12","GAP:pq-001","MECHANICS"\]' "$cite" 2>/dev/null || \
+    issues+=("valid gate: rules_cited array not persisted to rule-cite.jsonl")
+
+  # Malformed verdict → warn-allow + exit 0 + stderr warn (never a block — BR-P8/U3).
+  rc=0
+  PATH="$run_path" CLAUDE_PROJECT_DIR="$proj1" AIHAUS_HOME="$repo_root" bash "$shim" kanban gate \
+    --task T-1 --stage tdd --verdict MAYBE --rules "BR-F1" >/dev/null 2>"$warn_err" || rc=$?
+  [[ "$rc" -eq 0 ]] || issues+=("malformed verdict exit ${rc} — warn-only contract broken (never a block this cycle)")
+  [[ -s "$warn_err" ]] || issues+=("malformed verdict produced no stderr warn")
+  grep -q '"verdict":"MAYBE".*"validation":"warn".*"decision":"warn-allow"' "$cite" 2>/dev/null || \
+    issues+=("malformed verdict: warn-allow row missing (every path emits a row before exit)")
+
+  # Malformed rules_cited element → warn-allow + exit 0.
+  rc=0
+  PATH="$run_path" CLAUDE_PROJECT_DIR="$proj1" AIHAUS_HOME="$repo_root" bash "$shim" kanban gate \
+    --task T-1 --stage tdd --verdict PASS --rules "BR-F1,NOT_A_RULE" >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -eq 0 ]] || issues+=("malformed rules_cited exit ${rc} (expected 0)")
+  grep -q '"rules_cited":\["BR-F1","NOT_A_RULE"\].*"validation":"warn".*"decision":"warn-allow"' "$cite" 2>/dev/null || \
+    issues+=("malformed rules_cited: warn-allow row missing")
+
+  # Audited validation bypass (BR-P4 — never silent).
+  rc=0
+  AIHAUS_KANBAN_GATE_VALIDATE=0 PATH="$run_path" CLAUDE_PROJECT_DIR="$proj1" AIHAUS_HOME="$repo_root" \
+    bash "$shim" kanban gate --task T-1 --stage tdd --verdict MAYBE >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -eq 0 ]] || issues+=("validation bypass exit ${rc} (expected 0)")
+  grep -q '"decision":"bypass".*"opt_out":true' "$cite" 2>/dev/null || \
+    issues+=("AIHAUS_KANBAN_GATE_VALIDATE=0 bypass not audited (BR-P4 never-silent)")
+  rm -rf "$proj1" 2>/dev/null || true
+
+  # ---- (c) promotion-join arm (real sqlite3 only) ----------------------------
+  if [[ "$have_sqlite" -eq 1 ]]; then
+    local proj2 evout
+    proj2="$(_mktemp_dir kanban-choke2)" || { _fail "$label" "mktemp failed (join arm)"; return; }
+    mkdir -p "${proj2}/.aihaus/memory/workflows" 2>/dev/null || true
+    # Round-trip through the wrapper verbs: question → answer → gate.
+    CLAUDE_PROJECT_DIR="$proj2" AIHAUS_HOME="$repo_root" bash "$shim" kanban question \
+      --task T-1 --question "Business rule gap for T-1: define archived-record visibility." >/dev/null 2>&1 || \
+      issues+=("question verb failed under real sqlite3")
+    CLAUDE_PROJECT_DIR="$proj2" AIHAUS_HOME="$repo_root" bash "$shim" kanban answer \
+      --question pq-001 --answer "Archived records stay visible to admins only." >/dev/null 2>&1 || \
+      issues+=("answer verb failed under real sqlite3")
+    CLAUDE_PROJECT_DIR="$proj2" AIHAUS_HOME="$repo_root" bash "$shim" kanban gate \
+      --task T-1 --stage planejamento --verdict PASS --rules "GAP:pq-001" >/dev/null 2>&1 || \
+      issues+=("gate verb failed under real sqlite3")
+    local qstat
+    qstat="$(sqlite3 "${proj2}/.aihaus/state/kanban.db" "SELECT status FROM planning_questions WHERE id='pq-001';" 2>/dev/null | tr -d '[:space:]')"
+    [[ "$qstat" == "answered" ]] || issues+=("answer did not flip pq-001 to answered (got '${qstat:-<none>}')")
+    # PASS pair: ledger carrying the Source token.
+    cp "${fixture_dir}/ledger-with-source.md" "${proj2}/.aihaus/memory/workflows/business-rules.md"
+    rc=0; evout="$(bash "$eval_script" --project "$proj2" 2>/dev/null)" || rc=$?
+    [[ "$rc" -eq 0 ]] || issues+=("eval with Source-carrying ledger exited ${rc} (expected 0)")
+    printf '%s' "$evout" | grep -q '"check":"planning-answer-promotion","result":"PASS"' || \
+      issues+=("promotion join did not PASS with the Source-carrying ledger")
+    printf '%s' "$evout" | grep -q '"check":"citation-coverage","result":"INFO"' || \
+      issues+=("citation-coverage INFO report missing from eval output")
+    # Fixture-FAIL pair (BR-P8): ledger missing the token MUST fail the join.
+    cp "${fixture_dir}/ledger-missing-source.md" "${proj2}/.aihaus/memory/workflows/business-rules.md"
+    rc=0; evout="$(bash "$eval_script" --project "$proj2" 2>/dev/null)" || rc=$?
+    [[ "$rc" -ne 0 ]] || issues+=("eval passed with the token-missing ledger — promotion join is green-but-vacuous (BR-P8)")
+    printf '%s' "$evout" | grep -q '"check":"planning-answer-promotion","result":"FAIL"' || \
+      issues+=("promotion join did not report FAIL on the token-missing ledger")
+    # Waiver: a no-rule:<reason> answer is exempt from the join.
+    CLAUDE_PROJECT_DIR="$proj2" AIHAUS_HOME="$repo_root" bash "$shim" kanban question \
+      --task T-1 --question "Business rule gap for T-1: define export retention period." >/dev/null 2>&1 || \
+      issues+=("second question verb failed")
+    CLAUDE_PROJECT_DIR="$proj2" AIHAUS_HOME="$repo_root" bash "$shim" kanban answer \
+      --question pq-002 --answer "no-rule: covered by the existing retention rule; nothing new to promote." >/dev/null 2>&1 || \
+      issues+=("waiver answer verb failed")
+    cp "${fixture_dir}/ledger-with-source.md" "${proj2}/.aihaus/memory/workflows/business-rules.md"
+    rc=0
+    bash "$eval_script" --project "$proj2" >/dev/null 2>&1 || rc=$?
+    [[ "$rc" -eq 0 ]] || issues+=("no-rule:<reason> waiver not exempted by the promotion join (exit ${rc})")
+    rm -rf "$proj2" 2>/dev/null || true
+  else
+    echo "        note: sqlite3 unavailable — promotion-join arm skipped (grammar + rule-cite arms ran with stubbed sqlite3)"
+  fi
+
+  # ---- (d) PowerShell parity arm (BR-P3) -------------------------------------
+  local ps_bin=""
+  if command -v pwsh >/dev/null 2>&1; then
+    ps_bin="pwsh"
+  elif command -v powershell >/dev/null 2>&1; then
+    ps_bin="powershell"
+  fi
+  if [[ -z "$ps_bin" || "$have_sqlite" -eq 0 ]]; then
+    echo "        note: PowerShell kanban arm skipped (needs a pwsh/powershell host + real sqlite3) — parity asserted on Windows/CI hosts"
+  else
+    local proj3 win_proj3 win_repo cite_ps
+    proj3="$(_mktemp_dir kanban-choke3)" || { _fail "$label" "mktemp failed (pwsh arm)"; return; }
+    win_proj3="$(cygpath -w "$proj3" 2>/dev/null || echo "$proj3")"
+    win_repo="$(cygpath -w "$repo_root" 2>/dev/null || echo "$repo_root")"
+    cite_ps="${proj3}/.claude/audit/rule-cite.jsonl"
+    rc=0
+    CLAUDE_PROJECT_DIR="$win_proj3" AIHAUS_HOME="$win_repo" \
+      "$ps_bin" -NoProfile -ExecutionPolicy Bypass -File "$shim_ps1" kanban gate \
+      --task T-1 --stage tdd --verdict PASS --rules "BR-F1" >/dev/null 2>&1 || rc=$?
+    [[ "$rc" -eq 0 ]] || issues+=("pwsh: valid gate exit ${rc} (expected 0)")
+    grep -q '"event":"kanban-gate".*"decision":"allow".*"shell":"pwsh"' "$cite_ps" 2>/dev/null || \
+      issues+=("pwsh: allow row missing from rule-cite.jsonl")
+    rc=0
+    CLAUDE_PROJECT_DIR="$win_proj3" AIHAUS_HOME="$win_repo" \
+      "$ps_bin" -NoProfile -ExecutionPolicy Bypass -File "$shim_ps1" kanban gate \
+      --task T-1 --stage tdd --verdict MAYBE --rules "BR-F1" >/dev/null 2>&1 || rc=$?
+    [[ "$rc" -eq 0 ]] || issues+=("pwsh: malformed verdict exit ${rc} — warn-only contract broken")
+    grep -q '"verdict":"MAYBE".*"validation":"warn".*"decision":"warn-allow"' "$cite_ps" 2>/dev/null || \
+      issues+=("pwsh: warn-allow row missing")
+    rm -rf "$proj3" 2>/dev/null || true
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -6189,6 +6392,7 @@ check_eval_run_deterministic
 check_settings_merge_matcher
 check_harness_byte_cap
 check_prefs_lock
+check_kanban_chokepoint
 
 printf "
 "

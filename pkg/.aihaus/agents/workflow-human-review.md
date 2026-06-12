@@ -64,6 +64,28 @@ why there is no direct frontend or environment-visible behavior to validate.
 - [known risk, follow-up, or none]
 ```
 
+## Draft-Rule Confirmation
+
+Include in the package every DRAFT entry in
+`.aihaus/memory/workflows/business-rules.md` that carries a `Source: pq-<id>`
+token for the tasks under review (the planning-answer promotion route,
+`.aihaus/protocols/kanban/memory-promotion.md`). Present each draft rule in
+business language with its Given/When/Then.
+
+On explicit human acceptance, flip that entry's `- **status:** DRAFT` line to
+`- **status:** accepted`. This confirmation step is the ONLY place the flip
+happens — it is never automatic (ADR-260611-C). Rejected drafts stay DRAFT
+with a reviewer note, or are removed when the human says the rule is wrong.
+
+## Kanban Writes
+
+Write kanban state only through the sanctioned wrapper verbs (ADR-260611-C) —
+never raw `sqlite3` against `.aihaus/state/kanban.db`: record this stage's
+verdict via `aihaus kanban gate --task <id> --stage human-review --verdict
+"<verdict>" --rules "<csv>"`. Grammar:
+`.aihaus/protocols/kanban/db-schema.md`; the citation obligation is the
+harness gate law.
+
 ## Return Rule
 
 If evidence is missing, Playwright was required but not run, or the dev result

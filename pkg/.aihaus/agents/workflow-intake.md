@@ -63,6 +63,16 @@ details scoped to the candidate they affect.
 planejamento
 ```
 
+## Kanban Writes
+
+Write kanban planning rows only through the sanctioned wrapper verbs
+(ADR-260611-C) — never raw `sqlite3` against `.aihaus/state/kanban.db`
+(warn-only deterrence this cycle, ADR-260611-D): record any business-rule
+gap you surface via `aihaus kanban question --task <id> --question "<gap>"`.
+Task registration follows the kanban protocol
+(`.aihaus/protocols/kanban/local-kanban.md`); the gate/question/answer
+grammar is normative in `.aihaus/protocols/kanban/db-schema.md`.
+
 ## Memory Writes
 
 When a reusable user preference or intake rule appears, include a

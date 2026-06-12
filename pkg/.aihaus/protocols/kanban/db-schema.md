@@ -32,6 +32,59 @@ When `source_kind` is not `local`, the external source owns:
 Do not overwrite source-owned fields from local DB state unless the user
 explicitly requested that mutation.
 
+### Write chokepoint + gate grammar (M050/S07 — ADR-260611-C, normative)
+
+`aihaus kanban gate|question|answer` is the **sanctioned write path** for
+`gate_events`, `planning_questions`, and `planning_answers` rows. Raw
+`sqlite3 .aihaus/state/kanban.db` write commands (INSERT/UPDATE/DELETE) are
+**deprecated**: `bash-guard.sh` emits a warn-only stderr notice plus an audit
+row (`.claude/audit/kanban-write-warn.jsonl`); reads stay silent. Opt-out:
+`AIHAUS_KANBAN_WRITE_WARN=0` — audited bypass, never silent (BR-P4). The
+warn-only posture is governed by ADR-260611-D: it flips to enforcing only via
+a dedicated future ADR.
+
+This section is the **normative home** of the gate grammar. The literals
+below are byte-stable — eval and smoke checks grep them; do not reword:
+
+- **Verdict 4-enum:** `PASS|SKIPPED|BLOCKED-TO-PLANNING|BLOCKED` — exactly
+  one enum token, optionally followed by `: <reason>` (`SKIPPED: <reason>`,
+  `BLOCKED-TO-PLANNING: <task-specific business-rule gap>`,
+  `BLOCKED: <true blocker>`). Byte-matches `eval/eval-run.sh` check 1.
+- **`rules_cited` grammar:** **comma-separated** elements, each one of
+  `BR-F?[0-9]+ | GAP:pq-<id> | MECHANICS`,
+  where `<id>` is `[A-Za-z0-9][A-Za-z0-9_-]*`. The `F?` is load-bearing:
+  founding rules `BR-F1`..`BR-F4` match the same element regex as numbered
+  rules (`BR-12`). The citation obligation itself is the harness gate law
+  (`protocols/harness.md` §Gates) — this file only fixes the shape.
+- **Validation is warn-only this cycle** (ADR-260611-C/D): malformed verdict
+  or `rules_cited` ⇒ stderr warn + `"decision":"warn-allow"` audit row +
+  exit 0 — never a block. Audited validation bypass:
+  `AIHAUS_KANBAN_GATE_VALIDATE=0`.
+- **Citation persistence is JSONL-only** (BR-P10): citations land in
+  `.claude/audit/rule-cite.jsonl`, keyed `(task_id, stage, created_at)`; the
+  wrapper is that file's **sole writer** (BR-P5). The `gate_events` schema
+  below is **untouched** — the additive `rules_cited` column is paid only in
+  the future enforce-flip ADR.
+
+`rule-cite.jsonl` row schema (one row per `aihaus kanban gate` invocation;
+every decision path — allow / warn-allow / bypass — emits its row before
+exiting):
+
+```json
+{"ts":"2026-06-11T14:03:00Z","event":"kanban-gate","task_id":"T-014","stage":"tdd",
+ "created_at":"2026-06-11T14:03:00Z","verdict":"PASS",
+ "rules_cited":["BR-12","BR-F1","GAP:pq-7"],
+ "validation":"ok|warn","warn_reason":null,
+ "decision":"allow|warn-allow|bypass","opt_out":false,"shell":"bash|pwsh"}
+```
+
+`aihaus kanban question` records a task-specific business-rule gap (id
+`pq-<n>`, max-scan allocated, status `open`); `aihaus kanban answer` records
+the answer (id `pa-<n>`) and flips the question to `answered` — or to
+`waived` when the answer is an explicit `no-rule:<reason>` waiver. Answered
+questions feed the draft-BR promotion route in `memory-promotion.md`
+(`Source: pq-<id>` join token).
+
 ### Required tables
 
 Prefer the packaged initializer; do not generate ad hoc `schema.sql` or

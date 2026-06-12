@@ -105,6 +105,58 @@ if [[ $any_dangerous -eq 1 ]]; then
   exit 2
 fi
 
+# --- M050/S07 (ADR-260611-C/D): raw kanban-write soft-warn --------------------
+# Detect raw `sqlite3 ... kanban.db ... INSERT|UPDATE|DELETE` segments. The
+# sanctioned write path is `aihaus kanban gate|question|answer` (grammar
+# normative in .aihaus/protocols/kanban/db-schema.md). Warn-only this cycle
+# (ADR-260611-D observe→enforce policy) — stderr warn + JSONL row + exit 0.
+# READS stay silent. Clones the ADR-260427-B branch-switch soft-warn shape.
+#
+# Audit: .claude/audit/kanban-write-warn.jsonl (sole writer: this hook — BR-P5;
+# rule-cite.jsonl belongs to the wrapper, never written here).
+# Opt-out: AIHAUS_KANBAN_WRITE_WARN=0 — audited bypass row, never silent (BR-P4).
+
+_kwn_ts() { date -u +%FT%TZ 2>/dev/null || echo ""; }
+
+_kwn_audit() {  # _kwn_audit <decision>
+  local decision="$1"
+  local audit_log
+  audit_log="$(aihaus_project_path "${AIHAUS_KANBAN_WRITE_LOG:-.claude/audit/kanban-write-warn.jsonl}")"
+  mkdir -p "$(dirname "$audit_log")" 2>/dev/null || return 0
+  local cmd_hash
+  cmd_hash="$(printf '%s' "$COMMAND" | sha256sum 2>/dev/null | cut -c1-12 || printf 'nohash')"
+  printf '{"ts":"%s","session_id":"%s","event":"kanban-write-warn","decision":"%s","command_hash":"%s"}\n' \
+    "$(_kwn_ts)" "${CLAUDE_SESSION_ID:-unknown}" "$decision" "$cmd_hash" \
+    >> "$audit_log" 2>/dev/null || true
+}
+
+# Quick reject before the per-segment walk (most commands never mention both).
+if printf '%s' "$COMMAND" | grep -qi 'sqlite3' && printf '%s' "$COMMAND" | grep -qi 'kanban\.db'; then
+  kwn_match=0
+  OLD_IFS="$IFS"
+  IFS=$'\n'
+  for seg in $segments; do
+    trimmed="${seg#"${seg%%[![:space:]]*}"}"
+    trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+    [ -z "$trimmed" ] && continue
+    # Write segment = sqlite3 …kanban.db… AND a write keyword. Reads stay silent.
+    if printf '%s' "$trimmed" | grep -qiE 'sqlite3[[:space:]][^|]*kanban\.db' && \
+       printf '%s' "$trimmed" | grep -qiE '\b(insert|update|delete)\b'; then
+      kwn_match=1
+      break
+    fi
+  done
+  IFS="$OLD_IFS"
+  if [[ "$kwn_match" -eq 1 ]]; then
+    if [ "${AIHAUS_KANBAN_WRITE_WARN:-1}" = "0" ]; then
+      _kwn_audit "bypass"
+    else
+      echo "aihaus: raw sqlite3 write to kanban.db detected — the sanctioned write path is \`aihaus kanban gate|question|answer\` (ADR-260611-C; grammar: .aihaus/protocols/kanban/db-schema.md). Warn-only this cycle (ADR-260611-D). Set AIHAUS_KANBAN_WRITE_WARN=0 to silence (audited)." >&2
+      _kwn_audit "warn-allow"
+    fi
+  fi
+fi
+
 # --- ADR-260427-B: branch-switch soft-warn -----------------------------------
 # Detect `git checkout <ref>` / `git switch <ref>` while a feature/bugfix/
 # milestone RUN-MANIFEST shows status: running. Warn-only — never blocks.

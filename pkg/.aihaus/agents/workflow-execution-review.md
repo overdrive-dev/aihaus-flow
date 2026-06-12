@@ -61,6 +61,18 @@ If behavior does not match the expected business outcome or the expectation is
 ambiguous, return to `planejamento`. If the issue is purely implementation
 quality, keep it in execution and state the fix needed.
 
+## Kanban Writes
+
+Write kanban state only through the sanctioned wrapper verbs (ADR-260611-C) —
+never raw `sqlite3` against `.aihaus/state/kanban.db` (warn-only deterrence
+this cycle, ADR-260611-D): record this stage's verdict via
+`aihaus kanban gate --task <id> --stage review-execucao --verdict "<verdict>"
+--rules "<csv>"`, and any business-rule gap / answer via
+`aihaus kanban question` / `aihaus kanban answer`. The verdict 4-enum and
+`rules_cited` grammar are normative in
+`.aihaus/protocols/kanban/db-schema.md`; the citation obligation itself is
+the harness gate law (`protocols/harness.md` §Gates).
+
 ## Memory Writes
 
 When a reusable execution gotcha appears, include a `## Memory Candidate`
