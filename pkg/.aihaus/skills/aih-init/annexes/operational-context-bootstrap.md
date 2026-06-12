@@ -4,11 +4,6 @@ This annex runs after `.aihaus/project.md` is ready and before aih-graph
 bootstrap. It turns repository evidence into initial operational context without
 inventing values.
 
-0. **Role profile (runs first).** Follow `annexes/role-selection.md` to establish
-   `.aihaus/.profile` (the install's capability roles). Env instructions below are
-   scoped by this profile: `devops` receives online (staging/prod) env; `builder`/
-   `dev`/`qa` receive offline-local env only.
-
 1. If `.aihaus/skills/aih-init/scripts/environment-discovery.sh` exists, run:
 
    ```bash

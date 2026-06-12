@@ -6,7 +6,7 @@ fan-out only** — never the interactive spine.
 ## When (and when not)
 
 - **Use a native workflow** for fan-out at scale: a qa sweep (parallel
-  test/lint/security across the repo), devops parallel env/deploy ops, a
+  test/lint/security across the repo), parallel env/deploy ops, a
   cross-checked audit. Many agents, context-isolated, rerunnable.
 - **Do NOT** use one for the interactive spine (planning/bugfix/feature). Native
   workflows take **no mid-run input** — interactive flows stay skills (see
@@ -23,13 +23,12 @@ and in research preview. Per project:
    `.claude/workflows/<name>.js` (project, shared) or `~/.claude/workflows/`
    (personal). It then runs as `/<name>`.
 
-## Role gating
+## Online boundary
 
-Only profiles holding **`qa` or `devops`** invoke fan-out workflows. The online
-boundary still holds: a workflow's subagents inherit the tool allowlist, so a
-non-devops profile's denied online tools (`role-guard.sh`) block online actions
-**even inside a workflow**. Defense in depth — the guard is not bypassed by the
-workflow layer.
+The online boundary still holds inside fan-out: a workflow's subagents inherit
+the tool allowlist, and `flow-guard.sh` blocks online actions outside an active
+tracked flow **even inside a workflow**. Defense in depth — the guard is not
+bypassed by the workflow layer.
 
 ## Sequencing
 

@@ -76,8 +76,8 @@ runs fully autonomously:
 - `desenvolvimento` (`tdd` / `review-execucao`): ready feature work routes to
   `Skill(aih-feature)` and defects route to `Skill(aih-bugfix)` when dev-level
   scoping is needed. Pre-scoped tasks go straight to specialist agents.
-- `homolog` and `prod`: never interactive sub-flows. They stay devops-gated
-  CI/CD stages enforced by `role-guard.sh`.
+- `homolog` and `prod`: never interactive sub-flows. They stay flow-gated
+  CI/CD stages enforced by `flow-guard.sh`.
 
 Interactive scoping is a scoping-first window at the entry of a task. Once
 plan-mode approval lands or the autonomous sweep passes, the run drives

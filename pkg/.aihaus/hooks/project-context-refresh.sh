@@ -50,13 +50,12 @@ aihaus_dir="${project_root}/.aihaus"
 claude_dir="${project_root}/.claude"
 audit_dir="${aihaus_dir}/audit"
 state_dir="${aihaus_dir}/state"
-roles_dir="${aihaus_dir}/roles"
 repair_count=0
 discovery_run=0
 verify_run=0
 freshness_status="unknown"
 
-mkdir -p "$aihaus_dir" "$claude_dir" "$audit_dir" "$state_dir" "$roles_dir" 2>/dev/null || true
+mkdir -p "$aihaus_dir" "$claude_dir" "$audit_dir" "$state_dir" 2>/dev/null || true
 
 write_if_missing() {
   local file="$1"
@@ -330,7 +329,16 @@ EOF
 
 copy_or_seed "${aihaus_dir}/templates/business-rules.md" "${aihaus_dir}/memory/workflows/business-rules.md" "Business Rules"
 
-write_if_missing "${roles_dir}/online-actions.conf" <<'EOF'
+# Legacy-path migration (ADR-260612-A): pre-260612 installs kept this config
+# under the removed roles/ directory. Move user-authored patterns to the new
+# canonical location before seeding so they are never lost.
+if [ -f "${aihaus_dir}/roles/online-actions.conf" ] && [ ! -f "${aihaus_dir}/online-actions.conf" ]; then
+  mv "${aihaus_dir}/roles/online-actions.conf" "${aihaus_dir}/online-actions.conf" 2>/dev/null || true
+  rmdir "${aihaus_dir}/roles" 2>/dev/null || true
+  repair_count=$((repair_count + 1))
+fi
+
+write_if_missing "${aihaus_dir}/online-actions.conf" <<'EOF'
 # Project-specific online-action command patterns.
 # One extended regular expression per line. Blank lines and # comments ignored.
 # Keep local; do not commit credentials or environment-specific secrets here.

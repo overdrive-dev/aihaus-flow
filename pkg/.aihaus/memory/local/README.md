@@ -1,7 +1,7 @@
 # Local memory (per-machine, gitignored)
 
 Artifacts here are **local-scoped**: per-machine / per-person, **never committed**.
-This is the privacy/access boundary of the role model — sensitive or
+This is a privacy/access boundary — sensitive or
 environment-specific context that must not enter the shared (project) memory or
 the shared aih-graph index.
 
@@ -12,9 +12,8 @@ Contrast with **project memory** (committed, shared): `.aihaus/decisions.md`,
 
 - `environment-online.md` — online (staging/prod) env: deploy URLs, promote/
   rollback commands, **credential locations** (never the secrets themselves).
-  Created by `aih-init` env-detection. Injected into agent context **only for
-  profiles holding the `devops` role** (see `context-inject.sh` + `roles.md`),
-  so builder/dev/qa agents never receive online env in their context.
+  Created by `aih-init` env-detection and updated by `/aih-env`. Local-only:
+  never committed and never indexed into shared memory.
 
 ## Rules
 

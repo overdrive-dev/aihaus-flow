@@ -25,11 +25,11 @@ $ARGUMENTS
 - Read `.aihaus/memory/workflows/environment.md` — the durable env doc, marker block
   `AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START/END`. Note which fields are already
   filled; do **not** re-ask those unless the user wants to change them.
-- Read `.aihaus/.profile` (role profile) and `.aihaus/project.md` for stack + role
-  context. Read `.aihaus/memory/local/environment-online.md` if present (the
-  devops-scoped online environment).
-- `--show` → print the current resolved environment (durable, plus online only if
-  the profile holds `devops`) and stop without asking anything.
+- Read `.aihaus/project.md` for stack context. Read
+  `.aihaus/memory/local/environment-online.md` if present (the local online
+  environment notes).
+- `--show` → print the current resolved environment (durable, plus the local
+  online notes when present) and stop without asking anything.
 
 ## Phase 2 — Interrogate the gaps (one batch)
 
@@ -42,13 +42,13 @@ anything already answered in the source and skip its question:
 - **Credential locations** — where secrets live (Secrets Manager / Parameter Store /
   `.env` vault / password manager). **Locations and named test roles only.**
 - **Env-var locations** — which file or secret store holds env vars per environment.
-- **Env access by role** — which roles reach which environments. The **online
-  boundary** (staging → prod) is **devops-only** (`.aihaus/protocols/roles.md` +
-  `role-guard.sh`); builder/dev/qa stay offline-local.
+- **Env access** — which environments are **online** (staging/prod) vs
+  **offline-local** (Docker, dev). The online boundary is flow-gated:
+  `flow-guard.sh` blocks deploy/promotion commands outside an active tracked flow.
 - **Validation + deploy** — unit/integration command, Playwright/browser command +
   dev URL, CI job names, deploy path and promotion gates.
 
-## Phase 3 — Persist (merge, role-scoped)
+## Phase 3 — Persist (merge)
 
 - **Durable + offline** facts → write into `environment.md` **between the
   `AIHAUS:WORKFLOW-ENVIRONMENT-PROMPTS-START/END` markers**, updating the matching
@@ -56,9 +56,8 @@ anything already answered in the source and skip its question:
   project-scoped (committed) and `@`-imported every session, so it loads once for
   everyone.
 - **Online** facts (staging/prod URLs, online deploy + its credential *location*) →
-  only when the profile holds `devops`; write to
-  `.aihaus/memory/local/environment-online.md` (local, gitignored — never committed,
-  and `context-inject.sh` keeps it out of non-devops contexts).
+  write to `.aihaus/memory/local/environment-online.md` (local, gitignored —
+  never committed, never indexed into shared memory).
 - Confirm in one line what was written and where, and that it now loads
   automatically for every session, agent, and `/compact` — no repetition.
 

@@ -1,5 +1,5 @@
 {
-  "_comment": "Role-default context paths keyed on cohort. Used by context-inject.sh static path. Each entry is an array of {tier, path, rationale} objects. Paths are relative to the project root (or .aihaus/ base). The token '<story-file>' is resolved at runtime by context-inject.sh.",
+  "_comment": "Cohort-default context paths keyed on cohort. Used by context-inject.sh static path. Each entry is an array of {tier, path, rationale} objects. Paths are relative to the project root (or .aihaus/ base). The token '<story-file>' is resolved at runtime by context-inject.sh.",
   "_schema": 1,
   ":planner-binding": [
     {"tier": "HIGH", "path": ".aihaus/project.md", "rationale": "Stack, conventions, and milestone history inform planning scope."},

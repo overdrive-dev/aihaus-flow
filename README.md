@@ -31,7 +31,7 @@ bash "$XDG_DATA_HOME/aihaus/pkg/scripts/install.sh"
 # 2 — Bind it to a project (inside Claude Code)
 cd ~/myproject && claude
 > /aih-install
-> /aih-init                      # writes project.md, captures roles + env
+> /aih-init                      # writes project.md, captures env
 
 # 3 — Launch with full autonomy (DSP wrapper)
 bash .aihaus/auto.sh
@@ -45,7 +45,7 @@ Runs on macOS, Windows, Linux. No runtime, no build step — just markdown and s
 
 <br>
 
-[Why](#why-aihaus) · [Quickstart](#your-first-5-minutes) · [The Four Pillars](#the-four-pillars) · [Roles](#roles--the-online-boundary) · [How the Engine Works](#how-the-engine-works) · [Architecture](docs/architecture-3.0.md) · [Commands](#commands) · [Requirements](#requirements)
+[Why](#why-aihaus) · [Quickstart](#your-first-5-minutes) · [The Four Pillars](#the-four-pillars) · [Online boundary](#-the-online-boundary) · [How the Engine Works](#how-the-engine-works) · [Architecture](docs/architecture-3.0.md) · [Commands](#commands) · [Requirements](#requirements)
 
 </div>
 
@@ -58,7 +58,7 @@ Most of your time with ai-assisted coding goes into describing *how* instead of 
 **aihaus 3.0 inverts the loop.** You think; ai builds. A natural-language request auto-routes into a gated, staged workflow. The system understands the task to 100% before planning, writes failing tests before code, builds in isolated worktrees, runs the suite in local Docker, and parks the result at human-review. Everything it learns about your repo lives in local markdown and a private per-repo index. Nothing is hosted.
 
 > [!NOTE]
-> aihaus is **native-first**. It leans on Claude Code's own primitives — native `/goal`, native plan mode, the native task list, native git worktrees, native subagent memory — and layers gates, roles, a kanban, and a local memory engine *on top*. It does **not** reinvent them.
+> aihaus is **native-first**. It leans on Claude Code's own primitives — native `/goal`, native plan mode, the native task list, native git worktrees, native subagent memory — and layers gates, a kanban, and a local memory engine *on top*. It does **not** reinvent them.
 
 ---
 
@@ -85,7 +85,7 @@ cd ~/myproject && claude
 > /aih-init
 ```
 
-It scans your codebase, detects the stack, and writes `.aihaus/project.md` — the shared context every agent reads. It also **captures your role profile** (pm / builder / dev / qa / devops) and runs `/aih-env` to record your **test environment, credential *locations* (never secret values), and deploy path** into `environment.md`. You describe your setup **once**; every future session and agent reads it without you repeating yourself.
+It scans your codebase, detects the stack, and writes `.aihaus/project.md` — the shared context every agent reads. It also runs `/aih-env` to record your **test environment, credential *locations* (never secret values), and deploy path** into `environment.md`. You describe your setup **once**; every future session and agent reads it without you repeating yourself.
 
 ### Minutes 2–4 — Describe a feature; it auto-routes, gates, and tracks
 
@@ -95,7 +95,7 @@ You don't have to type a slash command. Just say what you want:
 > Add multi-tenant workspaces with role-based access
 ```
 
-aihaus classifies the request, resolves your profile, and **auto-routes** it to the right interactive sub-flow (here, `/aih-plan`). From there it drives the gated stages — and a **local SQLite kanban tracks every move**:
+aihaus classifies the request and **auto-routes** it to the right interactive sub-flow (here, `/aih-plan`). From there it drives the gated stages — and a **local SQLite kanban tracks every move**:
 
 ```
 backlog → entendimento → planejamento → tdd → review-execucao
@@ -187,7 +187,7 @@ Operational state isn't scattered across files — it lives in a **local SQLite 
 aihaus 3.0 builds workflows on **native Claude Code primitives** rather than a bespoke engine.
 
 - **Auto-routing.** A natural-language request **auto-routes** to the right interactive sub-flow — `/aih-plan`, `/aih-feature`, or `/aih-bugfix`. Typing `/aih-*` is an optional override, never required. Feature work → `aih-feature`; a defect → `aih-bugfix`; "think first" → `aih-plan`.
-- **Native fan-out.** Native dynamic JS workflows handle autonomous fan-out — QA sweeps, devops deploys — and are **role-gated** (see below).
+- **Native fan-out.** Native dynamic JS workflows handle autonomous fan-out — QA sweeps, deploy ops — and stay subject to the online boundary (see below).
 - **Safe parallelism.** Many agents run at once with **zero file conflicts**: worktree isolation + **Owned-Files sharding** + sequential merge-back + a single-writer DB (**ADR-260529-A**).
 - **Native surfaces.** Written plans surface to the native **Plan panel**, and the runner **projects to the native task list** so progress shows in the GUI, not just on disk.
 
@@ -211,22 +211,12 @@ Set a **completion condition** and aihaus works autonomously, turn after turn, u
 
 ---
 
-## 🔐 Roles & the online boundary
+## 🔐 The online boundary
 
-aihaus 3.0 ships a **real security barrier**, not advice. Captured at `/aih-init`, your profile is one of five roles:
-
-| Profile | Scope | Can cross staging → prod? |
-|---------|-------|:---:|
-| `pm` | Scope, plan, prioritize | ✕ |
-| `builder` | Scope + build features **locally** | ✕ |
-| `dev` | Implement, **offline-local** | ✕ |
-| `qa` | Test, **offline-local** (Docker) | ✕ |
-| `devops` | Build **and** deploy | ✓ |
-
-The staging → prod boundary **is** the capability boundary, and it's enforced by `role-guard.sh` — a **PreToolUse hook** that blocks deploy / online commands for any non-devops role. `builder` / `dev` / `qa` are **100% offline-local** (Docker).
-
-> [!IMPORTANT]
-> This is what lets a client safely become a **builder**: they can scope and build features locally, end to end — and they **cannot deploy**. The barrier is a hook, not a guideline.
+aihaus 3.0 ships a **real security barrier**, not advice. `flow-guard.sh` — a
+**PreToolUse hook** — blocks any deploy / online command that is not part of an
+active tracked flow, so every promotion traces back to a gated flow and, through
+it, to a business rule and its tests. Nothing reaches prod ad-hoc.
 
 ---
 
@@ -280,7 +270,7 @@ aihaus ships **15 intent-based skills**. Every command follows the same pattern:
 | Command | What it does |
 |---------|--------------|
 | `/aih-install` | Bind / refresh the per-repo overlay in cwd (resolves `AIHAUS_HOME`) |
-| `/aih-init` | Scan the codebase, write `project.md`, **capture roles + env** |
+| `/aih-init` | Scan the codebase, write `project.md`, **capture env** |
 | `/aih-env` | Capture the test environment, credential **locations**, access + deploy → `environment.md` |
 
 ### Scope, plan & build (auto-routable)
@@ -332,11 +322,11 @@ aihaus feedback export                           # bundle gate stats + warnings 
 
 **3.0 foundation:**
 
-- **Native-first throughout** — native `/goal`, native plan mode, native task list, native worktrees, native subagent memory. aihaus layers gates + roles + kanban + the memory engine on top.
+- **Native-first throughout** — native `/goal`, native plan mode, native task list, native worktrees, native subagent memory. aihaus layers gates + kanban + the memory engine on top.
 - **No `aih-goal` skill** — native `/goal` + auto-routed sub-flows replace it; the kanban DB is a **default substrate**, decoupled from any "goal" command.
 - **Auto-routing** — describe what you want; the right sub-flow is chosen for you. Slash commands are an optional override.
 - **Local kanban** — operational state lives in `kanban.db` through gated stages; tests run **100% in local Docker** by default; syncs to Linear / Notion / Jira / GitHub Issues.
-- **Role-based online boundary** — `role-guard.sh` makes "only devops may deploy" a hook-enforced barrier, so a client can safely build locally.
+- **Flow-gated online boundary** — `flow-guard.sh` makes "deploys only inside a tracked flow" a hook-enforced barrier, so nothing reaches prod ad-hoc.
 - **Private repo memory** — `aih-graph` indexes real code, markdown memory, and commits into a per-repo SQLite/BM25 index under the OS state dir. Never hosted.
 
 ---
@@ -350,7 +340,7 @@ your-project/
 │   │   └── _shared/
 │   │       └── autonomy-protocol.md  # Binding execution-autonomy rules
 │   ├── agents/                       # 59 specialist agent definitions
-│   ├── hooks/                        # lifecycle + protocol hooks (incl. role-guard.sh)
+│   ├── hooks/                        # lifecycle + protocol hooks (incl. flow-guard.sh)
 │   ├── protocols/                    # harness.md + stage workflow + kanban DB substrate
 │   ├── memory/                       # local markdown memory (project.md, environment.md, …)
 │   ├── decisions.md                  # Architecture Decision Records (binding)
@@ -393,6 +383,6 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 **You think. ai builds.**
 
-*Describe it once. It routes, gates, builds, and tracks — locally, with a real role barrier, and nothing hosted.*
+*Describe it once. It routes, gates, builds, and tracks — locally, with a real online barrier, and nothing hosted.*
 
 </div>

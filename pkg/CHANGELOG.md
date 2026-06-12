@@ -5,6 +5,17 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- **The entire role system** (ADR-260612-A): the pm/builder/dev/qa/devops capability-profile taxonomy, `role-guard.sh` (the WHO-gate at the online boundary), the `.aihaus/.profile` sentinel, role capture in `/aih-init`, role-resolution in routing/orchestration, role-scoped agent context, and the devops-only annotations on `homolog`/`prod`. **`flow-guard.sh` is now the sole online/deploy gate** — deploys require an active tracked flow, not a privileged profile. Hook count 39 → 38.
+
+### Changed
+
+- `hooks/lib/role-defaults.json` renamed to `hooks/lib/cohort-defaults.json` — it was always keyed by agent cohort; cohorts (`:planner-binding`/`:planner`/`:doer`/`:verifier`/`:adversarial`) are unaffected.
+- Project deploy-pattern extensions moved from `.aihaus/roles/online-actions.conf` to `.aihaus/online-actions.conf`; `project-context-refresh.sh` migrates the legacy path automatically.
+
 ## [0.42.0] - 2026-06-12 - one harness, three memory tiers (M050)
 
 ### Added

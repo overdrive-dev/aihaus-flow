@@ -128,7 +128,6 @@ check_hooks() {
     merge-back.sh
     phase-advance.sh
     read-guard.sh
-    role-guard.sh
     scaffold-assert.sh
     session-end.sh
     session-start.sh
@@ -5078,8 +5077,8 @@ check_m048_memory_integration_contract() {
     if ! grep -Fq 'timeout 12s "${AIHAUS_MEMORY_CMD[@]}"' "${context_hook}"; then
       issues+=("context-inject.sh: packet internal timeout must be 12s (M050/S05)")
     fi
-    if ! grep -Fq 'local combined="${target_agent_name:-}|${cohort:-}|${_active_profile:-}|${task_description:-}"' "${context_hook}"; then
-      issues+=("context-inject.sh: cache key must include task-specific context (+ active profile, S4)")
+    if ! grep -Fq 'local combined="${target_agent_name:-}|${cohort:-}|${task_description:-}"' "${context_hook}"; then
+      issues+=("context-inject.sh: cache key must include task-specific context (agent|cohort|task — ADR-260612-A dropped the profile fold)")
     fi
   fi
 
@@ -5126,7 +5125,7 @@ check_m048_memory_integration_contract() {
       issues+=("${agent}: missing JSON status memory command")
     fi
     if ! grep -Eq 'aihaus memory (query|context|impact|callers)( --repo \.)? --json' "${file}"; then
-      issues+=("${agent}: missing role-specific JSON memory command")
+      issues+=("${agent}: missing agent-specific JSON memory command")
     fi
     if grep -Eq 'aih-graph (status|query|context|impact|callers|gotchas|milestone)' "${file}"; then
       issues+=("${agent}: bypasses integrated aihaus memory command")
@@ -5278,7 +5277,7 @@ check_legacy_hygiene_regressions() {
   if ! grep -Fq 'Legacy Claude Agent Memory Placeholders' "$preflight"; then
     issues+=("legacy-preflight missing empty .claude/agent-memory placeholder handling")
   fi
-  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '/.aihaus/roles/' '/.aihaus/memory/local/' '*/.aihaus/' '*/.claude/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
+  for needle in '/.claude/agents/' '/.claude/hooks/' '/.claude/skills/' '/.aihaus/agents/' '/.aihaus/online-actions.conf' '/.aihaus/memory/local/' '*/.aihaus/' '*/.claude/' '/.bg-shell/' '/.gsd/' '/.hermes/'; do
     if ! grep -Fxq "$needle" "$fragment"; then
       issues+=("gitignore fragment missing ${needle}")
     fi
@@ -5451,7 +5450,7 @@ check_claude_project_context_bridge() {
   local issues=()
   local context_template="${PACKAGE_ROOT}/.aihaus/templates/claude/CLAUDE.md"
   local rule_template="${PACKAGE_ROOT}/.aihaus/templates/claude/rules/aihaus-project-memory.md"
-  local role_defaults="${PACKAGE_ROOT}/.aihaus/hooks/lib/role-defaults.json"
+  local cohort_defaults="${PACKAGE_ROOT}/.aihaus/hooks/lib/cohort-defaults.json"
   local context_hook="${PACKAGE_ROOT}/.aihaus/hooks/context-inject.sh"
   local session_hook="${PACKAGE_ROOT}/.aihaus/hooks/session-start.sh"
   local init_skill="${PACKAGE_ROOT}/.aihaus/skills/aih-init/SKILL.md"
@@ -5509,15 +5508,15 @@ check_claude_project_context_bridge() {
     issues+=("install.ps1 bulk-copies package .aihaus into fresh repositories")
   fi
 
-  if [[ -f "${role_defaults}" ]]; then
-    grep -Fq '.aihaus/protocols/default.md' "${role_defaults}" || issues+=("role-defaults missing workflow profile context")
-    grep -Fq '.aihaus/protocols/routing.md' "${role_defaults}" || issues+=("role-defaults missing routing protocol context")
-    grep -Fq '.aihaus/memory/workflows/environment.md' "${role_defaults}" || issues+=("role-defaults missing workflow environment context")
-    if grep -Eq '\.aihaus/(decisions|knowledge)\.md' "${role_defaults}"; then
-      issues+=("role-defaults preloads project decisions/knowledge ledgers")
+  if [[ -f "${cohort_defaults}" ]]; then
+    grep -Fq '.aihaus/protocols/default.md' "${cohort_defaults}" || issues+=("cohort-defaults missing workflow profile context")
+    grep -Fq '.aihaus/protocols/routing.md' "${cohort_defaults}" || issues+=("cohort-defaults missing routing protocol context")
+    grep -Fq '.aihaus/memory/workflows/environment.md' "${cohort_defaults}" || issues+=("cohort-defaults missing workflow environment context")
+    if grep -Eq '\.aihaus/(decisions|knowledge)\.md' "${cohort_defaults}"; then
+      issues+=("cohort-defaults preloads project decisions/knowledge ledgers")
     fi
   else
-    issues+=("role-defaults.json missing")
+    issues+=("cohort-defaults.json missing")
   fi
 
   if [[ -f "${context_hook}" ]]; then
@@ -5778,7 +5777,7 @@ EOF
   [[ -f "${tmp_root}/.aihaus/protocols/default.md" ]] || issues+=("refresh hook did not seed workflow profile")
   [[ -f "${tmp_root}/.aihaus/memory/workflows/rules.md" ]] || issues+=("refresh hook did not seed workflow rules memory")
   [[ -f "${tmp_root}/.aihaus/memory/workflows/business-rules.md" ]] || issues+=("refresh hook did not seed business-rules memory")
-  [[ -f "${tmp_root}/.aihaus/roles/online-actions.conf" ]] || issues+=("refresh hook did not seed local online-actions config")
+  [[ -f "${tmp_root}/.aihaus/online-actions.conf" ]] || issues+=("refresh hook did not seed local online-actions config")
   [[ -f "${tmp_root}/.aihaus/init/environment-discovery.md" ]] || issues+=("refresh hook did not run environment discovery")
   [[ -f "${tmp_root}/.aihaus/audit/claude-context-verify.md" ]] || issues+=("refresh hook did not run Claude verifier")
   if [[ -f "${tmp_root}/.aihaus/audit/project-context-freshness.md" ]]; then
@@ -6597,7 +6596,7 @@ check_global_harness_and_feedback() {
 #      cohort fork; removal scheduled in the M046+ deprecation window.
 #   2. pkg/.aihaus/hooks/context-inject.sh _get_static_paths() — the M050/S02
 #      back-compat alias fall-through that resolves merged-:adversarial agents
-#      against a STALE role-defaults.json still carrying scout/review keys
+#      against a STALE cohort-defaults.json still carrying scout/review keys
 #      (resilience code must name the stale keys in order to map them).
 # Append-only ledgers and the v3->v4 sidecar-migration surfaces (which must
 # reference the old keys to fold them) are structurally exempt via the
@@ -6677,7 +6676,7 @@ check_stale_cohort_keys() {
   if [[ ${#issues[@]} -eq 0 ]]; then
     _pass "$label"
     echo "        note: deliberate carve-out — pkg/.aihaus/hooks/context-budget.conf lines 13-18 (pre-M027 back-compat budget keys; removal scheduled M046+)"
-    echo "        note: deliberate carve-out — pkg/.aihaus/hooks/context-inject.sh _get_static_paths() alias loop (M050/S02 stale role-defaults.json resilience)"
+    echo "        note: deliberate carve-out — pkg/.aihaus/hooks/context-inject.sh _get_static_paths() alias loop (M050/S02 stale cohort-defaults.json resilience)"
   else
     _fail "$label" "${issues[@]}"
   fi
@@ -6717,7 +6716,7 @@ check_context_inject_fixture() {
     cp "$hook_src" "$1/.aihaus/hooks/context-inject.sh" || return 1
     cp "${PACKAGE_ROOT}/.aihaus/hooks/context-budget.conf" "$1/.aihaus/hooks/context-budget.conf" || return 1
     cp "${PACKAGE_ROOT}/.aihaus/hooks/lib/path-helpers.sh" "$1/.aihaus/hooks/lib/path-helpers.sh" || return 1
-    cp "${PACKAGE_ROOT}/.aihaus/hooks/lib/role-defaults.json" "$1/.aihaus/hooks/lib/role-defaults.json" || return 1
+    cp "${PACKAGE_ROOT}/.aihaus/hooks/lib/cohort-defaults.json" "$1/.aihaus/hooks/lib/cohort-defaults.json" || return 1
     if [[ "$2" == "1" ]]; then
       cp "${PACKAGE_ROOT}/.aihaus/protocols/harness.md" "$1/.aihaus/protocols/harness.md" || return 1
     fi

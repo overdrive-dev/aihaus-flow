@@ -8,18 +8,18 @@ set -euo pipefail
 # work promotes to an online environment it must be part of a tracked sub-flow, so
 # nothing reaches prod ad-hoc and every promoted change traces back to a rule.
 #
-# Composes with role-guard.sh: role-guard answers WHO may cross the online
-# boundary (devops); flow-guard answers whether the crossing happens WITHIN a
-# flow. The deploy-command patterns are shared via lib/online-actions.sh (single
-# source — the M030 drift lesson).
+# This is the SOLE online-boundary gate (ADR-260612-A): the question is never
+# WHO is deploying, only whether the deploy happens WITHIN a tracked flow. The
+# deploy-command patterns live in lib/online-actions.sh (single source — the
+# M030 drift lesson).
 #
 # "Active flow" = any sentinel present:
 #   .claude/_state/active-flow              (feature / bugfix / milestone)
 #   .claude/calibrate-guard.active-slug     (plan)
 # Absent → ad-hoc promotion → block.
 #
-# Early-exit when the flow/role model is not installed (no .aihaus/.profile), so
-# this is a no-op on repos that have not opted in. Opt-out: AIHAUS_FLOW_GUARD=0.
+# Early-exit when the aihaus overlay is not installed (no .aihaus/ directory),
+# so this is a no-op on repos that have not opted in. Opt-out: AIHAUS_FLOW_GUARD=0.
 # Audit: .claude/audit/flow-guard.jsonl.
 
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,12 +32,12 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ROOT="$(aihaus_project_root)"
 
-# Flow/role model not installed → out of scope (no-op).
-[ -f "${ROOT}/.aihaus/.profile" ] || exit 0
+# aihaus overlay not installed → out of scope (no-op).
+[ -d "${ROOT}/.aihaus" ] || exit 0
 
 INPUT=$(cat)
 
-# jq-optional command extraction (mirror role-guard / bash-guard).
+# jq-optional command extraction (mirror bash-guard).
 if command -v jq >/dev/null 2>&1; then
   COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || echo "")
 else
@@ -47,7 +47,7 @@ fi
 
 ONLINE_REGEX="$(aihaus_online_action_regex "$ROOT")"
 
-# Segment on && || ; and test each segment (mirror role-guard).
+# Segment on && || ; and test each segment (mirror bash-guard).
 matched=0
 MATCHED_SEG=""
 OLD_IFS="$IFS"
