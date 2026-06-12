@@ -3,3 +3,6 @@
 .aihaus/.calibration
 .aihaus/auto.sh
 .aihaus/auto.ps1
+.aihaus/hooks/
+.aihaus/hooks/lib/
+.aihaus/hooks/context-budget.conf
