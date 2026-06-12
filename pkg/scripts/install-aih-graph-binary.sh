@@ -89,14 +89,25 @@ fi
 
 # Resolve version → tag.
 if [[ "$VERSION" == "latest" ]]; then
-  # GitHub redirects /releases/latest to the actual tag URL. Follow once.
-  tag_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" 2>/dev/null || true)"
-  if [[ -z "$tag_url" ]]; then
-    echo "install-aih-graph-binary: failed to resolve latest release" >&2
+  # The repo carries TWO release families (aihaus-v* and aih-graph-v*), so
+  # GitHub's /releases/latest redirect may land on an aihaus release that
+  # carries no binaries (observed live 2026-06-12: latest=aihaus-v0.42.0 →
+  # asset 404). Resolve the newest aih-graph-v* tag via the releases API
+  # (no jq dependency), falling back to the redirect only when it already
+  # points at an aih-graph-v* tag.
+  TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=30" 2>/dev/null \
+    | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"aih-graph-v[^"]*"' \
+    | head -1 | sed 's/.*"\(aih-graph-v[^"]*\)".*/\1/' || true)"
+  if [[ -z "$TAG" ]]; then
+    tag_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" 2>/dev/null || true)"
+    case "${tag_url##*/}" in
+      aih-graph-v*) TAG="${tag_url##*/}" ;;
+    esac
+  fi
+  if [[ -z "$TAG" ]]; then
+    echo "install-aih-graph-binary: failed to resolve latest aih-graph-v* release" >&2
     exit 1
   fi
-  # tag_url is like https://github.com/owner/repo/releases/tag/aih-graph-v0.1.0
-  TAG="${tag_url##*/}"
 else
   TAG="$VERSION"
   [[ "$TAG" != aih-graph-v* ]] && TAG="aih-graph-${TAG}"
