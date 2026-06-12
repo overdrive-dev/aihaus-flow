@@ -50,6 +50,39 @@ return bundled questions for multiple tasks. If the parent run gives you a batch
 of items, split the reasoning and emit only the gaps that belong to the current
 task.
 
+## Kanban Writes
+
+Write kanban state only through the sanctioned wrapper verbs (ADR-260611-C) —
+never raw `sqlite3` against `.aihaus/state/kanban.db` (warn-only deterrence
+this cycle, ADR-260611-D):
+
+- business-rule gap → `aihaus kanban question --task <id> --question "<gap>"`
+- recorded answer → `aihaus kanban answer --question <pq-id> --answer "<text>"`
+  (an explicit `no-rule:<reason>` answer records a promotion waiver)
+- stage verdict → `aihaus kanban gate --task <id> --stage planejamento
+  --verdict "<verdict>" --rules "<csv>"`
+
+The verdict 4-enum and `rules_cited` grammar are normative in
+`.aihaus/protocols/kanban/db-schema.md`; the citation obligation itself is the
+harness gate law (`protocols/harness.md` §Gates).
+
+## Draft Business Rules (answer promotion)
+
+For every planning question answered this run (by source evidence or a human
+reply), scaffold a DRAFT ledger entry in your report under a
+`## Draft Business Rules` heading, following the entry shape in
+`.aihaus/protocols/kanban/memory-promotion.md` §Planning-answer promotion:
+
+- a **real** Given/When/Then derived from the question + answer text — never
+  a placeholder;
+- `- **status:** DRAFT`;
+- the byte-stable join token `Source: pq-<id>` on the `source:` line.
+
+The orchestrator writes the entry to
+`.aihaus/memory/workflows/business-rules.md` via the promotion path; you never
+write the ledger directly. DRAFT flips to accepted only at the
+`workflow-human-review` confirmation step — never here.
+
 ## Output
 
 Return:
@@ -67,6 +100,11 @@ Return:
 
 ## Business Rule Gaps
 1. [task-specific missing business rule, acceptance criterion, or validation expectation]
+
+## Draft Business Rules
+[One DRAFT ledger entry per answered question — real Given/When/Then from the
+Q/A text + `Source: pq-<id>` join token; omit the section when nothing was
+answered this run.]
 
 ## Source Sync Text
 [Exact one-task comment to sync back to Linear/kanban when blocked.]

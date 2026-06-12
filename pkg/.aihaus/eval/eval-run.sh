@@ -65,6 +65,40 @@ if [[ -f "$RG" ]]; then
   _report role-guard-online-blocks INFO "${blocks} online-action block(s) recorded"
 fi
 
+# 6 — Learning loop (planning-answer promotion, M050/S07 — feeds the ADR-260611-D
+#     flip evidence): every answered planning question must have a BR-ledger entry
+#     carrying its byte-stable join token `Source: pq-<id>` in
+#     .aihaus/memory/workflows/business-rules.md (route: protocols/kanban/
+#     memory-promotion.md). Waiver: answers recorded as `no-rule:<reason>` are
+#     explicit no-promotion rows and are exempt.
+LEDGER="${PROJECT}/.aihaus/memory/workflows/business-rules.md"
+unpromoted=0
+while IFS= read -r row; do
+  [[ -z "$row" ]] && continue
+  qid="${row%%|*}"
+  ans="${row#*|}"
+  case "$ans" in no-rule:*) continue ;; esac
+  grep -qF "Source: ${qid}" "$LEDGER" 2>/dev/null || unpromoted=$((unpromoted+1))
+done < <(_q "SELECT question_id || '|' || replace(replace(answer, char(10), ' '), char(13), ' ') FROM planning_answers;")
+if [[ "$unpromoted" -gt 0 ]]; then _report planning-answer-promotion FAIL "${unpromoted} answered planning question(s) without a ledger entry carrying 'Source: pq-<id>' (waive explicitly with a no-rule:<reason> answer)"; fails=$((fails+1)); else _report planning-answer-promotion PASS ""; fi
+
+# 7 — Citation coverage (REPORT-ONLY — never a gate; the ADR-260611-D flip
+#     evidence stream): reads .claude/audit/rule-cite.jsonl (sole writer: the
+#     `aihaus kanban` wrapper, ADR-260611-C) and reports the
+#     autonomous-decisions-per-human-answer metric.
+RC="${PROJECT}/.claude/audit/rule-cite.jsonl"
+if [[ -f "$RC" ]]; then
+  gate_rows="$(_num "$(grep -c '"event":"kanban-gate"' "$RC" 2>/dev/null || echo 0)")"
+  cited_rows="$(_num "$(grep -c '"event":"kanban-gate".*"validation":"ok".*"decision":"allow"' "$RC" 2>/dev/null || echo 0)")"
+  answers="$(_num "$(_q "SELECT count(*) FROM planning_answers;")")"
+  coverage="n/a"; per_answer="n/a"
+  [[ "$gate_rows" -gt 0 ]] && coverage="$(awk -v c="$cited_rows" -v t="$gate_rows" 'BEGIN { printf "%.0f%%", (c/t)*100 }')"
+  [[ "$answers" -gt 0 ]] && per_answer="$(awk -v c="$cited_rows" -v a="$answers" 'BEGIN { printf "%.1f", c/a }')"
+  _report citation-coverage INFO "${cited_rows}/${gate_rows} gate write(s) cited (coverage ${coverage}); ${answers} human answer(s); ${per_answer} autonomous decision(s) per human answer"
+else
+  _report citation-coverage INFO "no rule-cite.jsonl yet — 0 gate writes via the wrapper (aihaus kanban gate)"
+fi
+
 # Rubric (NON-deterministic, out of scope here): business-rule coverage — whether the
 # delivered work satisfies the confirmed BUSINESS-RULES for each task — requires a
 # judgment/LLM pass over BUSINESS-RULES + the evidence package. Run it separately.

@@ -115,6 +115,18 @@ handoff must explain the failed business expectation and ask the human-facing
 questions needed to clarify it. Avoid implementation jargon unless needed as
 evidence.
 
+## Kanban Writes
+
+Write kanban state only through the sanctioned wrapper verbs (ADR-260611-C) —
+never raw `sqlite3` against `.aihaus/state/kanban.db` (warn-only deterrence
+this cycle, ADR-260611-D): record this stage's verdict via
+`aihaus kanban gate --task <id> --stage homolog --verdict "<verdict>"
+--rules "<csv>"`, and any business-rule gap / answer via
+`aihaus kanban question` / `aihaus kanban answer`. The verdict 4-enum and
+`rules_cited` grammar are normative in
+`.aihaus/protocols/kanban/db-schema.md`; the citation obligation itself is
+the harness gate law (`protocols/harness.md` §Gates).
+
 ## Memory Writes
 
 When reusable Playwright/dev-review facts appear, include a

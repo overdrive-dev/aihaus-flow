@@ -41,6 +41,11 @@ Verbs:
                 Append a global user preference (tier C, M050/S06) to
                 ~\.aihaus\memory\user\preferences.md -- the SOLE write path
                 (ADR-260611-C). Topics: workflow|style|tooling|communication|other
+  kanban gate|question|answer
+                Sanctioned write path for .aihaus/state/kanban.db (M050/S07,
+                ADR-260611-C): gate_events / planning_questions /
+                planning_answers rows. Gate validation is WARN-ONLY this cycle
+                (ADR-260611-D). Grammar: .aihaus/protocols/kanban/db-schema.md
   update --all  Update all registered installs (requires Z9 registry)
   self-update   Update the central aihaus clone from origin (requires Z9)
   --help, -h    Show this message
@@ -353,6 +358,194 @@ function Invoke-Prefs([string]$HomePath,[string[]]$PrefArgs) {
     exit 0
 }
 
+# ---------------------------------------------------------------------------
+# kanban (M050/S07, ADR-260611-C) -- the sanctioned write path for
+# .aihaus/state/kanban.db (gate_events / planning_questions / planning_answers).
+# Verdict 4-enum + rules_cited grammar are NORMATIVE in
+# .aihaus/protocols/kanban/db-schema.md; the citation obligation itself is the
+# harness gate law (protocols/harness.md, Gates) -- cited, not restated.
+# Gate validation is WARN-ONLY this cycle (ADR-260611-D): malformed shape =>
+# warn + "warn-allow" audit row + exit 0 -- never a block. Every decision path
+# (allow / warn-allow / bypass) emits its row BEFORE exiting.
+# .claude/audit/rule-cite.jsonl -- this wrapper is its SOLE writer (BR-P5),
+# keyed (task_id, stage, created_at). gate_events schema UNTOUCHED (BR-P10).
+# Audited validation bypass: AIHAUS_KANBAN_GATE_VALIDATE=0 (BR-P4).
+# BR-P3 parity with the bash shim _kanban().
+# ---------------------------------------------------------------------------
+function Get-KanbanTs { (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ") }
+
+function ConvertTo-KanbanJson([string]$s) {
+    if ($null -eq $s) { return "" }
+    return (($s -replace '\\','\\') -replace '"','\"')
+}
+
+function ConvertTo-KanbanSql([string]$s) {
+    if ($null -eq $s) { return "" }
+    return ($s -replace "'","''")
+}
+
+function Get-KanbanNextId([string]$Sqlite,[string]$Db,[string]$Table,[string]$Prefix) {
+    $n = 0
+    try {
+        $sub = $Prefix.Length + 1
+        $raw = (& $Sqlite $Db "SELECT COALESCE(MAX(CAST(substr(id, $sub) AS INTEGER)), 0) FROM $Table WHERE id GLOB '$Prefix[0-9]*';" 2>$null | Out-String).Trim()
+        if ($raw -match '^[0-9]+$') { $n = [int]$raw }
+    } catch { $n = 0 }
+    return ($n + 1)
+}
+
+function Invoke-Kanban([string]$HomePath,[string[]]$KanArgs) {
+    $sub = if ($KanArgs -and $KanArgs.Count -ge 1) { $KanArgs[0] } else { "" }
+    if ($sub -notin @("gate","question","answer")) {
+        Write-Host 'aihaus kanban: unknown sub-verb. Usage: aihaus kanban gate|question|answer (grammar: .aihaus/protocols/kanban/db-schema.md, ADR-260611-C)' -ForegroundColor Red
+        exit 2
+    }
+    # Generic --flag <value> / --flag=<value> parse into a map.
+    $opt = @{}
+    for ($i = 1; $i -lt $KanArgs.Count; $i++) {
+        $a = $KanArgs[$i]
+        if ($a -like "--*=*") {
+            $pair = $a.Substring(2).Split("=", 2)
+            $opt[$pair[0]] = $pair[1]
+        } elseif ($a -like "--*" -and ($i+1) -lt $KanArgs.Count) {
+            $opt[$a.Substring(2)] = $KanArgs[$i+1]; $i++
+        }
+    }
+    $repo = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { (Get-Location).Path }
+    $db = if ($opt["db"]) { $opt["db"] } else { Join-Path $repo ".aihaus\state\kanban.db" }
+
+    if ($sub -eq "gate") {
+        $task = $opt["task"]; $stage = $opt["stage"]; $verdict = $opt["verdict"]; $rules = $opt["rules"]
+        if (-not $task -or -not $stage -or -not $verdict) {
+            Write-Host 'aihaus kanban gate: --task <id> --stage <stage> --verdict "<verdict>" required ([--rules <csv>] [--reason <text>] [--evidence <path>] [--db <path>])' -ForegroundColor Red
+            exit 2
+        }
+        # --- Shape validation (WARN-ONLY; grammar normative in db-schema.md) --
+        $validation = "ok"; $warnReason = ""; $decision = "allow"; $optOut = "false"
+        $ruleEls = @()
+        if ($rules) { $ruleEls = @($rules.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+        if ($env:AIHAUS_KANBAN_GATE_VALIDATE -eq "0") {
+            $decision = "bypass"; $optOut = "true"
+        } else {
+            if ($verdict -notmatch '^(PASS|SKIPPED|BLOCKED-TO-PLANNING|BLOCKED)(:.*)?$') {
+                $validation = "warn"
+                $warnReason = "verdict '$verdict' not in 4-enum PASS|SKIPPED|BLOCKED-TO-PLANNING|BLOCKED"
+            }
+            if (-not $rules) {
+                $validation = "warn"
+                if ($warnReason) { $warnReason += "; " }
+                $warnReason += "rules_cited missing -- cite per the harness gate law (protocols/harness.md)"
+            } else {
+                $bad = @($ruleEls | Where-Object { $_ -notmatch '^(BR-F?[0-9]+|GAP:pq-[A-Za-z0-9][A-Za-z0-9_-]*|MECHANICS)$' })
+                if ($bad.Count -gt 0) {
+                    $validation = "warn"
+                    if ($warnReason) { $warnReason += "; " }
+                    $warnReason += "rules_cited element(s) '$($bad -join "' '")' not in grammar BR-F?[0-9]+ | GAP:pq-<id> | MECHANICS"
+                }
+            }
+            if ($validation -eq "warn") { $decision = "warn-allow" }
+        }
+        if ($decision -eq "warn-allow") {
+            Write-Host "aihaus kanban gate: WARN -- $warnReason. Recorded warn-allow; the write proceeds (warn-only this cycle, ADR-260611-D). Grammar: .aihaus/protocols/kanban/db-schema.md. Audited bypass: AIHAUS_KANBAN_GATE_VALIDATE=0." -ForegroundColor Yellow
+        }
+        # --- Persist the kanban row (gate_events schema UNTOUCHED -- BR-P10) --
+        $sqlite = Get-Command sqlite3 -ErrorAction SilentlyContinue
+        if (-not $sqlite) { Write-Host "aihaus kanban: sqlite3 not found -- the kanban DB requires it (same prerequisite as init-kanban-db.sh). Install sqlite3 and retry." -ForegroundColor Red; exit 127 }
+        $dbDir = Split-Path -Parent $db
+        if (-not (Test-Path $dbDir)) { New-Item -ItemType Directory -Path $dbDir -Force | Out-Null }
+        if (-not (Test-Path $db)) {
+            foreach ($schema in @((Join-Path $repo ".aihaus\protocols\kanban\schema.sql"), (Join-Path $HomePath "pkg\.aihaus\protocols\kanban\schema.sql"))) {
+                if (Test-Path $schema) { try { Get-Content -Raw -LiteralPath $schema | & $sqlite.Source $db 2>$null } catch { }; break }
+            }
+        }
+        $createdAt = Get-KanbanTs
+        $gid = "GATE-{0:d3}" -f (Get-KanbanNextId $sqlite.Source $db "gate_events" "GATE-")
+        $reasonSql = if ($opt["reason"]) { "'" + (ConvertTo-KanbanSql $opt["reason"]) + "'" } else { "NULL" }
+        $evidenceSql = if ($opt["evidence"]) { "'" + (ConvertTo-KanbanSql $opt["evidence"]) + "'" } else { "NULL" }
+        $ok = $true
+        try {
+            & $sqlite.Source $db "INSERT INTO gate_events (id, task_id, stage, verdict, reason, evidence_path, created_at) VALUES ('$(ConvertTo-KanbanSql $gid)', '$(ConvertTo-KanbanSql $task)', '$(ConvertTo-KanbanSql $stage)', '$(ConvertTo-KanbanSql $verdict)', $reasonSql, $evidenceSql, '$createdAt');" 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) { $ok = $false }
+        } catch { $ok = $false }
+        if (-not $ok) { Write-Host "aihaus kanban gate: failed to write gate_events row to $db." -ForegroundColor Red; exit 1 }
+        # --- Citation row -> rule-cite.jsonl (SOLE writer -- BR-P5) -----------
+        try {
+            $auditDir = Join-Path $repo ".claude\audit"
+            if (-not (Test-Path $auditDir)) { New-Item -ItemType Directory -Path $auditDir -Force | Out-Null }
+            $rulesJson = ($ruleEls | ForEach-Object { '"' + (ConvertTo-KanbanJson $_) + '"' }) -join ","
+            $warnJson = if ($warnReason) { '"' + (ConvertTo-KanbanJson $warnReason) + '"' } else { "null" }
+            $row = '{"ts":"' + $createdAt + '","event":"kanban-gate","task_id":"' + (ConvertTo-KanbanJson $task) + '","stage":"' + (ConvertTo-KanbanJson $stage) + '","created_at":"' + $createdAt + '","verdict":"' + (ConvertTo-KanbanJson $verdict) + '","rules_cited":[' + $rulesJson + '],"validation":"' + $validation + '","warn_reason":' + $warnJson + ',"decision":"' + $decision + '","opt_out":' + $optOut + ',"shell":"pwsh"}'
+            [System.IO.File]::AppendAllText((Join-Path $auditDir "rule-cite.jsonl"), $row + "`n")
+        } catch { }
+        Write-Host "kanban: gate $(($verdict -split ':')[0]) recorded for $task@$stage ($gid; decision $decision)"
+        exit 0
+    }
+
+    # --- question / answer (thin validated wrappers) --------------------------
+    $sqlite = Get-Command sqlite3 -ErrorAction SilentlyContinue
+    if (-not $sqlite) { Write-Host "aihaus kanban: sqlite3 not found -- the kanban DB requires it (same prerequisite as init-kanban-db.sh). Install sqlite3 and retry." -ForegroundColor Red; exit 127 }
+    $dbDir = Split-Path -Parent $db
+    if (-not (Test-Path $dbDir)) { New-Item -ItemType Directory -Path $dbDir -Force | Out-Null }
+    if (-not (Test-Path $db)) {
+        foreach ($schema in @((Join-Path $repo ".aihaus\protocols\kanban\schema.sql"), (Join-Path $HomePath "pkg\.aihaus\protocols\kanban\schema.sql"))) {
+            if (Test-Path $schema) { try { Get-Content -Raw -LiteralPath $schema | & $sqlite.Source $db 2>$null } catch { }; break }
+        }
+    }
+    $srcKind = if ($opt["source-kind"]) { $opt["source-kind"] } else { "local" }
+    $srcRefSql = if ($opt["source-ref"]) { "'" + (ConvertTo-KanbanSql $opt["source-ref"]) + "'" } else { "NULL" }
+
+    if ($sub -eq "question") {
+        $task = $opt["task"]; $question = $opt["question"]
+        if (-not $task -or -not $question) {
+            Write-Host 'aihaus kanban question: --task <id> --question "<one task-specific business-rule gap>" required ([--reason <text>] [--id pq-<n>] [--source-kind <kind>] [--source-ref <ref>] [--db <path>])' -ForegroundColor Red
+            exit 2
+        }
+        $qid = $opt["id"]
+        if ($qid -and $qid -notmatch '^pq-[A-Za-z0-9][A-Za-z0-9_-]*$') {
+            Write-Host "aihaus kanban question: --id '$qid' must match pq-<id> (grammar: .aihaus/protocols/kanban/db-schema.md)." -ForegroundColor Red
+            exit 2
+        }
+        if (-not $qid) { $qid = "pq-{0:d3}" -f (Get-KanbanNextId $sqlite.Source $db "planning_questions" "pq-") }
+        $askedAt = Get-KanbanTs
+        $reasonSql = if ($opt["reason"]) { "'" + (ConvertTo-KanbanSql $opt["reason"]) + "'" } else { "NULL" }
+        $ok = $true
+        try {
+            & $sqlite.Source $db "INSERT INTO planning_questions (id, task_id, question, reason, status, source_kind, source_ref, asked_at) VALUES ('$(ConvertTo-KanbanSql $qid)', '$(ConvertTo-KanbanSql $task)', '$(ConvertTo-KanbanSql $question)', $reasonSql, 'open', '$(ConvertTo-KanbanSql $srcKind)', $srcRefSql, '$askedAt');" 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) { $ok = $false }
+        } catch { $ok = $false }
+        if (-not $ok) { Write-Host "aihaus kanban question: failed to write planning_questions row to $db (duplicate id $qid?)." -ForegroundColor Red; exit 1 }
+        Write-Host "kanban: planning question $qid recorded for $task (status open)"
+        exit 0
+    }
+
+    # answer
+    $qid = $opt["question"]; $answer = $opt["answer"]
+    if (-not $qid -or -not $answer) {
+        Write-Host 'aihaus kanban answer: --question <pq-id> --answer "<text>" required ([--source-kind <kind>] [--source-ref <ref>] [--db <path>]). A "no-rule:<reason>" answer records an explicit promotion waiver.' -ForegroundColor Red
+        exit 2
+    }
+    $exists = "0"
+    try { $exists = (& $sqlite.Source $db "SELECT count(*) FROM planning_questions WHERE id = '$(ConvertTo-KanbanSql $qid)';" 2>$null | Out-String).Trim() } catch { $exists = "0" }
+    if ($exists -eq "0") {
+        Write-Host "aihaus kanban answer: question $qid not found in $db -- record it first via: aihaus kanban question" -ForegroundColor Red
+        exit 4
+    }
+    $qstatus = if ($answer -like "no-rule:*") { "waived" } else { "answered" }
+    $aid = "pa-{0:d3}" -f (Get-KanbanNextId $sqlite.Source $db "planning_answers" "pa-")
+    $answeredAt = Get-KanbanTs
+    $ok = $true
+    try {
+        & $sqlite.Source $db "INSERT INTO planning_answers (id, question_id, answer, source_kind, source_ref, answered_at) VALUES ('$(ConvertTo-KanbanSql $aid)', '$(ConvertTo-KanbanSql $qid)', '$(ConvertTo-KanbanSql $answer)', '$(ConvertTo-KanbanSql $srcKind)', $srcRefSql, '$answeredAt'); UPDATE planning_questions SET status = '$qstatus', answered_at = '$answeredAt' WHERE id = '$(ConvertTo-KanbanSql $qid)';" 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) { $ok = $false }
+    } catch { $ok = $false }
+    if (-not $ok) { Write-Host "aihaus kanban answer: failed to write planning_answers row to $db." -ForegroundColor Red; exit 1 }
+    Write-Host "kanban: answer $aid recorded for $qid (question status $qstatus)"
+    if ($qstatus -eq "answered") {
+        Write-Host "kanban: promote it to a DRAFT business rule carrying 'Source: $qid' per .aihaus/protocols/kanban/memory-promotion.md (the eval planning-answer-promotion join checks this)"
+    }
+    exit 0
+}
+
 if ($Verb -in @("--help","-h","")) { Show-Help; exit 0 }
 $h=Resolve-Home
 if (-not $h) { Write-Host "aihaus: package not found. Set AIHAUS_HOME or reinstall." -ForegroundColor Red; exit 1 }
@@ -371,6 +564,7 @@ switch ($Verb) {
       Invoke-Sh (Join-Path $h "pkg\scripts\update.sh") (Join-Path $h "pkg\scripts\update.ps1") (@("--target",(Get-Location).Path)+$Rest) }
   "memory"      { Invoke-Memory $h $Rest }
   "prefs"       { Invoke-Prefs $h $Rest }
+  "kanban"      { Invoke-Kanban $h $Rest }
   "self-update" { Test-DogfoodDirty; Invoke-Sh (Join-Path $h "pkg\scripts\update.sh") (Join-Path $h "pkg\scripts\update.ps1") (@("--self")+$Rest) }
   default       { Write-Host "aihaus: unknown verb '$Verb'" -ForegroundColor Red; Write-Host "Run 'aihaus --help' for usage." -ForegroundColor Red; exit 2 }
 }
