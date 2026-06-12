@@ -303,6 +303,35 @@ install_user_global_skills() {
 }
 
 # ---------------------------------------------------------------------------
+# M050/S06 (ADR-260611-E): tier-C global user-preferences seed.
+# Creates ~/.aihaus/memory/user/preferences.md from the package template,
+# create-if-absent ONLY (seed_claude_context_bridge shape — never clobber
+# user content). Sole runtime write path is `aihaus prefs add` (ADR-260611-C);
+# this is the one-time installer seed. Runs on BOTH the dogfood/global-
+# bootstrap arm AND the per-repo arm (each invocation hits exactly one).
+# Opt-out: AIHAUS_SKIP_TIER_C_SEED=1 (named in ADR-260611-E; quiet note only).
+# Purge arm: uninstall.sh --purge-user-global removes ~/.aihaus/memory/user/.
+# ---------------------------------------------------------------------------
+seed_tier_c_preferences() {
+  if [[ "${AIHAUS_SKIP_TIER_C_SEED:-0}" == "1" ]]; then
+    echo "  tier-c: seed skipped (AIHAUS_SKIP_TIER_C_SEED=1)"
+    return 0
+  fi
+  local prefs_src="${PKG_TEMPLATES}/user-preferences-global.md"
+  local prefs_dst="$HOME/.aihaus/memory/user/preferences.md"
+  if [[ ! -f "${prefs_src}" ]]; then
+    echo "  warn: tier-C preferences template missing at ${prefs_src}" >&2
+    return 0
+  fi
+  if [[ ! -f "${prefs_dst}" ]]; then
+    mkdir -p "$(dirname "${prefs_dst}")" 2>/dev/null || return 0
+    cp "${prefs_src}" "${prefs_dst}" 2>/dev/null && \
+      echo "  tier-c: created ~/.aihaus/memory/user/preferences.md (global user preferences; add entries via 'aihaus prefs add')"
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # V5 (M022/Z3): Dogfood mode check — I-04, L9
 # Must run BEFORE per-repo install logic. If we are inside the aihaus package
 # directory, emit a one-liner and exit 0. Never git-pull. Never self-symlink.
@@ -317,6 +346,8 @@ if is_dogfood_cwd; then
   mkdir -p "$HOME/.aihaus"
   printf '%s\n' "${RESOLVED_HOME}" > "$HOME/.aihaus/.install-source"
   echo "  registry: ~/.aihaus/.install-source -> ${RESOLVED_HOME}"
+  # M050/S06: tier-C seed on the global-bootstrap arm (before the dogfood exit).
+  seed_tier_c_preferences
   echo ""
   echo "aihaus user-global skills installed (dogfood mode; per-repo overlay skipped)."
   exit 0
@@ -718,6 +749,10 @@ install_user_global_skills "${AIHAUS_RESOLVED}"
 mkdir -p "$HOME/.aihaus"
 printf '%s\n' "${AIHAUS_RESOLVED}" > "$HOME/.aihaus/.install-source"
 echo "  registry: ~/.aihaus/.install-source -> ${AIHAUS_RESOLVED}"
+
+# Step 11.5: tier-C global user-preferences seed (M050/S06, ADR-260611-E) —
+# per-repo arm call site (the dogfood arm seeds + exits earlier).
+seed_tier_c_preferences
 
 # Step 12: idempotent .gitignore injection (soft-fail per LD-3)
 # Manual fallback: pkg/.aihaus/templates/gitignore-fragment

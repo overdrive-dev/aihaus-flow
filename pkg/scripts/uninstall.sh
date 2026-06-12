@@ -8,6 +8,8 @@
 #                          Only removes entries carrying the .aihaus-managed marker AND
 #                          whose symlink target resolves under registered AIHAUS_HOME
 #                          (R4 readlink validation — ADR-260504-A FR-06 + FR-21).
+#                          Also purges tier-C global user preferences (M050/S06 /
+#                          ADR-260611-E): ~/.aihaus/memory/user/ + prefs-audit JSONL.
 #   -h, --help             Show usage
 set -euo pipefail
 
@@ -23,6 +25,9 @@ Options:
   --purge-user-global  Remove user-global aih-* skills from ~/.claude/skills/
                        Only removes entries marked aihaus-owned AND whose symlink
                        target resolves under registered AIHAUS_HOME (R4 guard).
+                       Also purges tier-C global user preferences (M050/S06,
+                       ADR-260611-E): ~/.aihaus/memory/user/ and the prefs
+                       audit JSONL ~/.aihaus/state/prefs-audit.jsonl.
   -h, --help           Show this message
 EOF
 }
@@ -203,9 +208,35 @@ purge_user_global() {
   fi
 }
 
+# ---------------------------------------------------------------------------
+# Tier-C purge (M050/S06, ADR-260611-E standing checklist): remove the global
+# user-preferences store (~/.aihaus/memory/user/) and the prefs-audit JSONL
+# (~/.aihaus/state/prefs-audit.jsonl). Independent of the R4 registry guard
+# above — these are plain aihaus-owned files, not symlinked skill dirs.
+# ---------------------------------------------------------------------------
+purge_tier_c() {
+  local user_memory_dir="$HOME/.aihaus/memory/user"
+  local prefs_audit="$HOME/.aihaus/state/prefs-audit.jsonl"
+  local tier_c_touched="0"
+  if [[ -d "${user_memory_dir}" ]]; then
+    rm -rf "${user_memory_dir}"
+    echo "  removed user-global: ~/.aihaus/memory/user/ (tier-C preferences)"
+    tier_c_touched="1"
+  fi
+  if [[ -f "${prefs_audit}" ]]; then
+    rm -f "${prefs_audit}"
+    echo "  removed user-global: ~/.aihaus/state/prefs-audit.jsonl"
+    tier_c_touched="1"
+  fi
+  if [[ "${tier_c_touched}" == "0" ]]; then
+    echo "  tier-c: nothing to remove"
+  fi
+}
+
 # Invoke user-global purge if flag was set.
 if [[ "${PURGE_USER_GLOBAL}" == "1" ]]; then
   purge_user_global || true
+  purge_tier_c || true
   touched="1"
 fi
 
