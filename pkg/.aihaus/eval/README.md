@@ -22,7 +22,7 @@ Exit: `0` = all deterministic checks pass · `1` = ≥1 failed · `2` = cannot r
 | `evidence-exists` | process | a recorded `evidence_path` points to a file that does not exist (violates write-then-reference, rule 5) |
 | `planning-gate` | process | a task advanced past `planejamento` with an `open` planning question (BR-1) |
 | `no-gate-churn` | efficiency | a task has >30 `gate_events` (likely a re-eval loop) |
-| `role-guard-online-blocks` | policy (info) | — (reports count of online-action blocks from `role-guard.jsonl`) |
+| `flow-guard-online-blocks` | policy (info) | — (reports count of online-action blocks from `flow-guard.jsonl`) |
 
 ### Rubric (NOT in this script — needs judgment)
 

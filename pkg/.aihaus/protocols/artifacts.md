@@ -59,7 +59,7 @@ Scope is encoded in the **path**, and `.gitignore` enforces it:
   `audit/`.
 
 Writing a project-scoped fact into a local path (or vice versa) is a scope bug —
-the path decides commit visibility and role-scoped exposure.
+the path decides commit visibility and local-only exposure.
 
 ## Eval gate (S6)
 

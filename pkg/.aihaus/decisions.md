@@ -5771,3 +5771,37 @@ Three loose ends survived to closeout. (1) CHECK F6 proposed deleting `pkg/.aiha
 - ADR-260611-B/C/E — harness delivery, chokepoints, tier-C store (closeout cross-check: all verified present, no duplicates)
 - ADR-260611-D — BR-U3 observe→enforce standing policy (already encoded there; deliberately not restated here)
 - `.aihaus/milestones/M050-260611-one-harness-three-tiers/execution/KNOWLEDGE-LOG.md` — S08 findings feeding clauses 2-3
+
+## ADR-260612-A — Role system removed — flow-guard becomes the sole online gate
+
+**Status:** Accepted
+**Date:** 2026-06-12
+
+### Context
+
+Maintainer decision (2026-06-12, recorded verbatim): "remove absolutely everything that touches the concept of roles." After M050 the role system consisted of: the pm/builder/dev/qa/devops capability-profile taxonomy (`protocols/roles.md`), `role-guard.sh` (PreToolUse WHO-gate at the online boundary), the `.aihaus/.profile` sentinel, role capture in `/aih-init` (`annexes/role-selection.md`), role-resolution in routing/orchestration (`protocols/routing.md`, `workflow-orchestrator`), role-scoped agent context (`context-inject.sh` devops-only `environment-online.md` injection), role-gated fan-out prose, and the `homolog`/`prod` "devops-only" stage annotations. Distinct from all of this, `hooks/lib/role-defaults.json` was misleadingly NAMED "role" but keyed by agent COHORT — it belongs to the cohort system (`:planner-binding`/`:planner`/`:doer`/`:verifier`/`:adversarial`), which is untouched by this decision.
+
+### Decision
+
+Full excision of the role system, including the WHO-gate:
+
+1. **DELETE** `hooks/role-guard.sh`, `protocols/roles.md`, `skills/aih-init/annexes/role-selection.md`; remove the role-guard PreToolUse entry from both settings templates; remove `.aihaus/.profile` capture/reads everywhere (aih-init, aih-env, routing, context-inject).
+2. **`flow-guard.sh` is the SOLE online/deploy gate.** It is flow-determinism, not role machinery: an online-action command runs only inside an active tracked flow. The question at the boundary is never WHO, only whether the promotion happens WITHIN a flow. `lib/online-actions.sh` stays the single deploy-pattern source; the project extension config moves `.aihaus/roles/online-actions.conf` → `.aihaus/online-actions.conf` (legacy path migrated by `project-context-refresh.sh`).
+3. **Rename** `hooks/lib/role-defaults.json` → `hooks/lib/cohort-defaults.json` (cohorts unaffected; all consumers updated: `context-inject.sh`, `memory-read-audit.sh`, smoke checks).
+4. The `homolog 🔒 / prod 🔒 devops-only` annotations become **flow-gated**: stages and gates stay; the lock concept now means flow-guard only. Routing/orchestration become intent-only (no profile resolution input).
+5. `environment-online.md` survives as plain local env memory (per-machine, gitignored) — written by aih-init env-detection and `/aih-env`, no longer conditionally injected by profile.
+
+This supersedes the role aspects of the 3.0 protocol set (`roles.md`, the routing profile-resolution step, the fan-out role gating, the default.md devops-only online boundary) **by reference** — prior ADR entries are not edited.
+
+### Consequences
+
+**Negative (accepted):** client-as-builder loses its cannot-deploy barrier. Online safety is now flow-determinism only — a deploy requires an active tracked flow, not a privileged profile. Any future per-person capability boundary must be rebuilt outside aihaus (OS users, managed settings, server-side credentials).
+
+**Positive:** one gate instead of two at the same boundary (no WHO/WITHIN split to keep coherent); no per-machine `.profile` sentinel state; `/aih-init` loses its only interactive role question; the misleading role-vs-cohort naming collision is gone (`cohort-defaults.json` says what it is).
+
+**Neutral:** hook count 39 → 38; existing installs get the stale role-guard settings entry pruned by the template-driven merge on next update; `.claude/audit/role-guard.jsonl` files left on disk are inert.
+
+### References
+
+- ADR-260531-A — Business-Rules Contract (BR-F2 promotion-boundary determinism; flow-guard origin)
+- ADR-260509-Y — cohort fork (the cohort system this decision explicitly does NOT touch)

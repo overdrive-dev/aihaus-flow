@@ -5,10 +5,10 @@
 # first token is grounded in project/workflow memory and task artifacts.
 #
 # Hybrid Option C (S01-validated SubagentStart.additionalContext path):
-#   (a) Static role-default map keyed on cohort (lib/role-defaults.json)
+#   (a) Static cohort-default map keyed on cohort (lib/cohort-defaults.json)
 #       covers ~80% of spawns with zero haiku cost.
 #   (b) Novel-task heuristic: if task prompt doesn't mention any
-#       role-default path, invoke context-curator via haiku CLI probe.
+#       cohort-default path, invoke context-curator via haiku CLI probe.
 #       3s timeout, fail-safe allow (empty additionalContext on error).
 #
 # Opt-out: AIHAUS_CONTEXT_INJECT=0 disables entirely.
@@ -116,7 +116,7 @@ _anchor_path() {
 AUDIT_LOG="$(_anchor_path "${AIHAUS_CONTEXT_INJECT_LOG:-.claude/audit/context-inject.jsonl}")"
 INJECT_CACHE="$(_anchor_path "${AIHAUS_CONTEXT_INJECT_CACHE:-.claude/audit/context-inject.cache}")"
 RECEIPTS_LOG="$(_anchor_path "${AIHAUS_MEMORY_READ_LOG:-.claude/audit/memory-read.jsonl}")"
-ROLE_DEFAULTS_JSON="${SCRIPT_DIR}/lib/role-defaults.json"
+COHORT_DEFAULTS_JSON="${SCRIPT_DIR}/lib/cohort-defaults.json"
 COHORTS_MD_REL=".aihaus/skills/aih-effort/annexes/cohorts.md"
 BUDGET_CONF="${SCRIPT_DIR}/context-budget.conf"
 AIHAUS_MEMORY_INJECT="${AIHAUS_MEMORY_INJECT:-1}"
@@ -291,7 +291,7 @@ _write_receipt() {
 #     Rotation:   10 KB OR 100 lines (lighter than 10 MB/10000 in advisor)
 # ---------------------------------------------------------------------------
 compute_hash() {
-  local combined="${target_agent_name:-}|${cohort:-}|${_active_profile:-}|${task_description:-}"
+  local combined="${target_agent_name:-}|${cohort:-}|${task_description:-}"
   if command -v sha256sum >/dev/null 2>&1; then
     printf '%s' "$combined" | sha256sum | awk '{print $1}'
   elif command -v shasum >/dev/null 2>&1; then
@@ -405,15 +405,6 @@ cohort="$(_resolve_cohort "$target_agent_name")"
 # Default to :doer if cohort cannot be resolved.
 [ -z "$cohort" ] && cohort=":doer"
 
-# Resolve active profile (role-scoped context, S4). Folded into the cache key
-# below so builder/devops never share a cached payload — the online env must
-# never leak into a non-devops profile's context.
-_active_profile=""
-_profile_file_early="$(aihaus_project_path ".aihaus/.profile" 2>/dev/null || echo "")"
-if [ -n "$_profile_file_early" ] && [ -f "$_profile_file_early" ]; then
-  _active_profile="$(tr ',' ' ' < "$_profile_file_early" 2>/dev/null | tr -s '[:space:]' ' ' | sed 's/^ *//; s/ *$//')"
-fi
-
 # ---------------------------------------------------------------------------
 # 6b. Cache lookup (M016-S07) — cache key: hash(target_agent_name | cohort | task)
 #     Hit: skip S05 warning-recurrence read + S06 budget parse; emit cached
@@ -481,7 +472,7 @@ fi
 # 6c. Native repository memory packet (M048)
 #     Subagents should not depend on the human remembering to call memory.
 #     This hook injects a bounded, best-effort `aihaus memory ... --json`
-#     packet before the agent starts. The role prompt may still run targeted
+#     packet before the agent starts. The agent prompt may still run targeted
 #     follow-up memory commands when this packet is not enough.
 # ---------------------------------------------------------------------------
 declare -a AIHAUS_MEMORY_CMD=()
@@ -645,17 +636,17 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# 7. Static role-default map lookup
+# 7. Static cohort-default map lookup
 # ---------------------------------------------------------------------------
 _get_static_paths() {
   local cohort_key="$1"
-  [ -f "$ROLE_DEFAULTS_JSON" ] || { echo ""; return; }
+  [ -f "$COHORT_DEFAULTS_JSON" ] || { echo ""; return; }
 
   if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
     local py_bin
     py_bin="$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo "")"
     [ -z "$py_bin" ] && { echo ""; return; }
-    "$py_bin" - "$ROLE_DEFAULTS_JSON" "$cohort_key" <<'PYEOF' 2>/dev/null
+    "$py_bin" - "$COHORT_DEFAULTS_JSON" "$cohort_key" <<'PYEOF' 2>/dev/null
 import json, sys
 f, key = sys.argv[1], sys.argv[2]
 with open(f, encoding='utf-8') as fh:
@@ -663,7 +654,7 @@ with open(f, encoding='utf-8') as fh:
 entries = d.get(key)
 if entries is None and key.startswith(':adversarial'):
     # M050/S02: merged :adversarial cohort (M027/ADR-260509-Y) must resolve
-    # even against a stale role-defaults.json still carrying the pre-M027
+    # even against a stale cohort-defaults.json still carrying the pre-M027
     # :adversarial-scout/:adversarial-review keys (and vice versa). Never
     # fall through to :doer for adversarial agents.
     for alias in (':adversarial', ':adversarial-review', ':adversarial-scout'):
@@ -689,7 +680,7 @@ PYEOF
         .[":doer"] // []) |
       .[] |
       (.tier + ":" + .path + " — " + .rationale)
-    ' "$ROLE_DEFAULTS_JSON" 2>/dev/null
+    ' "$COHORT_DEFAULTS_JSON" 2>/dev/null
   else
     echo ""
   fi
@@ -699,7 +690,7 @@ static_lines="$(_get_static_paths "$cohort")"
 
 # ---------------------------------------------------------------------------
 # 8. Novel-task heuristic: does the task prompt already reference any
-#    of the role-default paths? If yes → static path (haiku not needed).
+#    of the cohort-default paths? If yes → static path (haiku not needed).
 # ---------------------------------------------------------------------------
 _is_novel_task() {
   local task="$1" defaults="$2"
@@ -889,17 +880,6 @@ MED:.aihaus/memory/workflows/user-preferences.md - Repository-scoped user prefer
 MED:.aihaus/memory/MEMORY.md - Agent memory index for cross-task context."
   path_method="fallback"
 fi
-
-# Role-scoped online env (S4): only profiles holding `devops` get the online
-# (staging/prod) env pointer. Keeps online URLs/credential locations out of
-# builder/dev/qa agent context (reinforces the role-guard online boundary).
-# Uses _active_profile resolved above (also folded into the cache key).
-case " ${_active_profile:-} " in
-  *" devops "*)
-    payload_lines="${payload_lines}
-HIGH:.aihaus/memory/local/environment-online.md — Online (staging/prod) env: deploy URLs, promote/rollback commands, credential locations. devops-scoped."
-    ;;
-esac
 
 # M050/S05: single batched packet fetch (one `aihaus memory packet` call).
 _fetch_memory_packet
@@ -1094,7 +1074,7 @@ if [ -n "$tier_c_excerpt_section" ]; then
   esac
   _write_receipt "tier_c_excerpt" "${TIER_C_SOURCE_PATH:-user-preferences-excerpt}" "${#tier_c_excerpt_section}" "$tier_c_truncated"
 fi
-_write_receipt "path_list" "$ROLE_DEFAULTS_JSON" "${#payload_lines}" "$truncated"
+_write_receipt "path_list" "$COHORT_DEFAULTS_JSON" "${#payload_lines}" "$truncated"
 
 # ---------------------------------------------------------------------------
 # 14. Emit SubagentStart hook output (additionalContext)

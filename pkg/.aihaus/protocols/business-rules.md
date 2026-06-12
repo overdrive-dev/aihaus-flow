@@ -67,7 +67,7 @@ Rule = behavior; ADR = approach; knowledge = technique.
 - **flow-guard** (promotion boundary) — a code mutation reaching an online
   stage (`homolog` / `prod`) or production code is rejected unless it arrives through
   an active flow. Offline / dev scratch is free; nothing lands in prod without the
-  contract. Composes with `role-guard.sh` at the same boundary.
+  contract. It is the sole gate at the online boundary.
 
 ## How agents consume it
 

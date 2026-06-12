@@ -73,8 +73,8 @@ Choose one route:
 - `REVIEW`: review, audit, verification, risk analysis, or acceptance check;
   use the relevant review/verifier workflow agent and preserve gate evidence.
 - `OPS`: CI/CD, staging, production, deployment, credentials, or online
-  environment movement; route through the workflow gates and enforce the
-  devops boundary in `.aihaus/protocols/roles.md`.
+  environment movement; route through the workflow gates — the online boundary
+  is flow-gated (`flow-guard.sh`: promotions only inside an active flow).
 - `WORKFLOW_DESIGN`: change aihaus protocols, routing, memory boundaries, or
   workflow-agent behavior; use `workflow-designer` or planning first depending
   on blast radius.

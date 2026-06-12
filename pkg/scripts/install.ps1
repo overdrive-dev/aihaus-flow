@@ -1020,7 +1020,6 @@ $workflowSeedFiles = @(
     'fan-out.md',
     'harness.md',
     'parallelism.md',
-    'roles.md',
     'routing.md'
 )
 foreach ($workflowFile in $workflowSeedFiles) {
@@ -1780,7 +1779,7 @@ function Invoke-InjectGitignore {
         '/.aihaus/state/',
         '/.aihaus/runtime/',
         '/.aihaus/backups/',
-        '/.aihaus/roles/',
+        '/.aihaus/online-actions.conf',
         '/.aihaus/memory/local/',
         '/.claude/agents/',
         '/.claude/hooks/',

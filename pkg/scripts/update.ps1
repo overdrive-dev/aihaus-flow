@@ -189,7 +189,7 @@ function Migrate-LegacyWorkflowsDir {
     New-Item -ItemType Directory -Path $newDir -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $Aihaus 'runtime') -Force | Out-Null
 
-    foreach ($rel in @('default.md','agents.md','artifacts.md','business-rules.md','fan-out.md','parallelism.md','roles.md','routing.md','kanban')) {
+    foreach ($rel in @('default.md','agents.md','artifacts.md','business-rules.md','fan-out.md','parallelism.md','routing.md','kanban')) {
         $src = Join-Path $oldDir $rel
         $dst = Join-Path $newDir $rel
         if (-not (Test-Path -LiteralPath $src)) { continue }
@@ -224,7 +224,6 @@ $workflowSeedFiles = @(
     'fan-out.md',
     'harness.md',
     'parallelism.md',
-    'roles.md',
     'routing.md'
 )
 foreach ($workflowFile in $workflowSeedFiles) {
@@ -1215,7 +1214,7 @@ function Invoke-BackfillGitignore {
         '/.aihaus/state/',
         '/.aihaus/runtime/',
         '/.aihaus/backups/',
-        '/.aihaus/roles/',
+        '/.aihaus/online-actions.conf',
         '/.aihaus/memory/local/',
         '/.claude/agents/',
         '/.claude/hooks/',

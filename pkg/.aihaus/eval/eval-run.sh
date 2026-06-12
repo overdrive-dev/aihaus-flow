@@ -58,11 +58,11 @@ if [[ "$openq" -gt 0 ]]; then _report planning-gate FAIL "${openq} task(s) advan
 churn="$(_num "$(_q "SELECT count(*) FROM (SELECT task_id, count(*) c FROM gate_events GROUP BY task_id HAVING c > 30);")")"
 if [[ "$churn" -gt 0 ]]; then _report no-gate-churn FAIL "${churn} task(s) with >30 gate_events (possible re-eval loop)"; fails=$((fails+1)); else _report no-gate-churn PASS ""; fi
 
-# 5 — Policy trace (informational): online-action blocks recorded by role-guard.
-RG="${PROJECT}/.claude/audit/role-guard.jsonl"
-if [[ -f "$RG" ]]; then
-  blocks="$(_num "$(grep -c '"decision":"block-online"' "$RG" 2>/dev/null || echo 0)")"
-  _report role-guard-online-blocks INFO "${blocks} online-action block(s) recorded"
+# 5 — Policy trace (informational): online-action blocks recorded by flow-guard.
+FG="${PROJECT}/.claude/audit/flow-guard.jsonl"
+if [[ -f "$FG" ]]; then
+  blocks="$(_num "$(grep -c '"decision":"block-no-flow"' "$FG" 2>/dev/null || echo 0)")"
+  _report flow-guard-online-blocks INFO "${blocks} online-action block(s) recorded"
 fi
 
 # 6 — Learning loop (planning-answer promotion, M050/S07 — feeds the ADR-260611-D

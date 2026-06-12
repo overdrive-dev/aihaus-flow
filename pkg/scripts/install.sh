@@ -497,7 +497,7 @@ mkdir -p \
   "${TARGET}/.aihaus/memory/global" \
   "${TARGET}/.aihaus/memory/backend" \
   "${TARGET}/.aihaus/memory/frontend"
-for protocol_file in default.md agents.md artifacts.md business-rules.md fan-out.md harness.md parallelism.md roles.md routing.md; do
+for protocol_file in default.md agents.md artifacts.md business-rules.md fan-out.md harness.md parallelism.md routing.md; do
   if [[ ! -f "${TARGET}/.aihaus/protocols/${protocol_file}" && -f "${PKG_AIHAUS}/protocols/${protocol_file}" ]]; then
     cp "${PKG_AIHAUS}/protocols/${protocol_file}" "${TARGET}/.aihaus/protocols/${protocol_file}"
     echo "  protocol: created .aihaus/protocols/${protocol_file}"
@@ -804,7 +804,7 @@ _inject_gitignore() {
     '/.aihaus/state/'
     '/.aihaus/runtime/'
     '/.aihaus/backups/'
-    '/.aihaus/roles/'
+    '/.aihaus/online-actions.conf'
     '/.aihaus/memory/local/'
     '/.claude/agents/'
     '/.claude/hooks/'

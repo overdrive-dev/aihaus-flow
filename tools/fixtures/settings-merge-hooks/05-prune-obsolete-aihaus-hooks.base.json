@@ -23,7 +23,7 @@
       {
         "matcher": "Bash",
         "hooks": [
-          {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/role-guard.sh"},
+          {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/tdd-guard.sh"},
           {"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.aihaus/hooks/flow-guard.sh"}
         ]
       },

@@ -16,7 +16,7 @@ moving tasks between stages.
 - Runtime evidence and generated state belong in `.aihaus/state/`.
 - Artifact storage + consumption rules (IDs, pointers, scope, worktree paths): see `artifacts.md`.
 - Routing — natural-language requests auto-route to sub-flows (no `/aih-*` typing required): see `routing.md`.
-- Native fan-out workflows (autonomous only; qa/devops, runtime-authored): see `fan-out.md`.
+- Native fan-out workflows (autonomous only, runtime-authored): see `fan-out.md`.
 - Parallel agents without conflicts (worktree isolation, Owned-Files sharding, single-writer): see `parallelism.md`.
 - Business rules — the decision-autonomy contract agents decide from (schema, domains, gates): see `business-rules.md`.
 
@@ -30,9 +30,9 @@ substrate**: every action registers its task + gate events there, under
 **single-writer** discipline (one writer per transition — ADR-004; safe when
 parallel worktree agents each own disjoint files and merge back sequentially).
 Native **`/goal`** supplies the autonomous loop for hands-off multi-turn
-execution; the gates here plus the hooks (`role-guard`, `autonomy-guard`,
+execution; the gates here plus the hooks (`flow-guard`, `autonomy-guard`,
 `tdd-guard`) enforce regardless of how a run is launched. **Native dynamic
-workflows are reserved for autonomous fan-out only** (qa sweeps, devops deploy).
+workflows are reserved for autonomous fan-out only** (qa sweeps, deploy ops).
 Rule: interactive scoping → sub-flow skill (can ask the requester); fully
 autonomous fan-out → native JS workflow (no mid-run input).
 
@@ -46,9 +46,9 @@ autonomous fan-out → native JS workflow (no mid-run input).
 | tdd | (dev 4.0–4.1) Map technical impact, then turn acceptance criteria into failing tests/contracts. | Impact surface mapped with no NEEDS-REVIEW rule pending; tests/contracts fail for the expected reason or strict-TDD-N/A recorded. |
 | review-execucao | (dev 4.2–4.5) Implement in a local worktree, run local Playwright smoke for UI/flow, verify integration wiring, review readiness. | Code satisfies the contract; UI/flow has local Playwright evidence; connections wired; quality issues resolved. All offline/Docker. |
 | testes | Run the full test pipeline in local Docker; capture breakage and regression risk. | Relevant automated checks pass in Docker-local; UI/flow records the homolog Playwright plan or blocks. |
-| homolog | Promote to the staging/homologation environment and validate published behavior (full Playwright for UI/flow). | Published in homolog with passing Playwright/E2E evidence, or backend-only skip justified. **Online — devops only.** |
+| homolog | Promote to the staging/homologation environment and validate published behavior (full Playwright for UI/flow). | Published in homolog with passing Playwright/E2E evidence, or backend-only skip justified. **Online — flow-gated.** |
 | human-review | Human validates the homolog result in business language and approves promotion. | Human accepts (approval to promote) or sends back with business-language feedback. |
-| prod | After human approval, promote to production. | Production promotion executed, or the blocker is documented. **Online — devops only.** |
+| prod | After human approval, promote to production. | Production promotion executed, or the blocker is documented. **Online — flow-gated.** |
 | box-dev | Holding box for accepted work before the next downstream process. | Project-specific. |
 
 ## Understanding Gate
@@ -67,10 +67,10 @@ Playwright E2E runs later at `homolog`.
 
 ## Online Boundary
 
-`homolog` and `prod` are the **online** stages and may be driven only by a
-profile holding the `devops` role (see `.aihaus/protocols/roles.md`);
-`role-guard.sh` enforces it. Everything up to and including `testes` is
-offline-local (Docker).
+`homolog` and `prod` are the **online** stages and may be driven only from
+within an active tracked flow; `flow-guard.sh` enforces it (promotion-boundary
+determinism — the sole online gate). Everything up to and including `testes`
+is offline-local (Docker).
 
 ## Planning Gate
 
@@ -146,7 +146,7 @@ needed for traceability.
 ## CI/CD Agents
 
 CI/CD workflow agents may act in `testes`, `homolog`, and `prod` (the online
-stages — devops only). Their job is to optimize repeatable checks, deployments,
+stages — flow-gated). Their job is to optimize repeatable checks, deployments,
 rollback notes, smoke tests, and environment evidence while preserving the gates
 above.
 

@@ -160,7 +160,7 @@ if [ "$RECEIPTS_SEEN" -gt 0 ]; then
   _advisory_count=$(( RECEIPTS_SEEN - _inline_count ))
 
   # Advisory receipts (path_list): transcript Read evidence on HIGH-tier paths.
-  # Canonical HIGH-tier set (role-defaults.json HIGH rows + fallback minimum).
+  # Canonical HIGH-tier set (cohort-defaults.json HIGH rows + fallback minimum).
   _transcript_available=0
   _advisory_evidenced=0
   if [ "$_advisory_count" -gt 0 ] && [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then

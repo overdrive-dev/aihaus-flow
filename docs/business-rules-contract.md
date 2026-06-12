@@ -92,13 +92,13 @@ The holy grail of maintainability: *"why does this code exist?" → BR-id*, and 
 
 You cannot force the *model* to invoke anything (auto-invoke is model-judgment). In an agent system you never control the brain — only the **hands**, via hooks. So we don't force the call; we **forbid the bypass**:
 
-- **`flow-guard.sh`** (PreToolUse) — enforces dispatch **at the promotion boundary** (BR-F2): a code mutation reaching an **online stage (`homolog`/`prod`) or production code** is rejected unless it arrives through an active flow (sentinel: `aih-plan` writes `.claude/_state/active-slug`; the kanban task sits in an execution stage). It **composes with `role-guard`** at that same boundary. Offline/dev edits stay free — but the only path to production runs through the gated stages, so **nothing lands in prod without the contract**. Emergency opt-out `AIHAUS_FLOW_GUARD=0`, audited.
+- **`flow-guard.sh`** (PreToolUse) — enforces dispatch **at the promotion boundary** (BR-F2): a code mutation reaching an **online stage (`homolog`/`prod`) or production code** is rejected unless it arrives through an active flow (sentinel: `aih-plan` writes `.claude/_state/active-slug`; the kanban task sits in an execution stage). It is the **sole gate at that boundary**. Offline/dev edits stay free — but the only path to production runs through the gated stages, so **nothing lands in prod without the contract**. Emergency opt-out `AIHAUS_FLOW_GUARD=0`, audited.
 
-  > **Reconciling with "deterministicamente obrigado":** the determinism lives at **what lands**, not at every keystroke. Local scratch is the dev's sandbox; the moment work promotes toward prod, `flow-guard` + `role-guard` + `rule-gate` bind it to the contract. Same boundary `role-guard` already owns — so this reuses the existing online frontier rather than inventing a new one.
+  > **Reconciling with "deterministicamente obrigado":** the determinism lives at **what lands**, not at every keystroke. Local scratch is the dev's sandbox; the moment work promotes toward prod, `flow-guard` + `rule-gate` bind it to the contract at the online frontier.
 - **`rule-gate`** (extends `calibrate-guard.sh`) — blocks a task from crossing `planejamento → tdd` without **≥1 linked rule carrying testable BDD criteria**. Reuses the existing ambiguity regex; adds the rule-link check.
 - **BDD-as-tests** — the `tdd` stage consumes each rule's `Given/When/Then` directly as the failing tests it already must write. No new test authoring concept.
 
-Every guarantee is a hook (the aihaus deterministic layer), with an opt-out env + a JSONL audit row — same family as `tdd-guard`, `role-guard`, `git-add-guard`, `autonomy-guard`.
+Every guarantee is a hook (the aihaus deterministic layer), with an opt-out env + a JSONL audit row — same family as `tdd-guard`, `git-add-guard`, `autonomy-guard`.
 
 ---
 
@@ -122,7 +122,7 @@ Enforcing the *framing* (vs the artifact) is model-judgment, so we reinforce it 
 | **S1** | BR-ledger schema + storage + 3-ledger boundary doc | *Given* a new rule, *When* recorded, *Then* it carries id/domain/statement/scenarios/status/links and passes a schema check; a boundary doc states BR≠ADR≠knowledge. |
 | **S2** | `Rule` node in aih-graph + bidirectional code binding | *Given* BR-42 linked to a symbol, *When* `aihaus memory rule BR-42`, *Then* it returns the implementing code + tests; *When* `aihaus memory why <symbol>`, *Then* it returns BR-42. |
 | **S3** | Staleness / `rule-drift` detection | *Given* linked code changes without a rule re-review, *When* the drift check runs, *Then* the rule is flagged stale with both SHAs. |
-| **S4** | `flow-guard.sh` — promotion-boundary determinism (Q1 / BR-F2) | *Given* a mutation reaching an online stage or production code with no active flow, *When* attempted, *Then* blocked (composes with `role-guard`); *Given* an offline/dev edit, *Then* allowed. |
+| **S4** | `flow-guard.sh` — promotion-boundary determinism (Q1 / BR-F2) | *Given* a mutation reaching an online stage or production code with no active flow, *When* attempted, *Then* blocked; *Given* an offline/dev edit, *Then* allowed. |
 | **S5** | `rule-gate` (extend `calibrate-guard`) | *Given* a task with no linked testable rule, *When* it tries `planejamento → tdd`, *Then* blocked with the missing-rule reason. |
 | **S6** | Autonomy decision-table + provenance, wired into agents + a top-level Output Style | *Given* a covered decision, *When* the agent proceeds, *Then* it decides and cites the rule (no client question); *Given* a gap, *Then* it pauses, asks, and writes the answer as a new rule. |
 | **S7** | `/aih-init` seeds initial rules from the codebase + migrates `BUSINESS-RULES.md` → ledger | *Given* a repo, *When* `/aih-init` runs, *Then* a seed ledger exists with at least the BR-1/8/9 rules formalized. |
@@ -148,7 +148,7 @@ Enforcing the *framing* (vs the artifact) is model-judgment, so we reinforce it 
 *The model in action: designing this, I hit four contract gaps; the client set the premises (2026-05-31). They are now the **founding rules** — `BR-F1..BR-F4`, the seed of the ledger.*
 
 - **BR-F1 (domains)** — the contract covers **6 domains** from day one: `software · design · infra · security · data · compliance`. Further domains are each a recorded decision.
-- **BR-F2 (determinism scope)** — `flow-guard` enforces dispatch **at the promotion boundary only**: online stages (`homolog`/`prod`) + production code. Offline/dev editing is free; nothing reaches production without an active flow + the contract. Composes with `role-guard` at the same boundary.
+- **BR-F2 (determinism scope)** — `flow-guard` enforces dispatch **at the promotion boundary only**: online stages (`homolog`/`prod`) + production code. Offline/dev editing is free; nothing reaches production without an active flow + the contract. It is the sole gate at that boundary.
 - **BR-F3 (residence)** — the **markdown ledger is the source of truth** (reviewable, git-diffable, like `decisions.md`); the aih-graph `Rule` node is the **queryable index** for code↔rule.
 - **BR-F4 (provenance)** — an autonomous decision **cites its rule ID when it affects business behavior**; pure-mechanics decisions need no citation.
 
@@ -158,6 +158,6 @@ Proof of the loop: the contract grew by exactly the four premises the client def
 
 ## 9. Definition of done (the closed loop)
 
-A change to ruled behavior **cannot reach production** without all of: promotion through an active flow (`flow-guard` + `role-guard` at the online boundary) → a linked, testable rule (`rule-gate`) → tests generated from the rule's BDD scenario → a fresh rule↔code binding (no staleness flag). Offline scratch is free; the gates bind it the moment it promotes. And mid-flow, the agent **decides every contract-covered question alone, citing the rule when it affects behavior**, pausing only on a genuine gap — whose answer permanently extends the contract.
+A change to ruled behavior **cannot reach production** without all of: promotion through an active flow (`flow-guard` at the online boundary) → a linked, testable rule (`rule-gate`) → tests generated from the rule's BDD scenario → a fresh rule↔code binding (no staleness flag). Offline scratch is free; the gates bind it the moment it promotes. And mid-flow, the agent **decides every contract-covered question alone, citing the rule when it affects behavior**, pausing only on a genuine gap — whose answer permanently extends the contract.
 
 That is the theory made enforceable: *the agent decides from the fundamentals; the hooks guarantee nothing escapes them.*

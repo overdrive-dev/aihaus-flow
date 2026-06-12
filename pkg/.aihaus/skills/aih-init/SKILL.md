@@ -169,8 +169,8 @@ count of `[PLACEHOLDER]` tokens still present in the manual block (those are
 expected — they live inside the MANUAL region and are the user's to fill).
 
 ### 12.5. Bootstrap operational and business context
-Follow `annexes/operational-context-bootstrap.md`: set the role profile
-(`annexes/role-selection.md`), run env-discovery + context-verify scripts, then spawn
+Follow `annexes/operational-context-bootstrap.md`: run env-discovery +
+context-verify scripts, then spawn
 `project-business-interviewer` to write
 `.aihaus/init/business-context-questions.md`. If interactive, ask only the top
 unanswered business-rule question; never block `/aih-init` on the answer.

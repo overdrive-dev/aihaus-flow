@@ -15,9 +15,8 @@ not required for normal use.
    the active workflow.
 3. Otherwise classify the request intent: feature, bug, planning, review, ops,
    backlog intake, workflow design, or no workflow.
-4. Resolve the requester's profile from `.aihaus/.profile` when present.
-5. Route to the selected workflow entry.
-6. Drive gated execution through the stages in `default.md`.
+4. Route to the selected workflow entry.
+5. Drive gated execution through the stages in `default.md`.
 
 ## No-Workflow Path
 
@@ -53,7 +52,7 @@ or clearly replaces the current task.
 - `FEATURE` -> `Skill(aih-feature)`
 - `BUGFIX` -> `Skill(aih-bugfix)`
 - `REVIEW` -> relevant verifier/reviewer workflow agent
-- `OPS` -> workflow gates plus devops-only online boundary
+- `OPS` -> workflow gates plus the flow-gated online boundary
 - `WORKFLOW_DESIGN` -> `workflow-designer` or planning first
 - `CONTINUE_ACTIVE_WORKFLOW` -> current workflow
 - `NO_WORKFLOW` -> inline answer
@@ -64,8 +63,8 @@ or clearly replaces the current task.
 - Higher-risk routes win when intent overlaps: bugfix before feature, planning
   before implementation when business meaning is unclear, ops only when the
   request touches online environment movement.
-- The active profile scopes the allowed stages and tools. Builder/dev/qa roles
-  never reach online stages; `role-guard.sh` enforces the boundary.
+- The online stages are flow-gated: `flow-guard.sh` blocks deploy/promotion
+  commands outside an active tracked flow.
 - Route descriptions must stay non-overlapping. Competing descriptions cause
   misroutes.
 - Business-rule gaps return to planning in business language.

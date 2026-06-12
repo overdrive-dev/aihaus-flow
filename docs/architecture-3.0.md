@@ -1,6 +1,6 @@
 # aihaus 3.0 — Architecture
 
-How the pieces fit together: **workflows → their gate hooks → their agents → the agents' lifecycle hooks → the agents' skills.** aihaus 3.0 is specialist agents running *inside* gated workflows, with local memory and role-based access — layered on Claude Code's native primitives.
+How the pieces fit together: **workflows → their gate hooks → their agents → the agents' lifecycle hooks → the agents' skills.** aihaus 3.0 is specialist agents running *inside* gated workflows, with local memory — layered on Claude Code's native primitives.
 
 > Wiring verified against the package on `main`: stages from `pkg/.aihaus/protocols/default.md`, hook → event from `pkg/.aihaus/templates/settings.local.json`, stage owners from `pkg/.aihaus/protocols/agents.md`, and sub-flow → specialist spawns from the `aih-plan` / `aih-feature` / `aih-bugfix` skills.
 
@@ -17,7 +17,7 @@ flowchart TB
 
   REQ(["Natural-language request"]):::skill
   GOAL(["native /goal — autonomous loop"]):::skill
-  REQ -->|auto-route by description| RT{"classify + resolve role"}
+  REQ -->|auto-route by description| RT{"classify intent"}
   GOAL -.wraps a run.-> RT
   RT --> KPLAN & KFEAT & KBUG
 
@@ -56,8 +56,8 @@ flowchart TB
   WH --- HR
 
   GTDD[["tdd-guard.sh · PreToolUse"]]:::hook -->|gate| TD
-  GROLE[["role-guard.sh · PreToolUse<br/>online boundary"]]:::hook -->|devops-only| HO
-  GROLE -->|devops-only| PD
+  GFLOW[["flow-guard.sh · PreToolUse<br/>online boundary"]]:::hook -->|flow-gated| HO
+  GFLOW -->|flow-gated| PD
   GSTOP[["autonomy-guard.sh · Stop"]]:::hook -->|no bad pause| KB
 
   subgraph SP["Specialist agents (spawned by sub-flows)"]
@@ -81,7 +81,7 @@ flowchart TB
   subgraph AL["Agent-lifecycle hooks"]
     LST[["SubagentStart →<br/>context-inject.sh · audit-agent.sh"]]:::hook
     LSP[["SubagentStop →<br/>worktree-release.sh · learning-advisor.sh<br/>warning-recurrence.sh"]]:::hook
-    LPT[["PreToolUse →<br/>role · tdd · git-add · file · bash · read-guard"]]:::hook
+    LPT[["PreToolUse →<br/>flow · tdd · git-add · file · bash · read-guard"]]:::hook
     MB[["merge-back.sh<br/>(flow-invoked: per-file Owned-Files)"]]:::hook
   end
   LST -.injects context.-> SP
@@ -98,7 +98,7 @@ flowchart TB
   GRF[["aih-graph-refresh.sh<br/>SessionStart · TaskCompleted · SessionEnd"]]:::hook -.refresh.-> AGR
 ```
 
-**Legend:** 🟪 skills / sub-flows · 🟦 kanban stages (🔒 = devops-only online) · 🟩 `workflow-*` agents · 🟨 specialist agents (`⌖wt` = `isolation: worktree`) · 🟥 hooks (event in label) · 🟢 local memory.
+**Legend:** 🟪 skills / sub-flows · 🟦 kanban stages (🔒 = flow-gated online) · 🟩 `workflow-*` agents · 🟨 specialist agents (`⌖wt` = `isolation: worktree`) · 🟥 hooks (event in label) · 🟢 local memory.
 
 ## Hook → Claude Code event
 
@@ -108,7 +108,7 @@ Every hook is wired in `pkg/.aihaus/templates/settings.local.json`.
 |-------|--------------|
 | `SessionStart` | `aih-graph-refresh` · `project-context-refresh` · `session-start` |
 | `UserPromptExpansion` | `calibrate-guard` |
-| `PreToolUse` | **`role-guard`** · **`tdd-guard`** · `git-add-guard` · `bash-guard` · `file-guard` · `read-guard` |
+| `PreToolUse` | **`flow-guard`** · **`tdd-guard`** · `git-add-guard` · `bash-guard` · `file-guard` · `read-guard` |
 | `PostToolUse` | `aih-graph-stale` · `audit-log` · `backup-file` |
 | `SubagentStart` | **`context-inject`** · `audit-agent` |
 | `SubagentStop` | `worktree-release` · `learning-advisor` · `warning-recurrence` |
@@ -129,9 +129,9 @@ Every hook is wired in `pkg/.aihaus/templates/settings.local.json`.
 | `tdd` | `workflow-tdd-gate` | failing tests first — **`tdd-guard.sh`** |
 | `review-execucao` | `workflow-execution-review` | worktree build + local Playwright smoke |
 | `testes` | `workflow-test-gate` · `workflow-cicd` | full suite in local Docker |
-| `homolog` 🔒 | `workflow-dev-reviewer` · `workflow-cicd` | staging + Playwright — **`role-guard.sh` (devops-only)** |
+| `homolog` 🔒 | `workflow-dev-reviewer` · `workflow-cicd` | staging + Playwright — **`flow-guard.sh` (flow-gated)** |
 | `human-review` | `workflow-human-review` | human accepts or sends back |
-| `prod` 🔒 | `workflow-cicd` | production — **`role-guard.sh` (devops-only)** |
+| `prod` 🔒 | `workflow-cicd` | production — **`flow-guard.sh` (flow-gated)** |
 | `box-dev` | — | project-specific |
 
 `autonomy-guard.sh` (`Stop`) spans the whole execution — it blocks bad pauses at decomposition seams.

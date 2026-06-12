@@ -212,7 +212,7 @@ migrate_legacy_workflows_dir() {
 
   mkdir -p "${new_dir}" "${AIHAUS}/runtime"
   local rel src dst
-  for rel in default.md agents.md artifacts.md business-rules.md fan-out.md parallelism.md roles.md routing.md kanban; do
+  for rel in default.md agents.md artifacts.md business-rules.md fan-out.md parallelism.md routing.md kanban; do
     src="${old_dir}/${rel}"
     dst="${new_dir}/${rel}"
     [[ -e "${src}" ]] || continue
@@ -234,7 +234,7 @@ migrate_legacy_workflows_dir() {
 migrate_legacy_workflows_dir
 mkdir -p "${AIHAUS}/runtime/runs"
 
-for protocol_file in default.md agents.md artifacts.md business-rules.md fan-out.md harness.md parallelism.md roles.md routing.md; do
+for protocol_file in default.md agents.md artifacts.md business-rules.md fan-out.md harness.md parallelism.md routing.md; do
   if [[ ! -f "${AIHAUS}/protocols/${protocol_file}" && -f "${PKG_AIHAUS}/protocols/${protocol_file}" ]]; then
     cp "${PKG_AIHAUS}/protocols/${protocol_file}" "${AIHAUS}/protocols/${protocol_file}"
     echo "  protocol: created .aihaus/protocols/${protocol_file}"
@@ -791,7 +791,7 @@ _backfill_gitignore() {
     '/.aihaus/state/'
     '/.aihaus/runtime/'
     '/.aihaus/backups/'
-    '/.aihaus/roles/'
+    '/.aihaus/online-actions.conf'
     '/.aihaus/memory/local/'
     '/.claude/agents/'
     '/.claude/hooks/'
