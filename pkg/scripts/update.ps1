@@ -271,6 +271,15 @@ if (-not (Test-Path -LiteralPath $knowledgeSeedDst) -and (Test-Path -LiteralPath
     Copy-Item -LiteralPath $knowledgeSeedSrc -Destination $knowledgeSeedDst
     Write-Host "  memory: created .aihaus\knowledge.md"
 }
+# .worktreeinclude repo-root seed (M050/S09, ADR-260611-H -- closes ADR-260611-G
+# §Neutral): pre-existing installs gain the worktree hook-substrate carry list
+# on update. Create-if-absent ONLY -- never clobbers a user's existing file.
+$wtiSeedSrc = Join-Path $PkgTemplates '.worktreeinclude'
+$wtiSeedDst = Join-Path $Target '.worktreeinclude'
+if (-not (Test-Path -LiteralPath $wtiSeedDst) -and (Test-Path -LiteralPath $wtiSeedSrc)) {
+    Copy-Item -LiteralPath $wtiSeedSrc -Destination $wtiSeedDst
+    Write-Host "  worktree: created .worktreeinclude (hook substrate carried into worktrees)"
+}
 
 function Ensure-WorkflowEnvironmentPrompts {
     param([string]$EnvironmentFile)
