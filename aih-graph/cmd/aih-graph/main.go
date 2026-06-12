@@ -45,10 +45,11 @@ import (
 // (Go's -X only works on string vars, not consts — keeping this as var is
 // load-bearing for release pipeline correctness.)
 //
-// 0.2.0-dev: M050/S04 tier-A capability set (rule / why verbs, --types
-// multi-type filter, SHA staleness in rule-drift, build --user). The
-// aih-graph-v0.2.0 tag itself is cut at S09.
-var version = "0.2.0-dev"
+// 0.2.0: M050/S04 tier-A capability set (rule / why verbs, --types
+// multi-type filter, SHA staleness in rule-drift, build --user). Flipped
+// from 0.2.0-dev at S09 closeout (tag readiness — the aih-graph-v0.2.0
+// tag is cut by the orchestrator after merge, BR-U4).
+var version = "0.2.0"
 
 const jsonPropertyStringLimit = 4000
 const embedInputStringLimit = 4000

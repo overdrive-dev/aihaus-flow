@@ -268,6 +268,13 @@ if [[ ! -f "${AIHAUS}/knowledge.md" && -f "${PKG_TEMPLATES}/knowledge.md" ]]; th
   cp "${PKG_TEMPLATES}/knowledge.md" "${AIHAUS}/knowledge.md"
   echo "  memory: created .aihaus/knowledge.md"
 fi
+# .worktreeinclude repo-root seed (M050/S09, ADR-260611-H — closes ADR-260611-G
+# §Neutral): pre-existing installs gain the worktree hook-substrate carry list
+# on update. Create-if-absent ONLY — never clobbers a user's existing file.
+if [[ ! -f "${TARGET}/.worktreeinclude" && -f "${PKG_TEMPLATES}/.worktreeinclude" ]]; then
+  cp "${PKG_TEMPLATES}/.worktreeinclude" "${TARGET}/.worktreeinclude"
+  echo "  worktree: created .worktreeinclude (hook substrate carried into worktrees)"
+fi
 
 ensure_workflow_environment_prompts() {
   local env_file="$1"

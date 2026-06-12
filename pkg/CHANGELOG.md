@@ -5,6 +5,26 @@ All notable changes to aihaus are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.0] - 2026-06-12 - one harness, three memory tiers (M050)
+
+### Added
+
+- `pkg/.aihaus/protocols/harness.md` — single ≤2KB harness (condensed autonomy law, 3-tier memory map, gate grammar) delivered to the main session as the bridge's first `@import` and inlined verbatim (trim-exempt) into every subagent via context-inject v2.
+- Tier-C global user preferences: `~/.aihaus/memory/user/preferences.md` seeded by install (`AIHAUS_SKIP_TIER_C_SEED=1` opt-out), written only via the new lock-atomic `aihaus prefs add` verb, mirrored into the repo and surfaced as a budget-capped packet excerpt.
+- `aihaus memory packet` (single batched context call), `aihaus kanban gate|question|answer` (sanctioned kanban write path, warn-only `rules_cited` validation), `aihaus feedback export`; aih-graph v0.2 `rule <BR-id>`, `why <ref>`, `--types`, SHA-stale `rule-drift`, `build --user`.
+- Injection receipts (`.claude/audit/memory-read.jsonl`) + observe-only SubagentStop read-audit (`memory-read-verdicts.jsonl`); planning-answer→draft-BR promotion flywheel with `Source: pq-<id>` provenance + deterministic eval join and citation-coverage report.
+- GLOBAL-HARNESS block seeded into `~/.claude/CLAUDE.md` (default-on; `--no-global-harness` / `AIHAUS_SKIP_GLOBAL_HARNESS=1`; removed by `uninstall --purge-user-global`); `~/.aihaus/.targets` enrollment makes `aihaus update --all` functional.
+
+### Fixed
+
+- Pre-M027 cohort drift: `:adversarial` agents no longer fall through to `:doer` context budgets; SessionStart hooks fire on resume/clear/compact; `rule-drift` joins the shim db-pin allowlist; M024 path-doubling residue on the dogfood install arm.
+
+## [0.41.0] - 2026-06-11 - 3.0 stage-workflow spine (M050 S00-S02)
+
+### Added
+
+- `pkg/.aihaus/protocols/` (renamed from `workflows/`) with the kanban substrate; `workflow-orchestrator` agent (59th); obsidian-export verb; aih-graph CI gains `go test`.
+
 ## [0.40.2] - 2026-06-05 - context freshness and package seeding
 
 ### Fixed

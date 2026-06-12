@@ -32,7 +32,7 @@ There is no build command, no type checker, and no unit test framework. The smok
 - `pkg/.aihaus/skills/*/SKILL.md` — 14 skill definitions with YAML frontmatter. Each skill is a command invoked as `/aih-<name>` on Claude Code.
 - `pkg/.aihaus/skills/_shared/autonomy-protocol.md` — binding execution-autonomy rules (M005 / ADR-bound-to-all-skills): 3-phase rule, TRUE blocker definition, no option menus, no delegated typing. Every SKILL.md references it.
 - `pkg/.aihaus/agents/*.md` — 59 agent definitions with YAML frontmatter. Agents are spawned by skills to do specialized work (analyst, architect, implementer, reviewer, plan-checker, verifier, code-reviewer, code-fixer, security-auditor, integration-checker, debugger, plan-calibrator, migration-reviewer, etc.).
-- `pkg/.aihaus/hooks/*.sh` — 34 shell hooks for Claude Code lifecycle events: M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance) plus v0.12.0 runtime autonomy enforcement (autonomy-guard blocks forbidden execution-phase patterns) plus M017+ merge-back/git-add/lock-leak guards plus M039 aih-graph-refresh.sh (refreshes structural/semantic memory index).
+- `pkg/.aihaus/hooks/*.sh` — 39 shell hooks for Claude Code lifecycle events: M003 protocol enforcement (invoke-guard, manifest-append, manifest-migrate, phase-advance) plus v0.12.0 runtime autonomy enforcement (autonomy-guard blocks forbidden execution-phase patterns) plus M017+ merge-back/git-add/lock-leak guards plus M039 aih-graph-refresh.sh (refreshes structural/semantic memory index) plus BRC flow-guard/role-guard determinism plus M050 memory-read-audit.sh (SubagentStop read-verdicts).
 - `pkg/.aihaus/skills/aih-plan/annexes/*.md` — 4 annex files (attachments, intake-discipline, from-brainstorm, guardrails) — M004 enxugamento of the aih-plan core SKILL.md.
 - `pkg/.aihaus/templates/SESSION-LOG.md` — template for `/aih-update --session-log <slug>` post-hoc retrospective (M004 story L).
 - `pkg/.aihaus/memory/` — Empty memory index and directory structure (populated at runtime in target repos).
@@ -397,6 +397,103 @@ table → ledger BDD entries under a `## Migrated rules` review section (lossy �
 Given/When/Then for you to complete; idempotent via a `.business-rules-migrated` marker).
 **Deferred:** the output-style subagent-spawn canary (top-level use is safe; ADR-260517 caveat
 unverified for Task spawn).
+
+## One Harness, Three Memory Tiers (M050 / ADR-260611-A..H)
+
+Since v0.42.0 / M050 (ADR-260611-A through H; first checkpoint v0.41.0 shipped the 3.0 spine,
+S00-S02), aihaus collapses ~10 fragmented memory surfaces into **exactly three declared tiers**
+and guarantees that one ≤2KB law document reaches every session and every subagent.
+
+**The harness (ADR-260611-B).** `pkg/.aihaus/protocols/harness.md` — hard smoke-failing caps:
+**2048 bytes / ≤45 lines** (smoke Check 97 + fixture-fail pair). It condenses the autonomy law
+(BR-U5 verbatim tokens: covered → cite BR-id / gap → **ask once**, the answer **becomes a rule** /
+conflict → surface / mechanics → decide; `protocols/business-rules.md` is canonical-on-conflict),
+the 3-tier map, and the gate 4-enum + `rules_cited` grammar. EN prose with PT-BR stage tokens
+verbatim (BR-U2). Two delivery paths: (1) **main session** — `@../.aihaus/protocols/harness.md`
+as the FIRST import inside the CLAUDE.md bridge's `AIHAUS:CLAUDE-CONTEXT` markers (rides
+`ensure_block()`; survives the large-import scrub); (2) **subagents** — `context-inject.sh` v2
+inlines the body **verbatim** (the `<!-- MAIN-SESSION-ONLY -->` orchestrator-routing span is
+stripped) as a trim-exempt section on every SubagentStart. The harness **never yields to budget
+pressure** (F8). The output-style is thinned to a pointer — one authoring surface for the law.
+
+**3-tier memory model (ADR-260611-A).** Tier A — code/concept graph, rebuildable index
+(`.aihaus/state/aih-graph.db` + user-scope `~/.aihaus/state/user-graph.db`); never authoritative.
+Tier B — project memory, source of truth (business-rules ledger as the apex autonomy tier +
+`decisions.md`, `knowledge.md`, `project.md`, `.aihaus/memory/**`, kanban DB); no tier-B path
+moved this cycle (BR-P6). Tier C — global user preferences at
+`~/.aihaus/memory/user/preferences.md`, written ONLY via `aihaus prefs add` (BR-P7), surfaced
+through a gitignored repo mirror (`.aihaus/memory/local/user-preferences-global.md`, 900s
+cadence; no `@~` home imports) and a ≤1.5KB packet excerpt. **Precedence: repo overrides global;
+tier A never decides — it only retrieves.** `pkg/.aihaus/memory/MEMORY.md` deletion stays
+deferred behind the 11-consumer scrub precondition recorded in ADR-260611-H (incl. the
+`project-context-refresh.sh:264` runtime re-seed heredoc).
+
+**New verbs (both shells).** `aihaus memory packet --task "<text>" --json` — ONE batched context
+packet (status + Rule/Decision slice + top matches; 12s internal timeout / 15s settings belt;
+0.9s warm vs the 19s two-call worst case it replaces). `aihaus prefs add "<text>" [--topic
+<workflow|style|tooling|communication|other>]` — the SOLE tier-C write path: grammar-validated,
+lock-atomic (bash `mkdir`-lock + temp + atomic `mv`; PowerShell exclusive FileStream +
+`Move-Item`), max-scan PREF ids, own audit JSONL at `~/.aihaus/state/prefs-audit.jsonl`.
+`aihaus kanban gate|question|answer` — the sanctioned kanban write path; gate validates the
+4-enum verdict + `rules_cited` grammar (`BR-F?[0-9]+ | GAP:pq-<id> | MECHANICS`, comma-separated;
+normative home `protocols/kanban/db-schema.md`) **warn-only** this cycle (ADR-260611-D: flips are
+never automatic — own ADR + sign-off + ≥1 release window of `rule-cite.jsonl` + ≥80% citation
+coverage with no recurring false-warn class). `aihaus feedback export` — evolution-export.md with
+3 always-present sections (gate-churn / recurring warnings / evolution proposals; explicit
+`(none)` markers). aih-graph **v0.2.0** pairs: `rule <BR-id>` (one Rule node + scenarios +
+bindings + freshness), `why <ref>` (reverse lookup file/symbol/ADR/BR → bound rules + decision
+chains), `--types` comma-separated multi-type query filter, `build --user` (user-scope graph with
+own consent marker + `uninstall --user` purge; per-repo DBs absorb nothing), SHA-stale detection
+in `rule-drift`.
+
+**Observability (ADR-260611-F/H).** `context-inject.sh` is the SOLE writer of injection receipts
+(`.claude/audit/memory-read.jsonl` — one row per inlined artifact per spawn; yield disposition
+recorded, degradation never silent). `memory-read-audit.sh` (SubagentStop, observe-only, NEW
+hook) reads receipts + transcript evidence and writes `read|partial|unread|indeterminate`
+verdicts to its OWN `.claude/audit/memory-read-verdicts.jsonl` (canonical name per ADR-260611-H,
+superseding the ADR-260611-F prose name; override env `AIHAUS_MEMORY_READ_VERDICTS_LOG`).
+`aihaus kanban` writes `.claude/audit/rule-cite.jsonl` (sole writer; keyed task_id/stage/
+created_at). F8 yield order below the `:verifier` 1500-token threshold: tier-C excerpt drops
+first → packet cap shrinks 6KB→2KB → the harness NEVER yields. Worktree contexts (ADR-260611-G
+live canary): context IS emitted from main-repo paths (`*/.claude/worktrees/*` detection +
+git-common-dir anchor rewrite), but ALL writes (audit/cache/receipts) are suppressed —
+single-writer discipline across worktree boundaries; absent receipts read as `indeterminate`,
+never `unread`. `.worktreeinclude` (template + installer-seeded to repo root create-if-absent,
+ADR-260611-H) carries the hook substrate into worktrees.
+
+**Flywheel (S07).** Answered kanban `planning_questions` promote to DRAFT BR-ledger entries with
+real Given/When/Then + `Source: pq-<id>` (max-scan ids, dedupe, idempotent, under a review H2);
+DRAFT→accepted flips ONLY at workflow-human-review. `eval-run.sh` ships the
+`planning-answer-promotion` deterministic join + citation-coverage report (report-only per
+ADR-260611-D). `session-end.sh` harvests agent-memory diffs into `runtime/memory-candidates/`
+(candidates only; the orchestrator promotes via the ritual — BR-P6).
+
+**Global reach (S08, BR-U1 consent triple).** install/update write an idempotent
+`AIHAUS:GLOBAL-HARNESS-START/END` digest block into `~/.claude/CLAUDE.md` (closes the
+global-skills-only harness blackout) — opt-outs: `--no-global-harness` flag, env, and
+`uninstall.sh --purge-user-global` removes only the block. `~/.aihaus/.targets` enrolls each
+install (append-dedupe) so `aihaus update --all` works; honors the same env opt-out.
+
+**New env vars (M050):** `AIHAUS_SKIP_TIER_C_SEED=1` (skip the install-time tier-C
+`~/.aihaus/memory/user/preferences.md` seed), `AIHAUS_KANBAN_GATE_VALIDATE=0` (audited bypass of
+the kanban wrapper's warn-only shape validation), `AIHAUS_KANBAN_WRITE_WARN=0` (silence the
+bash-guard raw-sqlite3 kanban-write soft warn), `AIHAUS_MEMORY_READ_AUDIT=0` (audited bypass of
+the SubagentStop read-auditor), `AIHAUS_SKIP_GLOBAL_HARNESS=1` (skip the `~/.claude/CLAUDE.md`
+GLOBAL-HARNESS seed AND `.targets` enrollment), `AIHAUS_MEMORY_HARVEST=0` (skip the session-end
+agent-memory scratch harvest). Path overrides: `AIHAUS_MEMORY_READ_LOG` (receipts),
+`AIHAUS_MEMORY_READ_VERDICTS_LOG` (verdicts). All observe-only surfaces are governed by the
+ADR-260611-D standing policy — every branch emits its audit row before exit 0 (BR-P4), every gate
+ships a fixture-fail smoke pair (BR-P8).
+
+**S09 closeout gates.** Smoke grows 100 → 103: Check 101 — stale pre-M027 cohort-key static grep
+over shipped `pkg/` files with two NAMED deliberate carve-outs (`context-budget.conf:13-18`
+back-compat budget keys, removal M046+; `context-inject.sh` `_get_static_paths()` alias loop —
+S02 stale role-defaults.json resilience); Check 102 — context-inject harness+receipt fixture-fail
+pair under temp HOME/project root (`tools/fixtures/context-inject/`); Check 103 — fixture-pair
+audit asserting all six M050 pairs (S02 settings-merge-matcher, S03 harness-byte-cap, S06
+prefs-lock, S07 kanban-promotion, S08 global-harness, S09 context-inject) stay present AND
+exercised. Release pairing (BR-U4): tag `aih-graph-v0.2.0` at-or-before `v0.42.0`; run
+`git fetch --tags origin` on installs that follow the release branch.
 
 ## Installer Behavior
 

@@ -5716,3 +5716,58 @@ Revert the S05 PR: context-inject v2 reverts to the M048 two-call path, the `.wo
 - ADR-260611-B/F — harness delivery + receipts/yield contracts this slice implements
 - M047 (`lib/manifest-helpers.sh:resolve_manifest_path`) — anchor-rewrite lineage
 - `.aihaus/milestones/M050-260611-one-harness-three-tiers/execution/architecture.md` §5 — canary decision tree
+
+## ADR-260611-H — MEMORY.md-deletion deferral (F6) + M050 closeout reconciliations
+
+**Status:** Accepted
+**Date:** 2026-06-12
+**Milestone:** M050/S09
+
+### Context
+
+Three loose ends survived to closeout. (1) CHECK F6 proposed deleting `pkg/.aihaus/memory/MEMORY.md` (the legacy agent-memory index) as redundant under the 3-tier model (ADR-260611-A); the plan dropped the deletion but required the deferral and its precondition be recorded here. (2) ADR-260611-F §2 named the read-audit verdicts file `memory-read-audit.jsonl` in prose, while S08 shipped the hook writing `memory-read-verdicts.jsonl` — two names for one file is exactly the drift the single-writer contract exists to prevent. (3) ADR-260611-G §Neutral left the `pkg/.aihaus/templates/.worktreeinclude` template shipped-but-unseeded ("S08 scope"); S08's story did not own it (KNOWLEDGE-LOG 2026-06-12), stranding it to S09.
+
+### Decision
+
+1. **MEMORY.md deletion stays DEFERRED (F6) behind a consumer-scrub precondition.** A fresh closeout grep (2026-06-12) confirms **11 live consumer files (12 reference sites)** of `memory/MEMORY.md` in shipped surfaces:
+   - `pkg/.aihaus/hooks/project-context-refresh.sh:264` — **runtime re-seed heredoc** (`write_if_missing`): the hook recreates the file on cadence, so deletion without this scrub silently reverts
+   - `pkg/.aihaus/hooks/context-inject.sh:889` — universal-minimum fallback payload line
+   - `pkg/.aihaus/agents/context-curator.md:86` — universal-minimum path list
+   - `pkg/.aihaus/agents/knowledge-curator.md:50` — index-confirmation step
+   - `pkg/.aihaus/skills/aih-brainstorm/SKILL.md:15`, `aih-bugfix/SKILL.md:17+154`, `aih-feature/SKILL.md:30`, `aih-plan/SKILL.md:15` — silent context-load steps
+   - `pkg/.aihaus/skills/aih-milestone/completion-protocol.md:165` — index-update obligation
+   - `pkg/scripts/install.sh:507` + `pkg/scripts/update.sh:244` — per-repo create-if-absent seed lists
+
+   **Deletion precondition:** a future milestone may delete the file ONLY after scrubbing every consumer above in the same slice (re-grep at execution time; this list is the floor, not the ceiling), with the `project-context-refresh.sh` re-seed heredoc removed FIRST — otherwise the runtime resurrects the file between scrub and ship.
+2. **Verdicts filename reconciled: `.claude/audit/memory-read-verdicts.jsonl` is canonical** — the on-disk S08 reality (`memory-read-audit.sh` header + `VERDICTS_LOG` default) supersedes the ADR-260611-F §2 prose name `memory-read-audit.jsonl`. The env override **`AIHAUS_MEMORY_READ_VERDICTS_LOG` stands** unchanged. ADR-260611-F is NOT edited (append-only ledger); this clause is the correction of record. The distinct name keeps the receipts/verdicts writer split legible: `memory-read.jsonl` = receipts (context-inject.sh, sole writer), `memory-read-verdicts.jsonl` = verdicts (memory-read-audit.sh, sole writer).
+3. **`.worktreeinclude` installer seeding lands (ADR-260611-G §Neutral closed):** `install.sh`, `install.ps1`, `update.sh`, and `update.ps1` seed `templates/.worktreeinclude` to the target repo ROOT as `.worktreeinclude`, **create-if-absent only** — a user's existing file is never clobbered (same contract as every other per-repo template seed). This is the first repo-root template-file seed; it follows the `seed_claude_context_bridge` create-if-absent shape rather than introducing marker-block merge machinery the file does not need.
+
+### Consequences
+
+**Positive:** the F6 disposition is auditable instead of folklore; the verdicts file has exactly one name; fresh installs (and refreshed overlays) carry the hook substrate into native worktrees without the manual step ADR-260611-G's gap forced.
+
+**Negative:** MEMORY.md remains a fourth-ish memory surface the 3-tier prose must keep classifying as tier-B-adjacent scratch (ADR-260611-A §Negative) until a milestone pays the scrub.
+
+**Neutral:** stale-cohort-key hygiene rides smoke (the S09 static grep with the two named carve-outs: `context-budget.conf:13-18` back-compat keys and the `context-inject.sh` `_get_static_paths()` alias loop) — no runtime behavior change.
+
+### Alternatives Considered
+
+| Alternative | Verdict | Rationale |
+|-------------|---------|-----------|
+| Delete MEMORY.md now, scrub consumers in S09 | Rejected (F6) | 12-site scrub across skills/agents/hooks/installers is a milestone-sized blast radius inside a closeout slice; the re-seed heredoc makes a partial scrub silently self-revert |
+| Rename the verdicts file to match ADR-260611-F prose | Rejected | The shipped name is live on dogfood disks and wired in both settings templates; renaming costs a migration to fix prose |
+| Amend ADR-260611-F in place | Rejected | Append-only ledger (ADR-001 lineage); supersession is recorded forward, never by edit |
+| Seed `.worktreeinclude` with a marker-block merge | Rejected | gitignore-syntax file with no user/machine section split; create-if-absent is the established template-seed contract and never clobbers |
+
+### Rollback
+
+(1) is a record, not code — reverting restores the undocumented limbo. (2) reverting re-opens the two-name ambiguity; no code change involved. (3) revert the S09 PR: the four seed sites disappear; already-seeded repo-root files remain inert user files.
+
+### References
+
+- ADR-260611-A — 3-tier model (F6 deferral first recorded in its §Neutral)
+- ADR-260611-F — receipts/verdicts split this ADR's clause 2 reconciles
+- ADR-260611-G — `.worktreeinclude` template + the seeding gap clause 3 closes
+- ADR-260611-B/C/E — harness delivery, chokepoints, tier-C store (closeout cross-check: all verified present, no duplicates)
+- ADR-260611-D — BR-U3 observe→enforce standing policy (already encoded there; deliberately not restated here)
+- `.aihaus/milestones/M050-260611-one-harness-three-tiers/execution/KNOWLEDGE-LOG.md` — S08 findings feeding clauses 2-3

@@ -1856,6 +1856,18 @@ function Invoke-InjectGitignore {
 }
 Invoke-InjectGitignore -TargetDir $Target
 
+# Step 12.5: .worktreeinclude repo-root seed (M050/S09, ADR-260611-H -- closes
+# ADR-260611-G §Neutral). Carries the hook substrate (.aihaus/hooks/ + lib/ +
+# context-budget.conf) and sidecars into native Claude Code worktrees so
+# isolated subagents resolve hooks + relative sidecar paths. Create-if-absent
+# ONLY -- a user's existing .worktreeinclude is never clobbered.
+$wtiSrc = Join-Path $PkgTemplates '.worktreeinclude'
+$wtiDst = Join-Path $Target '.worktreeinclude'
+if (-not (Test-Path -LiteralPath $wtiDst) -and (Test-Path -LiteralPath $wtiSrc)) {
+    Copy-Item -LiteralPath $wtiSrc -Destination $wtiDst
+    Write-Host "  worktree: created .worktreeinclude (hook substrate carried into worktrees)"
+}
+
 # Step 13: aih-graph memory engine binary bootstrap
 # Downloads the aih-graph binary to .aihaus\bin\ if not already present.
 # Non-fatal: /aih-init and hooks degrade to lexical/no-memory behavior if absent.

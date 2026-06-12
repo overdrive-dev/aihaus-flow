@@ -6587,6 +6587,267 @@ check_global_harness_and_feedback() {
   fi
 }
 
+# ---- Check 101: stale pre-M027 cohort keys absent from shipped files (M050/S09, F10) ----
+# Scans every shipped pkg/ file for the deleted-cohort keys ':adversarial-scout' /
+# ':adversarial-review' (M027/ADR-260509-Y 6->5 fork) plus the colon-less budget-key
+# form '^adversarial-(scout|review)='. TWO deliberate carve-outs, NAMED in the
+# check output so a future maintainer reads them as intentional, not missed (F10):
+#   1. pkg/.aihaus/hooks/context-budget.conf lines 13-18 — pre-M027 back-compat
+#      budget keys honoring user .context-budgets sidecars written before the
+#      cohort fork; removal scheduled in the M046+ deprecation window.
+#   2. pkg/.aihaus/hooks/context-inject.sh _get_static_paths() — the M050/S02
+#      back-compat alias fall-through that resolves merged-:adversarial agents
+#      against a STALE role-defaults.json still carrying scout/review keys
+#      (resilience code must name the stale keys in order to map them).
+# Append-only ledgers and the v3->v4 sidecar-migration surfaces (which must
+# reference the old keys to fold them) are structurally exempt via the
+# documented allowlist below. Everything else fails.
+check_stale_cohort_keys() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: stale pre-M027 cohort keys absent from shipped pkg/ files (M050/S09, F10)"
+  local issues=()
+  local conf_rel=".aihaus/hooks/context-budget.conf"
+  local inject_rel=".aihaus/hooks/context-inject.sh"
+
+  # Historical/migration exemptions (NOT runtime key consumers):
+  #   - append-only ledgers (decisions.md ADR history, CHANGELOG.md)
+  #   - the .effort v3->v4 sidecar migration implementation + its PS parity
+  #     messaging (folds old keys -> :adversarial; must name them)
+  #   - aih-effort cohort-taxonomy history + migration guide annexes and the
+  #     enforcement-audit rows quoting that migration verbatim
+  local -a exempt=(
+    ".aihaus/decisions.md"
+    "CHANGELOG.md"
+    "scripts/lib/restore-effort.sh"
+    "scripts/install.ps1"
+    "scripts/update.ps1"
+    ".aihaus/skills/aih-effort/SKILL.md"
+    ".aihaus/skills/aih-effort/annexes/cohorts.md"
+    ".aihaus/skills/aih-effort/annexes/presets.md"
+    ".aihaus/skills/aih-effort/annexes/state-file.md"
+    ".aihaus/skills/_shared/enforcement-audit.md"
+    ".aihaus/skills/_shared/enforcement-audit/aih-effort.md"
+  )
+  _stale_key_exempt() {
+    local rel="$1" e
+    for e in "${exempt[@]}"; do [[ "$rel" == "$e" ]] && return 0; done
+    return 1
+  }
+
+  # Carve-out 2 scope: the _get_static_paths() body line range. Empty range
+  # (function renamed/moved) makes every context-inject hit a failure — the
+  # check then forces a re-anchor instead of going green-but-vacuous.
+  local fn_range fn_start="" fn_end=""
+  fn_range="$(awk '/^_get_static_paths\(\) \{/{s=NR} s && /^\}/{print s ":" NR; exit}' \
+    "${PACKAGE_ROOT}/${inject_rel}" 2>/dev/null)"
+  if [[ "$fn_range" == *:* ]]; then
+    fn_start="${fn_range%%:*}"
+    fn_end="${fn_range##*:}"
+  fi
+
+  local hits
+  hits="$(grep -rnE ':adversarial-(scout|review)|^adversarial-(scout|review)=' "$PACKAGE_ROOT" 2>/dev/null | tr -d '\r')"
+
+  local hit f rest ln rel
+  while IFS= read -r hit; do
+    [ -z "$hit" ] && continue
+    f="${hit%%:*}"
+    rest="${hit#*:}"
+    ln="${rest%%:*}"
+    case "$ln" in (*[!0-9]*|"") continue ;; esac
+    rel="${f#"${PACKAGE_ROOT}"/}"
+    if [[ "$rel" == "$conf_rel" ]]; then
+      # Carve-out 1: deliberate back-compat keys live ONLY at lines 13-18.
+      if [ "$ln" -lt 13 ] || [ "$ln" -gt 18 ]; then
+        issues+=("${rel}:${ln}: stale cohort key OUTSIDE the deliberate lines-13-18 carve-out (F10)")
+      fi
+      continue
+    fi
+    if [[ "$rel" == "$inject_rel" ]]; then
+      # Carve-out 2: alias fall-through inside _get_static_paths() only.
+      if [ -z "$fn_start" ] || [ "$ln" -lt "$fn_start" ] || [ "$ln" -gt "$fn_end" ]; then
+        issues+=("${rel}:${ln}: stale cohort key outside the _get_static_paths() alias-loop carve-out (M050/S02)")
+      fi
+      continue
+    fi
+    _stale_key_exempt "$rel" && continue
+    issues+=("${rel}:${ln}: stale pre-M027 cohort key — merge to :adversarial (ADR-260509-Y)")
+  done <<< "$hits"
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+    echo "        note: deliberate carve-out — pkg/.aihaus/hooks/context-budget.conf lines 13-18 (pre-M027 back-compat budget keys; removal scheduled M046+)"
+    echo "        note: deliberate carve-out — pkg/.aihaus/hooks/context-inject.sh _get_static_paths() alias loop (M050/S02 stale role-defaults.json resilience)"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 102: context-inject.sh harness + receipt fixture-fail pair (M050/S09) ----
+# Runs the REAL context-inject.sh against the stub SubagentStart payload at
+# tools/fixtures/context-inject/payload.json under a TEMP HOME + TEMP project
+# root (Check 98 temp-home discipline — the real repo audit files are NEVER
+# touched). The staged project carries the .worktreeinclude hook substrate
+# (hook + lib + context-budget.conf), mirroring ADR-260611-G branch (b).
+#   PASS arm (harness.md staged): the emitted additionalContext must carry the
+#     verbatim harness section with the MAIN-SESSION-ONLY span STRIPPED, and
+#     .claude/audit/memory-read.jsonl must carry a "harness" receipt row plus
+#     the unconditional "path_list" row (ADR-260611-B/F delivery ground truth).
+#   FAIL arm (harness.md absent): same run on a fresh root must emit NO harness
+#     section and NO harness receipt row — while still writing the path_list
+#     row — proving the packet/receipt path is keyed to actual delivery and not
+#     green-but-vacuous (BR-P8). The memory packet is opted out
+#     (AIHAUS_MEMORY_INJECT=0) so the check is deterministic and binary-free.
+check_context_inject_fixture() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: context-inject.sh harness packet + receipt fixture-fail pair (M050/S09, ADR-260611-B/F)"
+  local issues=()
+  local repo_root hook_src fixture_dir
+  repo_root="$(cd "${PACKAGE_ROOT}/.." && pwd)"
+  hook_src="${PACKAGE_ROOT}/.aihaus/hooks/context-inject.sh"
+  fixture_dir="${repo_root}/tools/fixtures/context-inject"
+  [[ -f "$hook_src" ]] || { _fail "$label" "missing hook: pkg/.aihaus/hooks/context-inject.sh"; return; }
+  [[ -f "${fixture_dir}/payload.json" ]] || {
+    _fail "$label" "fixture missing: tools/fixtures/context-inject/payload.json"
+    return
+  }
+
+  _stage_inject_proj() {  # $1 = dest project root, $2 = 1|0 stage harness.md
+    mkdir -p "$1/.aihaus/hooks/lib" "$1/.aihaus/protocols" 2>/dev/null || return 1
+    cp "$hook_src" "$1/.aihaus/hooks/context-inject.sh" || return 1
+    cp "${PACKAGE_ROOT}/.aihaus/hooks/context-budget.conf" "$1/.aihaus/hooks/context-budget.conf" || return 1
+    cp "${PACKAGE_ROOT}/.aihaus/hooks/lib/path-helpers.sh" "$1/.aihaus/hooks/lib/path-helpers.sh" || return 1
+    cp "${PACKAGE_ROOT}/.aihaus/hooks/lib/role-defaults.json" "$1/.aihaus/hooks/lib/role-defaults.json" || return 1
+    if [[ "$2" == "1" ]]; then
+      cp "${PACKAGE_ROOT}/.aihaus/protocols/harness.md" "$1/.aihaus/protocols/harness.md" || return 1
+    fi
+    return 0
+  }
+
+  _run_inject() {  # $1 = project root; echoes hook stdout; rc = hook rc
+    CLAUDE_PROJECT_DIR="$1" HOME="$2" USERPROFILE="$2" \
+      AIHAUS_MEMORY_INJECT=0 AIHAUS_HOME="$1" \
+      bash "$1/.aihaus/hooks/context-inject.sh" \
+      < "${fixture_dir}/payload.json" 2>/dev/null
+  }
+
+  local tmp_home proj_pass proj_fail out rc receipts
+  tmp_home="$(_mktemp_dir context-inject-home)" || { _fail "$label" "mktemp failed (home)"; return; }
+  proj_pass="$(_mktemp_dir context-inject-pass)" || { _fail "$label" "mktemp failed (pass arm)"; return; }
+  proj_fail="$(_mktemp_dir context-inject-fail)" || { _fail "$label" "mktemp failed (fail arm)"; return; }
+
+  # ---- PASS arm: harness present → section emitted + receipt rows ----------
+  if ! _stage_inject_proj "$proj_pass" "1"; then
+    issues+=("pass arm: could not stage temp project root")
+  else
+    rc=0
+    out="$(_run_inject "$proj_pass" "$tmp_home")" || rc=$?
+    receipts="${proj_pass}/.claude/audit/memory-read.jsonl"
+    [[ "$rc" -eq 0 ]] || issues+=("pass arm: hook exited ${rc} (expected 0 — BR-P4 fail-open)")
+    printf '%s' "$out" | grep -Fq '"hookSpecificOutput"' || \
+      issues+=("pass arm: no hookSpecificOutput envelope on stdout")
+    printf '%s' "$out" | grep -Fq 'aihaus harness (auto-injected' || \
+      issues+=("pass arm: harness section missing from additionalContext (ADR-260611-B delivery path 2)")
+    if printf '%s' "$out" | grep -Fq 'MAIN-SESSION-ONLY'; then
+      issues+=("pass arm: MAIN-SESSION-ONLY span not stripped for subagents")
+    fi
+    if [[ ! -f "$receipts" ]]; then
+      issues+=("pass arm: no receipts file at .claude/audit/memory-read.jsonl (ADR-260611-F sole-writer ground truth)")
+    else
+      grep -q '"artifact":"harness"' "$receipts" || \
+        issues+=("pass arm: no harness receipt row")
+      grep '"artifact":"harness"' "$receipts" 2>/dev/null | grep -Fq 'harness.md' || \
+        issues+=("pass arm: harness receipt row does not carry the resolved harness.md source path")
+      grep -q '"artifact":"path_list"' "$receipts" || \
+        issues+=("pass arm: no path_list receipt row")
+    fi
+  fi
+
+  # ---- FAIL arm (BR-P8 non-vacuity): harness absent → NO harness receipt ---
+  if ! _stage_inject_proj "$proj_fail" "0"; then
+    issues+=("fail arm: could not stage temp project root")
+  else
+    rc=0
+    out="$(_run_inject "$proj_fail" "$tmp_home")" || rc=$?
+    receipts="${proj_fail}/.claude/audit/memory-read.jsonl"
+    [[ "$rc" -eq 0 ]] || issues+=("fail arm: hook exited ${rc} (expected 0 even with harness absent)")
+    if printf '%s' "$out" | grep -Fq 'aihaus harness (auto-injected'; then
+      issues+=("fail arm: harness section emitted with no harness on disk — delivery path is fabricating content")
+    fi
+    if [[ ! -f "$receipts" ]]; then
+      issues+=("fail arm: no receipts file — receipt machinery did not run (path_list row expected)")
+    else
+      if grep -q '"artifact":"harness"' "$receipts"; then
+        issues+=("fail arm: harness receipt row written with harness absent — receipts are green-but-vacuous (BR-P8)")
+      fi
+      grep -q '"artifact":"path_list"' "$receipts" || \
+        issues+=("fail arm: path_list receipt row missing — receipt machinery dead, absence of harness row proves nothing")
+    fi
+  fi
+
+  rm -rf "$tmp_home" "$proj_pass" "$proj_fail" 2>/dev/null || true
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
+# ---- Check 103: M050 fixture-fail pair audit — all six pairs present + exercised (BR-P8) ----
+# Closeout sweep: every gate M050 shipped must keep its fixture-fail pair on
+# disk AND keep the smoke function that exercises it both defined and invoked
+# at the runner. A deleted fixture dir, a renamed check function, or a check
+# dropped from the runner list all fail here — the green-but-vacuous failure
+# mode BR-P8 exists to prevent. Pairs (story → fixture dir → check):
+#   S02 settings-merge-matcher, S03 harness-byte-cap, S06 prefs-lock,
+#   S07 kanban-promotion, S08 global-harness, S09 context-inject (whose fail
+#   arm is runtime — harness absent — so payload.json is its on-disk artifact).
+check_m050_fixture_pair_audit() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: M050 fixture-fail pairs present + exercised (M050/S09, BR-P8)"
+  local issues=()
+  local repo_root self
+  repo_root="$(cd "${PACKAGE_ROOT}/.." && pwd)"
+  self="${SCRIPT_DIR}/$(basename "$0")"
+  [[ -f "$self" ]] || self="${SCRIPT_DIR}/smoke-test.sh"
+
+  # Row schema: <fixture-dir>|<comma-separated required artifacts>|<check fn>
+  local -a pairs=(
+    "settings-merge-matcher|01-matcher-widen.expected.json,02-stale-matcher-must-mismatch.expected.json|check_settings_merge_matcher"
+    "harness-byte-cap|within-cap-must-pass.md,oversized-must-fail.md|check_harness_byte_cap"
+    "prefs-lock|valid-entry.txt,malformed-empty.txt,malformed-multiline.txt|check_prefs_lock"
+    "kanban-promotion|ledger-with-source.md,ledger-missing-source.md|check_kanban_chokepoint"
+    "global-harness|seeded.md,unseeded.md|check_global_harness_and_feedback"
+    "context-inject|payload.json|check_context_inject_fixture"
+  )
+
+  local row dir files fn f
+  local -a flist=()
+  for row in "${pairs[@]}"; do
+    IFS='|' read -r dir files fn <<< "$row"
+    if [[ ! -d "${repo_root}/tools/fixtures/${dir}" ]]; then
+      issues+=("fixture dir missing: tools/fixtures/${dir}/")
+      continue
+    fi
+    IFS=',' read -ra flist <<< "$files"
+    for f in "${flist[@]}"; do
+      [[ -f "${repo_root}/tools/fixtures/${dir}/${f}" ]] || \
+        issues+=("fixture artifact missing: tools/fixtures/${dir}/${f}")
+    done
+    grep -Eq "^${fn}\(\)" "$self" || \
+      issues+=("check function not defined: ${fn} (pair ${dir} cannot be exercised)")
+    grep -Eq "^${fn}\$" "$self" || \
+      issues+=("check function not invoked at runner: ${fn} (pair ${dir} present but never exercised)")
+  done
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -6606,6 +6867,9 @@ check_harness_byte_cap
 check_prefs_lock
 check_kanban_chokepoint
 check_global_harness_and_feedback
+check_stale_cohort_keys
+check_context_inject_fixture
+check_m050_fixture_pair_audit
 
 printf "
 "

@@ -47,8 +47,7 @@ the task clearly makes them irrelevant.
 `:planner` → decisions.md (HIGH), knowledge.md (HIGH), project.md (MED), CONTEXT.md (MED)
 `:doer` → decisions.md (HIGH), knowledge.md (HIGH), project.md (HIGH), story-file (HIGH)
 `:verifier` → decisions.md (HIGH), knowledge.md (HIGH), story-file (HIGH), execution/* (MED)
-`:adversarial-scout` → decisions.md (HIGH), knowledge.md (HIGH), story-file (HIGH)
-`:adversarial-review` → decisions.md (HIGH), knowledge.md (HIGH), memory/reviews/* (MED)
+`:adversarial` → decisions.md (HIGH), knowledge.md (HIGH), story-file (HIGH), memory/reviews/* (MED)
 
 ## Delta Reasoning (novel tasks)
 
