@@ -17,7 +17,7 @@
 **Describe a feature in plain language. It auto-routes to the right sub-flow, drives it through gated stages on a local kanban, builds it in isolated worktrees with adversarial review, and verifies the result — while everything it knows about your project stays on your machine.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.39.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
+[![Version](https://img.shields.io/badge/version-0.42.0-181717?style=for-the-badge&logo=github)](pkg/VERSION)
 [![aihaus 3.0](https://img.shields.io/badge/aihaus-3.0%20·%20native--first-7c3aed?style=for-the-badge)](#whats-new-in-30)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-first--class-d97757?style=for-the-badge)](https://claude.ai/code)
 
@@ -122,34 +122,39 @@ aihaus 3.0 stands on four foundations. Everything else is glue.
 
 | Pillar | One line |
 |--------|----------|
-| 🧠 **Local Memory** | Everything aihaus knows about your repo lives on your machine — never hosted. |
+| 🧠 **Local Memory** | One harness, three tiers — code graph, project + business rules, your global preferences. Never hosted. |
 | 📋 **Kanban** | A staged, gated workflow whose live state is a local SQLite board. |
 | ⚙️ **Workflows** | Natural-language requests auto-route to the right sub-flow; native primitives handle fan-out. |
 | 🎯 **Goals** | Native `/goal`: set a condition, walk away, a fast model verifies it's met. |
 
 ---
 
-### 🧠 Pillar 1 — Local Memory (everything local, never hosted)
+### 🧠 Pillar 1 — Local Memory (one harness, three tiers, never hosted)
 
-Three layers, all on disk, all yours — auto-injected into every session and every agent so you never repeat yourself.
+Since v0.42.0, memory is exactly **three tiers** governed by **one harness** — all on disk, all yours, auto-injected into every session *and every subagent* so you never repeat yourself.
 
-**(a) Markdown source-of-truth.** A small set of files is the canonical memory, auto-imported into **every session** via `CLAUDE.md` `@`-imports — so it survives `/compact` and never has to be re-pasted:
+**The harness.** A single ≤2KB file (`.aihaus/protocols/harness.md`) carries the autonomy law, the memory map, and the gate grammar. The main session gets it as the first `CLAUDE.md` `@`-import; **every subagent gets it inlined verbatim at spawn** (it never yields to context-budget pressure), with an injection **receipt** logged per artifact — reading isn't advisory, it's by construction.
 
-| File | What it holds |
-|------|---------------|
-| `.aihaus/project.md` | Stack, conventions, architecture — read at runtime by every agent |
-| `.aihaus/decisions.md` | Architecture Decision Records. **Binding.** Every code-writing agent reads it before editing |
-| `.aihaus/knowledge.md` | Lessons and gotchas carried forward so they stop repeating |
-| `.aihaus/memory/workflows/environment.md` | Env access, credential **locations** (never values), and validation commands |
-
-**(b) `aih-graph` — a private, derived index.** A per-repo SQLite + BM25/FTS5 index (with optional local Ollama embeddings) of your **real code** (files, symbols, call-sites, tests), your markdown memory, and your commits. It lives under the OS state directory — **never merged into the repo, never hosted.** Agents query it with `aihaus memory ... --json` to ground planning, edits, review, and verification in what's actually in the tree.
+**Tier A — code memory & relations (derived, rebuildable).** `aih-graph`: a per-repo SQLite + BM25/FTS5 index (with optional local Ollama embeddings) of your **real code** (files, symbols, call-sites, tests), markdown memory, and commits — under the OS state directory, **never merged into the repo, never hosted.** Agents ground themselves through one batched call (`aihaus memory packet`, sub-second warm) plus targeted queries:
 
 ```bash
 ▸ aihaus memory query "where do we validate JWTs" --json
 ▸ aihaus memory callers "createSession" --json
+▸ aihaus memory rule BR-12 --json        # one business rule + the code/tests bound to it
+▸ aihaus memory why src/auth/session.ts  # which rules/decisions explain this file
 ```
 
-**(c) `/aih-env` — capture the environment once.** A skill that interrogates and persists your test environment, credential **locations** (never secret values), env access, and deploy path into `environment.md`. Capture it **once**; every session and agent reads it without you re-explaining.
+**Tier B — project memory & business decisions (committed, the apex).** The canonical markdown set, auto-imported into every session:
+
+| File | What it holds |
+|------|---------------|
+| `.aihaus/memory/workflows/business-rules.md` | **The autonomy contract.** Covered decision → the agent decides alone, citing the rule. Gap → it asks *once*, and the answer becomes a rule. Answered planning questions auto-draft new rules (`Source: pq-<id>`), confirmed at human-review — every answer permanently widens the autonomous surface |
+| `.aihaus/project.md` | Stack, conventions, architecture — read at runtime by every agent |
+| `.aihaus/decisions.md` | Architecture Decision Records. **Binding.** Every code-writing agent reads it before editing |
+| `.aihaus/knowledge.md` | Lessons and gotchas carried forward so they stop repeating |
+| `.aihaus/memory/workflows/environment.md` | Env access, credential **locations** (never values), and validation commands — captured once by `/aih-env` |
+
+**Tier C — your preferences (global, cross-project).** `~/.aihaus/memory/user/preferences.md` follows *you*, not the repo — written only through the lock-atomic `aihaus prefs add`, surfaced to every session in every repo. Repo rules override global preferences on conflict; one deterministic sentence, no drift.
 
 > [!IMPORTANT]
 > `environment.md` records *where* credentials live and *how* to validate access — it never stores secret values. The private `aih-graph` index never leaves the OS state directory. Nothing about your project is hosted.
@@ -227,7 +232,7 @@ The staging → prod boundary **is** the capability boundary, and it's enforced 
 
 ## 🛠 How the engine works
 
-Under the native-first surface sits a deliberate, file-driven engine: **58 specialist agents** and **15 intent-based skills**.
+Under the native-first surface sits a deliberate, file-driven engine: **59 specialist agents** and **15 intent-based skills**.
 
 ### Thin coordinator, specialist workforce
 
@@ -306,12 +311,26 @@ aihaus ships **15 intent-based skills**. Every command follows the same pattern:
 ### Global CLI helper
 
 ```bash
-aihaus memory <refresh|query|context|callers|impact|gotchas|status>   # query the private aih-graph index; --json for agents
+aihaus memory <refresh|query|packet|context|callers|impact|rule|why|gotchas|status>   # the private aih-graph index; --json for agents
+aihaus prefs add "<preference>"                  # the only write path into your global tier-C preferences
+aihaus kanban <gate|question|answer> …           # the sanctioned write path for board state (warn-only rule citations)
+aihaus feedback export                           # bundle gate stats + warnings + evolution proposals for upstreaming
 ```
 
 ---
 
 ## ✨ What's new in 3.0
+
+**v0.42.0 — One Harness, Three Memory Tiers (M050):**
+
+- **One harness file** (≤2KB) carries the autonomy law + memory map + gate grammar — first import for the main session, **inlined verbatim into every subagent** with per-artifact injection receipts. Reading is by construction, not by instruction.
+- **Business rules become the autonomy engine** — covered decisions are made alone (citing the rule); gaps are asked *once* and the answer becomes a rule; answered planning questions auto-draft new rules confirmed at human-review. A deterministic eval reports **autonomous decisions per human answer**.
+- **Tier-C global preferences** — `~/.aihaus/memory/user/preferences.md` follows you across repos, written only via lock-atomic `aihaus prefs add`; repo rules win on conflict.
+- **Deterministic write chokepoints** — `aihaus kanban gate|question|answer` replaces free-form board writes (warn-only rule-citation validation; enforcement flips only by ADR + maintainer sign-off after a release of evidence).
+- **aih-graph v0.2** — `rule <BR-id>` and `why <ref>` connect code to the rules that govern it; `rule-drift` flags rules whose bound files changed since last review; `--types` filters; one batched `memory packet` call grounds every spawn in <1s.
+- **Transparency note:** the installer seeds a small marker block into `~/.claude/CLAUDE.md` (so even repos *without* aihaus get the autonomy-law digest) and enrolls repos in `~/.aihaus/.targets` for `aihaus update --all`. Both are opt-out: `--no-global-harness` / `AIHAUS_SKIP_GLOBAL_HARNESS=1`; removed by `uninstall --purge-user-global`.
+
+**3.0 foundation:**
 
 - **Native-first throughout** — native `/goal`, native plan mode, native task list, native worktrees, native subagent memory. aihaus layers gates + roles + kanban + the memory engine on top.
 - **No `aih-goal` skill** — native `/goal` + auto-routed sub-flows replace it; the kanban DB is a **default substrate**, decoupled from any "goal" command.
@@ -330,9 +349,9 @@ your-project/
 │   ├── skills/                       # 15 intent-based commands
 │   │   └── _shared/
 │   │       └── autonomy-protocol.md  # Binding execution-autonomy rules
-│   ├── agents/                       # 58 specialist agent definitions
+│   ├── agents/                       # 59 specialist agent definitions
 │   ├── hooks/                        # lifecycle + protocol hooks (incl. role-guard.sh)
-│   ├── workflows/                    # stage workflow + kanban DB substrate
+│   ├── protocols/                    # harness.md + stage workflow + kanban DB substrate
 │   ├── memory/                       # local markdown memory (project.md, environment.md, …)
 │   ├── decisions.md                  # Architecture Decision Records (binding)
 │   └── knowledge.md                  # Accumulated lessons
