@@ -430,6 +430,35 @@ case "$last_epoch" in *[!0-9]*|'') last_epoch=0 ;; esac
 interval="${AIHAUS_CONTEXT_REFRESH_INTERVAL_SEC:-900}"
 case "$interval" in *[!0-9]*|'') interval=900 ;; esac
 
+# ---------------------------------------------------------------------------
+# Tier-C mirror (M050/S06, ADR-260611-E §4): copy the global user-preferences
+# file (~/.aihaus/memory/user/preferences.md, sole writer `aihaus prefs add`)
+# into the gitignored repo mirror .aihaus/memory/local/user-preferences-global.md
+# on this hook's 900s cadence. The CLAUDE.md bridge imports the MIRROR (never
+# `@~` home paths — rejected alternative). Survival is by-location: the
+# update.sh refresh loop only touches skills/, agents/, hooks/, templates/,
+# so memory/local/ is never wiped (PATTERNS §9). Create only when the source
+# exists; never error when absent. The mirror is regenerated, never hand-edited.
+# ---------------------------------------------------------------------------
+mirror_tier_c_preferences() {
+  local src="$HOME/.aihaus/memory/user/preferences.md"
+  local dst="${aihaus_dir}/memory/local/user-preferences-global.md"
+  [ -f "$src" ] || return 0
+  # Cadence gate: regenerate when the mirror is missing, on --force, or when
+  # the 900s refresh interval has elapsed (same window as the discovery pass).
+  if [ -f "$dst" ] && [ "$force" != "1" ]; then
+    if [ "$now_epoch" -gt 0 ] && [ $((now_epoch - last_epoch)) -lt "$interval" ]; then
+      return 0
+    fi
+  fi
+  mkdir -p "$(dirname "$dst")" 2>/dev/null || return 0
+  if cmp -s "$src" "$dst" 2>/dev/null; then
+    return 0
+  fi
+  cp "$src" "$dst" 2>/dev/null || true
+}
+mirror_tier_c_preferences
+
 discovery_script="${aihaus_dir}/skills/aih-init/scripts/environment-discovery.sh"
 verify_script="${aihaus_dir}/skills/aih-init/scripts/claude-context-verify.sh"
 

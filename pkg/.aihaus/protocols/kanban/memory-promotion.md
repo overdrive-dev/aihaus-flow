@@ -57,6 +57,31 @@ the agent, applies those blocks.
 If the curator is unavailable, the orchestrator still performs the same review
 directly and records the reason in `RUN-MANIFEST.md`.
 
+### User-preference candidates (tier C, M050/S06)
+
+Agents may surface durable, cross-project user preferences they observed
+(workflow habits, communication language, tooling choices) as a
+`user-preference` candidate class in their returned reports — plain bullets
+under a `User-preference candidates` heading, each a one-line preference plus
+a topic from `workflow|style|tooling|communication|other`.
+
+The **orchestrator** promotes accepted candidates by running:
+
+    aihaus prefs add "<one-line preference>" --topic <slug>
+
+That verb is the SOLE write path to `~/.aihaus/memory/user/preferences.md`
+(ADR-260611-C/E). Agents never write tier-C memory directly — direct
+Write/Edit to `~/.aihaus/memory/**` stays file-guard-blocked with no
+carve-outs (BR-P7); a candidate that bypasses the verb is rejected.
+
+Scope rule: preferences that only apply to THIS repository belong in tier-B
+`.aihaus/memory/workflows/user-preferences.md` via the normal workflow-memory
+route above — promote to tier C only what should follow the user into every
+repository. On conflict, repo overrides global (ADR-260611-A).
+
+Record each promotion (or the decision not to promote) in the run's
+`### Memory Promotion` section like any other durable output.
+
 ### Per-agent memory blocks
 
 For every returned `aihaus:agent-memory` block:

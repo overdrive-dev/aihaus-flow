@@ -37,6 +37,10 @@ Verbs:
   memory        Query repository memory (delegates to aih-graph)
                 memory packet --task "<text>" --json -- batched context packet
                 (status + Rule/Decision slice + top matches in ONE call; M050/S05)
+  prefs add "<text>" [--topic <slug>]
+                Append a global user preference (tier C, M050/S06) to
+                ~\.aihaus\memory\user\preferences.md -- the SOLE write path
+                (ADR-260611-C). Topics: workflow|style|tooling|communication|other
   update --all  Update all registered installs (requires Z9 registry)
   self-update   Update the central aihaus clone from origin (requires Z9)
   --help, -h    Show this message
@@ -217,6 +221,138 @@ function Add-DefaultGraphDbArgs([string[]]$GraphArgs) {
     return @($cmd, "--db", $dbPath) + $GraphArgs[1..($GraphArgs.Count-1)]
 }
 
+# ---------------------------------------------------------------------------
+# prefs (M050/S06, ADR-260611-C/E) -- tier-C global user preferences.
+# `aihaus prefs add "<text>" [--topic <slug>]` is the SOLE write path to
+# ~\.aihaus\memory\user\preferences.md (BR-P7 -- no file-guard carve-outs).
+# Atomicity: [System.IO.File]::Open exclusive lock file + temp + Move-Item.
+# Own audit JSONL (~\.aihaus\state\prefs-audit.jsonl, sole writer -- BR-P5).
+# BR-P3 parity with the bash shim _prefs()/_prefs_add().
+# ---------------------------------------------------------------------------
+function Write-PrefsAudit([string]$Result,[string]$Id,[string]$Topic,[string]$Reason) {
+    try {
+        $auditDir = Join-Path $env:USERPROFILE ".aihaus\state"
+        if (-not (Test-Path $auditDir)) { New-Item -ItemType Directory -Path $auditDir -Force | Out-Null }
+        $auditFile = Join-Path $auditDir "prefs-audit.jsonl"
+        $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        $escReason = $Reason -replace '\\','\\\\' -replace '"','\"'
+        $row = '{"ts":"' + $ts + '","event":"prefs-add","result":"' + $Result + '","id":"' + $Id + '","topic":"' + $Topic + '","reason":"' + $escReason + '","shell":"pwsh"}'
+        [System.IO.File]::AppendAllText($auditFile, $row + "`n")
+    } catch { }
+}
+
+function Invoke-Prefs([string]$HomePath,[string[]]$PrefArgs) {
+    $sub = if ($PrefArgs -and $PrefArgs.Count -ge 1) { $PrefArgs[0] } else { "" }
+    if ($sub -ne "add") {
+        Write-Host 'aihaus prefs: unknown sub-verb. Usage: aihaus prefs add "<text>" [--topic <slug>]' -ForegroundColor Red
+        exit 2
+    }
+    $text = ""; $topic = "other"
+    for ($i = 1; $i -lt $PrefArgs.Count; $i++) {
+        $a = $PrefArgs[$i]
+        if ($a -eq "--topic" -and ($i+1) -lt $PrefArgs.Count) { $topic = $PrefArgs[$i+1]; $i++ }
+        elseif ($a -like "--topic=*") { $topic = $a.Substring(8) }
+        else { if ($text) { $text = "$text $a" } else { $text = $a } }
+    }
+
+    # --- Format validation (refusal = non-zero exit + audit row) ---
+    $text = if ($text) { $text.Trim() } else { "" }
+    if (-not $text) {
+        Write-PrefsAudit "refused" "" $topic "empty entry text"
+        Write-Host 'aihaus prefs add: entry text is empty. Usage: aihaus prefs add "<text>" [--topic <slug>]' -ForegroundColor Red
+        exit 2
+    }
+    if ($text -match "[`r`n]") {
+        Write-PrefsAudit "refused" "" $topic "multi-line entry text"
+        Write-Host "aihaus prefs add: entry must be a single line (no embedded newlines)." -ForegroundColor Red
+        exit 2
+    }
+    if ($text.Length -gt 500) {
+        Write-PrefsAudit "refused" "" $topic "entry text exceeds 500 chars ($($text.Length))"
+        Write-Host "aihaus prefs add: entry text exceeds 500 characters ($($text.Length))." -ForegroundColor Red
+        exit 2
+    }
+    if ($topic -notin @("workflow","style","tooling","communication","other")) {
+        Write-PrefsAudit "refused" "" $topic "invalid topic (allowed: workflow|style|tooling|communication|other)"
+        Write-Host "aihaus prefs add: invalid --topic '$topic' (allowed: workflow|style|tooling|communication|other)." -ForegroundColor Red
+        exit 2
+    }
+
+    $prefsFile = Join-Path $env:USERPROFILE ".aihaus\memory\user\preferences.md"
+    $prefsDir = Split-Path -Parent $prefsFile
+    if (-not (Test-Path $prefsDir)) { New-Item -ItemType Directory -Path $prefsDir -Force | Out-Null }
+
+    # --- Exclusive lock file ([System.IO.File]::Open, FileShare None; ~10s) ---
+    $lockPath = "$prefsFile.lock"
+    $lockStream = $null
+    for ($try = 0; $try -lt 100; $try++) {
+        try {
+            $lockStream = [System.IO.File]::Open($lockPath, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+            break
+        } catch {
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    if (-not $lockStream) {
+        Write-PrefsAudit "refused" "" $topic "lock timeout at $lockPath"
+        Write-Host "aihaus prefs add: could not acquire lock at $lockPath (stale lock? remove it manually and retry)." -ForegroundColor Red
+        exit 3
+    }
+
+    try {
+        # Seed create-if-absent INSIDE the lock (concurrent first-adds race-safe).
+        if (-not (Test-Path $prefsFile)) {
+            $seedSrc = Join-Path $HomePath "pkg\.aihaus\templates\user-preferences-global.md"
+            if (Test-Path $seedSrc) {
+                Copy-Item -LiteralPath $seedSrc -Destination $prefsFile
+            } else {
+                [System.IO.File]::WriteAllText($prefsFile, "# User Preferences (aihaus tier C)`n`n<!-- AIHAUS:PREFS-START -->`n## Preferences`n<!-- AIHAUS:PREFS-END -->`n")
+            }
+        }
+
+        # PREF-<n> max-scan allocation (business-rules-migrate.sh shape).
+        $maxId = 0
+        foreach ($line in [System.IO.File]::ReadAllLines($prefsFile)) {
+            if ($line -match '^- PREF-([0-9]+)') {
+                $n = [int]$Matches[1]
+                if ($n -gt $maxId) { $maxId = $n }
+            }
+        }
+        $nextId = $maxId + 1
+        $entryDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+        $entryLine = "- PREF-$nextId [$entryDate] ($topic) $text"
+
+        # Temp file in the same directory + atomic Move-Item. Insert before the
+        # END marker when present; append at EOF otherwise.
+        $lines = [System.IO.File]::ReadAllLines($prefsFile)
+        $out = New-Object System.Collections.Generic.List[string]
+        $inserted = $false
+        foreach ($line in $lines) {
+            if (-not $inserted -and $line.Contains('<!-- AIHAUS:PREFS-END -->')) {
+                $out.Add($entryLine)
+                $inserted = $true
+            }
+            $out.Add($line)
+        }
+        if (-not $inserted) { $out.Add($entryLine) }
+        $tmpFile = "$prefsFile.tmp.$PID"
+        [System.IO.File]::WriteAllLines($tmpFile, $out)
+        Move-Item -LiteralPath $tmpFile -Destination $prefsFile -Force
+
+        Write-PrefsAudit "ok" "PREF-$nextId" $topic ""
+        Write-Host "prefs: appended PREF-$nextId ($topic) to ~\.aihaus\memory\user\preferences.md"
+    } catch {
+        Write-PrefsAudit "refused" "" $topic "write failed: $($_.Exception.Message)"
+        Write-Host "aihaus prefs add: failed to write ${prefsFile}: $($_.Exception.Message)" -ForegroundColor Red
+        try { $lockStream.Close() } catch { }
+        try { Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue } catch { }
+        exit 1
+    }
+    try { $lockStream.Close() } catch { }
+    try { Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue } catch { }
+    exit 0
+}
+
 if ($Verb -in @("--help","-h","")) { Show-Help; exit 0 }
 $h=Resolve-Home
 if (-not $h) { Write-Host "aihaus: package not found. Set AIHAUS_HOME or reinstall." -ForegroundColor Red; exit 1 }
@@ -234,6 +370,7 @@ switch ($Verb) {
               if ($LASTEXITCODE -ne 0){$rc=$LASTEXITCODE} }; exit $rc }
       Invoke-Sh (Join-Path $h "pkg\scripts\update.sh") (Join-Path $h "pkg\scripts\update.ps1") (@("--target",(Get-Location).Path)+$Rest) }
   "memory"      { Invoke-Memory $h $Rest }
+  "prefs"       { Invoke-Prefs $h $Rest }
   "self-update" { Test-DogfoodDirty; Invoke-Sh (Join-Path $h "pkg\scripts\update.sh") (Join-Path $h "pkg\scripts\update.ps1") (@("--self")+$Rest) }
   default       { Write-Host "aihaus: unknown verb '$Verb'" -ForegroundColor Red; Write-Host "Run 'aihaus --help' for usage." -ForegroundColor Red; exit 2 }
 }

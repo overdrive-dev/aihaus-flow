@@ -7,6 +7,8 @@
 #                         Only removes entries carrying the .aihaus-managed marker AND
 #                         whose junction/symlink target resolves under registered AIHAUS_HOME
 #                         (R4 readlink validation — ADR-260504-A FR-06 + FR-21).
+#                         Also purges tier-C global user preferences (M050/S06 /
+#                         ADR-260611-E): ~\.aihaus\memory\user\ + prefs-audit JSONL.
 
 [CmdletBinding()]
 param(
@@ -30,6 +32,9 @@ Options:
   -PurgeUserGlobal      Remove user-global aih-* skills from ~\.claude\skills\
                         Only removes entries marked aihaus-owned AND whose junction/
                         symlink target resolves under registered AIHAUS_HOME (R4 guard).
+                        Also purges tier-C global user preferences (M050/S06,
+                        ADR-260611-E): ~\.aihaus\memory\user\ and the prefs
+                        audit JSONL ~\.aihaus\state\prefs-audit.jsonl.
   -Help                 Show this message
 '@ | Write-Host
 }
@@ -238,9 +243,36 @@ function Invoke-PurgeUserGlobal {
     $script:Touched = $true
 }
 
+# ---------------------------------------------------------------------------
+# Tier-C purge (M050/S06, ADR-260611-E standing checklist): remove the global
+# user-preferences store (~\.aihaus\memory\user\) and the prefs-audit JSONL
+# (~\.aihaus\state\prefs-audit.jsonl). Independent of the R4 registry guard
+# above -- these are plain aihaus-owned files, not junctioned skill dirs.
+# ---------------------------------------------------------------------------
+function Invoke-PurgeTierC {
+    $userMemoryDir = Join-Path $env:USERPROFILE '.aihaus\memory\user'
+    $prefsAudit = Join-Path $env:USERPROFILE '.aihaus\state\prefs-audit.jsonl'
+    $tierCTouched = $false
+    if (Test-Path -LiteralPath $userMemoryDir) {
+        Remove-Item -Recurse -Force -LiteralPath $userMemoryDir
+        Write-Host "  removed user-global: ~\.aihaus\memory\user\ (tier-C preferences)"
+        $tierCTouched = $true
+    }
+    if (Test-Path -LiteralPath $prefsAudit) {
+        Remove-Item -Force -LiteralPath $prefsAudit
+        Write-Host "  removed user-global: ~\.aihaus\state\prefs-audit.jsonl"
+        $tierCTouched = $true
+    }
+    if (-not $tierCTouched) {
+        Write-Host "  tier-c: nothing to remove"
+    }
+    $script:Touched = $true
+}
+
 # Invoke user-global purge if flag was set.
 if ($PurgeUserGlobal) {
     Invoke-PurgeUserGlobal
+    Invoke-PurgeTierC
 }
 
 # Settings cleanup: only remove keys listed in _aihaus_managed marker

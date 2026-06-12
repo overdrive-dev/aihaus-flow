@@ -27,6 +27,7 @@ the correct aihaus workflow entry and returns the next action for the main
 session to run.
 
 @../.aihaus/protocols/harness.md
+@../.aihaus/memory/local/user-preferences-global.md
 @../.aihaus/project.md
 @../.aihaus/protocols/default.md
 @../.aihaus/protocols/agents.md

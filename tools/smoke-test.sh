@@ -5964,6 +5964,214 @@ check_harness_byte_cap() {
   fi
 }
 
+# ---- Check 98: aihaus prefs add — lock-atomic append, both shells (M050/S06) ----
+# Tier-C write chokepoint (ADR-260611-C/E): `aihaus prefs add` is the SOLE
+# write path to ~/.aihaus/memory/user/preferences.md. Fixtures under
+# tools/fixtures/prefs-lock/ prove on BOTH shells:
+#   (a) concurrent-append integrity — two parallel adds, both entries intact
+#       (bash mkdir-lock / PowerShell exclusive FileStream + temp + atomic mv);
+#   (b) malformed-entry refusal — empty + multi-line entries MUST exit non-zero
+#       with a "refused" audit row (fixture-fail pair, BR-P8 non-vacuity).
+# All writes go to a TEMP home override (HOME / USERPROFILE) — the real
+# ~/.aihaus is NEVER touched (S04 AIH_GRAPH_USER_HOME-override discipline).
+# PowerShell arm skips (not fails) when no pwsh/powershell host exists,
+# mirroring Check 63.
+check_prefs_lock() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: aihaus prefs add lock + grammar fixtures, both shells (M050/S06)"
+  local issues=()
+  local repo_root shim shim_ps1 fixture_dir
+  repo_root="$(cd "${PACKAGE_ROOT}/.." && pwd)"
+  shim="${PACKAGE_ROOT}/scripts/aihaus"
+  shim_ps1="${PACKAGE_ROOT}/scripts/aihaus.ps1"
+  fixture_dir="${repo_root}/tools/fixtures/prefs-lock"
+
+  [[ -f "$shim" ]] || { _fail "$label" "missing shim: pkg/scripts/aihaus"; return; }
+  [[ -f "$shim_ps1" ]] || { _fail "$label" "missing shim: pkg/scripts/aihaus.ps1"; return; }
+  if [[ ! -d "$fixture_dir" ]]; then
+    _fail "$label" "fixture directory missing: tools/fixtures/prefs-lock/"
+    return
+  fi
+  local fx
+  for fx in valid-entry.txt concurrent-a.txt concurrent-b.txt malformed-empty.txt malformed-multiline.txt; do
+    [[ -f "${fixture_dir}/${fx}" ]] || issues+=("fixture missing: tools/fixtures/prefs-lock/${fx}")
+  done
+  if [[ ${#issues[@]} -gt 0 ]]; then
+    _fail "$label" "${issues[@]}"
+    return
+  fi
+
+  # ---------------- bash shim arm (temp HOME — never the real ~/.aihaus) ----
+  local tmp_home prefs_file audit_file rc
+  tmp_home="$(_mktemp_dir prefs-lock-home)"
+  if [[ -z "$tmp_home" ]]; then
+    _fail "$label" "could not create temp HOME for bash arm"
+    return
+  fi
+  prefs_file="${tmp_home}/.aihaus/memory/user/preferences.md"
+  audit_file="${tmp_home}/.aihaus/state/prefs-audit.jsonl"
+
+  # Sub-assert 1: valid entry appends (exit 0 + entry row + ok audit row).
+  rc=0
+  HOME="$tmp_home" AIHAUS_HOME="$repo_root" bash "$shim" prefs add \
+    "$(cat "${fixture_dir}/valid-entry.txt")" --topic workflow >/dev/null 2>&1 || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    issues+=("bash: valid entry exit ${rc} (expected 0)")
+  elif [[ ! -f "$prefs_file" ]]; then
+    issues+=("bash: prefs file not created at temp \$HOME/.aihaus/memory/user/preferences.md")
+  else
+    grep -q '^- PREF-1 \[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\] (workflow) ' "$prefs_file" || \
+      issues+=("bash: valid entry missing or grammar mismatch (expected '- PREF-1 [YYYY-MM-DD] (workflow) ...')")
+    grep -q '"event":"prefs-add".*"result":"ok"' "$audit_file" 2>/dev/null || \
+      issues+=("bash: no ok audit row in prefs-audit.jsonl (BR-P5 sole-writer audit contract)")
+  fi
+
+  # Sub-assert 2: concurrent-append integrity — two parallel adds, both intact.
+  if [[ -f "$prefs_file" ]]; then
+    local pid_a pid_b rc_a=0 rc_b=0
+    HOME="$tmp_home" AIHAUS_HOME="$repo_root" bash "$shim" prefs add \
+      "$(cat "${fixture_dir}/concurrent-a.txt")" --topic tooling >/dev/null 2>&1 &
+    pid_a=$!
+    HOME="$tmp_home" AIHAUS_HOME="$repo_root" bash "$shim" prefs add \
+      "$(cat "${fixture_dir}/concurrent-b.txt")" --topic tooling >/dev/null 2>&1 &
+    pid_b=$!
+    wait "$pid_a" || rc_a=$?
+    wait "$pid_b" || rc_b=$?
+    [[ "$rc_a" -eq 0 ]] || issues+=("bash concurrent: add A exit ${rc_a} (expected 0)")
+    [[ "$rc_b" -eq 0 ]] || issues+=("bash concurrent: add B exit ${rc_b} (expected 0)")
+    grep -qF "Concurrent lock fixture entry A." "$prefs_file" || \
+      issues+=("bash concurrent: entry A lost (lock + temp + atomic mv broken)")
+    grep -qF "Concurrent lock fixture entry B." "$prefs_file" || \
+      issues+=("bash concurrent: entry B lost (lock + temp + atomic mv broken)")
+    local entry_count
+    entry_count="$(grep -c '^- PREF-[0-9]' "$prefs_file" 2>/dev/null)" || true
+    [[ "${entry_count:-0}" -eq 3 ]] || \
+      issues+=("bash concurrent: expected 3 intact entries, found ${entry_count:-0}")
+    # Distinct max-scan ids: 3 entries must carry 3 distinct PREF numbers.
+    local distinct_ids
+    distinct_ids="$(grep -oE '^- PREF-[0-9]+' "$prefs_file" 2>/dev/null | sort -u | wc -l | tr -d ' ')"
+    [[ "$distinct_ids" -eq 3 ]] || \
+      issues+=("bash concurrent: duplicate PREF ids (${distinct_ids}/3 distinct — max-scan raced)")
+    # No lock/temp leftovers.
+    [[ -e "${prefs_file}.lock" ]] && issues+=("bash concurrent: stale lock left at preferences.md.lock")
+    ls "${prefs_file}".tmp.* >/dev/null 2>&1 && issues+=("bash concurrent: temp-file leftover next to preferences.md")
+  fi
+
+  # Sub-assert 3 (fixture-fail pair, BR-P8): malformed entries MUST refuse.
+  local before_count after_count
+  before_count="$(grep -c '^- PREF-[0-9]' "$prefs_file" 2>/dev/null)" || true
+  before_count="${before_count:-0}"
+  rc=0
+  HOME="$tmp_home" AIHAUS_HOME="$repo_root" bash "$shim" prefs add \
+    "$(cat "${fixture_dir}/malformed-empty.txt")" --topic other >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -eq 0 ]] && \
+    issues+=("bash fixture-fail: empty entry exited 0 — validation gate is green-but-vacuous (BR-P8)")
+  rc=0
+  HOME="$tmp_home" AIHAUS_HOME="$repo_root" bash "$shim" prefs add \
+    "$(cat "${fixture_dir}/malformed-multiline.txt")" --topic other >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -eq 0 ]] && \
+    issues+=("bash fixture-fail: multi-line entry exited 0 — validation gate is green-but-vacuous (BR-P8)")
+  rc=0
+  HOME="$tmp_home" AIHAUS_HOME="$repo_root" bash "$shim" prefs add \
+    "valid text, invalid topic" --topic not-a-topic >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -eq 0 ]] && \
+    issues+=("bash fixture-fail: invalid topic exited 0 — topic enum unenforced (BR-P8)")
+  after_count="$(grep -c '^- PREF-[0-9]' "$prefs_file" 2>/dev/null)" || true
+  after_count="${after_count:-0}"
+  [[ "$after_count" -eq "$before_count" ]] || \
+    issues+=("bash fixture-fail: refused entries mutated the file (${before_count} -> ${after_count})")
+  grep -q '"event":"prefs-add".*"result":"refused"' "$audit_file" 2>/dev/null || \
+    issues+=("bash fixture-fail: no refused audit row (refusals must be audited)")
+
+  rm -rf "$tmp_home" 2>/dev/null || true
+
+  # ---------------- PowerShell shim arm (BR-P3 parity) ----------------------
+  local ps_bin=""
+  if command -v pwsh >/dev/null 2>&1; then
+    ps_bin="pwsh"
+  elif command -v powershell >/dev/null 2>&1; then
+    ps_bin="powershell"
+  fi
+  if [[ -z "$ps_bin" ]]; then
+    echo "        note: no pwsh/powershell host — PowerShell prefs-lock arm skipped (parity asserted on Windows/CI hosts)"
+  else
+    local tmp_home_ps win_home win_repo prefs_file_ps audit_file_ps
+    tmp_home_ps="$(_mktemp_dir prefs-lock-pshome)"
+    if [[ -z "$tmp_home_ps" ]]; then
+      issues+=("pwsh: could not create temp USERPROFILE")
+    else
+      win_home="$(cygpath -w "$tmp_home_ps" 2>/dev/null || echo "$tmp_home_ps")"
+      win_repo="$(cygpath -w "$repo_root" 2>/dev/null || echo "$repo_root")"
+      prefs_file_ps="${tmp_home_ps}/.aihaus/memory/user/preferences.md"
+      audit_file_ps="${tmp_home_ps}/.aihaus/state/prefs-audit.jsonl"
+
+      _run_ps_prefs() {  # _run_ps_prefs <text> <topic>; echoes exit code
+        local p_rc=0
+        USERPROFILE="$win_home" HOME="$tmp_home_ps" AIHAUS_HOME="$win_repo" \
+          "$ps_bin" -NoProfile -ExecutionPolicy Bypass -File "$shim_ps1" \
+          prefs add "$1" --topic "$2" >/dev/null 2>&1 || p_rc=$?
+        echo "$p_rc"
+      }
+
+      # Valid entry.
+      rc="$(_run_ps_prefs "$(cat "${fixture_dir}/valid-entry.txt")" workflow)"
+      if [[ "$rc" -ne 0 ]]; then
+        issues+=("pwsh: valid entry exit ${rc} (expected 0)")
+      elif [[ ! -f "$prefs_file_ps" ]]; then
+        issues+=("pwsh: prefs file not created under temp USERPROFILE")
+      else
+        grep -q '^- PREF-1 \[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\] (workflow) ' "$prefs_file_ps" || \
+          issues+=("pwsh: valid entry missing or grammar mismatch")
+        grep -q '"event":"prefs-add".*"result":"ok"' "$audit_file_ps" 2>/dev/null || \
+          issues+=("pwsh: no ok audit row in prefs-audit.jsonl")
+      fi
+
+      # Concurrent-append integrity.
+      if [[ -f "$prefs_file_ps" ]]; then
+        local ps_pid_a ps_pid_b ps_rc_a=0 ps_rc_b=0
+        USERPROFILE="$win_home" HOME="$tmp_home_ps" AIHAUS_HOME="$win_repo" \
+          "$ps_bin" -NoProfile -ExecutionPolicy Bypass -File "$shim_ps1" \
+          prefs add "$(cat "${fixture_dir}/concurrent-a.txt")" --topic tooling >/dev/null 2>&1 &
+        ps_pid_a=$!
+        USERPROFILE="$win_home" HOME="$tmp_home_ps" AIHAUS_HOME="$win_repo" \
+          "$ps_bin" -NoProfile -ExecutionPolicy Bypass -File "$shim_ps1" \
+          prefs add "$(cat "${fixture_dir}/concurrent-b.txt")" --topic tooling >/dev/null 2>&1 &
+        ps_pid_b=$!
+        wait "$ps_pid_a" || ps_rc_a=$?
+        wait "$ps_pid_b" || ps_rc_b=$?
+        [[ "$ps_rc_a" -eq 0 ]] || issues+=("pwsh concurrent: add A exit ${ps_rc_a} (expected 0)")
+        [[ "$ps_rc_b" -eq 0 ]] || issues+=("pwsh concurrent: add B exit ${ps_rc_b} (expected 0)")
+        grep -qF "Concurrent lock fixture entry A." "$prefs_file_ps" || \
+          issues+=("pwsh concurrent: entry A lost (FileStream lock + temp + Move-Item broken)")
+        grep -qF "Concurrent lock fixture entry B." "$prefs_file_ps" || \
+          issues+=("pwsh concurrent: entry B lost (FileStream lock + temp + Move-Item broken)")
+        local ps_entry_count
+        ps_entry_count="$(grep -c '^- PREF-[0-9]' "$prefs_file_ps" 2>/dev/null)" || true
+        [[ "${ps_entry_count:-0}" -eq 3 ]] || \
+          issues+=("pwsh concurrent: expected 3 intact entries, found ${ps_entry_count:-0}")
+      fi
+
+      # Fixture-fail pair: malformed entries MUST refuse on PowerShell too.
+      rc="$(_run_ps_prefs "$(cat "${fixture_dir}/malformed-empty.txt")" other)"
+      [[ "$rc" -eq 0 ]] && \
+        issues+=("pwsh fixture-fail: empty entry exited 0 — validation green-but-vacuous (BR-P8)")
+      rc="$(_run_ps_prefs "$(cat "${fixture_dir}/malformed-multiline.txt")" other)"
+      [[ "$rc" -eq 0 ]] && \
+        issues+=("pwsh fixture-fail: multi-line entry exited 0 — validation green-but-vacuous (BR-P8)")
+      grep -q '"event":"prefs-add".*"result":"refused"' "$audit_file_ps" 2>/dev/null || \
+        issues+=("pwsh fixture-fail: no refused audit row (refusals must be audited)")
+
+      rm -rf "$tmp_home_ps" 2>/dev/null || true
+    fi
+  fi
+
+  if [[ ${#issues[@]} -eq 0 ]]; then
+    _pass "$label"
+  else
+    _fail "$label" "${issues[@]}"
+  fi
+}
+
 check_merge_hooks_union
 check_update_drift_recompute
 check_aih_graph_purego_adrs
@@ -5980,6 +6188,7 @@ check_aih_graph_integration_round_trip
 check_eval_run_deterministic
 check_settings_merge_matcher
 check_harness_byte_cap
+check_prefs_lock
 
 printf "
 "

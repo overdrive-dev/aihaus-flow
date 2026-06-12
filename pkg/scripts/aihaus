@@ -44,6 +44,10 @@ Verbs:
   memory        Query repository memory (delegates to aih-graph)
                 memory packet --task "<text>" --json — batched context packet
                 (status + Rule/Decision slice + top matches in ONE call; M050/S05)
+  prefs add "<text>" [--topic <slug>]
+                Append a global user preference (tier C, M050/S06) to
+                ~/.aihaus/memory/user/preferences.md — the SOLE write path
+                (ADR-260611-C). Topics: workflow|style|tooling|communication|other
   update --all  Update all registered installs (requires Z9 registry)
   self-update   Update the central aihaus clone from origin (requires Z9)
   --help, -h    Show this message
@@ -225,6 +229,140 @@ _memory() {
   exit 1
 }
 
+# ---------------------------------------------------------------------------
+# prefs (M050/S06, ADR-260611-C/E) — tier-C global user preferences.
+# `aihaus prefs add "<text>" [--topic <slug>]` is the SOLE write path to
+# ~/.aihaus/memory/user/preferences.md (BR-P7 — file-guard keeps blocking
+# direct agent Write/Edit; no carve-outs). Atomicity: mkdir-based lock +
+# temp file + atomic mv. Own audit JSONL (~/.aihaus/state/prefs-audit.jsonl,
+# sole writer — BR-P5). Entry grammar (validated before append):
+#   - PREF-<n> [YYYY-MM-DD] (<workflow|style|tooling|communication|other>) <text>
+# PREF-<n> allocated by max-scan (business-rules-migrate.sh BR-id shape).
+# ---------------------------------------------------------------------------
+_PREFS_TS() { date -u +%FT%TZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "1970-01-01T00:00:00Z"; }
+
+_prefs_audit() {  # _prefs_audit <result> <id> <topic> <reason>
+  local audit_dir="$HOME/.aihaus/state"
+  local audit_file="${audit_dir}/prefs-audit.jsonl"
+  local r_result="${1:-}" r_id="${2:-}" r_topic="${3:-}" r_reason="${4:-}"
+  r_reason="${r_reason//\\/\\\\}"; r_reason="${r_reason//\"/\\\"}"
+  mkdir -p "${audit_dir}" 2>/dev/null || return 0
+  printf '{"ts":"%s","event":"prefs-add","result":"%s","id":"%s","topic":"%s","reason":"%s","shell":"bash"}\n' \
+    "$(_PREFS_TS)" "${r_result}" "${r_id}" "${r_topic}" "${r_reason}" \
+    >> "${audit_file}" 2>/dev/null || true
+}
+
+_prefs_add() {
+  local text="" topic="other" arg
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --topic)   topic="${2:-}"; shift 2 || break ;;
+      --topic=*) topic="${1#--topic=}"; shift ;;
+      *)
+        if [[ -z "${text}" ]]; then text="$1"; else text="${text} $1"; fi
+        shift ;;
+    esac
+  done
+
+  # --- Format validation (refusal = non-zero exit + audit row) ---
+  # Trim leading/trailing whitespace (pure bash).
+  text="${text#"${text%%[![:space:]]*}"}"
+  text="${text%"${text##*[![:space:]]}"}"
+  if [[ -z "${text}" ]]; then
+    _prefs_audit "refused" "" "${topic}" "empty entry text"
+    echo 'aihaus prefs add: entry text is empty. Usage: aihaus prefs add "<text>" [--topic <slug>]' >&2
+    exit 2
+  fi
+  case "${text}" in
+    *$'\n'*|*$'\r'*)
+      _prefs_audit "refused" "" "${topic}" "multi-line entry text"
+      echo "aihaus prefs add: entry must be a single line (no embedded newlines)." >&2
+      exit 2 ;;
+  esac
+  if [[ "${#text}" -gt 500 ]]; then
+    _prefs_audit "refused" "" "${topic}" "entry text exceeds 500 chars (${#text})"
+    echo "aihaus prefs add: entry text exceeds 500 characters (${#text})." >&2
+    exit 2
+  fi
+  case "${topic}" in
+    workflow|style|tooling|communication|other) : ;;
+    *)
+      _prefs_audit "refused" "" "${topic}" "invalid topic (allowed: workflow|style|tooling|communication|other)"
+      echo "aihaus prefs add: invalid --topic '${topic}' (allowed: workflow|style|tooling|communication|other)." >&2
+      exit 2 ;;
+  esac
+
+  local prefs_file="$HOME/.aihaus/memory/user/preferences.md"
+  local lock_dir="${prefs_file}.lock"
+  mkdir -p "$(dirname "${prefs_file}")" 2>/dev/null || true
+
+  # --- mkdir-based lock (atomic on every POSIX fs; ~10s timeout) ---
+  local waited=0
+  while ! mkdir "${lock_dir}" 2>/dev/null; do
+    waited=$((waited + 1))
+    if [[ "${waited}" -ge 100 ]]; then
+      _prefs_audit "refused" "" "${topic}" "lock timeout at ${lock_dir}"
+      echo "aihaus prefs add: could not acquire lock at ${lock_dir} (stale lock? remove the directory manually and retry)." >&2
+      exit 3
+    fi
+    sleep 0.1 2>/dev/null || sleep 1
+  done
+  # shellcheck disable=SC2064
+  trap "rmdir '${lock_dir}' 2>/dev/null || true" EXIT
+
+  # Seed create-if-absent INSIDE the lock (concurrent first-adds race-safe).
+  if [[ ! -f "${prefs_file}" ]]; then
+    if [[ -f "${AIHAUS_HOME}/pkg/.aihaus/templates/user-preferences-global.md" ]]; then
+      cp "${AIHAUS_HOME}/pkg/.aihaus/templates/user-preferences-global.md" "${prefs_file}" 2>/dev/null || true
+    fi
+    if [[ ! -f "${prefs_file}" ]]; then
+      printf '# User Preferences (aihaus tier C)\n\n<!-- AIHAUS:PREFS-START -->\n## Preferences\n<!-- AIHAUS:PREFS-END -->\n' > "${prefs_file}"
+    fi
+  fi
+
+  # PREF-<n> max-scan allocation (business-rules-migrate.sh shape).
+  local _max next_id
+  _max="$(grep -oE '^- PREF-[0-9]+' "${prefs_file}" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || true)"
+  next_id=$(( ${_max:-0} + 1 ))
+  local entry_date entry_line
+  entry_date="$(date -u +%F 2>/dev/null || echo 1970-01-01)"
+  entry_line="- PREF-${next_id} [${entry_date}] (${topic}) ${text}"
+
+  # Temp file in the same directory + atomic mv. Insert before the END marker
+  # when present; append at EOF otherwise.
+  local tmp_file="${prefs_file}.tmp.$$"
+  if awk -v entry="${entry_line}" '
+    index($0, "<!-- AIHAUS:PREFS-END -->") > 0 && !done { print entry; done=1 }
+    { print }
+    END { if (!done) print entry }
+  ' "${prefs_file}" > "${tmp_file}" 2>/dev/null && [[ -s "${tmp_file}" ]]; then
+    mv -f "${tmp_file}" "${prefs_file}"
+  else
+    rm -f "${tmp_file}" 2>/dev/null || true
+    rmdir "${lock_dir}" 2>/dev/null || true
+    trap - EXIT
+    _prefs_audit "refused" "PREF-${next_id}" "${topic}" "temp-file write failed"
+    echo "aihaus prefs add: failed to write ${prefs_file}." >&2
+    exit 1
+  fi
+
+  rmdir "${lock_dir}" 2>/dev/null || true
+  trap - EXIT
+  _prefs_audit "ok" "PREF-${next_id}" "${topic}" ""
+  echo "prefs: appended PREF-${next_id} (${topic}) to ~/.aihaus/memory/user/preferences.md"
+  exit 0
+}
+
+_prefs() {
+  local sub="${1:-}"; shift || true
+  case "${sub}" in
+    add) _prefs_add "$@" ;;
+    *)
+      echo 'aihaus prefs: unknown sub-verb. Usage: aihaus prefs add "<text>" [--topic <slug>]' >&2
+      exit 2 ;;
+  esac
+}
+
 VERB="${1:-}"; shift || true
 case "${VERB}" in --help|-h|"") _help; exit 0 ;; esac
 
@@ -250,6 +388,8 @@ case "${VERB}" in
     exec bash "${AIHAUS_HOME}/pkg/scripts/update.sh" --target "${PWD}" "$@" ;;
   memory)
     _memory "$@" ;;
+  prefs)
+    _prefs "$@" ;;
   self-update)
     _dogfood_dirty
     exec bash "${AIHAUS_HOME}/pkg/scripts/update.sh" --self "$@" ;;

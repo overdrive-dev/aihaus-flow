@@ -1,0 +1,1 @@
+Prefer branch -> PR -> merge; never direct-to-main.

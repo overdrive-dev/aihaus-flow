@@ -688,6 +688,37 @@ function Install-UserGlobalSkills {
 }
 
 # ============================================================================
+# M050/S06 (ADR-260611-E): tier-C global user-preferences seed.
+# Creates ~\.aihaus\memory\user\preferences.md from the package template,
+# create-if-absent ONLY (Ensure-ClaudeContextBridge shape -- never clobber
+# user content). Sole runtime write path is `aihaus prefs add` (ADR-260611-C);
+# this is the one-time installer seed. Runs on BOTH the dogfood/global-
+# bootstrap arm AND the per-repo arm (each invocation hits exactly one).
+# Opt-out: AIHAUS_SKIP_TIER_C_SEED=1 (named in ADR-260611-E; quiet note only).
+# Purge arm: uninstall.ps1 -PurgeUserGlobal removes ~\.aihaus\memory\user\.
+# ============================================================================
+function Ensure-TierCPreferences {
+    if ($env:AIHAUS_SKIP_TIER_C_SEED -eq '1') {
+        Write-Host "  tier-c: seed skipped (AIHAUS_SKIP_TIER_C_SEED=1)"
+        return
+    }
+    $prefsSrc = Join-Path $PkgTemplates 'user-preferences-global.md'
+    $prefsDst = Join-Path $env:USERPROFILE '.aihaus\memory\user\preferences.md'
+    if (-not (Test-Path -LiteralPath $prefsSrc)) {
+        Write-Host "  warn: tier-C preferences template missing at $prefsSrc" -ForegroundColor Yellow
+        return
+    }
+    if (-not (Test-Path -LiteralPath $prefsDst)) {
+        $prefsDir = Split-Path -Parent $prefsDst
+        if (-not (Test-Path -LiteralPath $prefsDir)) {
+            New-Item -ItemType Directory -Path $prefsDir -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $prefsSrc -Destination $prefsDst
+        Write-Host "  tier-c: created ~\.aihaus\memory\user\preferences.md (global user preferences; add entries via 'aihaus prefs add')"
+    }
+}
+
+# ============================================================================
 # V5 (M022/Z4): Dogfood mode check -- I-04, L9
 # Must run BEFORE per-repo install logic. If we are inside the aihaus package
 # directory, emit a one-liner and return. Never git-pull. Never self-junction.
@@ -708,6 +739,8 @@ if (Test-DogfoodCwd) {
     $registryFile = Join-Path $registryDir ".install-source"
     Set-Content -LiteralPath $registryFile -Value $resolvedHome -Encoding UTF8 -NoNewline
     Write-Host "  registry: $env:USERPROFILE\.aihaus\.install-source -> $resolvedHome"
+    # M050/S06: tier-C seed on the global-bootstrap arm (before the dogfood exit).
+    Ensure-TierCPreferences
     Write-Host ""
     Write-Host "aihaus user-global skills installed (dogfood mode; per-repo overlay skipped)."
     exit 0
@@ -1525,6 +1558,10 @@ if (-not $Update) {
     Set-Content -LiteralPath $registryFile -Value $AihausResolved -Encoding UTF8 -NoNewline
     Write-Host "  registry: $env:USERPROFILE\.aihaus\.install-source -> $AihausResolved"
 }
+
+# Step 11.5: tier-C global user-preferences seed (M050/S06, ADR-260611-E) --
+# per-repo arm call site (the dogfood arm seeds + exits earlier).
+Ensure-TierCPreferences
 
 # Step 12: idempotent .gitignore injection (soft-fail per LD-3)
 # Manual fallback: pkg\.aihaus\templates\gitignore-fragment
