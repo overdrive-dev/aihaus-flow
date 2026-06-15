@@ -71,7 +71,3 @@ tools/.out/
 /.aihaus/.enforcement
 /.aihaus/.automode
 # AIHAUS:GITIGNORE-END
-# AIHAUS-TEAM:LOCAL-START -- managed by aihaus-team
-/aihaus-team/
-/aihaus-team.local/
-# AIHAUS-TEAM:LOCAL-END

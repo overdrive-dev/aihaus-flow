@@ -173,7 +173,7 @@ Expected behavior:
 - [ ] Archive old or conflicting aihaus-flow artifacts instead of deleting them, and produce a clear report of what was ignored, kept, replaced, or backed up.
 - [ ] Update memory extraction to understand target repository layouts such as `.aihaus/decisions.md`, `.aihaus/knowledge.md`, `.aihaus/memory/**`, and `.claude/agent-memory/**`, not only package-local `pkg/.aihaus/**` paths.
 - [ ] Make initialization refresh repository memory automatically after install and leave the repo usable in lexical fallback mode even when Ollama is missing or the model has not been pulled yet.
-- [ ] Dogfood this flow against `domus-nora-app` before release because it has old aihaus artifacts, rich markdown memory, missing hook references, and real package history.
+- [ ] Dogfood this flow against a legacy target repository before release because it has old aihaus artifacts, rich markdown memory, missing hook references, and real package history.
 
 ### T02 - Workflow and Agent Spawn Audit
 

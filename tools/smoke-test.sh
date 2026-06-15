@@ -1068,6 +1068,21 @@ check_purity() {
   fi
 }
 
+check_custom_harness_hygiene() {
+  _start_check
+  local label="Check ${CHECK_NUMBER}: custom harness references absent from tracked files"
+  local hygiene="${SCRIPT_DIR}/harness-hygiene-check.sh"
+  if [[ ! -f "$hygiene" ]]; then
+    _fail "$label" "harness-hygiene-check.sh not found at $hygiene"
+    return
+  fi
+  if bash "$hygiene" >/dev/null 2>&1; then
+    _pass "$label"
+  else
+    _fail "$label" "harness-hygiene-check.sh reported matches; run it directly for details"
+  fi
+}
+
 # ---- Check 27: skill directory count = 15 -----------------------------------
 # Verifies that exactly 15 aih-* skill directories exist under .aihaus/skills/.
 # Note: Check 1 verifies the NAMED SKILL.md files (15 expected names). In the
@@ -4805,6 +4820,7 @@ check_readme_length
 check_license
 check_version
 check_purity
+check_custom_harness_hygiene
 check_aih_plan_annexes
 check_aih_milestone_annexes
 check_m005_canonical_phrases
