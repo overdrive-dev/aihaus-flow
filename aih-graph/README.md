@@ -1,135 +1,83 @@
 # aih-graph
 
-Standalone Go binary memory engine for [aihaus](https://github.com/overdrive-dev/aihaus-flow).
+`aih-graph` is aihaus's optional, local code and concept retrieval engine. It
+builds a disposable SQLite graph from a consented repository. Project source
+and `.aihaus/memory/` Markdown remain authoritative.
 
-**Status:** v0.1.5 baseline plus M048 native repository memory: files, chunks, symbols, calls, tests, markdown memory, commits, local Ollama embeddings, JSON agent output, lifecycle refresh hooks, and context/callers/impact/gotchas/milestone commands.
+## Retrieval
 
-## What this is
+- Structural relationships use graph traversal.
+- Lexical search uses SQLite FTS5/BM25 and works without embeddings.
+- Semantic search can use local Ollama embeddings.
+- Hybrid search expands lexical or vector seeds through graph relationships.
 
-aih-graph is the **memory + structural retrieval engine** aihaus uses as a mandatory addon. It builds a queryable knowledge graph of aihaus-managed repositories with **first-class ontological types** for aihaus concepts (Decision, Milestone, Story, Agent, Hook, Skill) and M048 repository-memory types (File, Chunk, Symbol, Call).
+There is no hosted store, telemetry service, mandatory model API, ANN index, or
+cloud account.
 
-M048 adds a local repository-brain slice:
-- `File` and `Chunk` nodes for real repository text
-- `Symbol` and `Call` nodes for Go functions/methods plus shell and PowerShell functions
-- `Test` nodes for Go tests and common script/spec test files
-- `Memory` nodes from markdown memory and `Commit` nodes from recent git history
-- `context`, `callers`, `impact`, `gotchas`, `milestone`, `status`, and `mark-stale` commands
-- `refresh` as the agent-facing rebuild command (`build` remains the lower-level primitive)
-- local semantic embeddings through Ollama `/api/embed` with fixed `nomic-embed-text`
+## Indexed concepts
 
-The installed `aihaus` shim exposes these as `aihaus memory <subcommand> ...`.
+The portable aihaus surface is indexed as Map, Convention, Role, Room,
+Contract, and Tool nodes. Durable pages become Decision, Rule, and Memory
+nodes. Repository extraction adds File, Chunk, Symbol, Call, Test, and Commit
+nodes where supported.
 
-## Agent-readable output
+Current parser fidelity:
 
-The human text output remains the default. Agents should prefer `--json` for stable payloads:
+| Input | Text | Symbols | Calls |
+|---|---:|---:|---:|
+| Go | yes | Go AST | Go AST |
+| Bash | yes | function regex | no |
+| PowerShell | yes | function regex | no |
+| Markdown/config/JS/TS | yes | no | no |
+| Python | no | no | no |
+
+Text indexing is not AST extraction. See [PRD.md](PRD.md) for the complete
+capability and release contract.
+
+## Install and use
+
+Released binaries are installed separately from the portable instruction core.
+The repository README shows the Bash and PowerShell installer commands.
+
+Indexing requires explicit repository consent. Create `.aih-graph-consent` at
+the repository root or pass `--accept-all-repos` for one build. The aihaus
+wrapper pins repository-local state:
 
 ```bash
-aihaus memory query --json "Ollama embedding backend"
-aihaus memory status --json
-aihaus memory context --type Symbol --depth 1 --json aih-graph/internal/extract/repository.go:ParseRepositoryText
-aihaus memory impact --type File --depth 1 --limit 40 --json aih-graph/cmd/aih-graph/main.go
-aihaus memory callers --json ParseRepositoryText
-aihaus memory gotchas --json git checkout
-aihaus memory milestone --json Ollama
-aihaus memory obsidian-export --repo . --out ~/Obsidian/aihaus
+node .aihaus/tools/graph.mjs refresh --json
+node .aihaus/tools/graph.mjs status --json
+node .aihaus/tools/graph.mjs query --json "decision boundary"
+node .aihaus/tools/graph.mjs context --json path/to/file
+node .aihaus/tools/graph.mjs callers --json SymbolName
+node .aihaus/tools/graph.mjs impact --json path/to/file
+node .aihaus/tools/graph.mjs rule --json BR-001
+node .aihaus/tools/graph.mjs why --json path/to/file
 ```
 
-`query`, `context`, `impact`, `callers`, `gotchas`, `milestone`, and `status` support `--json`. Exact graph lookups include node `type`, `identifier`, derived `title`, and stored `properties`. Long string properties are capped in JSON output and marked with `<field>_truncated` plus `<field>_original_bytes`; the SQLite index keeps the complete value. `status --json` includes `embedding_models` counts. `query`, `context`, and `impact` include `freshness`; `context` and `impact` also include `neighborhood_total`, `neighborhood_returned`, and `neighborhood_truncated`; use `--limit N` to bound agent payloads, or `--limit 0` for a full neighborhood. Pass `--repo PATH` when the command runs from outside the indexed repository.
+Generated state lives at `.aihaus/state/aih-graph.db` when invoked through the
+wrapper. Raw binary calls use the privacy package's per-repository OS state
+location unless `--db` is supplied.
 
-`obsidian-export` writes a read-only Markdown projection for humans. It creates
-`code-brain/`, `repo-memory/`, and `user-brain/` folders under the chosen output
-path. SQLite/aih-graph remains the operational source of truth; every exported
-note is tagged `aih_sync: export-only`. High-volume `Chunk` and `Call` nodes are
-skipped by default; pass `--include-chunks` or `--include-calls` when a complete
-projection is worth the note volume.
+## Development
 
-This is intentionally **narrower than graphify-the-tool**. v0.1 forever-scope:
-- **Markdown-only extraction** for 6 aihaus typed nodes (Decision/Milestone/Story/Agent/Hook/Skill) — per ADR-260515-C-amend-02
-- **modernc.org/sqlite storage** (pure-Go, no CGO) — per ADR-260515-B-amend-02
-- **Lexical search via BM25/FTS5** (pure-Go offline, zero API keys) plus local Ollama `nomic-embed-text` embeddings when Ollama is available.
-- **Three query modes:** structural BFS, vector similarity (`--semantic`), hybrid
-- **Pure-Go single binary** — zero CGO requirement, works on any platform Go supports
+The module requires the Go version declared in `go.mod` and has no CGO
+dependency.
 
-Out of scope for the current native memory slice:
-- Broad AST extraction for every language (Python/JS/TS/etc.) remains deferred; current M048 extraction is intentionally focused on aihaus-flow's Go, shell, PowerShell, and markdown needs
-- Semantic LLM extraction (paid LLM-driven node/edge extraction — distinct from embeddings)
-- Clustering (Leiden community detection)
-- HNSW/IVF vector indexes (brute-force only; sufficient for target repos up to ~500k nodes)
-- LLM re-ranking (`--rerank` deferred to v0.2+)
-- Local-ONNX embeddings — deferred indefinitely (would re-introduce CGO; pure-Go transformer inference not production-grade today)
-
-## Status
-
-**v0.1.1 — shipped.** Markdown extraction across 6 aihaus types + modernc/sqlite storage + 3 query modes + BM25/FTS5 lexical search + 4-platform binary release.
-
-Shipped milestone chain:
-- M033: Markdown extraction (6 type parsers)
-- M034: modernc/sqlite storage
-- M035: Query (BFS/semantic/hybrid) + typed accessors + embedding pipeline
-- M036: Privacy gates (XDG storage, isolation, consent, purge, NDA opt-out)
-- M037: CI cross-compile (4 platforms)
-- M038: v0.1.0 release
-- M039: aihaus integration (install.sh, hooks, agent prompts)
-- M040: Smoke checks + aihaus v0.35.0 release
-- M041: BM25/FTS5 lexical search default; one-shot install; tag v0.1.1
-- M041 dogfood: query --db default + hybrid BM25 routing + var-version ldflag fix; tag v0.1.2
-- M042: legacy cloud-embedding demotion from advertised surfaces; CLI/PRD/README reconciliation; tag v0.1.3
-- M046: Agent memory indexing — `.claude/agent-memory/<name>/MEMORY.md` excerpts (200 lines / 25KB cap matching native CC) injected into Agent node properties; tag v0.1.4
-- M048: Native repository memory for real code, tests, markdown memory, recent commits, fixed local Ollama `nomic-embed-text` embeddings, JSON command payloads, lifecycle refresh/stale hooks, repo-local `.aihaus/state` runtime, workflow memory agents, and all-agent memory consultation; tag v0.1.5
-
-## Verifying the memory engine
-
-After `/aih-init` has built the index for at least one project, you can verify the binary, the DB file, and the query pipeline in three steps.
-
-**1. Binary present and reports version:**
-```
-aih-graph version
-```
-Should print `v0.1.5` (or higher). In installed repositories, aihaus keeps the runtime binary at `.aihaus/bin/aih-graph[.exe]`. If the binary is absent, re-run `aihaus update` or use `bash pkg/scripts/install-aih-graph-binary.sh --bin .aihaus/bin/aih-graph`.
-
-**2. DB file exists on disk**:
-
-For aihaus-installed repositories, wrappers and hooks use repo-local state:
-
-```
-.aihaus/state/aih-graph.db
+```bash
+go mod verify
+go vet ./...
+go test ./...
+go build ./cmd/aih-graph
 ```
 
-Raw `aih-graph` calls without `--db` still use the engine's XDG per-repo fallback. Prefer `aihaus memory ...` inside installed repositories so agents and humans use the same repo-local state layout.
+CI also cross-compiles Linux amd64, macOS amd64/arm64, and Windows amd64.
 
-**3. Query returns scored results:**
-```
-aih-graph query "decision"
-```
-A healthy index returns at least one `[s=N.NN]` line, for example:
-```
-[s=5.42] Decision   ADR-260515-E-amend-02   v0.1 forever-scope: vector promoted...
-[s=4.72] Hook       aih-graph-refresh.sh    aih-graph-refresh.sh — refresh...
-```
+## Privacy and deletion
 
-Use `--semantic` (vector-first when Ollama embeddings exist, BM25 fallback otherwise) or `--bfs <exact-identifier>` (structural lookup) instead of the default hybrid mode for narrower queries.
-
-### Troubleshooting
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `no node matches identifier "..."` | Used `--bfs` with free-text input | Pass an exact identifier, or omit `--bfs` for default hybrid retrieval |
-| `consent gate: missing .aih-graph-consent` | Raw `aih-graph build` was run without consent | Use `aihaus memory refresh --repo .` or pass `--accept-all-repos` for that run |
-| `database is locked` | Another process writing to the DB | Wait a few seconds and retry |
-| Build prints `0 nodes` | Repo has no indexed files or aihaus memory artifacts | Verify the repo is an aihaus-managed project (has `.aihaus/`) |
-| `aih-graph: command not found` | Binary not on PATH and discovery chain failed | Re-run `aihaus update` or install to `.aihaus/bin/` |
-
-## Specs
-
-Authoritative design package in `pkg/.aihaus/decisions.md`:
-- ADR-260515-A — privacy contract
-- ADR-260515-B — Node/Edge data model (hybrid generic+typed)
-- ADR-260515-C — tree-sitter binding (provisional + M033 pre-flight gate; amended by C-amend-01)
-- ADR-260515-D — integration model (tight, monorepo)
-- ADR-260515-E — v0.1 forever-scope
-
-Full PRD at `aih-graph/PRD.md`.
+Repository and user-scope indexes use separate consent and storage. `uninstall`
+purges generated databases and sidecars within the configured state root; it
+must not remove source, Markdown memory, or unrelated files.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT. See the repository `LICENSE`.

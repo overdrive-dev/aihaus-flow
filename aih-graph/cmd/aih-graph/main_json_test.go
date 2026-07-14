@@ -438,7 +438,8 @@ func seedRefreshRepo(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	repoPath := filepath.Join(dir, "repo")
-	if err := os.MkdirAll(filepath.Join(repoPath, "pkg", ".aihaus"), 0o755); err != nil {
+	projectMemory := filepath.Join(repoPath, "pkg", ".aihaus", "memory", "project")
+	if err := os.MkdirAll(projectMemory, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	decisions := strings.Join([]string{
@@ -451,7 +452,7 @@ func seedRefreshRepo(t *testing.T) (string, string) {
 		"Refresh JSON must return a machine-readable status payload.",
 		"",
 	}, "\n")
-	if err := os.WriteFile(filepath.Join(repoPath, "pkg", ".aihaus", "decisions.md"), []byte(decisions), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectMemory, "decisions.md"), []byte(decisions), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("# Test Repo\n\nRepository memory refresh fixture.\n"), 0o644); err != nil {

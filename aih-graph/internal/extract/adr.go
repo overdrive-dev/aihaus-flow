@@ -1,7 +1,6 @@
-// Package extract implements markdown-only structured extraction for the 6
-// aihaus typed nodes per ADR-260515-C-amend-02.
+// Package extract implements markdown-only structured extraction.
 //
-// adr.go parses pkg/.aihaus/decisions.md by splitting on `^## ADR-` section
+// adr.go parses memory/project/decisions.md by splitting on `^## ADR-` section
 // headers. Each section becomes one Decision.
 package extract
 

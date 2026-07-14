@@ -1,0 +1,42 @@
+name: package CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pkg/**'
+      - 'tools/aihaus-lab.mjs'
+      - 'tools/lab/**'
+      - 'tests/contracts/**'
+      - 'tests/lab/**'
+      - 'tools/run-contract-tests.mjs'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - '.github/workflows/package-ci.yml'
+  pull_request:
+    paths:
+      - 'pkg/**'
+      - 'tools/aihaus-lab.mjs'
+      - 'tools/lab/**'
+      - 'tests/contracts/**'
+      - 'tests/lab/**'
+      - 'tools/run-contract-tests.mjs'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - '.github/workflows/package-ci.yml'
+
+jobs:
+  contracts:
+    name: contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: focused package and lab contracts
+        run: node tools/run-contract-tests.mjs

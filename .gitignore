@@ -1,73 +1,38 @@
-# OS
+# OS and editors
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Editors
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Claude Code local config — created by install.sh, never source
+# Maintainer-local agent and dogfood state
 /.claude/
-
-# Local aihaus installation — created by running install.sh on this repo.
-# All runtime artifacts (project.md, plans, milestones, memory) live here.
-# The publishable package source is in pkg/.aihaus/ (committed separately).
 /.aihaus/
+/.aihaus-lab/
+/.aih-graph-consent
 
-# Temp files
+# Generated outputs
+node_modules/
+coverage/
+dist/
+build/
+target/
+tmp/
 *.tmp
 *.bak
-.header.tmp
-.footer.tmp
-.auto.tmp
-.merged.tmp
-.rendered-template.tmp
+*.log
 
-# ── GSD baseline (auto-generated) ──
-.gsd
-.gsd-id
-.bg-shell/
-*.code-workspace
+# Local environments and secrets
 .env
 .env.*
 !.env.example
-node_modules/
-.next/
-dist/
-build/
-__pycache__/
-*.pyc
 .venv/
 venv/
-target/
-vendor/
-*.log
-coverage/
-.cache/
-tmp/
+__pycache__/
+*.pyc
 
-# Smoke test scratch output (Check 82+83 fixtures stage temp files here)
-pkg/tools/.out/
-tools/.out/
-
-# aih-graph consent marker (created by `aih-graph build --accept-all-repos`
-# during smoke Check 86; never source — repo-root local state)
-/.aih-graph-consent
-
-# AIHAUS:GITIGNORE-START -- managed by install.sh / update.sh; do not edit between markers
-/.aihaus/audit/
-/.claude/audit/
-/.aihaus/.context-budgets
-/.aihaus/.effort
-/.aihaus/.calibration
-/.aihaus/.install-mode
-/.aihaus/.install-source
-/.aihaus/.install-platform
-/.aihaus/.version
-/.aihaus/.enforcement
-/.aihaus/.automode
-# AIHAUS:GITIGNORE-END
+# Optional local graph builds
+/aih-graph/bin/

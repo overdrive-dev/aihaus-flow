@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "defaultMode": "bypassPermissions",
-    "allow": ["Bash(*)", "Read"]
-  },
-  "hooks": {},
-  "env": {}
-}

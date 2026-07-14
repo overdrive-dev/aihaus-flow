@@ -1,8 +1,7 @@
 // Package types defines the core domain types for aih-graph.
 //
-// Per ADR-260521-A, M048 expands aih-graph from aihaus-artifact memory into
-// native repository memory. The original 6 aihaus types remain first-class,
-// and generic repository types become codebase memory nodes.
+// aihaus instructions and generic repository types become codebase memory
+// nodes. Durable Markdown remains the source of truth.
 //
 // Node + Edge are the storage-substrate-shaped generic types; the 6 typed
 // structs are property-view structs that consumers of the public API see.
@@ -14,7 +13,7 @@ import "time"
 // JSON-serializable map.
 type Node struct {
 	ID             int64
-	Type           string // "Decision" | "Milestone" | "Story" | "Agent" | "Hook" | "Skill" | "Rule" | "File" | "Chunk" | "Symbol" | "Call" | "Test" | "Memory" | "Commit"
+	Type           string // "Decision" | "Rule" | "Map" | "Convention" | "Role" | "Room" | "Contract" | "Tool" | "File" | "Chunk" | "Symbol" | "Call" | "Test" | "Memory" | "Commit"
 	Identifier     string // e.g. "ADR-260514-B", "M030", "aih-milestone"
 	Properties     map[string]any
 	Embedding      []float32 // optional; nil if not yet embedded
@@ -155,47 +154,19 @@ type RepoCommit struct {
 	Files      []string
 }
 
-// Agent represents an aihaus agent definition.
-// Source: pkg/.aihaus/agents/<name>.md YAML frontmatter + body.
-// MemoryPath + MemoryExcerpt populated when .claude/agent-memory/<name>/MEMORY.md
-// exists (native CC memory: project field — first 200 lines or 25KB per docs).
-type Agent struct {
-	Name                  string
-	Tools                 []string
-	Model                 string // "opus" | "sonnet" | "haiku"
-	Effort                string // "medium" | "high" | "xhigh" | "max"
-	Color                 string
-	Memory                string
-	Resumable             bool
-	CheckpointGranularity string // "story" | "file" | "step"
-	Description           string // first non-frontmatter paragraph
-	MemoryPath            string // relative path to .claude/agent-memory/<name>/MEMORY.md if present
-	MemoryExcerpt         string // first 200 lines or 25KB of MEMORY.md (matches native CC injection)
-}
-
-// Hook represents an aihaus shell hook script.
-// Source: pkg/.aihaus/hooks/<name>.sh header comment + bash function declarations.
-type Hook struct {
-	Name      string   // "bash-guard.sh"
-	Path      string   // "pkg/.aihaus/hooks/bash-guard.sh"
-	Purpose   string   // from leading comment block
-	Functions []string // declared bash function names
-	SizeBytes int64
-}
-
-// Skill represents an aihaus user-invocable skill.
-// Source: pkg/.aihaus/skills/aih-<name>/SKILL.md YAML frontmatter.
-type Skill struct {
-	Name                   string // "aih-milestone"
-	Description            string
-	DisableModelInvocation bool
-	AllowedTools           []string
-	ArgumentHint           string
+// Instruction is a portable aihaus Map, convention, role, room, contract, or
+// deterministic tool. Its source file is indexed verbatim for citations.
+type Instruction struct {
+	Type       string // "Map" | "Convention" | "Role" | "Room" | "Contract" | "Tool"
+	Identifier string
+	Path       string
+	Title      string
+	Body       string
 }
 
 // Rule represents a business rule from the decision-autonomy contract.
-// Source: .aihaus/memory/workflows/business-rules.md sections beginning with
-// `### BR-`. Per ADR-260531-A. Scenarios are the BDD core (Given/When/Then);
+// Source: .aihaus/memory/project/business-rules.md sections beginning with
+// `### BR-`. Scenarios are the BDD core (Given/When/Then);
 // Implements / Relates / DecidedBy are cross-link fields used to build edges to
 // code symbols/files/tests, other rules, and ADRs. The markdown ledger stays the
 // source of truth; aih-graph indexes Rule nodes so agents can query rule↔code.

@@ -2,7 +2,7 @@
 //
 // aih-graph is aihaus's standalone Go binary memory engine. It builds and
 // queries a knowledge graph of aihaus-managed repositories with first-class
-// aihaus types (Decision, Milestone, Story, Agent, Hook, Skill) plus M048
+// aihaus types (Decision, Rule, Role, Room, Contract, Tool) plus native
 // native repository-memory nodes (File, Chunk, Symbol, Call).
 //
 // v0.1 forever-scope (per ADR-260515-B-amend-02 + C-amend-02 + E-amend-03,
@@ -168,8 +168,8 @@ func resolveRepoPath(repoPath string) string {
 	return repoPath
 }
 
-// runBuild implements the M033 build subcommand. Extracts Decision / Agent /
-// Skill / Hook nodes; Milestone + Story parsers land in follow-on commits.
+// runBuild extracts durable Markdown, portable instructions, and repository
+// code/relationship nodes into a rebuildable local index.
 func runBuild(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	dryRun := fs.Bool("dry-run", false, "print extraction summary without persisting")
@@ -191,13 +191,14 @@ func runBuild(args []string) int {
 
 	repoPath := resolveRepoPath(fs.Arg(0))
 	decisionsPath := firstExistingPath(
-		filepath.Join(repoPath, ".aihaus", "decisions.md"),
-		filepath.Join(repoPath, "pkg", ".aihaus", "decisions.md"),
+		filepath.Join(repoPath, ".aihaus", "memory", "project", "decisions.md"),
+		filepath.Join(repoPath, "pkg", ".aihaus", "memory", "project", "decisions.md"),
 	)
 	// Business-rules ledger — the decision-autonomy contract (ADR-260531-A).
 	// Source-of-truth is the runtime ledger; absent on a fresh repo (→ 0 Rules).
 	rulesPath := firstExistingPath(
-		filepath.Join(repoPath, ".aihaus", "memory", "workflows", "business-rules.md"),
+		filepath.Join(repoPath, ".aihaus", "memory", "project", "business-rules.md"),
+		filepath.Join(repoPath, "pkg", ".aihaus", "memory", "project", "business-rules.md"),
 	)
 
 	// Consent gate (ADR-260515-A privacy contract).
@@ -238,7 +239,7 @@ func runBuild(args []string) int {
 			return 1
 		}
 	} else {
-		fmt.Fprintln(os.Stderr, "build: decisions.md not found in .aihaus/ or pkg/.aihaus/; continuing without Decision nodes")
+		fmt.Fprintln(os.Stderr, "build: memory/project/decisions.md not found; continuing without Decision nodes")
 	}
 	statusCounts := map[string]int{}
 	amendCount := 0
@@ -261,61 +262,19 @@ func runBuild(args []string) int {
 	}
 	fmt.Printf("  Rules: %d\n", len(rules))
 
-	// Agent extraction.
-	agents, err := extract.ParseAgentsDir(repoPath)
+	// Portable instruction extraction.
+	instructions, err := extract.ParseInstructionsDir(repoPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "build: parse agents: %v\n", err)
+		fmt.Fprintf(os.Stderr, "build: parse instructions: %v\n", err)
 		return 1
 	}
-	modelCounts := map[string]int{}
-	memoryCount := 0
-	for _, a := range agents {
-		modelCounts[a.Model]++
-		if a.MemoryPath != "" {
-			memoryCount++
-		}
+	instructionCounts := map[string]int{}
+	for _, instruction := range instructions {
+		instructionCounts[instruction.Type]++
 	}
-	fmt.Printf("  Agents:    %d", len(agents))
-	if len(modelCounts) > 0 {
-		fmt.Print(" (")
-		first := true
-		for _, k := range keysSorted(modelCounts) {
-			if !first {
-				fmt.Print(", ")
-			}
-			label := k
-			if label == "" {
-				label = "(no model)"
-			}
-			fmt.Printf("%s=%d", label, modelCounts[k])
-			first = false
-		}
-		fmt.Print(")")
+	for _, typ := range keysSorted(instructionCounts) {
+		fmt.Printf("  %-11s %d\n", typ+":", instructionCounts[typ])
 	}
-	if memoryCount > 0 {
-		fmt.Printf(" [%d w/ memory]", memoryCount)
-	}
-	fmt.Println()
-
-	// Skill extraction.
-	skills, err := extract.ParseSkillsDir(repoPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "build: parse skills: %v\n", err)
-		return 1
-	}
-	fmt.Printf("  Skills:    %d\n", len(skills))
-
-	// Hook extraction.
-	hooks, err := extract.ParseHooksDir(repoPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "build: parse hooks: %v\n", err)
-		return 1
-	}
-	totalFns := 0
-	for _, h := range hooks {
-		totalFns += len(h.Functions)
-	}
-	fmt.Printf("  Hooks:     %d (%d declared functions)\n", len(hooks), totalFns)
 
 	// Milestone + Story extraction. .aihaus/milestones/ may not exist (fresh
 	// install or runtime artifacts purged); parsers return empty slices.
@@ -408,35 +367,14 @@ func runBuild(args []string) int {
 		}
 		persisted++
 	}
-	for _, a := range agents {
-		if _, err := db.UpsertNode("Agent", a.Name, agentProps(a)); err != nil {
-			fmt.Fprintf(os.Stderr, "build: upsert agent %s: %v\n", a.Name, err)
-			return 1
-		}
-		persisted++
-	}
-	for _, s := range skills {
+	for _, instruction := range instructions {
 		props := map[string]any{
-			"description":              s.Description,
-			"disable_model_invocation": s.DisableModelInvocation,
-			"allowed_tools":            s.AllowedTools,
-			"argument_hint":            s.ArgumentHint,
+			"path":  instruction.Path,
+			"title": instruction.Title,
+			"body":  instruction.Body,
 		}
-		if _, err := db.UpsertNode("Skill", s.Name, props); err != nil {
-			fmt.Fprintf(os.Stderr, "build: upsert skill %s: %v\n", s.Name, err)
-			return 1
-		}
-		persisted++
-	}
-	for _, h := range hooks {
-		props := map[string]any{
-			"path":       h.Path,
-			"purpose":    h.Purpose,
-			"functions":  h.Functions,
-			"size_bytes": h.SizeBytes,
-		}
-		if _, err := db.UpsertNode("Hook", h.Name, props); err != nil {
-			fmt.Fprintf(os.Stderr, "build: upsert hook %s: %v\n", h.Name, err)
+		if _, err := db.UpsertNode(instruction.Type, instruction.Identifier, props); err != nil {
+			fmt.Fprintf(os.Stderr, "build: upsert %s %s: %v\n", instruction.Type, instruction.Identifier, err)
 			return 1
 		}
 		persisted++
@@ -532,7 +470,7 @@ func runBuild(args []string) int {
 
 	// Edge derivation: Decision.Amends → Decision-[amends]→Decision;
 	// Story.MilestoneID → Story-[in_milestone]→Milestone. More edge types
-	// (Hook-[invoked_by]→Skill, Agent-[spawned_by]→Skill, ...) land in M035.
+	// Additional instruction-to-code relationships require explicit consumers.
 	edgesAdded := 0
 	for _, d := range decisions {
 		if d.Amends == "" {
@@ -723,11 +661,11 @@ func runBuild(args []string) int {
 
 	// Search pipeline: BM25 is always refreshed; Ollama/nomic embeddings are
 	// added when the local server is available.
-	if err := runBM25Pipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules); err != nil {
+	if err := runBM25Pipeline(db, decisions, instructions, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules); err != nil {
 		fmt.Fprintf(os.Stderr, "build: bm25: %v\n", err)
 		return 1
 	}
-	runOllamaEmbeddingPipeline(db, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules)
+	runOllamaEmbeddingPipeline(db, decisions, instructions, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules)
 	clearStaleMarker(repoPath)
 	return 0
 }
@@ -809,11 +747,11 @@ func runBuildUser(dbPath string, accept, dryRun bool) int {
 
 	// Same search pipeline as repo builds: BM25 always; Ollama embeddings when
 	// the local server is available. Only the memories slice is populated.
-	if err := runBM25Pipeline(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, memories, nil, nil); err != nil {
+	if err := runBM25Pipeline(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, memories, nil, nil); err != nil {
 		fmt.Fprintf(os.Stderr, "build --user: bm25: %v\n", err)
 		return 1
 	}
-	runOllamaEmbeddingPipeline(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, memories, nil, nil)
+	runOllamaEmbeddingPipeline(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, memories, nil, nil)
 	return 0
 }
 
@@ -871,9 +809,7 @@ func runRefresh(args []string) int {
 func runBM25Pipeline(
 	db *storage.DB,
 	decisions []types.Decision,
-	agents []types.Agent,
-	skills []types.Skill,
-	hooks []types.Hook,
+	instructions []types.Instruction,
 	milestones []types.Milestone,
 	stories []types.Story,
 	repoFiles []types.RepoFile,
@@ -890,14 +826,8 @@ func runBM25Pipeline(
 	for _, d := range decisions {
 		units = append(units, unit{"Decision", d.Identifier, embedTextForDecision(d)})
 	}
-	for _, a := range agents {
-		units = append(units, unit{"Agent", a.Name, embedTextForAgent(a)})
-	}
-	for _, s := range skills {
-		units = append(units, unit{"Skill", s.Name, embedTextForSkill(s)})
-	}
-	for _, h := range hooks {
-		units = append(units, unit{"Hook", h.Name, embedTextForHook(h)})
+	for _, instruction := range instructions {
+		units = append(units, unit{instruction.Type, instruction.Identifier, embedTextForInstruction(instruction)})
 	}
 	for _, m := range milestones {
 		id := m.ID
@@ -963,16 +893,8 @@ func embedTextForRule(r types.Rule) string {
 	return r.Identifier + "\n" + r.Title + "\n" + r.Domain + "\n" + r.Statement + "\n" + r.Body
 }
 
-func embedTextForAgent(a types.Agent) string {
-	return a.Name + "\n" + a.Description + "\n" + a.MemoryPath + "\n" + a.MemoryExcerpt
-}
-
-func embedTextForSkill(s types.Skill) string {
-	return s.Name + "\n" + s.Description
-}
-
-func embedTextForHook(h types.Hook) string {
-	return h.Name + "\n" + h.Purpose
+func embedTextForInstruction(instruction types.Instruction) string {
+	return instruction.Identifier + "\n" + instruction.Title + "\n" + instruction.Path + "\n" + instruction.Body
 }
 
 func embedTextForMilestone(m types.Milestone) string {
@@ -1018,9 +940,7 @@ func embedInputText(text string) string {
 func runOllamaEmbeddingPipeline(
 	db *storage.DB,
 	decisions []types.Decision,
-	agents []types.Agent,
-	skills []types.Skill,
-	hooks []types.Hook,
+	instructions []types.Instruction,
 	milestones []types.Milestone,
 	stories []types.Story,
 	repoFiles []types.RepoFile,
@@ -1041,7 +961,7 @@ func runOllamaEmbeddingPipeline(
 		fmt.Fprintf(os.Stderr, "build: Ollama embeddings skipped: %v\n", err)
 		return
 	}
-	if err := runEmbedPipeline(db, embedder, decisions, agents, skills, hooks, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules); err != nil {
+	if err := runEmbedPipeline(db, embedder, decisions, instructions, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules); err != nil {
 		fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
 	}
 }
@@ -1053,9 +973,7 @@ func runEmbedPipeline(
 	db *storage.DB,
 	embedder embed.Embedder,
 	decisions []types.Decision,
-	agents []types.Agent,
-	skills []types.Skill,
-	hooks []types.Hook,
+	instructions []types.Instruction,
 	milestones []types.Milestone,
 	stories []types.Story,
 	repoFiles []types.RepoFile,
@@ -1076,14 +994,8 @@ func runEmbedPipeline(
 	for _, d := range decisions {
 		units = append(units, unit{"Decision", d.Identifier, embedTextForDecision(d)})
 	}
-	for _, a := range agents {
-		units = append(units, unit{"Agent", a.Name, embedTextForAgent(a)})
-	}
-	for _, s := range skills {
-		units = append(units, unit{"Skill", s.Name, embedTextForSkill(s)})
-	}
-	for _, h := range hooks {
-		units = append(units, unit{"Hook", h.Name, embedTextForHook(h)})
+	for _, instruction := range instructions {
+		units = append(units, unit{instruction.Type, instruction.Identifier, embedTextForInstruction(instruction)})
 	}
 	for _, m := range milestones {
 		id := m.ID
@@ -1889,7 +1801,7 @@ func runMilestone(args []string) int {
 
 // reviewedSHARe matches a `last-reviewed:` value that looks like a git commit
 // SHA (7..40 hex chars) — the staleness anchor per the rule record schema in
-// pkg/.aihaus/protocols/business-rules.md.
+// pkg/.aihaus/memory/project/business-rules.md.
 var reviewedSHARe = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
 
 // runRuleDrift reports business rules whose binding is suspect (BRC-S3,
@@ -2078,7 +1990,7 @@ type ruleReviewJSON struct {
 
 // ruleVerbJSON is the stable payload of `aih-graph rule <BR-id> --json` —
 // the rule → implementing code + tests direction promised at
-// pkg/.aihaus/protocols/business-rules.md (Residence §).
+// pkg/.aihaus/memory/project/business-rules.md.
 type ruleVerbJSON struct {
 	Command            string            `json:"command"`
 	ID                 string            `json:"id"`
@@ -2105,7 +2017,7 @@ type whyRuleJSON struct {
 
 // whyJSON is the stable payload of `aih-graph why <ref> --json` — the
 // code → rules-it-serves direction promised at
-// pkg/.aihaus/protocols/business-rules.md (Residence §).
+// pkg/.aihaus/memory/project/business-rules.md.
 type whyJSON struct {
 	Command   string          `json:"command"`
 	Ref       string          `json:"ref"`
@@ -2152,7 +2064,7 @@ func loadRuleBindings(db *storage.DB, ruleNodeID int64) ([]ruleBindingJSON, erro
 // runRule implements `aih-graph rule <BR-id>` (M050/S04): resolve one Rule
 // node from the indexed ledger and print it with its bindings + freshness.
 // Closes documented-but-unimplemented hole 5
-// (pkg/.aihaus/protocols/business-rules.md Residence §).
+// (pkg/.aihaus/memory/project/business-rules.md).
 func runRule(args []string) int {
 	fs := flag.NewFlagSet("rule", flag.ExitOnError)
 	dbPath := fs.String("db", "", "path to SQLite database")
@@ -3228,11 +3140,6 @@ func propFloat(props map[string]any, key string) float64 {
 	}
 }
 
-// agentProps reshapes a types.Agent into a properties map for storage.
-// M046: memory_path + memory_excerpt are populated when .claude/agent-memory/
-// <name>/MEMORY.md exists (native CC memory: project field accumulation). The
-// excerpt becomes part of the Agent node's properties JSON → BM25/FTS5 +
-// semantic queries search across what each agent has learned across sessions.
 // ruleProps converts a business Rule into node properties. Scenarios + link
 // lists are stored so query consumers can render the rule and traverse bindings.
 func ruleProps(r types.Rule) map[string]any {
@@ -3262,24 +3169,6 @@ func lookupCodeRef(db *storage.DB, ref string) (int64, bool) {
 		}
 	}
 	return 0, false
-}
-
-func agentProps(a types.Agent) map[string]any {
-	props := map[string]any{
-		"tools":                  a.Tools,
-		"model":                  a.Model,
-		"effort":                 a.Effort,
-		"color":                  a.Color,
-		"memory":                 a.Memory,
-		"resumable":              a.Resumable,
-		"checkpoint_granularity": a.CheckpointGranularity,
-		"description":            a.Description,
-	}
-	if a.MemoryPath != "" {
-		props["memory_path"] = a.MemoryPath
-		props["memory_excerpt"] = a.MemoryExcerpt
-	}
-	return props
 }
 
 func repoFileProps(f types.RepoFile) map[string]any {
@@ -3466,9 +3355,12 @@ func loadObsidianExportNodes(sqlDB *sql.DB, includeChunks, includeCalls bool, li
 			WHEN 'Milestone' THEN 7
 			WHEN 'Story' THEN 8
 			WHEN 'Commit' THEN 9
-			WHEN 'Agent' THEN 10
-			WHEN 'Skill' THEN 11
-			WHEN 'Hook' THEN 12
+			WHEN 'Role' THEN 10
+			WHEN 'Room' THEN 11
+			WHEN 'Map' THEN 12
+			WHEN 'Convention' THEN 13
+			WHEN 'Contract' THEN 14
+			WHEN 'Tool' THEN 15
 			WHEN 'Chunk' THEN 90
 			WHEN 'Call' THEN 91
 			ELSE 99
@@ -3514,7 +3406,7 @@ func obsidianCategoryForType(typ string) string {
 	switch typ {
 	case "File", "Chunk", "Symbol", "Call", "Test":
 		return "code-brain"
-	case "Decision", "Milestone", "Story", "Rule", "Memory", "Commit", "Agent", "Hook", "Skill":
+	case "Decision", "Milestone", "Story", "Rule", "Memory", "Commit", "Map", "Convention", "Role", "Room", "Contract", "Tool":
 		return "repo-memory"
 	default:
 		return "repo-memory"
