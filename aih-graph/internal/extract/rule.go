@@ -1,7 +1,7 @@
 // rule.go parses an aihaus business-rules ledger (the decision-autonomy contract)
 // by splitting on `^### BR-` section headers. Each section becomes one Rule per
 // ADR-260531-A. The ledger source-of-truth is markdown
-// (.aihaus/memory/workflows/business-rules.md); aih-graph indexes it as Rule
+// (.aihaus/memory/project/business-rules.md); aih-graph indexes it as Rule
 // nodes so agents can query rule↔code bindings. HTML-commented template examples
 // (`<!-- … -->`) are skipped so the seed template contributes no phantom rules.
 package extract

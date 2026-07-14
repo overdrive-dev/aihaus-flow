@@ -50,22 +50,6 @@ func ParseMarkdownMemory(repoRoot string) ([]types.MarkdownMemory, error) {
 			return nil, err
 		}
 	}
-	for _, file := range memoryFiles(repoRoot) {
-		if _, err := os.Stat(file.abs); os.IsNotExist(err) {
-			continue
-		} else if err != nil {
-			return nil, err
-		}
-		rel, err := filepath.Rel(repoRoot, file.abs)
-		if err != nil {
-			return nil, err
-		}
-		items, err := parseMemoryFile(file.abs, filepath.ToSlash(rel), file.category)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, items...)
-	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Identifier < out[j].Identifier })
 	return out, nil
 }
@@ -119,23 +103,6 @@ func memoryRoots(repoRoot string) []memoryRoot {
 	return []memoryRoot{
 		{filepath.Join(repoRoot, ".aihaus", "memory"), ""},
 		{filepath.Join(repoRoot, "pkg", ".aihaus", "memory"), ""},
-		{filepath.Join(repoRoot, ".claude", "agent-memory"), "agent"},
-	}
-}
-
-type memoryFile struct {
-	abs      string
-	category string
-}
-
-func memoryFiles(repoRoot string) []memoryFile {
-	return []memoryFile{
-		{filepath.Join(repoRoot, ".aihaus", "project.md"), "project"},
-		{filepath.Join(repoRoot, ".aihaus", "knowledge.md"), "knowledge"},
-		{filepath.Join(repoRoot, ".aihaus", "decisions.md"), "decision"},
-		{filepath.Join(repoRoot, "pkg", ".aihaus", "project.md"), "project"},
-		{filepath.Join(repoRoot, "pkg", ".aihaus", "knowledge.md"), "knowledge"},
-		{filepath.Join(repoRoot, "pkg", ".aihaus", "decisions.md"), "decision"},
 	}
 }
 

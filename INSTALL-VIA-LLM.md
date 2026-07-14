@@ -1,112 +1,42 @@
-# Install aihaus via an LLM agent
+# Install aihaus with a coding agent
 
-If you'd rather hand the install off to an LLM with shell access (Claude Code CLI, Cursor, Windsurf, Claude Desktop with filesystem MCP, etc.), copy the prompt below into a fresh chat. The agent will:
+Run the following request from the root of the Git repository that should use
+aihaus:
 
-1. Detect your platform (macOS/Linux/Windows).
-2. Verify prerequisites (`git`, Node 18+, Claude Code CLI, bash on Unix or PowerShell 5.1+ on Windows) and install whichever are missing.
-3. Clone aihaus-flow and run the canonical install script.
-4. Verify three checkpoints (global skills linked, aih-graph binary downloaded + executable, settings template merged).
-5. Hand back to you for the final two slash commands inside Claude Code (those steps require an interactive TUI — no agent can run them headlessly).
+```text
+Install the repository-local aihaus package here.
 
-The prompt assumes the LLM has shell execution. It does **not** work in chat-only LLM interfaces (Claude.ai web, ChatGPT web without local code interpreter). Use it inside Claude Code CLI, Cursor, Windsurf, Claude Desktop with filesystem MCP, or any agent runtime with bash/PowerShell tool access.
-
----
-
-## Copy-paste prompt
-
-````
-You are a DevOps assistant. Your mission: install aihaus (https://github.com/overdrive-dev/aihaus-flow) on the machine you have shell access to. Aihaus is a Claude Code skills toolkit; users invoke `/aih-*` slash commands inside Claude Code.
-
-CRITICAL CONSTRAINT: do NOT skip verification steps. Report each checkpoint result back to me. Do NOT improvise alternative install paths — the discovery chain is deterministic; the commands below are the canonical path.
-
-### Step 1 — Verify prerequisites
-
-Check that these are installed; install whichever are missing:
-
-- git (any recent version)
-- Node.js 18+ AND Claude Code CLI: `npm install -g @anthropic-ai/claude-code` then verify with `claude --version`
-- On Windows: PowerShell 5.1+ (built-in on Windows 10+) — no Git Bash needed
-- On macOS/Linux: bash 4+
-
-If any are missing, install them first using the platform's standard package manager (apt/brew/winget/choco), then continue.
-
-### Step 2 — Clone + install (detect platform first)
-
-macOS / Linux:
-```
-INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/aihaus"
-mkdir -p "$(dirname "$INSTALL_DIR")"
-git clone https://github.com/overdrive-dev/aihaus-flow "$INSTALL_DIR"
-bash "$INSTALL_DIR/pkg/scripts/install.sh"
+1. Verify that the current directory is the Git repository root and that Git
+   and Node.js 22+ are available.
+2. Clone https://github.com/overdrive-dev/aihaus-flow with --depth 1 into the
+   temporary child directory .aihaus-download.
+3. Run:
+      node .aihaus-download/pkg/setup.mjs --target . --json
+4. Read the JSON result and verify these files exist:
+      .aihaus/MAP.md
+      .aihaus/contracts/harness.md
+      .aihaus/roles/orchestrator.md
+      .aihaus/rooms/feature/CONTEXT.md
+5. Delete only the temporary .aihaus-download clone after resolving its real
+   path and confirming it is inside this repository.
+6. Do not install global hooks, mutate user-level agent settings, start a site,
+   or upload repository data.
+7. Read .aihaus/MAP.md and report the installed package surface plus any files
+   that setup preserved rather than replaced.
 ```
 
-Windows PowerShell:
+## Optional local index
+
+If the user asks for the code index, install the matching released `aih-graph`
+binary into `.aihaus/bin/` before deleting the temporary clone. Indexing consent
+must remain explicit; do not create `.aih-graph-consent` on the user's behalf.
+
+After consent, verify with:
+
+```bash
+node .aihaus/tools/graph.mjs refresh --json
+node .aihaus/tools/graph.mjs status --json
 ```
-$InstallDir = "$env:LOCALAPPDATA\aihaus"
-New-Item -ItemType Directory -Path (Split-Path $InstallDir) -Force | Out-Null
-git clone https://github.com/overdrive-dev/aihaus-flow $InstallDir
-& "$InstallDir\pkg\scripts\install.ps1"
-```
 
-If git clone fails with "directory already exists", the user already has a clone. Run `git -C "$INSTALL_DIR" pull` instead, then re-run the install script.
-
-### Step 3 — Verify the install (3 checkpoints, all MUST pass)
-
-Run each and report the output:
-
-1. Global skills linked:
-   - macOS/Linux: `ls ~/.claude/skills/ | grep aih-`
-   - Windows: `Get-ChildItem ~/.claude/skills/ -Filter aih-* -Name`
-   - Expected: 14 entries starting with `aih-` (init, install, plan, feature, milestone, brainstorm, bugfix, close, effort, help, quick, resume, sync-notion, update).
-
-2. aih-graph binary downloaded:
-   - macOS/Linux: `ls -la ~/.aihaus/bin/aih-graph && ~/.aihaus/bin/aih-graph version`
-   - Windows: `Test-Path ~/.aihaus/bin/aih-graph.exe; & "$HOME/.aihaus/bin/aih-graph.exe" version`
-   - Expected: file exists; `version` command prints something like `0.1.3` or higher, exit 0.
-
-3. Settings template merged:
-   - Both platforms: confirm `~/.aihaus/.install-source` contains `https://github.com/overdrive-dev/aihaus-flow`.
-
-4. Memory engine queryable (run AFTER the user has executed `/aih-init` inside Claude Code on at least one project — skip this checkpoint until then):
-   - Both platforms: `~/.aihaus/bin/aih-graph query --json "decision"` (Windows: `& "$HOME/.aihaus/bin/aih-graph.exe" query --json "decision"`)
-   - Expected: JSON output with `"command": "query"`, `"mode": "hybrid_bm25"`, and at least one match.
-   - If the output is `consent gate: missing .aih-graph-consent` the user hasn't run `/aih-init` yet — that's expected at install time; tell the user to run `/aih-init` and skip this checkpoint.
-
-If ANY checkpoint (1-3) fails, do NOT proceed — report which one and stop. Checkpoint 4 is post-install validation; skip it cleanly if the user hasn't run `/aih-init` yet.
-
-### Step 4 — Tell the human user what to do next
-
-After all 3 checkpoints pass, output EXACTLY this message to the user:
-
----
-aihaus installed successfully.
-
-Two final steps must be done by YOU (the human) inside Claude Code — these are slash commands inside the interactive TUI, not shell commands. An LLM/agent cannot run them from outside.
-
-In any project you want to use aihaus on:
-
-  cd <your-project>
-  claude
-
-Then inside Claude Code, type:
-
-  /aih-install     # links aihaus into this repo
-  /aih-init        # bootstraps .aihaus/project.md + indexes memory engine
-
-After that, all `/aih-*` commands work in that project.
----
-
-### Recovery paths if something goes wrong
-
-- aih-graph binary did not download (Step 3 checkpoint 2 fails): run `bash "$INSTALL_DIR/pkg/scripts/install-aih-graph-binary.sh"` manually. If it still fails, check `https://github.com/overdrive-dev/aihaus-flow/releases` for the `aih-graph-v*` release matching your platform (linux-amd64, darwin-amd64, darwin-arm64, windows-amd64); download manually and place at `~/.aihaus/bin/aih-graph[.exe]`, chmod +x on Unix.
-- `/aih-install` not recognized in Claude Code: the user did not restart Claude Code after install. Have them `exit` and re-launch `claude`.
-- AIHAUS_HOME ambiguity: if user has multiple legacy installs, the 8-tier discovery chain picks the newest. Force a specific one with: `AIHAUS_HOME="$INSTALL_DIR" claude`.
-
-Report final status: install location, aih-graph version, and which platform you detected.
-````
-
----
-
-## What the LLM cannot do
-
-The final two steps — `/aih-install` and `/aih-init` — are slash commands inside the interactive Claude Code TUI. No LLM/agent can drive these from outside the session. You (human) must run them yourself. This is by design: `/aih-init` writes `.aihaus/project.md` based on your codebase, and the slash command lives in a different runtime than shell automation.
+The index is generated local state. Project Markdown and source files remain the
+source of truth.

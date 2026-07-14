@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-# aihaus install script (Unix) — STUB for dogfood detection test
-# Presence of this file at pkg/scripts/install.sh in a directory satisfies
-# the is_dogfood_cwd() predicate in the real install.sh:
-#   [[ -f "${PWD}/pkg/scripts/install.sh" ]] && [[ -d "${PWD}/pkg/.aihaus/skills" ]]
-# This stub is NOT executable — it is only used as a file presence marker.
-set -euo pipefail

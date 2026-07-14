@@ -1,8 +1,0 @@
-{
-  "hook_event_name": "Stop",
-  "session_id": "test-session-outside-exec-001",
-  "message": {
-    "role": "assistant",
-    "content": "This is a safe planning-phase message with no forbidden patterns."
-  }
-}

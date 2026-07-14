@@ -1,0 +1,4 @@
+.aihaus/state/
+.aihaus/runtime/
+node_modules/
+coverage/

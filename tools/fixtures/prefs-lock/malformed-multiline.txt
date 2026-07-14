@@ -1,2 +1,0 @@
-First line of a malformed entry
-second line that must be refused

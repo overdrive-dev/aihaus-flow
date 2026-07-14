@@ -29,7 +29,7 @@ import (
 //	...
 
 var (
-	mfMetaSection = regexp.MustCompile(`(?ms)^## Metadata\s*$(.*?)(?:^## |\z)`)
+	mfMetaSection  = regexp.MustCompile(`(?ms)^## Metadata\s*$(.*?)(?:^## |\z)`)
 	mfStorySection = regexp.MustCompile(`(?ms)^## Story Records\s*$(.*?)(?:^## |\z)`)
 	mfKVLine       = regexp.MustCompile(`(?m)^([a-z_][a-z0-9_]*)\s*:\s*(.+?)\s*$`)
 	milestoneIDRe  = regexp.MustCompile(`^(M\d{3})`)
@@ -164,7 +164,7 @@ func parseStoryRecords(content, milestoneID string) []types.Story {
 				// not stored on Story directly; could be a property if needed later
 			case "owned_files", "files":
 				if val != "" && val != "-" {
-					s.OwnedFiles = splitFields(val)
+					s.OwnedFiles = splitManifestFields(val)
 				}
 			case "status":
 				s.Status = val
@@ -181,6 +181,11 @@ func parseStoryRecords(content, milestoneID string) []types.Story {
 	return stories
 }
 
+func splitManifestFields(value string) []string {
+	value = strings.ReplaceAll(value, ",", " ")
+	return strings.Fields(value)
+}
+
 // splitMDRow splits a markdown table row "| a | b | c |" into ["a", "b", "c"],
 // preserving empty cells but trimming surrounding whitespace.
 func splitMDRow(line string) []string {
@@ -194,4 +199,3 @@ func splitMDRow(line string) []string {
 	}
 	return out
 }
-

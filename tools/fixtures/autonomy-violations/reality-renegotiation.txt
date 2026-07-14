@@ -1,2 +1,0 @@
-Realista: continuar autonomamente = 4-6h+ de tempo real, com risco crescente
-de agent failures em stories complexas. Three realistic forks para considerar.
