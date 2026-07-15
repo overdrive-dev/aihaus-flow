@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { access, cp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { access, cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertPathWithin } from "./.aihaus/tools/path-safety.mjs";
@@ -38,14 +39,118 @@ const memoryFiles = [
 const kanbanStatuses = ["backlog", "todo", "doing", "review", "done"];
 const startMarker = "<!-- AIHAUS:START -->";
 const endMarker = "<!-- AIHAUS:END -->";
+const hostAdapterMarker = "<!-- AIHAUS-MANAGED: repository-local-host-adapter-v1 -->";
+const hostSkillAdapters = [
+  {
+    host: "claudeCode",
+    source: path.join(packageRoot, "adapters", "claude", "skills", "aih-init", "SKILL.md"),
+    relative: ".claude/skills/aih-init/SKILL.md",
+    capability: {
+      invoke: "/aih-init",
+      menu: "/",
+      restartMayBeRequired: true,
+    },
+  },
+  {
+    host: "codex",
+    source: path.join(packageRoot, "adapters", "codex", "skills", "aih-init", "SKILL.md"),
+    relative: ".agents/skills/aih-init/SKILL.md",
+    capability: {
+      invoke: "$aih-init",
+      menu: "/skills",
+      customSlash: false,
+      restartMayBeRequired: true,
+    },
+  },
+];
 
 async function exists(target) {
   try {
-    await access(target);
+    await lstat(target);
     return true;
   } catch {
     return false;
   }
+}
+
+async function entryKind(target) {
+  try {
+    const info = await lstat(target);
+    if (info.isSymbolicLink()) return "symbolic-link";
+    if (info.isFile()) return "file";
+    if (info.isDirectory()) return "directory";
+    return "other";
+  } catch (error) {
+    if (error.code === "ENOENT") return "missing";
+    throw error;
+  }
+}
+
+function digest(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function treeManifest(root, relative = "") {
+  const entries = await readdir(root, { withFileTypes: true });
+  const manifest = [];
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    const childRelative = relative ? `${relative}/${entry.name}` : entry.name;
+    const child = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      manifest.push({ path: childRelative, type: "directory" });
+      manifest.push(...await treeManifest(child, childRelative));
+    } else if (entry.isFile()) {
+      manifest.push({ path: childRelative, type: "file", sha256: digest(await readFile(child)) });
+    } else {
+      throw new Error(`refusing non-regular entry in managed directory: ${child}`);
+    }
+  }
+  return manifest;
+}
+
+async function filesEqual(source, destination) {
+  const [left, right] = await Promise.all([readFile(source), readFile(destination)]);
+  return left.equals(right);
+}
+
+async function directoriesEqual(source, destination) {
+  const [left, right] = await Promise.all([treeManifest(source), treeManifest(destination)]);
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+async function planManagedFile({ source, destination, root, check, force }) {
+  await assertPathWithin({ root, candidate: destination });
+  const kind = await entryKind(destination);
+  if (!["missing", "file"].includes(kind)) {
+    throw new Error(`refusing non-regular managed file: ${destination}`);
+  }
+  if (kind === "file" && (await lstat(destination)).nlink > 1) {
+    throw new Error(`refusing hard-linked managed file: ${destination}`);
+  }
+  const status = kind === "missing"
+    ? "created"
+    : !force && await filesEqual(source, destination) ? "unchanged" : "refreshed";
+  if (!check && status !== "unchanged") {
+    await mkdir(path.dirname(destination), { recursive: true });
+    await cp(source, destination, { force: true });
+  }
+  return status;
+}
+
+async function planManagedDirectory({ source, destination, root, check, force }) {
+  await assertPathWithin({ root, candidate: destination });
+  const kind = await entryKind(destination);
+  if (!["missing", "directory"].includes(kind)) {
+    throw new Error(`refusing non-directory managed surface: ${destination}`);
+  }
+  const status = kind === "missing"
+    ? "created"
+    : !force && await directoriesEqual(source, destination) ? "unchanged" : "refreshed";
+  if (!check && status !== "unchanged") {
+    if (kind === "directory") await rm(destination, { recursive: true, force: true });
+    await cp(source, destination, { recursive: true });
+  }
+  return status;
 }
 
 function samePath(left, right) {
@@ -185,19 +290,31 @@ async function cleanupState(repositoryRoot) {
 }
 
 async function verifyInstalledSurface(repositoryRoot) {
+  const missing = [];
   for (const relative of requiredSurface) {
-    await access(path.join(repositoryRoot, relative));
+    try {
+      await access(path.join(repositoryRoot, relative));
+    } catch {
+      missing.push(relative);
+    }
   }
-  return { ok: true, required: requiredSurface };
+  return { ok: missing.length === 0, required: requiredSurface, missing };
 }
 
-async function upsertManagedBlock(file, body) {
+async function upsertManagedBlock(file, body, { check = false } = {}) {
   const block = `${startMarker}\n${body.trim()}\n${endMarker}`;
   if (!(await exists(file))) {
-    await writeFile(file, `${block}\n`, "utf8");
-    return "created";
+    if (!check) await writeFile(file, `${block}\n`, "utf8");
+    return check ? "would-create" : "created";
   }
 
+  const info = await lstat(file);
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw new Error(`refusing non-regular managed block file: ${file}`);
+  }
+  if (info.nlink > 1) {
+    throw new Error(`refusing hard-linked managed block file: ${file}`);
+  }
   const current = await readFile(file, "utf8");
   const start = current.indexOf(startMarker);
   const end = current.indexOf(endMarker);
@@ -206,24 +323,73 @@ async function upsertManagedBlock(file, body) {
   }
   if (start < 0) {
     const separator = current.endsWith("\n") ? "\n" : "\n\n";
-    await writeFile(file, `${current}${separator}${block}\n`, "utf8");
-    return "appended";
+    if (!check) await writeFile(file, `${current}${separator}${block}\n`, "utf8");
+    return check ? "would-append" : "appended";
   }
 
   const next = `${current.slice(0, start)}${block}${current.slice(end + endMarker.length)}`;
-  if (next !== current) await writeFile(file, next, "utf8");
-  return next === current ? "unchanged" : "updated";
+  if (next === current) return "unchanged";
+  if (!check) await writeFile(file, next, "utf8");
+  return check ? "would-update" : "updated";
 }
 
-async function install(target) {
+async function installHostSkill(repositoryRoot, specification, { check = false, force = false } = {}) {
+  const destination = path.join(repositoryRoot, ...specification.relative.split("/"));
+  await assertPathWithin({ root: repositoryRoot, candidate: destination });
+  const desired = await readFile(specification.source, "utf8");
+
+  if (!(await exists(destination))) {
+    if (!check) {
+      await mkdir(path.dirname(destination), { recursive: true });
+      await assertPathWithin({ root: repositoryRoot, candidate: destination });
+      await writeFile(destination, desired, "utf8");
+    }
+    return { status: check ? "would-create" : "created", conflict: null };
+  }
+
+  const info = await lstat(destination);
+  if (!info.isFile() || info.isSymbolicLink() || info.nlink > 1) {
+    return {
+      status: "preserved",
+      conflict: {
+        type: "host-skill-collision",
+        path: specification.relative,
+        message:
+          info.nlink > 1
+            ? "Existing host skill is hard-linked and cannot be safely refreshed; preserved."
+            : "Existing host skill is not a regular aihaus-managed file; preserved.",
+      },
+    };
+  }
+  const current = await readFile(destination, "utf8");
+  if (!current.includes(hostAdapterMarker)) {
+    return {
+      status: "preserved",
+      conflict: {
+        type: "host-skill-collision",
+        path: specification.relative,
+        message: "Existing user-owned host skill was preserved.",
+      },
+    };
+  }
+  if (current === desired && !force) return { status: "unchanged", conflict: null };
+  if (!check) await writeFile(destination, desired, "utf8");
+  return { status: check ? "would-refresh" : "refreshed", conflict: null };
+}
+
+async function install(target, { check = false, force = false } = {}) {
   const preflight = {
     node: assertNodeRuntime(),
     git: gitVersion(),
   };
   const repositoryRoot = await assertRepositoryRoot(path.resolve(target));
   const destinationRoot = path.join(repositoryRoot, ".aihaus");
-  await mkdir(destinationRoot, { recursive: true });
   await assertPathWithin({ root: repositoryRoot, candidate: destinationRoot });
+  const destinationKind = await entryKind(destinationRoot);
+  if (!["missing", "directory"].includes(destinationKind)) {
+    throw new Error(`refusing non-directory aihaus destination: ${destinationRoot}`);
+  }
+  if (!check && destinationKind === "missing") await mkdir(destinationRoot, { recursive: true });
 
   const installed = [
     ...managedFiles.map((file) => `.aihaus/${file}`),
@@ -237,60 +403,103 @@ async function install(target) {
     const destination = path.join(destinationRoot, directory);
     managedStatus.set(
       `.aihaus/${directory}/`,
-      await exists(destination) ? "refreshed" : "created",
+      await planManagedDirectory({
+        source,
+        destination,
+        root: destinationRoot,
+        check,
+        force,
+      }),
     );
-    await assertPathWithin({ root: destinationRoot, candidate: destination });
-    await rm(destination, { recursive: true, force: true });
-    await cp(source, destination, { recursive: true });
   }
   for (const file of managedFiles) {
     const destination = path.join(destinationRoot, file);
-    managedStatus.set(`.aihaus/${file}`, await exists(destination) ? "refreshed" : "created");
-    await assertPathWithin({ root: destinationRoot, candidate: destination });
-    await cp(path.join(sourceRoot, file), destination);
+    managedStatus.set(
+      `.aihaus/${file}`,
+      await planManagedFile({
+        source: path.join(sourceRoot, file),
+        destination,
+        root: destinationRoot,
+        check,
+        force,
+      }),
+    );
   }
   for (const file of metadataFiles) {
     const destination = path.join(destinationRoot, file);
-    managedStatus.set(`.aihaus/${file}`, await exists(destination) ? "refreshed" : "created");
-    await assertPathWithin({ root: destinationRoot, candidate: destination });
-    await cp(path.join(packageRoot, file), destination);
+    managedStatus.set(
+      `.aihaus/${file}`,
+      await planManagedFile({
+        source: path.join(packageRoot, file),
+        destination,
+        root: destinationRoot,
+        check,
+        force,
+      }),
+    );
   }
 
   const seeded = [];
+  const wouldSeed = [];
   const preserved = [];
   for (const relative of memoryFiles) {
     const source = path.join(sourceRoot, "memory", relative);
     const destination = path.join(destinationRoot, "memory", relative);
     await assertPathWithin({ root: destinationRoot, candidate: destination });
     if (!(await exists(destination))) {
-      await mkdir(path.dirname(destination), { recursive: true });
-      await cp(source, destination);
-      seeded.push(`memory/${relative}`);
+      if (check) {
+        wouldSeed.push(`memory/${relative}`);
+      } else {
+        await mkdir(path.dirname(destination), { recursive: true });
+        await cp(source, destination);
+        seeded.push(`memory/${relative}`);
+      }
     } else {
       preserved.push(`memory/${relative}`);
     }
   }
-  for (const status of kanbanStatuses) {
-    const destination = path.join(destinationRoot, "memory", "kanban", status);
-    await assertPathWithin({ root: destinationRoot, candidate: destination });
-    await mkdir(destination, { recursive: true });
+  if (!check) {
+    for (const status of kanbanStatuses) {
+      const destination = path.join(destinationRoot, "memory", "kanban", status);
+      await assertPathWithin({ root: destinationRoot, candidate: destination });
+      await mkdir(destination, { recursive: true });
+    }
+    const state = path.join(destinationRoot, "state");
+    await assertPathWithin({ root: destinationRoot, candidate: state });
+    await mkdir(state, { recursive: true });
   }
-  const state = path.join(destinationRoot, "state");
-  await assertPathWithin({ root: destinationRoot, candidate: state });
-  await mkdir(state, { recursive: true });
 
   const router = await readFile(path.join(packageRoot, "adapters", "router.md"), "utf8");
   const adapters = {};
   for (const file of ["AGENTS.md", "CLAUDE.md"]) {
     const destination = path.join(repositoryRoot, file);
     await assertPathWithin({ root: repositoryRoot, candidate: destination });
-    adapters[file] = await upsertManagedBlock(destination, router);
+    adapters[file] = await upsertManagedBlock(destination, router, { check });
   }
   await assertPathWithin({ root: repositoryRoot, candidate: path.join(repositoryRoot, ".gitignore") });
   adapters[".gitignore"] = await upsertManagedBlock(
     path.join(repositoryRoot, ".gitignore"),
     "/.aihaus-download/\n.aihaus/state/\n.aihaus/runtime/\n.aihaus/backups/",
+    { check },
   );
+
+  const conflicts = [];
+  const hostCapabilities = {
+    universal: {
+      invoke: "node .aihaus/tools/init.mjs --repo . --json",
+    },
+  };
+  for (const specification of hostSkillAdapters) {
+    const installedHostSkill = await installHostSkill(repositoryRoot, specification, { check, force });
+    if (installedHostSkill.conflict) conflicts.push(installedHostSkill.conflict);
+    hostCapabilities[specification.host] = {
+      adapter: specification.relative,
+      status: installedHostSkill.status,
+      available:
+        installedHostSkill.conflict === null && installedHostSkill.status !== "would-create",
+      ...specification.capability,
+    };
+  }
 
   const source = await sourceProvenance();
   const warnings = [];
@@ -300,20 +509,51 @@ async function install(target) {
     );
   }
   if (source.dirty) warnings.push("source checkout has uncommitted changes");
+  for (const conflict of conflicts) {
+    warnings.push(`user-owned host skill preserved at ${conflict.path}`);
+  }
+
+  const plannedCreated = installed.filter((relative) => managedStatus.get(relative) === "created");
+  const plannedRefreshed = installed.filter((relative) => managedStatus.get(relative) === "refreshed");
+  const unchanged = installed.filter((relative) => managedStatus.get(relative) === "unchanged");
+  const adapterChanges = Object.values(adapters).some((status) => status !== "unchanged");
+  const hostChanges = Object.values(hostCapabilities).some(
+    (capability) => capability.status && !["unchanged", "preserved"].includes(capability.status),
+  );
+  const changesRequired =
+    plannedCreated.length > 0 ||
+    plannedRefreshed.length > 0 ||
+    seeded.length > 0 ||
+    wouldSeed.length > 0 ||
+    adapterChanges ||
+    hostChanges;
+  const verification = await verifyInstalledSurface(repositoryRoot);
+  if (!check && !verification.ok) {
+    throw new Error(`installed surface verification failed: ${verification.missing.join(", ")}`);
+  }
 
   return {
     ok: true,
     scope: "repository-local",
+    mode: check ? "check" : "apply",
+    forced: force,
+    changesRequired,
     target: repositoryRoot,
     preflight,
     source,
     installed,
-    created: installed.filter((relative) => managedStatus.get(relative) === "created"),
-    refreshed: installed.filter((relative) => managedStatus.get(relative) === "refreshed"),
+    created: check ? [] : plannedCreated,
+    refreshed: check ? [] : plannedRefreshed,
+    unchanged,
+    wouldCreate: check ? plannedCreated : [],
+    wouldRefresh: check ? plannedRefreshed : [],
     seeded,
+    wouldSeed,
     preserved,
     adapters,
-    verification: await verifyInstalledSurface(repositoryRoot),
+    hostCapabilities,
+    conflicts,
+    verification,
     bootstrap: {
       command: "node .aihaus/tools/init.mjs --repo . --json",
       dryRun: "node .aihaus/tools/init.mjs --repo . --dry-run --json",
@@ -327,15 +567,18 @@ async function install(target) {
 }
 
 function parseArgs(args) {
-  const options = { target: process.cwd(), json: false };
+  const options = { target: process.cwd(), json: false, check: false, force: false };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--target") options.target = args[++index] ?? "";
     else if (arg === "--json") options.json = true;
+    else if (arg === "--check") options.check = true;
+    else if (arg === "--force") options.force = true;
     else if (arg === "-h" || arg === "--help") options.help = true;
     else throw new Error(`unknown option: ${arg}`);
   }
   if (!options.target) throw new Error("--target requires a path");
+  if (options.check && options.force) throw new Error("--check and --force cannot be combined");
   return options;
 }
 
@@ -343,10 +586,12 @@ async function main() {
   try {
     const options = parseArgs(process.argv.slice(2));
     if (options.help) {
-      process.stdout.write("Usage: node pkg/setup.mjs [--target <git-root>] [--json]\n");
+      process.stdout.write(
+        "Usage: node pkg/setup.mjs [--target <git-root>] [--check | --force] [--json]\n",
+      );
       return;
     }
-    const result = await install(options.target);
+    const result = await install(options.target, options);
     process.stdout.write(`${JSON.stringify(result, null, options.json ? 2 : 0)}\n`);
   } catch (error) {
     process.stderr.write(`${JSON.stringify({ ok: false, error: error.message })}\n`);

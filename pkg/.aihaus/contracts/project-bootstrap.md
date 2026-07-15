@@ -22,10 +22,17 @@ Discovery must:
 - exclude secret-bearing paths before reading content;
 - retain source path, content hash, tracked/worktree state, and reviewed commit;
 - distinguish safe facts from conflicts and memory candidates;
+- report whether authoritative evidence is sufficient for semantic synthesis;
+- exclude aihaus-managed routers and host skills from project evidence;
 - leave .aih-graph-consent, global settings, hooks, and user files untouched.
 
 The packet is disposable. Canonical project memory remains the Markdown under
 .aihaus/memory/project/.
+
+If `readyForSynthesis` is false, synthesis is blocked. Preserve the templates
+and report `no-authoritative-project-sources`. Generated aihaus adapters,
+installation metadata, the repository name alone, and transient host-tool
+versions do not make an empty repository ready.
 
 ## Evidence authority
 
@@ -59,6 +66,7 @@ rollback expectations without storing credentials or executing operations.
 ## Idempotency and completion
 
 Unchanged repository inputs produce byte-identical discovery state and no
-writes on a second run. Completion requires a fresh packet, reviewed canonical
-Markdown, preserved existing content, explicit conflicts and gaps, and status
-reporting initialized true and stale false.
+writes on a second run. Completion requires sufficient authoritative evidence,
+a fresh packet, reviewed canonical Markdown, preserved existing content,
+explicit conflicts and gaps, and status reporting initialized true,
+memoryReadiness ready, and stale false.

@@ -11,11 +11,12 @@ const setup = path.join(packageRoot, "setup.mjs");
 function usage() {
   return [
     "Usage:",
-    "  aihaus setup [--target <git-root>] [--json]",
+    "  aihaus setup [--target <git-root>] [--check | --force] [--json]",
     "  aihaus version [--json]",
     "  aihaus --help",
     "",
-    "setup installs or updates the repository-local aihaus package and verifies it.",
+    "setup installs or updates only changed repository-local package files.",
+    "Use --check to preview changes without writing, or --force to rewrite package-owned files.",
     "After setup, run node .aihaus/tools/init.mjs --repo . --json.",
   ].join("\n");
 }

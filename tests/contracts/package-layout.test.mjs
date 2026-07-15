@@ -65,6 +65,28 @@ test("portable contracts and durable project memory are present", async () => {
   );
 });
 
+test("repository-local host adapters expose only the supported init workflow", async () => {
+  const claude = await readFile(
+    path.join(root, "pkg", "adapters", "claude", "skills", "aih-init", "SKILL.md"),
+    "utf8",
+  );
+  const codex = await readFile(
+    path.join(root, "pkg", "adapters", "codex", "skills", "aih-init", "SKILL.md"),
+    "utf8",
+  );
+
+  for (const adapter of [claude, codex]) {
+    assert.match(adapter, /name: aih-init/);
+    assert.match(adapter, /AIHAUS-MANAGED: repository-local-host-adapter-v1/);
+    assert.match(adapter, /\.aihaus\/INIT\.md/);
+    assert.match(adapter, /project-bootstrap\.md/);
+    assert.doesNotMatch(adapter, /allowed-tools|hooks:|!`/);
+  }
+  assert.match(claude, /disable-model-invocation: true/);
+  assert.ok(claude.split(/\r?\n/).length <= 40);
+  assert.ok(codex.split(/\r?\n/).length <= 40);
+});
+
 test("legacy orchestration surfaces are absent from the canonical package", async () => {
   for (const directory of [
     "agents",
@@ -87,17 +109,22 @@ test("legacy orchestration surfaces are absent from the canonical package", asyn
   }
 });
 
-test("agent install guide rejects host-specific and global installation routes", async () => {
+test("agent install guide distinguishes repository adapters from global installation", async () => {
   const guide = await readFile(path.join(root, "INSTALL-VIA-LLM.md"), "utf8");
-  assert.match(guide, /not a Codex skill/i);
+  assert.match(guide, /not a global Codex skill/i);
   assert.match(guide, /npm exec/);
   assert.match(guide, /aihaus setup/);
+  assert.match(guide, /--check/);
+  assert.match(guide, /--force/);
+  assert.match(guide, /changesRequired/);
   assert.match(guide, /github-release/);
   assert.match(guide, /source\.pinned/);
   assert.match(guide, /package-owned/i);
   assert.ok(guide.includes("node .aihaus/tools/init.mjs --repo . --json"));
   assert.ok(guide.includes(".aihaus/contracts/project-bootstrap.md"));
-  assert.ok(guide.includes("Do not use /aih-init or /aih-env"));
+  assert.ok(guide.includes(".claude/skills/aih-init/SKILL.md"));
+  assert.ok(guide.includes(".agents/skills/aih-init/SKILL.md"));
+  assert.ok(guide.includes("Do not use /aih-env"));
 });
 
 test("customer README leads with GitHub Release setup and keeps cloning as fallback", async () => {
@@ -109,6 +136,8 @@ test("customer README leads with GitHub Release setup and keeps cloning as fallb
   const primary = readme.slice(releaseStart, sourceStart);
   assert.match(primary, /npm exec/);
   assert.match(primary, /aihaus setup/);
+  assert.match(primary, /--check/);
+  assert.match(primary, /--force/);
   assert.doesNotMatch(primary, /git clone|rm -rf|Remove-Item/);
   assert.ok(primary.includes(".aihaus/tools/init.mjs"));
 });

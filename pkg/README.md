@@ -18,6 +18,13 @@ can run it directly from source:
 node pkg/setup.mjs --target . --json
 ```
 
+Preview without writing, or explicitly repair every package-owned surface:
+
+```bash
+node pkg/setup.mjs --target . --check --json
+node pkg/setup.mjs --target . --force --json
+```
+
 It installs the portable core from `pkg/.aihaus/` plus package version metadata:
 
 - installed package version from `pkg/VERSION`;
@@ -26,13 +33,20 @@ It installs the portable core from `pkg/.aihaus/` plus package version metadata:
 - harness, evidence, adversarial-review, and ops-safety contracts;
 - deterministic tools;
 - missing project-memory and file-kanban seeds.
+- thin repository-local initialization skills for Claude Code and Codex.
 
-Package-owned surfaces are refreshed on every run. Existing memory is never
-overwritten. Existing root instructions are preserved outside bounded
-`AIHAUS:START` / `AIHAUS:END` blocks. The JSON result distinguishes created and
-refreshed package surfaces, seeded and preserved memory, adapter outcomes,
-source version/commit/tag provenance, verification, warnings, and whether the
-exact repository-local `.aihaus-download` source still needs cleanup.
+Package-owned surfaces are compared by content and only missing or different
+paths are written. An unchanged rerun is a no-op. `--check` reports planned
+changes without writing; `--force` rewrites package-owned paths. Existing
+memory is never overwritten, including in force mode. Existing root
+instructions are preserved outside bounded
+`AIHAUS:START` / `AIHAUS:END` blocks. Host skills are refreshed only when the
+aihaus ownership marker is present. User-owned collisions are preserved and
+reported. The JSON result distinguishes created, refreshed, unchanged, and
+planned package surfaces; seeded and preserved memory; adapter and
+host-capability outcomes; conflicts; source version/commit/tag provenance;
+verification; warnings; and whether the exact repository-local
+`.aihaus-download` source still needs cleanup.
 
 Release packaging adds `RELEASE.json` with the exact tag and commit. The setup
 report validates that metadata and reports `source.distribution` as
@@ -56,6 +70,16 @@ safe source evidence to all eight canonical memory files, while the active
 agent performs semantic synthesis under .aihaus/INIT.md. Existing memory,
 secret-bearing paths, global configuration, graph consent, and files outside
 the Git repository remain untouched.
+
+Discovery reports `readyForSynthesis`, `evidenceLevel`, and `memoryReadiness`.
+Generated aihaus routers and host skills do not count as project evidence. An
+empty repository remains uninitialized and keeps its memory templates until an
+authoritative project source is available.
+
+Claude Code exposes the thin wrapper as `/aih-init`. Codex exposes its
+repository skill as `$aih-init` or through `/skills`; exact custom slash parity
+is not promised. Both wrappers delegate to the same provider-neutral Node and
+Markdown contract.
 
 The public product contract, usage, and verification commands are documented in
 the repository [README](../README.md).
