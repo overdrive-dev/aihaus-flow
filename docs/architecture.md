@@ -30,6 +30,20 @@ responsibility; rooms describe work. Specialist heuristics such as security,
 migration, integration, complexity, and goal-backward verification are loaded
 as review lenses instead of permanent agent identities.
 
+## Host adapters
+
+The portable initialization semantics live in `.aihaus/tools/init.mjs`,
+`.aihaus/INIT.md`, and the project-bootstrap contract. Setup may add thin
+repository-local discovery wrappers at `.claude/skills/aih-init/SKILL.md` and
+`.agents/skills/aih-init/SKILL.md`. Claude Code exposes its wrapper as
+`/aih-init`; Codex exposes its repository skill as `$aih-init` or through
+`/skills`. The package does not emulate unsupported command syntax.
+
+Host skills contain an aihaus ownership marker. Setup refreshes only marked
+files; a pre-existing unmarked file at either path is user-owned, preserved,
+and reported as a conflict. No adapter changes user settings, installs a global
+hook, enables network access, or owns the canonical project memory.
+
 ## Memory and state
 
 Repository bootstrap follows the authoritative-memory boundary. The Node-only
@@ -39,6 +53,11 @@ routine in .aihaus/INIT.md guides an active coding agent through a reviewed
 synthesis into canonical Markdown under .aihaus/memory/project/. Discovery
 never promotes inference to an accepted rule and never replaces semantic
 memory with generated state.
+
+Discovery also evaluates evidence sufficiency. Generated aihaus routers and
+skills are excluded as project sources. When no authoritative project evidence
+exists, `readyForSynthesis` is false, canonical templates remain unchanged, and
+status cannot report the repository as initialized.
 
 Project Markdown and task files are authoritative. `.aihaus/state/` contains
 rebuildable indexes and caches. Deleting generated state may reduce speed but

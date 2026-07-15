@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.0 - 2026-07-15
+
+- Added thin repository-local `aih-init` skills for Claude Code and Codex while
+  keeping the Node bootstrap as the provider-neutral source of truth.
+- Added structured host-capability and collision reporting. Updates refresh
+  only aihaus-marked host skills and preserve user-owned files at the same path.
+- Added evidence-readiness gates so empty repositories keep their memory
+  templates and cannot be reported initialized from aihaus-generated adapters.
+- Made `aihaus setup` content-aware: unchanged reruns are no-ops, `--check`
+  previews changes without writing, and `--force` repairs package-owned files
+  while still preserving project memory and user-owned adapter collisions.
+- Rejected hard-linked managed files so setup cannot mutate an inode shared
+  with a path outside the repository.
+
 ## 1.1.0 - 2026-07-15
 
 - Added an offline, provider-neutral project bootstrap with deterministic

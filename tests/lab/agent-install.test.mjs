@@ -7,6 +7,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const packageVersion = (await readFile(path.join(root, "pkg", "VERSION"), "utf8")).trim();
+const releaseTag = `v${packageVersion}`;
 
 function run(command, args, cwd, allowFailure = false) {
   const result = spawnSync(command, args, { cwd, encoding: "utf8" });
@@ -55,7 +57,7 @@ test("agent install stays local and reports provenance, preservation, and cleanu
     assert.equal(report.scope, "repository-local");
     assert.equal(report.target, await realpath(consumer));
     assert.equal(report.source.distribution, "git");
-    assert.equal(report.source.version, "1.1.0");
+    assert.equal(report.source.version, packageVersion);
     assert.match(report.source.commit, /^[0-9a-f]{40}$/);
     assert.equal(report.source.pinned, false);
     assert.equal(report.source.dirty, false);
@@ -63,6 +65,13 @@ test("agent install stays local and reports provenance, preservation, and cleanu
     assert.deepEqual(report.cleanup, { path: ".aihaus-download", pending: true });
     assert.equal(report.adapters["AGENTS.md"], "appended");
     assert.equal(report.adapters["CLAUDE.md"], "appended");
+    assert.equal(report.hostCapabilities.claudeCode.status, "created");
+    assert.equal(report.hostCapabilities.claudeCode.available, true);
+    assert.equal(report.hostCapabilities.claudeCode.invoke, "/aih-init");
+    assert.equal(report.hostCapabilities.codex.status, "created");
+    assert.equal(report.hostCapabilities.codex.available, true);
+    assert.equal(report.hostCapabilities.codex.invoke, "$aih-init");
+    assert.equal(report.hostCapabilities.codex.customSlash, false);
     assert.equal(report.verification.ok, true);
     assert.equal(report.bootstrap.command, "node .aihaus/tools/init.mjs --repo . --json");
 
@@ -73,21 +82,45 @@ test("agent install stays local and reports provenance, preservation, and cleanu
       /# Consumer Claude instructions/,
     );
     assert.match(await readFile(path.join(consumer, ".gitignore"), "utf8"), /^\*\.log$/m);
-    assert.equal(await readFile(path.join(consumer, ".aihaus", "VERSION"), "utf8"), "1.1.0\n");
+    assert.equal(
+      await readFile(path.join(consumer, ".aihaus", "VERSION"), "utf8"),
+      `${packageVersion}\n`,
+    );
+    assert.match(
+      await readFile(
+        path.join(consumer, ".claude", "skills", "aih-init", "SKILL.md"),
+        "utf8",
+      ),
+      /disable-model-invocation: true/,
+    );
+    assert.match(
+      await readFile(
+        path.join(consumer, ".agents", "skills", "aih-init", "SKILL.md"),
+        "utf8",
+      ),
+      /name: aih-init/,
+    );
     assert.equal(await readFile(sentinel, "utf8"), "outside remains untouched\n");
     assert.equal(run("git", ["check-ignore", ".aihaus-download"], consumer).status, 0);
     assert.doesNotMatch(run("git", ["status", "--short"], consumer).stdout, /\.aihaus-download/);
-    assert.equal(await readFile(path.join(download, "pkg", "VERSION"), "utf8"), "1.1.0\n");
+    assert.equal(
+      await readFile(path.join(download, "pkg", "VERSION"), "utf8"),
+      `${packageVersion}\n`,
+    );
 
-    run("git", ["tag", "v1.1.0"], download);
+    run("git", ["tag", releaseTag], download);
     const pinnedResult = run(process.execPath, [setup, "--target", consumer, "--json"], consumer);
     const pinnedReport = JSON.parse(pinnedResult.stdout);
     assert.equal(pinnedReport.source.distribution, "git");
     assert.equal(pinnedReport.source.pinned, true);
-    assert.equal(pinnedReport.source.ref, "v1.1.0");
+    assert.equal(pinnedReport.source.ref, releaseTag);
     assert.ok(!pinnedReport.warnings.some((warning) => /not pinned to a release tag/.test(warning)));
     assert.deepEqual(pinnedReport.created, []);
-    assert.deepEqual(pinnedReport.refreshed, pinnedReport.installed);
+    assert.deepEqual(pinnedReport.refreshed, []);
+    assert.deepEqual(pinnedReport.unchanged, pinnedReport.installed);
+    assert.equal(pinnedReport.changesRequired, false);
+    assert.equal(pinnedReport.hostCapabilities.claudeCode.status, "unchanged");
+    assert.equal(pinnedReport.hostCapabilities.codex.status, "unchanged");
   } finally {
     await rm(labRoot, { recursive: true, force: true });
   }

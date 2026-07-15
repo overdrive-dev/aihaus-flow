@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-import { access, realpath } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 async function exists(target) {
   try {
-    await access(target);
+    await lstat(target);
     return true;
   } catch {
     return false;
@@ -26,7 +26,11 @@ export async function realpathAllowMissing(target) {
     probe = parent;
   }
 
-  return path.resolve(await realpath(probe), ...suffix);
+  try {
+    return path.resolve(await realpath(probe), ...suffix);
+  } catch (error) {
+    throw new Error(`cannot safely resolve existing path entry ${probe}: ${error.message}`);
+  }
 }
 
 function samePath(left, right) {

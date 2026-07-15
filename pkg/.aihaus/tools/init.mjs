@@ -9,6 +9,12 @@ import { assertPathWithin } from "./path-safety.mjs";
 const minimumNodeMajor = 22;
 const packetRelative = ".aihaus/state/bootstrap/discovery.json";
 const maximumHashedBytes = 1024 * 1024;
+const hostAdapterPaths = new Set([
+  ".agents/skills/aih-init/SKILL.md",
+  ".claude/skills/aih-init/SKILL.md",
+]);
+const managedBlockStart = "<!-- AIHAUS:START -->";
+const managedBlockEnd = "<!-- AIHAUS:END -->";
 const templateHashes = new Map([
   ["business-rules.md", "3dc7797922a4ad520187db053ca088196d6dc6d1aebcd6106731bc8bd5c5a73d"],
   ["decisions.md", "506547082113998a90403338337932a7864a55c74e821635a5d8db587967d98d"],
@@ -126,6 +132,24 @@ const sourceRootNames = new Set([
   "client",
 ]);
 const testRootNames = new Set(["test", "tests", "spec", "specs", "__tests__"]);
+const authoritativeKinds = new Set([
+  "adapter",
+  "architecture",
+  "ci",
+  "container",
+  "decision",
+  "deployment",
+  "manifest",
+  "migration",
+  "readme",
+  "test-config",
+]);
+const applicationExtensions = new Set([
+  ".c", ".cc", ".clj", ".cljs", ".cpp", ".cs", ".dart", ".ex", ".exs",
+  ".fs", ".fsx", ".go", ".h", ".hpp", ".java", ".js", ".jsx", ".kt",
+  ".kts", ".mjs", ".php", ".py", ".rb", ".rs", ".scala", ".sh", ".sql",
+  ".svelte", ".swift", ".ts", ".tsx", ".vue",
+]);
 
 async function exists(target) {
   try {
@@ -221,6 +245,36 @@ function isSensitive(relative) {
   if (/\.(pem|key|p12|pfx|jks|keystore|tfvars)$/.test(base)) return true;
   if (/^terraform\.tfstate(?:\.|$)/.test(base)) return true;
   return sensitiveToken.test(base);
+}
+
+function stripAihausManagedBlock(text) {
+  const start = text.indexOf(managedBlockStart);
+  const end = text.indexOf(managedBlockEnd);
+  if (start < 0 || end < start) return text;
+  return text.slice(0, start) + text.slice(end + managedBlockEnd.length);
+}
+
+function isGeneratedAihausAdapter(relative, text) {
+  const normalized = normalize(relative);
+  const lower = normalized.toLowerCase();
+  if (lower === "agents.md" || lower === "claude.md") {
+    return text.includes(managedBlockStart) && stripAihausManagedBlock(text).trim() === "";
+  }
+  return false;
+}
+
+function isAuthoritativeSource(source) {
+  if (source.kinds.some((kind) => authoritativeKinds.has(kind))) return true;
+  if (!source.kinds.includes("document")) return false;
+  const base = path.posix.basename(source.path.toLowerCase());
+  return /^(project-brief|project-overview|product|requirements|specification|contributing|development|roadmap|runbook|operations)\.md$/.test(base);
+}
+
+function isApplicationSource(relative) {
+  const normalized = normalize(relative).toLowerCase();
+  const segments = normalized.split("/");
+  if (segments.some((segment) => segment.startsWith("."))) return false;
+  return applicationExtensions.has(path.posix.extname(normalized));
 }
 
 function classify(relative) {
@@ -395,6 +449,36 @@ async function memoryTargets(repository, sources, warnings) {
   return targets;
 }
 
+function readinessFor(sources, safePaths, targets) {
+  const authoritativeSources = sources.filter(isAuthoritativeSource);
+  const applicationSources = safePaths.filter(isApplicationSource);
+  const evidenceSignals = authoritativeSources.length + applicationSources.length;
+  const readyForSynthesis = evidenceSignals > 0;
+  const evidenceLevel = evidenceSignals === 0
+    ? "insufficient"
+    : evidenceSignals === 1 ? "limited" : "sufficient";
+  const existingTargets = targets.filter((target) => target.status === "existing").length;
+  const memoryReadiness = !readyForSynthesis || existingTargets === 0
+    ? "uninitialized"
+    : existingTargets === targets.length ? "ready" : "partial";
+  return {
+    readyForSynthesis,
+    evidenceLevel,
+    memoryReadiness,
+    evidence: {
+      authoritativeSources: authoritativeSources.map((source) => source.path),
+      applicationSourceCount: applicationSources.length,
+      applicationSourceExamples: applicationSources.slice(0, 25),
+    },
+    blockers: readyForSynthesis
+      ? []
+      : [{
+          id: "no-authoritative-project-sources",
+          message: "Add a README, PROJECT-BRIEF.md, manifest, or application source before synthesis.",
+        }],
+  };
+}
+
 async function discover(repository) {
   const warnings = [];
   const commit = git(repository, ["rev-parse", "--verify", "HEAD"], true)?.trim() || null;
@@ -413,6 +497,10 @@ async function discover(repository) {
   const sourceText = new Map();
 
   for (const relative of safePaths) {
+    if (hostAdapterPaths.has(normalize(relative))) {
+      excluded.push({ path: relative, reason: "host-skill-adapter" });
+      continue;
+    }
     const kinds = classify(relative);
     if (kinds.length === 0) continue;
     const file = path.join(repository, ...relative.split("/"));
@@ -436,8 +524,13 @@ async function discover(repository) {
     let sha256 = null;
     if (info.size <= maximumHashedBytes) {
       content = await readFile(file);
+      const text = content.toString("utf8");
+      if (isGeneratedAihausAdapter(relative, text)) {
+        excluded.push({ path: relative, reason: "aihaus-managed-adapter" });
+        continue;
+      }
       sha256 = digest(content);
-      sourceText.set(relative, content.toString("utf8"));
+      sourceText.set(relative, text);
     } else {
       warnings.push("source exceeds hash limit and was not read: " + relative);
     }
@@ -459,12 +552,17 @@ async function discover(repository) {
     .filter((source) => source.kinds.includes("manifest"))
     .map((source) => parseManifest(source, sourceText.get(source.path) ?? "", warnings));
   const conflicts = identityConflicts(manifests);
+  const layout = layoutFacts(safePaths);
   const targets = await memoryTargets(repository, sources, warnings);
+  const readiness = readinessFor(sources, safePaths, targets);
   if (!commit) warnings.push("repository has no reviewed Git commit; provenance is worktree-only");
   if (sourcePaths(sources, "adapter").length === 0) {
     warnings.push("no AGENTS.md or CLAUDE.md adapter source was found");
   }
   if (sources.length === 0) warnings.push("no safe bootstrap sources were discovered");
+  if (!readiness.readyForSynthesis) {
+    warnings.push("insufficient authoritative repository evidence; semantic synthesis must not run");
+  }
   if (conflicts.length > 0) warnings.push("discovered evidence contains unresolved conflicts");
 
   const packet = {
@@ -494,11 +592,15 @@ async function discover(repository) {
       migrations: sourcePaths(sources, "migration"),
       architecture: sourcePaths(sources, "architecture"),
       deployment: sourcePaths(sources, "deployment"),
-      layout: layoutFacts(safePaths),
+      layout,
     },
     conflicts,
     memoryTargets: targets,
+    readiness,
     nextStep: {
+      action: readiness.readyForSynthesis
+        ? "synthesize-project-memory"
+        : "add-authoritative-project-source",
       instruction: ".aihaus/INIT.md",
       contract: ".aihaus/contracts/project-bootstrap.md",
       canonicalMemory: ".aihaus/memory/project/",
@@ -540,10 +642,14 @@ function baseResult(repository, mode, packet, warnings, state) {
     conflicts: packet.conflicts,
     warnings,
     sources: packet.sources,
+    readyForSynthesis: packet.readiness.readyForSynthesis,
+    evidenceLevel: packet.readiness.evidenceLevel,
+    memoryReadiness: packet.readiness.memoryReadiness,
     memory: {
       targets: packet.memoryTargets,
       instruction: packet.nextStep.instruction,
       contract: packet.nextStep.contract,
+      readiness: packet.readiness,
     },
     packet: {
       path: packetRelative,
@@ -564,7 +670,11 @@ async function execute(options) {
   if (options.status) {
     result.packet.action = state.present ? state.same ? "unchanged" : "stale" : "missing";
     result.status = {
-      initialized: state.present,
+      discoveryInitialized: state.present,
+      initialized: state.present && packet.readiness.memoryReadiness === "ready",
+      readyForSynthesis: packet.readiness.readyForSynthesis,
+      evidenceLevel: packet.readiness.evidenceLevel,
+      memoryReadiness: packet.readiness.memoryReadiness,
       stale: state.present ? !state.same : null,
     };
     return result;

@@ -135,6 +135,9 @@ test("bootstrap discovers safe local evidence, preserves memory, and is idempote
     assert.equal(first.schema, "aihaus.bootstrap.result.v1");
     assert.equal(first.ok, true);
     assert.equal(first.mode, "apply");
+    assert.equal(first.readyForSynthesis, true);
+    assert.equal(first.evidenceLevel, "sufficient");
+    assert.equal(first.memoryReadiness, "partial");
     assert.equal(first.repo, await realpath(repository));
     assert.match(first.commit, /^[0-9a-f]{40}$/);
     assert.equal(first.packet.path, ".aihaus/state/bootstrap/discovery.json");
@@ -210,7 +213,9 @@ test("bootstrap discovers safe local evidence, preserves memory, and is idempote
       ).stdout,
     );
     assert.equal(status.mode, "status");
-    assert.equal(status.status.initialized, true);
+    assert.equal(status.status.discoveryInitialized, true);
+    assert.equal(status.status.initialized, false);
+    assert.equal(status.status.memoryReadiness, "partial");
     assert.equal(status.status.stale, false);
     assert.deepEqual(status.created, []);
     assert.deepEqual(status.updated, []);
@@ -256,6 +261,125 @@ test("bootstrap discovers safe local evidence, preserves memory, and is idempote
     assert.equal(refreshed.packet.action, "updated");
   } finally {
     await rm(labRoot, { recursive: true, force: true });
+  }
+});
+
+test("bootstrap blocks synthesis in an empty repository and ignores generated adapters", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-bootstrap-empty-"));
+  try {
+    await initializeGit(repository);
+    await writeFile(path.join(repository, ".gitattributes"), "* text=auto eol=lf\n", "utf8");
+    commitAll(repository, "seed empty repository");
+    const init = install(repository);
+    const before = new Map();
+    for (const name of memoryNames) {
+      before.set(
+        name,
+        await readFile(path.join(repository, ".aihaus", "memory", "project", name), "utf8"),
+      );
+    }
+
+    const result = JSON.parse(
+      run(process.execPath, [init, "--repo", repository, "--json"], repository).stdout,
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.readyForSynthesis, false);
+    assert.equal(result.evidenceLevel, "insufficient");
+    assert.equal(result.memoryReadiness, "uninitialized");
+    assert.deepEqual(result.sources, []);
+    assert.ok(result.warnings.some((warning) => /insufficient authoritative/i.test(warning)));
+    assert.ok(
+      result.skipped.some(
+        (entry) => entry.path === "AGENTS.md" && entry.reason === "aihaus-managed-adapter",
+      ),
+    );
+    assert.ok(
+      result.skipped.some(
+        (entry) =>
+          entry.path === ".claude/skills/aih-init/SKILL.md" &&
+          entry.reason === "host-skill-adapter",
+      ),
+    );
+    assert.ok(
+      result.skipped.some(
+        (entry) =>
+          entry.path === ".agents/skills/aih-init/SKILL.md" &&
+          entry.reason === "host-skill-adapter",
+      ),
+    );
+    for (const name of memoryNames) {
+      assert.equal(
+        await readFile(path.join(repository, ".aihaus", "memory", "project", name), "utf8"),
+        before.get(name),
+      );
+    }
+
+    const status = JSON.parse(
+      run(
+        process.execPath,
+        [init, "--repo", repository, "--status", "--json"],
+        repository,
+      ).stdout,
+    );
+    assert.equal(status.status.discoveryInitialized, true);
+    assert.equal(status.status.initialized, false);
+    assert.equal(status.status.readyForSynthesis, false);
+    assert.equal(status.status.memoryReadiness, "uninitialized");
+    assert.equal(status.status.stale, false);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("bootstrap rejects incidental files and host skills as authoritative evidence", async () => {
+  const fixtures = [
+    {
+      name: "notes",
+      seed: async (repository) => writeFile(path.join(repository, "notes.md"), "# Scratch notes\n", "utf8"),
+    },
+    {
+      name: "empty-source-root",
+      seed: async (repository) => {
+        await mkdir(path.join(repository, "src"), { recursive: true });
+        await writeFile(path.join(repository, "src", "empty.txt"), "placeholder\n", "utf8");
+      },
+    },
+    {
+      name: "colliding-host-skill",
+      seed: async (repository) => {
+        const skill = path.join(repository, ".claude", "skills", "aih-init", "SKILL.md");
+        await mkdir(path.dirname(skill), { recursive: true });
+        await writeFile(skill, "---\nname: aih-init\ndescription: User workflow\n---\n", "utf8");
+      },
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const repository = await mkdtemp(path.join(os.tmpdir(), `aihaus-bootstrap-${fixture.name}-`));
+    try {
+      await initializeGit(repository);
+      await writeFile(path.join(repository, ".gitattributes"), "* text=auto eol=lf\n", "utf8");
+      await fixture.seed(repository);
+      commitAll(repository, `seed ${fixture.name}`);
+      const init = install(repository);
+
+      const result = JSON.parse(
+        run(process.execPath, [init, "--repo", repository, "--dry-run", "--json"], repository).stdout,
+      );
+
+      assert.equal(result.readyForSynthesis, false, fixture.name);
+      assert.equal(result.evidenceLevel, "insufficient", fixture.name);
+      assert.equal(result.memoryReadiness, "uninitialized", fixture.name);
+      assert.deepEqual(result.memory.readiness.evidence.authoritativeSources, [], fixture.name);
+      assert.equal(result.memory.readiness.evidence.applicationSourceCount, 0, fixture.name);
+      assert.ok(
+        !result.sources.some((source) => source.path.includes("skills/aih-init/SKILL.md")),
+        fixture.name,
+      );
+    } finally {
+      await rm(repository, { recursive: true, force: true });
+    }
   }
 });
 

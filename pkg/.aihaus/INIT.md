@@ -21,7 +21,15 @@ manifest facts, layout facts, memory targets, exclusions, and conflicts.
 Sensitive paths are excluded before file content is read. The packet is
 rebuildable state, not canonical memory.
 
+Check `readyForSynthesis` before continuing. When it is false, the repository
+does not contain authoritative project evidence yet. Preserve every memory
+template, report the blocker and ask the user to add a README,
+PROJECT-BRIEF.md, manifest, or application source. Do not fill the files with
+placeholder, aihaus-installation, host-toolchain, or unresolved-only content.
+
 ## Phase 2: agent synthesis
+
+Only continue when `readyForSynthesis` is true.
 
 1. Read .aihaus/contracts/harness.md,
    .aihaus/contracts/project-bootstrap.md, and the discovery packet.
@@ -56,8 +64,8 @@ rebuildable state, not canonical memory.
     node .aihaus/tools/init.mjs --repo . --status --json
 
 Completion requires status.initialized true, status.stale false, reviewed
-changes to canonical Markdown, and a report of preserved files, conflicts, and
-unresolved gaps.
+changes to canonical Markdown, `memoryReadiness` equal to `ready`, and a report
+of preserved files, conflicts, and unresolved gaps.
 
 ## Copy-paste prompt for any coding agent
 
