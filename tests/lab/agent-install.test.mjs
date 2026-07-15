@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -53,7 +53,7 @@ test("agent install stays local and reports provenance, preservation, and cleanu
 
     assert.equal(report.ok, true);
     assert.equal(report.scope, "repository-local");
-    assert.equal(report.target, consumer);
+    assert.equal(report.target, await realpath(consumer));
     assert.equal(report.source.distribution, "git");
     assert.equal(report.source.version, "1.0.0");
     assert.match(report.source.commit, /^[0-9a-f]{40}$/);
