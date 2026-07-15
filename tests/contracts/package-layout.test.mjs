@@ -76,3 +76,25 @@ test("legacy orchestration surfaces are absent from the canonical package", asyn
     }
   }
 });
+
+test("agent install guide rejects host-specific and global installation routes", async () => {
+  const guide = await readFile(path.join(root, "INSTALL-VIA-LLM.md"), "utf8");
+  assert.match(guide, /not a Codex skill/i);
+  assert.match(guide, /npm exec/);
+  assert.match(guide, /aihaus setup/);
+  assert.match(guide, /github-release/);
+  assert.match(guide, /source\.pinned/);
+  assert.match(guide, /package-owned/i);
+});
+
+test("customer README leads with GitHub Release setup and keeps cloning as fallback", async () => {
+  const readme = await readFile(path.join(root, "README.md"), "utf8");
+  const releaseStart = readme.indexOf("## Set up from a GitHub Release");
+  const sourceStart = readme.indexOf("## Install from source");
+  assert.ok(releaseStart > 0);
+  assert.ok(sourceStart > releaseStart);
+  const primary = readme.slice(releaseStart, sourceStart);
+  assert.match(primary, /npm exec/);
+  assert.match(primary, /aihaus setup/);
+  assert.doesNotMatch(primary, /git clone|rm -rf|Remove-Item/);
+});

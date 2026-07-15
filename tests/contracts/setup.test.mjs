@@ -31,10 +31,27 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     );
 
     const first = run(process.execPath, [setup, "--target", temp, "--json"], temp);
-    assert.equal(JSON.parse(first.stdout).ok, true);
+    const firstResult = JSON.parse(first.stdout);
+    assert.equal(firstResult.ok, true);
+    assert.equal(firstResult.scope, "repository-local");
+    assert.equal(firstResult.source.version, "1.0.0");
+    assert.match(firstResult.preflight.node, /^\d+\.\d+\.\d+/);
+    assert.match(firstResult.preflight.git, /^git version /);
+    assert.deepEqual(firstResult.created, firstResult.installed);
+    assert.deepEqual(firstResult.refreshed, []);
+    assert.ok(firstResult.preserved.includes("memory/project/decisions.md"));
+    assert.ok(!firstResult.seeded.includes("memory/project/decisions.md"));
+    assert.equal(firstResult.verification.ok, true);
+    assert.ok(firstResult.verification.required.includes(".aihaus/MAP.md"));
+    assert.deepEqual(firstResult.cleanup, { path: null, pending: false });
     await writeFile(path.join(temp, ".aihaus", "roles", "stale.md"), "stale\n", "utf8");
     const second = run(process.execPath, [setup, "--target", temp, "--json"], temp);
-    assert.equal(JSON.parse(second.stdout).ok, true);
+    const secondResult = JSON.parse(second.stdout);
+    assert.equal(secondResult.ok, true);
+    assert.deepEqual(secondResult.created, []);
+    assert.deepEqual(secondResult.refreshed, secondResult.installed);
+    assert.equal(secondResult.adapters["AGENTS.md"], "unchanged");
+    assert.ok(secondResult.preserved.includes("memory/project/decisions.md"));
 
     const agents = await readFile(path.join(temp, "AGENTS.md"), "utf8");
     assert.match(agents, /Existing project instructions/);
@@ -50,6 +67,7 @@ test("canonical setup is local, idempotent, and preserves project memory", async
       await readFile(path.join(temp, ".aihaus", "contracts", "harness.md"), "utf8"),
       /# Contract: harness/,
     );
+    assert.match(await readFile(path.join(temp, ".gitignore"), "utf8"), /^\/\.aihaus-download\/$/m);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

@@ -15,7 +15,9 @@ const tests = [
   "tests/contracts/graph-source.test.mjs",
   "tests/contracts/online-action-gate.test.mjs",
   "tests/contracts/path-safety.test.mjs",
+  "tests/lab/agent-install.test.mjs",
   "tests/lab/lab-controller.test.mjs",
+  "tests/lab/release-package.test.mjs",
 ].map((file) => path.join(root, file));
 
 const result = spawnSync(process.execPath, ["--test", ...tests], {

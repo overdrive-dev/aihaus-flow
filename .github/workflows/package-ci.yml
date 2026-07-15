@@ -6,24 +6,32 @@ on:
     paths:
       - 'pkg/**'
       - 'tools/aihaus-lab.mjs'
+      - 'tools/build-package-release.mjs'
       - 'tools/lab/**'
       - 'tests/contracts/**'
       - 'tests/lab/**'
       - 'tools/run-contract-tests.mjs'
       - 'AGENTS.md'
       - 'CLAUDE.md'
+      - 'INSTALL-VIA-LLM.md'
+      - 'README.md'
       - '.github/workflows/package-ci.yml'
+      - '.github/workflows/package-release.yml'
   pull_request:
     paths:
       - 'pkg/**'
       - 'tools/aihaus-lab.mjs'
+      - 'tools/build-package-release.mjs'
       - 'tools/lab/**'
       - 'tests/contracts/**'
       - 'tests/lab/**'
       - 'tools/run-contract-tests.mjs'
       - 'AGENTS.md'
       - 'CLAUDE.md'
+      - 'INSTALL-VIA-LLM.md'
+      - 'README.md'
       - '.github/workflows/package-ci.yml'
+      - '.github/workflows/package-release.yml'
 
 jobs:
   contracts:

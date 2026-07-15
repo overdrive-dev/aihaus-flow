@@ -1,31 +1,64 @@
 # Install aihaus with a coding agent
 
+aihaus is a repository-local package. It is not a Codex skill, Claude runtime,
+plugin, website, or global agent installation. Use the versioned package asset
+from a GitHub Release; do not clone the source repository for a normal customer
+installation.
+
 Run the following request from the root of the Git repository that should use
 aihaus:
 
 ```text
-Install the repository-local aihaus package here.
+Set up the released aihaus package in this repository.
 
-1. Verify that the current directory is the Git repository root and that Git
-   and Node.js 22+ are available.
+Identity and scope:
+- aihaus is not a Codex skill, Claude runtime, plugin, or global installation.
+- Do not invoke skill-installer, install hooks, mutate user-level settings,
+  start a site, upload repository data, or clone the source repository.
+- Do not add aihaus to the consumer package.json or install it globally.
+
+1. Verify that the current directory is the Git repository root and that Git,
+   Node.js 22+, and npm are available.
+2. Use the explicit GitHub Release tag supplied by the user. Replace both
+   occurrences of <release-tag> below with that exact tag.
+3. Run this one setup command:
+      npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus setup --target . --json
+4. Treat the JSON result as authoritative. Require:
+   - ok: true and scope: repository-local;
+   - preflight Node and Git values;
+   - source.distribution: github-release;
+   - source.version, source.commit, and source.ref;
+   - source.pinned: true;
+   - verification.ok: true, including .aihaus/VERSION and the required package
+     entry points;
+   - created, refreshed, seeded, preserved, and adapters results;
+   - cleanup.path: null and cleanup.pending: false.
+5. Interpret ownership precisely. Paths in created/refreshed are package-owned;
+   refreshing them may replace prior package files. Project memory listed in
+   preserved and text outside bounded AIHAUS blocks remain user-owned. CLAUDE.md
+   is a host adapter, not evidence of a Claude runtime dependency.
+6. Read .aihaus/MAP.md and report version/ref provenance, package-owned changes,
+   preserved content, adapter results, verification, warnings, and readiness.
+```
+
+## Source-install fallback
+
+Use source installation only for aihaus development, unreleased evaluation, or
+the current optional `aih-graph` binary helper:
+
+```text
+1. Refuse to continue if .aihaus-download already exists.
 2. Clone https://github.com/overdrive-dev/aihaus-flow with --depth 1 into the
    temporary child directory .aihaus-download.
 3. Run:
       node .aihaus-download/pkg/setup.mjs --target . --json
-4. Read the JSON result and verify these files exist:
-      .aihaus/MAP.md
-      .aihaus/contracts/harness.md
-      .aihaus/roles/orchestrator.md
-      .aihaus/rooms/feature/CONTEXT.md
-5. Delete only the temporary .aihaus-download clone after resolving its real
-   path and confirming it is inside this repository.
-6. Do not install global hooks, mutate user-level agent settings, start a site,
-   or upload repository data.
-7. Read .aihaus/MAP.md and report the installed package surface plus any files
-   that setup preserved rather than replaced.
+4. Treat source.pinned: false as unreleased unless the checkout is at the tag
+   matching .aihaus/VERSION.
+5. Resolve the real path and delete only the .aihaus-download child after all
+   requested source helpers have finished.
 ```
 
-## Optional local index
+## Optional local index through the source fallback
 
 If the user asks for the code index, install the matching released `aih-graph`
 binary into `.aihaus/bin/` before deleting the temporary clone. Indexing consent

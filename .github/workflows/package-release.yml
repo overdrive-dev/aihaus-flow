@@ -1,0 +1,53 @@
+name: aihaus package release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: verify package contracts
+        run: node tools/run-contract-tests.mjs
+      - name: build versioned release package
+        run: >-
+          node tools/build-package-release.mjs
+          --tag "$GITHUB_REF_NAME"
+          --commit "$GITHUB_SHA"
+          --out dist
+          --json
+      - name: smoke release command
+        run: >-
+          npm exec --yes
+          --package="./dist/aihaus-flow-${GITHUB_REF_NAME}.tgz"
+          -- aihaus --help
+      - name: publish GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            Run from the root of the Git repository that should use aihaus:
+
+            ```bash
+            npm exec --yes --package=https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aihaus-flow-${{ github.ref_name }}.tgz -- aihaus setup --target . --json
+            ```
+
+            The command uses the versioned GitHub Release package, installs or
+            updates the repository-local `.aihaus` surface, preserves project
+            memory, and verifies readiness. The `.sha256` asset supports an
+            independent archive integrity check.
+          files: |
+            dist/aihaus-flow-*.tgz
+            dist/aihaus-flow-*.tgz.sha256
