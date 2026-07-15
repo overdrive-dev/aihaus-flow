@@ -5,6 +5,7 @@ workflow, role, or ledger.
 
 | Intent | Load |
 |---|---|
+| initialize or refresh project memory | INIT.md, contracts/project-bootstrap.md, and the research room |
 | deliver a behavior change | `rooms/feature/CONTEXT.md` |
 | diagnose and fix a defect | `rooms/bugfix/CONTEXT.md` |
 | gather evidence before deciding | `rooms/research/CONTEXT.md` |

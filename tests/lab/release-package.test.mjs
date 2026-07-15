@@ -51,20 +51,20 @@ test("GitHub Release tarball runs aihaus setup without a visible clone", async (
     await mkdir(dist);
     const built = run(
       process.execPath,
-      [builder, "--tag", "v1.0.0", "--commit", commit, "--out", dist, "--json"],
+      [builder, "--tag", "v1.1.0", "--commit", commit, "--out", dist, "--json"],
       root,
     );
     const release = JSON.parse(built.stdout);
     assert.equal(release.ok, true);
-    assert.equal(release.tag, "v1.0.0");
-    assert.equal(release.version, "1.0.0");
-    assert.equal(path.basename(release.asset), "aihaus-flow-v1.0.0.tgz");
+    assert.equal(release.tag, "v1.1.0");
+    assert.equal(release.version, "1.1.0");
+    assert.equal(path.basename(release.asset), "aihaus-flow-v1.1.0.tgz");
 
     const archive = await readFile(release.asset);
     const digest = createHash("sha256").update(archive).digest("hex");
     assert.equal(
       await readFile(release.checksum, "utf8"),
-      `${digest}  aihaus-flow-v1.0.0.tgz\n`,
+      `${digest}  aihaus-flow-v1.1.0.tgz\n`,
     );
 
     await mkdir(consumer);
@@ -95,15 +95,33 @@ test("GitHub Release tarball runs aihaus setup without a visible clone", async (
     assert.equal(installed.ok, true);
     assert.equal(installed.scope, "repository-local");
     assert.equal(installed.source.distribution, "github-release");
-    assert.equal(installed.source.version, "1.0.0");
-    assert.equal(installed.source.ref, "v1.0.0");
+    assert.equal(installed.source.version, "1.1.0");
+    assert.equal(installed.source.ref, "v1.1.0");
     assert.equal(installed.source.commit, commit);
     assert.equal(installed.source.pinned, true);
     assert.equal(installed.verification.ok, true);
     assert.deepEqual(installed.cleanup, { path: null, pending: false });
+
+    const bootstrap = JSON.parse(
+      run(
+        process.execPath,
+        [
+          path.join(consumer, ".aihaus", "tools", "init.mjs"),
+          "--repo",
+          consumer,
+          "--dry-run",
+          "--json",
+        ],
+        consumer,
+      ).stdout,
+    );
+    assert.equal(bootstrap.ok, true);
+    assert.equal(bootstrap.mode, "dry-run");
+    assert.deepEqual(bootstrap.wouldCreate, [".aihaus/state/bootstrap/discovery.json"]);
+
     assert.match(await readFile(path.join(consumer, "AGENTS.md"), "utf8"), /Existing consumer/);
     assert.match(await readFile(path.join(consumer, "README.md"), "utf8"), /Uncommitted customer work/);
-    assert.equal(await readFile(path.join(consumer, ".aihaus", "VERSION"), "utf8"), "1.0.0\n");
+    assert.equal(await readFile(path.join(consumer, ".aihaus", "VERSION"), "utf8"), "1.1.0\n");
 
     const updated = JSON.parse(run(npmCommand, [...npmPrefix, ...command], consumer, environment).stdout);
     assert.deepEqual(updated.created, []);
@@ -129,7 +147,7 @@ test("release builder rejects a tag that does not match pkg/VERSION", async () =
     { cwd: root, encoding: "utf8" },
   );
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /release tag must be v1\.0\.0/);
+  assert.match(result.stderr, /release tag must be v1\.1\.0/);
 });
 
 test("package release workflow publishes the tarball and checksum", async () => {

@@ -55,7 +55,7 @@ test("agent install stays local and reports provenance, preservation, and cleanu
     assert.equal(report.scope, "repository-local");
     assert.equal(report.target, await realpath(consumer));
     assert.equal(report.source.distribution, "git");
-    assert.equal(report.source.version, "1.0.0");
+    assert.equal(report.source.version, "1.1.0");
     assert.match(report.source.commit, /^[0-9a-f]{40}$/);
     assert.equal(report.source.pinned, false);
     assert.equal(report.source.dirty, false);
@@ -64,6 +64,7 @@ test("agent install stays local and reports provenance, preservation, and cleanu
     assert.equal(report.adapters["AGENTS.md"], "appended");
     assert.equal(report.adapters["CLAUDE.md"], "appended");
     assert.equal(report.verification.ok, true);
+    assert.equal(report.bootstrap.command, "node .aihaus/tools/init.mjs --repo . --json");
 
     assert.match(await readFile(path.join(consumer, "README.md"), "utf8"), /User work in progress/);
     assert.match(await readFile(path.join(consumer, "AGENTS.md"), "utf8"), /# Consumer agents/);
@@ -72,18 +73,18 @@ test("agent install stays local and reports provenance, preservation, and cleanu
       /# Consumer Claude instructions/,
     );
     assert.match(await readFile(path.join(consumer, ".gitignore"), "utf8"), /^\*\.log$/m);
-    assert.equal(await readFile(path.join(consumer, ".aihaus", "VERSION"), "utf8"), "1.0.0\n");
+    assert.equal(await readFile(path.join(consumer, ".aihaus", "VERSION"), "utf8"), "1.1.0\n");
     assert.equal(await readFile(sentinel, "utf8"), "outside remains untouched\n");
     assert.equal(run("git", ["check-ignore", ".aihaus-download"], consumer).status, 0);
     assert.doesNotMatch(run("git", ["status", "--short"], consumer).stdout, /\.aihaus-download/);
-    assert.equal(await readFile(path.join(download, "pkg", "VERSION"), "utf8"), "1.0.0\n");
+    assert.equal(await readFile(path.join(download, "pkg", "VERSION"), "utf8"), "1.1.0\n");
 
-    run("git", ["tag", "v1.0.0"], download);
+    run("git", ["tag", "v1.1.0"], download);
     const pinnedResult = run(process.execPath, [setup, "--target", consumer, "--json"], consumer);
     const pinnedReport = JSON.parse(pinnedResult.stdout);
     assert.equal(pinnedReport.source.distribution, "git");
     assert.equal(pinnedReport.source.pinned, true);
-    assert.equal(pinnedReport.source.ref, "v1.0.0");
+    assert.equal(pinnedReport.source.ref, "v1.1.0");
     assert.ok(!pinnedReport.warnings.some((warning) => /not pinned to a release tag/.test(warning)));
     assert.deepEqual(pinnedReport.created, []);
     assert.deepEqual(pinnedReport.refreshed, pinnedReport.installed);

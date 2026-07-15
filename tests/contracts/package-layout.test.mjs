@@ -39,6 +39,7 @@ test("portable contracts and durable project memory are present", async () => {
     "evidence.md",
     "harness.md",
     "ops-safety.md",
+    "project-bootstrap.md",
   ]);
 
   const memory = (await readdir(path.join(packageRoot, "memory", "project"))).sort();
@@ -53,6 +54,15 @@ test("portable contracts and durable project memory are present", async () => {
     "procedures.md",
     "project.md",
   ]);
+
+  assert.match(
+    await readFile(path.join(packageRoot, "INIT.md"), "utf8"),
+    /provider-neutral initialization routine/i,
+  );
+  assert.match(
+    await readFile(path.join(packageRoot, "tools", "init.mjs"), "utf8"),
+    /aihaus\.bootstrap\.discovery\.v1/,
+  );
 });
 
 test("legacy orchestration surfaces are absent from the canonical package", async () => {
@@ -85,6 +95,9 @@ test("agent install guide rejects host-specific and global installation routes",
   assert.match(guide, /github-release/);
   assert.match(guide, /source\.pinned/);
   assert.match(guide, /package-owned/i);
+  assert.ok(guide.includes("node .aihaus/tools/init.mjs --repo . --json"));
+  assert.ok(guide.includes(".aihaus/contracts/project-bootstrap.md"));
+  assert.ok(guide.includes("Do not use /aih-init or /aih-env"));
 });
 
 test("customer README leads with GitHub Release setup and keeps cloning as fallback", async () => {
@@ -97,4 +110,5 @@ test("customer README leads with GitHub Release setup and keeps cloning as fallb
   assert.match(primary, /npm exec/);
   assert.match(primary, /aihaus setup/);
   assert.doesNotMatch(primary, /git clone|rm -rf|Remove-Item/);
+  assert.ok(primary.includes(".aihaus/tools/init.mjs"));
 });
