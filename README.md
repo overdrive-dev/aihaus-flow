@@ -26,6 +26,20 @@ is not a Codex skill, Claude runtime, plugin, or global installation.
 Run installation commands from the root of the repository that will use
 aihaus.
 
+## Repository-local versus Claude-specific commands
+
+This README documents the provider-neutral repository-local package.
+
+| Installation model | Scope | Initialization |
+|---|---|---|
+| Full or legacy Claude-specific installation | User-level/provider-specific files installed separately | Slash commands such as /aih-init and /aih-env may exist |
+| Repository-local package documented here | Ordinary files inside one Git repository | node .aihaus/tools/init.mjs --repo . --json |
+
+The repository-local package does not install or emulate Claude slash commands,
+global hooks, or user settings. Older documentation paths such as
+.aihaus/project.md do not apply to this package. Its canonical project memory
+is under .aihaus/memory/project/.
+
 ## Set up with a coding agent
 
 This is the recommended customer path. Choose a tag from
@@ -46,6 +60,11 @@ Run the versioned GitHub Release package with npm exec and the `aihaus setup`
 command. Require source.distribution to be github-release and require
 source.pinned and verification.ok to be true. Report the installed version,
 package-owned changes, preserved content, adapters, warnings, and readiness.
+
+Then run node .aihaus/tools/init.mjs --repo . --json. Read .aihaus/INIT.md and
+.aihaus/contracts/project-bootstrap.md, synthesize the discovered evidence into
+.aihaus/memory/project/, preserve existing content, and finish with
+node .aihaus/tools/init.mjs --repo . --status --json.
 ```
 
 The full agent contract is also available in
@@ -54,11 +73,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Replace `<release-tag>` with the release you want:
+Current release (`v1.1.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus setup --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.1.0/aihaus-flow-v1.1.0.tgz -- aihaus setup --target . --json
 ```
+
+For another release, replace both occurrences of `v1.1.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -76,10 +97,14 @@ The setup JSON is the installation report. A released installation should show:
   "source": {
     "distribution": "github-release",
     "pinned": true,
-    "ref": "<release-tag>"
+    "ref": "v1.1.0"
   },
   "verification": {
     "ok": true
+  },
+  "bootstrap": {
+    "command": "node .aihaus/tools/init.mjs --repo . --json",
+    "instruction": ".aihaus/INIT.md"
   },
   "cleanup": {
     "path": null,
@@ -93,6 +118,9 @@ repository-local download directory behind.
 
 The installed entry points are:
 
+- .aihaus/INIT.md;
+- .aihaus/tools/init.mjs;
+- .aihaus/contracts/project-bootstrap.md;
 - `.aihaus/VERSION`;
 - `.aihaus/MAP.md`;
 - `.aihaus/contracts/harness.md`;
@@ -103,6 +131,7 @@ The installed entry points are:
 
 | Path | Purpose | Ownership on update |
 |---|---|---|
+| .aihaus/INIT.md | Provider-neutral memory synthesis routine | Package-owned and refreshed |
 | `.aihaus/MAP.md`, `rooms/`, `roles/`, `contracts/`, `tools/` | Portable aihaus workflow | Package-owned and refreshed |
 | `.aihaus/VERSION` | Installed package version | Package-owned and refreshed |
 | `.aihaus/memory/project/` | Project rules, decisions, knowledge, and procedures | Project-owned and preserved |
@@ -112,6 +141,47 @@ The installed entry points are:
 
 Text outside `AIHAUS:START` / `AIHAUS:END` blocks is preserved. `CLAUDE.md` is
 an adapter for compatible hosts, not a dependency on Claude.
+
+## Initialize project memory
+
+Setup installs preserved templates but does not guess project meaning. Run the
+deterministic offline discovery command:
+
+    node .aihaus/tools/init.mjs --repo . --json
+
+It writes only the ignored packet
+.aihaus/state/bootstrap/discovery.json. The packet contains source paths,
+hashes, Git/worktree provenance, safe manifest and layout facts, exclusions,
+conflicts, and a source plan for all eight canonical memory files. It does not
+read excluded secret-bearing paths, access the network, upload data, run
+services, deploy, or enable graph consent.
+
+Next, ask the active coding agent to follow .aihaus/INIT.md and
+.aihaus/contracts/project-bootstrap.md. The agent reviews candidate sources and
+updates .aihaus/memory/project/ without replacing existing content or turning
+inferences into accepted rules. This semantic phase is deliberately
+provider-neutral and reviewable instead of being hidden inside deterministic
+code.
+
+Preview without writing:
+
+    node .aihaus/tools/init.mjs --repo . --dry-run --json
+
+Check whether the discovery packet matches current inputs:
+
+    node .aihaus/tools/init.mjs --repo . --status --json
+
+Copy-paste prompt:
+
+~~~text
+Read .aihaus/MAP.md, .aihaus/contracts/harness.md,
+.aihaus/contracts/project-bootstrap.md, and .aihaus/INIT.md. Run the local
+bootstrap discovery command. Then populate .aihaus/memory/project/ using only
+verified repository evidence. Preserve existing content, cite source paths and
+the reviewed commit, keep inferences and conflicts explicit, and do not read or
+record secrets. Do not use slash commands, global aihaus state, network access,
+or graph indexing.
+~~~
 
 ## Start using aihaus
 
@@ -213,6 +283,11 @@ for production work.
 
 ## Troubleshooting
 
+- **Bootstrap packet missing or stale:** run
+  node .aihaus/tools/init.mjs --repo . --json, complete the synthesis in
+  .aihaus/INIT.md, rerun discovery, and require status.stale to be false.
+- **Conflicting bootstrap evidence:** preserve existing memory and report the
+  conflict; do not choose a business rule or project identity silently.
 - **`target must be the repository root`:** change to the Git repository root
   and rerun setup.
 - **Node version error:** install Node.js 22 or newer.

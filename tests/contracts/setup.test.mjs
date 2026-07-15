@@ -34,7 +34,7 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     const firstResult = JSON.parse(first.stdout);
     assert.equal(firstResult.ok, true);
     assert.equal(firstResult.scope, "repository-local");
-    assert.equal(firstResult.source.version, "1.0.0");
+    assert.equal(firstResult.source.version, "1.1.0");
     assert.match(firstResult.preflight.node, /^\d+\.\d+\.\d+/);
     assert.match(firstResult.preflight.git, /^git version /);
     assert.deepEqual(firstResult.created, firstResult.installed);
@@ -43,7 +43,17 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     assert.ok(!firstResult.seeded.includes("memory/project/decisions.md"));
     assert.equal(firstResult.verification.ok, true);
     assert.ok(firstResult.verification.required.includes(".aihaus/MAP.md"));
+    assert.ok(firstResult.verification.required.includes(".aihaus/INIT.md"));
+    assert.ok(
+      firstResult.verification.required.includes(".aihaus/contracts/project-bootstrap.md"),
+    );
+    assert.ok(firstResult.verification.required.includes(".aihaus/tools/init.mjs"));
     assert.deepEqual(firstResult.cleanup, { path: null, pending: false });
+    assert.equal(
+      firstResult.bootstrap.command,
+      "node .aihaus/tools/init.mjs --repo . --json",
+    );
+    assert.equal(firstResult.bootstrap.instruction, ".aihaus/INIT.md");
     await writeFile(path.join(temp, ".aihaus", "roles", "stale.md"), "stale\n", "utf8");
     const second = run(process.execPath, [setup, "--target", temp, "--json"], temp);
     const secondResult = JSON.parse(second.stdout);

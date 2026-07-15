@@ -32,6 +32,14 @@ as review lenses instead of permanent agent identities.
 
 ## Memory and state
 
+Repository bootstrap follows the authoritative-memory boundary. The Node-only
+init tool deterministically discovers safe local evidence and writes the
+rebuildable .aihaus/state/bootstrap/discovery.json packet. The provider-neutral
+routine in .aihaus/INIT.md guides an active coding agent through a reviewed
+synthesis into canonical Markdown under .aihaus/memory/project/. Discovery
+never promotes inference to an accepted rule and never replaces semantic
+memory with generated state.
+
 Project Markdown and task files are authoritative. `.aihaus/state/` contains
 rebuildable indexes and caches. Deleting generated state may reduce speed but
 must not erase rules, decisions, knowledge, or task history.

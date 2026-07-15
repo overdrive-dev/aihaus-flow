@@ -16,6 +16,7 @@ function usage() {
     "  aihaus --help",
     "",
     "setup installs or updates the repository-local aihaus package and verifies it.",
+    "After setup, run node .aihaus/tools/init.mjs --repo . --json.",
   ].join("\n");
 }
 

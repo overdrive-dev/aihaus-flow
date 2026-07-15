@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 - 2026-07-15
+
+- Added an offline, provider-neutral project bootstrap with deterministic
+  discovery, dry-run and status modes, source provenance, secret-path
+  exclusion, conflict reporting, and an agent-driven synthesis contract for
+  canonical project memory.
+
 ## 1.0.0 - 2026-07-15
 
 Breaking refactor from the Claude-specific workflow harness to a portable,

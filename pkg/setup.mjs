@@ -10,15 +10,18 @@ const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const sourceCheckoutRoot = path.resolve(packageRoot, "..");
 const sourceRoot = path.join(packageRoot, ".aihaus");
 const managedDirectories = ["roles", "rooms", "contracts", "tools"];
-const managedFiles = ["MAP.md", "conventions.md"];
+const managedFiles = ["MAP.md", "conventions.md", "INIT.md"];
 const metadataFiles = ["VERSION"];
 const minimumNodeMajor = 22;
 const requiredSurface = [
   ".aihaus/VERSION",
   ".aihaus/MAP.md",
+  ".aihaus/INIT.md",
   ".aihaus/contracts/harness.md",
+  ".aihaus/contracts/project-bootstrap.md",
   ".aihaus/roles/orchestrator.md",
   ".aihaus/rooms/feature/CONTEXT.md",
+  ".aihaus/tools/init.mjs",
 ];
 const memoryFiles = [
   "project/README.md",
@@ -311,6 +314,13 @@ async function install(target) {
     preserved,
     adapters,
     verification: await verifyInstalledSurface(repositoryRoot),
+    bootstrap: {
+      command: "node .aihaus/tools/init.mjs --repo . --json",
+      dryRun: "node .aihaus/tools/init.mjs --repo . --dry-run --json",
+      status: "node .aihaus/tools/init.mjs --repo . --status --json",
+      instruction: ".aihaus/INIT.md",
+      contract: ".aihaus/contracts/project-bootstrap.md",
+    },
     cleanup: await cleanupState(repositoryRoot),
     warnings,
   };

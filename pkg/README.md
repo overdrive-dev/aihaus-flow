@@ -42,5 +42,20 @@ scripts.
 The two scripts under `pkg/scripts/` install the optional released `aih-graph`
 binary. They are not required by the portable instruction core.
 
+## Provider-neutral project bootstrap
+
+Setup also installs .aihaus/tools/init.mjs, .aihaus/INIT.md, and the
+project-bootstrap contract. The deterministic command is Node-only, offline,
+and repository-scoped:
+
+    node .aihaus/tools/init.mjs --repo . --json
+
+It writes only the ignored discovery packet under
+.aihaus/state/bootstrap/. Dry-run and status modes do not write. The packet maps
+safe source evidence to all eight canonical memory files, while the active
+agent performs semantic synthesis under .aihaus/INIT.md. Existing memory,
+secret-bearing paths, global configuration, graph consent, and files outside
+the Git repository remain untouched.
+
 The public product contract, usage, and verification commands are documented in
 the repository [README](../README.md).
