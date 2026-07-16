@@ -49,10 +49,13 @@ import (
 // multi-type filter, SHA staleness in rule-drift, build --user). Flipped
 // from 0.2.0-dev at S09 closeout (tag readiness — the aih-graph-v0.2.0
 // tag is cut by the orchestrator after merge, BR-U4).
-var version = "0.2.0"
+// 0.2.1: Git-aware extraction, incremental node/embedding reuse, configurable
+// Ollama models, and native batched embedding requests with retry.
+var version = "0.2.1"
 
 const jsonPropertyStringLimit = 4000
 const embedInputStringLimit = 4000
+const embeddingBatchSize = 64
 
 // usage prints the top-level CLI help.
 func usage() {
@@ -121,7 +124,7 @@ Commands:
 
 Specs:
   pkg/.aihaus/decisions.md  — ADR-260515-A through -E (+ amendments), ADR-260516-A
-  aih-graph/PRD.md          — v0.1 forever-scope
+  aih-graph/PRD.md          — current capability and release contract
 `, version)
 }
 
@@ -149,13 +152,122 @@ func firstExistingPath(paths ...string) string {
 	return ""
 }
 
-func resetDerivedIndex(db *storage.DB) error {
-	_, err := db.SQL().Exec(`
-		DELETE FROM edges;
-		DELETE FROM nodes_fts;
-		DELETE FROM nodes;
-	`)
+type derivedNodeKey struct {
+	typ        string
+	identifier string
+}
+
+func resetDerivedEdges(db *storage.DB) error {
+	_, err := db.SQL().Exec("DELETE FROM edges")
 	return err
+}
+
+// pruneMissingNodes removes only rows that were not observed in the current
+// extraction. Existing node IDs, FTS rows, and embeddings survive refresh and
+// are updated in place by the subsequent pipelines.
+func pruneMissingNodes(db *storage.DB, active map[derivedNodeKey]struct{}) (int, error) {
+	rows, err := db.SQL().Query("SELECT id, type, identifier FROM nodes")
+	if err != nil {
+		return 0, err
+	}
+	var stale []int64
+	for rows.Next() {
+		var id int64
+		var typ, identifier string
+		if err := rows.Scan(&id, &typ, &identifier); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if _, keep := active[derivedNodeKey{typ: typ, identifier: identifier}]; !keep {
+			stale = append(stale, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+
+	tx, err := db.SQL().Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	for _, id := range stale {
+		if _, err := tx.Exec("DELETE FROM nodes_fts WHERE rowid = ?", id); err != nil {
+			return 0, err
+		}
+		if _, err := tx.Exec("DELETE FROM nodes WHERE id = ?", id); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(stale), nil
+}
+
+func currentDerivedNodeKeys(
+	decisions []types.Decision,
+	instructions []types.Instruction,
+	milestones []types.Milestone,
+	stories []types.Story,
+	repoFiles []types.RepoFile,
+	repoChunks []types.RepoChunk,
+	repoSymbols []types.RepoSymbol,
+	repoCalls []types.RepoCall,
+	repoTests []types.RepoTest,
+	memories []types.MarkdownMemory,
+	commits []types.RepoCommit,
+	rules []types.Rule,
+) map[derivedNodeKey]struct{} {
+	active := map[derivedNodeKey]struct{}{}
+	add := func(typ, identifier string) {
+		active[derivedNodeKey{typ: typ, identifier: identifier}] = struct{}{}
+	}
+	for _, d := range decisions {
+		add("Decision", d.Identifier)
+	}
+	for _, instruction := range instructions {
+		add(instruction.Type, instruction.Identifier)
+	}
+	for _, m := range milestones {
+		identifier := m.ID
+		if identifier == "" {
+			identifier = m.Slug
+		}
+		add("Milestone", identifier)
+	}
+	for _, s := range stories {
+		add("Story", s.MilestoneID+"/"+s.ID)
+	}
+	for _, f := range repoFiles {
+		add("File", f.Path)
+	}
+	for _, c := range repoChunks {
+		add("Chunk", c.Identifier)
+	}
+	for _, s := range repoSymbols {
+		add("Symbol", s.Identifier)
+	}
+	for _, c := range repoCalls {
+		add("Call", c.Identifier)
+	}
+	for _, test := range repoTests {
+		add("Test", test.Identifier)
+	}
+	for _, m := range memories {
+		add("Memory", m.Identifier)
+	}
+	for _, c := range commits {
+		add("Commit", c.Hash)
+	}
+	for _, r := range rules {
+		add("Rule", r.Identifier)
+	}
+	return active
 }
 
 func resolveRepoPath(repoPath string) string {
@@ -346,10 +458,7 @@ func runBuild(args []string) int {
 		return 1
 	}
 	defer db.Close()
-	if err := resetDerivedIndex(db); err != nil {
-		fmt.Fprintf(os.Stderr, "build: reset derived index: %v\n", err)
-		return 1
-	}
+	activeNodes := currentDerivedNodeKeys(decisions, instructions, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules)
 
 	persisted := 0
 	for _, d := range decisions {
@@ -466,6 +575,18 @@ func runBuild(args []string) int {
 			return 1
 		}
 		persisted++
+	}
+	if err := resetDerivedEdges(db); err != nil {
+		fmt.Fprintf(os.Stderr, "build: reset derived edges: %v\n", err)
+		return 1
+	}
+	removed, err := pruneMissingNodes(db, activeNodes)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build: prune missing nodes: %v\n", err)
+		return 1
+	}
+	if removed > 0 {
+		fmt.Printf("Removed %d nodes no longer present\n", removed)
 	}
 
 	// Edge derivation: Decision.Amends → Decision-[amends]→Decision;
@@ -731,10 +852,7 @@ func runBuildUser(dbPath string, accept, dryRun bool) int {
 		return 1
 	}
 	defer db.Close()
-	if err := resetDerivedIndex(db); err != nil {
-		fmt.Fprintf(os.Stderr, "build --user: reset derived index: %v\n", err)
-		return 1
-	}
+	activeNodes := currentDerivedNodeKeys(nil, nil, nil, nil, nil, nil, nil, nil, nil, memories, nil, nil)
 	persisted := 0
 	for _, m := range memories {
 		if _, err := db.UpsertNode("Memory", m.Identifier, memoryProps(m)); err != nil {
@@ -742,6 +860,14 @@ func runBuildUser(dbPath string, accept, dryRun bool) int {
 			return 1
 		}
 		persisted++
+	}
+	if err := resetDerivedEdges(db); err != nil {
+		fmt.Fprintf(os.Stderr, "build --user: reset derived edges: %v\n", err)
+		return 1
+	}
+	if _, err := pruneMissingNodes(db, activeNodes); err != nil {
+		fmt.Fprintf(os.Stderr, "build --user: prune missing nodes: %v\n", err)
+		return 1
 	}
 	fmt.Printf("Persisted %d nodes to %s\n", persisted, dbPath)
 
@@ -957,10 +1083,6 @@ func runOllamaEmbeddingPipeline(
 		fmt.Fprintf(os.Stderr, "build: Ollama embeddings skipped: %v\n", err)
 		return
 	}
-	if _, err := embedder.Embed("aih-graph readiness check"); err != nil {
-		fmt.Fprintf(os.Stderr, "build: Ollama embeddings skipped: %v\n", err)
-		return
-	}
 	if err := runEmbedPipeline(db, embedder, decisions, instructions, milestones, stories, repoFiles, repoChunks, repoSymbols, repoCalls, repoTests, memories, commits, rules); err != nil {
 		fmt.Fprintf(os.Stderr, "build: embed: %v\n", err)
 	}
@@ -968,7 +1090,7 @@ func runOllamaEmbeddingPipeline(
 
 // runEmbedPipeline iterates extracted nodes and writes embeddings + content
 // SHAs onto the persisted rows. SHA-based change detection skips nodes whose
-// stored content_sha already matches the current text.
+// stored content_sha and embedding_model still match the current input.
 func runEmbedPipeline(
 	db *storage.DB,
 	embedder embed.Embedder,
@@ -1032,7 +1154,13 @@ func runEmbedPipeline(
 		units = append(units, unit{"Rule", r.Identifier, embedTextForRule(r)})
 	}
 
+	type pendingEmbedding struct {
+		nodeID int64
+		unit   unit
+		sha    string
+	}
 	embedded, skipped, errs := 0, 0, 0
+	var pending []pendingEmbedding
 	for _, u := range units {
 		nodeID, err := db.LookupNodeID(u.typ, u.identifier)
 		if err != nil {
@@ -1040,24 +1168,72 @@ func runEmbedPipeline(
 			continue
 		}
 		sha := embed.SHA256Hex(u.text)
-		// Skip if existing SHA matches (content unchanged).
-		if existing, _ := db.EmbeddingSHA(nodeID); existing == sha {
+		existingSHA, existingModel, present, err := db.EmbeddingMetadata(nodeID)
+		if err != nil {
+			errs++
+			continue
+		}
+		if present && existingSHA == sha && existingModel == embedder.Model() {
 			skipped++
 			continue
 		}
-		vec, err := embedder.Embed(embedInputText(u.text))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  embed: skip %s %s: %v\n", u.typ, u.identifier, err)
-			errs++
-			continue
-		}
-		if err := db.UpdateEmbedding(nodeID, embed.EncodeVector(vec), embedder.Model(), sha); err != nil {
-			errs++
-			continue
-		}
-		embedded++
+		pending = append(pending, pendingEmbedding{nodeID: nodeID, unit: u, sha: sha})
 	}
-	fmt.Printf("Embedded %d nodes (%s; %d skipped — SHA match; %d errors)\n",
+	invalidated := pending[:0]
+	for _, item := range pending {
+		if err := db.ClearEmbedding(item.nodeID); err != nil {
+			errs++
+			continue
+		}
+		invalidated = append(invalidated, item)
+	}
+	pending = invalidated
+	if batcher, ok := embedder.(embed.BatchEmbedder); ok {
+		for start := 0; start < len(pending); start += embeddingBatchSize {
+			end := start + embeddingBatchSize
+			if end > len(pending) {
+				end = len(pending)
+			}
+			batch := pending[start:end]
+			texts := make([]string, len(batch))
+			for i, item := range batch {
+				texts[i] = embedInputText(item.unit.text)
+			}
+			vectors, err := batcher.EmbedBatch(texts)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  embed: skip batch of %d nodes: %v\n", len(batch), err)
+				errs += len(pending) - start
+				break
+			}
+			if len(vectors) != len(batch) {
+				fmt.Fprintf(os.Stderr, "  embed: skip batch: received %d vectors for %d nodes\n", len(vectors), len(batch))
+				errs += len(pending) - start
+				break
+			}
+			for i, item := range batch {
+				if err := db.UpdateEmbedding(item.nodeID, embed.EncodeVector(vectors[i]), embedder.Model(), item.sha); err != nil {
+					errs++
+					continue
+				}
+				embedded++
+			}
+		}
+	} else {
+		for _, item := range pending {
+			vector, err := embedder.Embed(embedInputText(item.unit.text))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  embed: skip %s %s: %v\n", item.unit.typ, item.unit.identifier, err)
+				errs++
+				continue
+			}
+			if err := db.UpdateEmbedding(item.nodeID, embed.EncodeVector(vector), embedder.Model(), item.sha); err != nil {
+				errs++
+				continue
+			}
+			embedded++
+		}
+	}
+	fmt.Printf("Embedded %d nodes (%s; %d skipped: SHA/model match; %d errors)\n",
 		embedded, embedder.Model(), skipped, errs)
 	return nil
 }

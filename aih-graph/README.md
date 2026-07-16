@@ -8,7 +8,7 @@ and `.aihaus/memory/` Markdown remain authoritative.
 
 - Structural relationships use graph traversal.
 - Lexical search uses SQLite FTS5/BM25 and works without embeddings.
-- Semantic search can use local Ollama embeddings.
+- Semantic search can use configurable local Ollama embeddings.
 - Hybrid search expands lexical or vector seeds through graph relationships.
 
 There is no hosted store, telemetry service, mandatory model API, ANN index, or
@@ -33,6 +33,19 @@ Current parser fidelity:
 
 Text indexing is not AST extraction. See [PRD.md](PRD.md) for the complete
 capability and release contract.
+
+## Refresh and embeddings
+
+Repository text discovery uses
+`git ls-files --cached --others --exclude-standard`, including nested
+`.gitignore` rules and negations. A separate safety boundary always excludes
+Git internals, aihaus runtime state, database files, and graph artifacts.
+
+Refresh upserts current nodes, removes only nodes that disappeared, and reuses
+an embedding when both its content SHA and model match. Ollama requests use
+native batches of up to 64 texts and retry transient failures. The default
+model is `nomic-embed-text`; set `AIH_GRAPH_OLLAMA_MODEL=bge-m3` (or another
+installed Ollama embedding model) to change it.
 
 ## Install and use
 
