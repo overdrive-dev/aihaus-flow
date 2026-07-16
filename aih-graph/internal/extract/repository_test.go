@@ -2,6 +2,7 @@ package extract
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,9 +10,9 @@ import (
 
 func TestParseRepositoryTextIndexesTextFilesAndChunks(t *testing.T) {
 	root := t.TempDir()
+	runRepositoryGit(t, root, "init")
 	writeFile(t, root, "cmd/app/main.go", "package main\n\nfunc main() {}\n")
 	writeFile(t, root, "README.md", strings.Repeat("repo memory\n", 700))
-	writeFile(t, root, ".git/config", "should be skipped\n")
 	writeFile(t, root, "image.png", "\x00\x01binary")
 
 	files, chunks, err := ParseRepositoryText(root)
@@ -57,6 +58,69 @@ func TestParseRepositoryTextIndexesTextFilesAndChunks(t *testing.T) {
 	}
 }
 
+func TestParseRepositoryTextHonorsGitignoreRulesAndNegations(t *testing.T) {
+	root := t.TempDir()
+	runRepositoryGit(t, root, "init")
+	writeFile(t, root, "tracked/generated.go", "package tracked\n")
+	runRepositoryGit(t, root, "add", "tracked/generated.go")
+	writeFile(t, root, ".gitignore", ".venv/\nbuild/\ntracked/\n")
+	writeFile(t, root, "nested/.gitignore", "*.md\n!important.md\n")
+	writeFile(t, root, "cmd/app/main.go", "package main\n")
+	writeFile(t, root, ".venv/dependency.go", "package dependency\n")
+	writeFile(t, root, "build/bundle.js", "generated();\n")
+	writeFile(t, root, "nested/ignored.md", "ignored\n")
+	writeFile(t, root, "nested/important.md", "kept by negation\n")
+
+	files, _, err := ParseRepositoryText(root)
+	if err != nil {
+		t.Fatalf("ParseRepositoryText returned error: %v", err)
+	}
+	got := map[string]bool{}
+	for _, file := range files {
+		got[file.Path] = true
+	}
+	for _, want := range []string{"cmd/app/main.go", "nested/important.md", "tracked/generated.go"} {
+		if !got[want] {
+			t.Errorf("expected %s to be indexed; got %#v", want, got)
+		}
+	}
+	for _, excluded := range []string{".venv/dependency.go", "build/bundle.js", "nested/ignored.md"} {
+		if got[excluded] {
+			t.Errorf("ignored path %s was indexed", excluded)
+		}
+	}
+}
+
+func TestParseRepositoryTextAlwaysAppliesSafetyExclusions(t *testing.T) {
+	root := t.TempDir()
+	runRepositoryGit(t, root, "init")
+	writeFile(t, root, ".aihaus/state/private.json", "{\"secret\":true}\n")
+	writeFile(t, root, "safe.json", "{\"safe\":true}\n")
+	runRepositoryGit(t, root, "add", "-f", ".aihaus/state/private.json", "safe.json")
+
+	files, _, err := ParseRepositoryText(root)
+	if err != nil {
+		t.Fatalf("ParseRepositoryText returned error: %v", err)
+	}
+	if len(files) != 1 || files[0].Path != "safe.json" {
+		t.Fatalf("safety exclusion failed: %#v", files)
+	}
+
+	for _, path := range []string{
+		".git/config",
+		".aihaus/state/aih-graph.db",
+		"cache.sqlite",
+		"cache.sqlite3-wal",
+		".aih-graph-consent",
+		".aihaus-download/release.json",
+		".aihaus-lab/run/output.json",
+	} {
+		if !neverIndexRepositoryPath(path) {
+			t.Errorf("neverIndexRepositoryPath(%q) = false", path)
+		}
+	}
+}
+
 func writeFile(t *testing.T, root, rel, content string) {
 	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(rel))
@@ -65,5 +129,13 @@ func writeFile(t *testing.T, root, rel, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func runRepositoryGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, output)
 	}
 }

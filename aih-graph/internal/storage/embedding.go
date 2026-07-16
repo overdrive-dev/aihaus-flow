@@ -32,14 +32,38 @@ func (d *DB) UpdateEmbedding(nodeID int64, embedding []byte, model, contentSHA s
 	return nil
 }
 
+// ClearEmbedding invalidates a vector whose content SHA or model no longer
+// matches the current node. Lexical properties and FTS rows remain available.
+func (d *DB) ClearEmbedding(nodeID int64) error {
+	res, err := d.sql.Exec(`
+		UPDATE nodes
+		   SET embedding = NULL,
+		       embedding_model = NULL,
+		       content_sha = NULL,
+		       updated_at = ?
+		 WHERE id = ?
+	`, time.Now().Unix(), nodeID)
+	if err != nil {
+		return fmt.Errorf("clear embedding for %d: %w", nodeID, err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 // EmbeddingRow is one (id, embedding bytes, content_sha) row from the nodes
 // table, used by KNN scan + change detection.
 type EmbeddingRow struct {
-	NodeID       int64
-	Embedding    []byte
-	ContentSHA   string
-	Type         string
-	Identifier   string
+	NodeID     int64
+	Embedding  []byte
+	ContentSHA string
+	Type       string
+	Identifier string
 }
 
 // IterateEmbeddings yields all rows with non-NULL embeddings. The optional
@@ -79,15 +103,21 @@ func (d *DB) IterateEmbeddings(typeFilters []string) ([]EmbeddingRow, error) {
 	return out, rows.Err()
 }
 
-// EmbeddingSHA returns the content_sha currently stored for nodeID, or empty
-// string if the node has no embedding yet. Used for change-detection skip.
-func (d *DB) EmbeddingSHA(nodeID int64) (string, error) {
-	var sha sql.NullString
-	err := d.sql.QueryRow(
-		"SELECT content_sha FROM nodes WHERE id = ?", nodeID,
-	).Scan(&sha)
+// EmbeddingMetadata returns the content SHA, model, and whether an embedding
+// is present. Reuse is safe only when both SHA and model match.
+func (d *DB) EmbeddingMetadata(nodeID int64) (contentSHA, model string, present bool, err error) {
+	var sha, storedModel sql.NullString
+	err = d.sql.QueryRow(
+		"SELECT content_sha, embedding_model, embedding IS NOT NULL FROM nodes WHERE id = ?", nodeID,
+	).Scan(&sha, &storedModel, &present)
 	if err != nil {
-		return "", err
+		return "", "", false, err
 	}
-	return sha.String, nil
+	return sha.String, storedModel.String, present, nil
+}
+
+// EmbeddingSHA is retained for callers that only need the content hash.
+func (d *DB) EmbeddingSHA(nodeID int64) (string, error) {
+	sha, _, _, err := d.EmbeddingMetadata(nodeID)
+	return sha, err
 }

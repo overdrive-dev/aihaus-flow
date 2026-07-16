@@ -16,6 +16,11 @@ It is acceleration, never durable project memory.
 - Store repository indexes outside the repository by default.
 - Keep per-repository and user-scope data isolated.
 - Refresh lexical/FTS rows even when embeddings are unavailable.
+- Honor Git ignore rules while retaining explicit exclusions for generated
+  state, database files, and internal artifacts.
+- Refresh incrementally: preserve current nodes, remove disappeared nodes, and
+  reuse embeddings only when content SHA and model both match.
+- Batch local Ollama embedding requests with bounded retry behavior.
 - Report the active retrieval mode in machine-readable output.
 - Cite paths and line spans for code/text results.
 - Expose deterministic freshness and stale-state information.
