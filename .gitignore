@@ -12,7 +12,6 @@ desktop.ini
 /.claude/
 /.aihaus/
 /.aihaus-lab/
-/.aih-graph-consent
 
 # Generated outputs
 node_modules/
@@ -33,6 +32,3 @@ tmp/
 venv/
 __pycache__/
 *.pyc
-
-# Optional local graph builds
-/aih-graph/bin/

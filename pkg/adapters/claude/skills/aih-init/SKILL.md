@@ -18,5 +18,5 @@ source-backed knowledge into `.aihaus/memory/project/`, preserving existing
 content and never recording secrets. Rerun discovery and finish with
 `node .aihaus/tools/init.mjs --repo . --status --json`.
 
-Do not use global aihaus state, user-level settings, hooks, graph indexing,
-network access, or legacy `/aih-env` behavior.
+Do not use global aihaus state, user-level settings, hooks, network access, or
+legacy `/aih-env` behavior.

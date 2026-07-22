@@ -14,6 +14,16 @@ const managedDirectories = ["roles", "rooms", "contracts", "tools"];
 const managedFiles = ["MAP.md", "conventions.md", "INIT.md"];
 const metadataFiles = ["VERSION"];
 const minimumNodeMajor = 22;
+const legacyGraphArtifacts = [
+  ".aih-graph-consent",
+  ".aihaus/bin/aih-graph",
+  ".aihaus/bin/aih-graph.exe",
+  ".aihaus/bin/aih-graph.install.json",
+  ".aihaus/state/aih-graph.db",
+  ".aihaus/state/aih-graph.db-shm",
+  ".aihaus/state/aih-graph.db-wal",
+  ".aihaus/state/aih-graph.db-journal",
+];
 const requiredSurface = [
   ".aihaus/VERSION",
   ".aihaus/MAP.md",
@@ -289,6 +299,22 @@ async function cleanupState(repositoryRoot) {
     : { path: null, pending: false };
 }
 
+async function removeLegacyGraphArtifacts(repositoryRoot, { check = false } = {}) {
+  const matches = [];
+  for (const relative of legacyGraphArtifacts) {
+    const candidate = path.join(repositoryRoot, ...relative.split("/"));
+    await assertPathWithin({ root: repositoryRoot, candidate });
+    const kind = await entryKind(candidate);
+    if (kind === "missing") continue;
+    if (kind !== "file") {
+      throw new Error(`refusing non-regular legacy graph artifact: ${candidate}`);
+    }
+    matches.push(relative);
+    if (!check) await rm(candidate);
+  }
+  return matches;
+}
+
 async function verifyInstalledSurface(repositoryRoot) {
   const missing = [];
   for (const relative of requiredSurface) {
@@ -438,6 +464,7 @@ async function install(target, { check = false, force = false } = {}) {
       }),
     );
   }
+  const legacyGraphCleanup = await removeLegacyGraphArtifacts(repositoryRoot, { check });
 
   const seeded = [];
   const wouldSeed = [];
@@ -525,6 +552,7 @@ async function install(target, { check = false, force = false } = {}) {
     plannedRefreshed.length > 0 ||
     seeded.length > 0 ||
     wouldSeed.length > 0 ||
+    legacyGraphCleanup.length > 0 ||
     adapterChanges ||
     hostChanges;
   const verification = await verifyInstalledSurface(repositoryRoot);
@@ -549,6 +577,8 @@ async function install(target, { check = false, force = false } = {}) {
     wouldRefresh: check ? plannedRefreshed : [],
     seeded,
     wouldSeed,
+    removed: check ? [] : legacyGraphCleanup,
+    wouldRemove: check ? legacyGraphCleanup : [],
     preserved,
     adapters,
     hostCapabilities,

@@ -189,8 +189,6 @@ test("bootstrap discovers safe local evidence, preserves memory, and is idempote
     );
     assert.deepEqual((await readdir(fakeHome)).sort(), ["sentinel.txt"]);
     assert.equal(await readFile(outsideSentinel, "utf8"), "outside remains unchanged\n");
-    assert.equal(await exists(path.join(repository, ".aih-graph-consent")), false);
-
     const second = JSON.parse(
       run(
         process.execPath,

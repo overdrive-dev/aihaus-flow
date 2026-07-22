@@ -6,7 +6,7 @@ Project bootstrap is repository-local, provider-neutral, offline, and
 two-phase. The deterministic command discovers evidence and writes rebuildable
 state. The active coding agent synthesizes reviewed Markdown. Neither phase
 depends on Claude slash commands, global aihaus installation, user-level hooks
-or settings, Bash, symlinks, a hosted service, or aih-graph.
+or settings, Bash, symlinks, or a hosted service.
 
 ## Deterministic discovery
 
@@ -24,7 +24,7 @@ Discovery must:
 - distinguish safe facts from conflicts and memory candidates;
 - report whether authoritative evidence is sufficient for semantic synthesis;
 - exclude aihaus-managed routers and host skills from project evidence;
-- leave .aih-graph-consent, global settings, hooks, and user files untouched.
+- leave global settings, hooks, and user files untouched.
 
 The packet is disposable. Canonical project memory remains the Markdown under
 .aihaus/memory/project/.

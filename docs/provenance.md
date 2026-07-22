@@ -46,12 +46,14 @@ must be ported, intentionally dropped, or archived before deletion.
 - archived `plugin/` preview and marketplace entry (no installer/runtime/CI
   consumers; removed after focused contracts and the 104-check legacy smoke);
 - superseded architecture, milestone, and proposal snapshots whose live
-  contracts now reside in `architecture.md`, `aih-graph/PRD.md`, and this
-  ledger;
+  contracts now reside in `architecture.md` and this ledger;
 - duplicate public/package README bodies, replaced by one public contract and
   a short package pointer;
 - fresh-install dependence on global Claude settings, hooks, or symlinks;
-  `pkg/setup.mjs` installs only the portable core and preserves local memory;
+  `pkg/setup.mjs` preserves local memory;
+- the graph runtime, embeddings, generated database, release workflows,
+  wrappers, and installers; Markdown file kanban remains the task authority,
+  and v1.3.0 setup removes known repository-local generated graph artifacts;
 - redundant specialist prompts, manifest/phase/statusline bureaucracy, SQLite
   kanban, core Notion integration, global hooks, and their migration fixtures.
 

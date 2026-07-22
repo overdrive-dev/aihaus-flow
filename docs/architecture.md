@@ -3,14 +3,13 @@
 ## Product boundary
 
 aihaus is a downloadable GitHub package for repository-local agent guidance,
-durable project memory, deterministic checks, and a rebuildable code/concept
-index. It is not a website or hosted control plane.
+durable project memory, deterministic checks, and Markdown file tasks. It is
+not a website or hosted control plane.
 
 The repository has two boundaries:
 
 - `pkg/`: the installable payload;
-- repository tooling: tests, local lab, docs, release workflows, and source for
-  the `aih-graph` binary.
+- repository tooling: tests, local lab, docs, and release workflows.
 
 ## Portable core
 
@@ -60,12 +59,9 @@ exists, `readyForSynthesis` is false, canonical templates remain unchanged, and
 status cannot report the repository as initialized.
 
 Project Markdown and task files are authoritative. `.aihaus/state/` contains
-rebuildable indexes and caches. Deleting generated state may reduce speed but
-must not erase rules, decisions, knowledge, or task history.
-
-`aih-graph` is the only semantic/relationship engine. Lexical/BM25 and graph
-retrieval must work without embeddings. Results disclose their retrieval mode
-and cite repository locations.
+only rebuildable discovery and tool state. Deleting generated state must not
+erase rules, decisions, knowledge, or task history. Task status is the Markdown
+file's folder under `.aihaus/memory/kanban/`.
 
 ## Evolution rule
 

@@ -6,11 +6,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertPathWithin } from "./path-safety.mjs";
 
-function git(args, cwd) {
+function git(args, cwd, { nul = false } = {}) {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr.trim()}`);
-  return result.stdout.split(/\r?\n/).filter(Boolean);
+  return result.stdout.split(nul ? "\0" : /\r?\n/).filter(Boolean);
 }
 
 function normalize(relative) {
@@ -27,9 +27,9 @@ export function isAllowed(file, allow) {
 
 async function changedFiles(repo) {
   const groups = [
-    git(["diff", "--name-only", "--diff-filter=ACMR"], repo),
-    git(["diff", "--cached", "--name-only", "--diff-filter=ACMR"], repo),
-    git(["ls-files", "--others", "--exclude-standard"], repo),
+    git(["diff", "--name-only", "--diff-filter=ACMRD", "-z"], repo, { nul: true }),
+    git(["diff", "--cached", "--name-only", "--diff-filter=ACMRD", "-z"], repo, { nul: true }),
+    git(["ls-files", "--others", "--exclude-standard", "-z"], repo, { nul: true }),
   ];
   return [...new Set(groups.flat().map(normalize))].sort();
 }

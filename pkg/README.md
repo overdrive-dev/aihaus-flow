@@ -42,8 +42,8 @@ memory is never overwritten, including in force mode. Existing root
 instructions are preserved outside bounded
 `AIHAUS:START` / `AIHAUS:END` blocks. Host skills are refreshed only when the
 aihaus ownership marker is present. User-owned collisions are preserved and
-reported. The JSON result distinguishes created, refreshed, unchanged, and
-planned package surfaces; seeded and preserved memory; adapter and
+reported. The JSON result distinguishes created, refreshed, unchanged, removed,
+and planned package surfaces; seeded and preserved memory; adapter and
 host-capability outcomes; conflicts; source version/commit/tag provenance;
 verification; warnings; and whether the exact repository-local
 `.aihaus-download` source still needs cleanup.
@@ -53,8 +53,9 @@ report validates that metadata and reports `source.distribution` as
 `github-release`. `package.json` intentionally has no dependencies or lifecycle
 scripts.
 
-The two scripts under `pkg/scripts/` install the optional released `aih-graph`
-binary. They are not required by the portable instruction core.
+Starting with v1.3.0, setup removes retired repository-local graph binaries and
+generated SQLite artifacts. Markdown project memory and file-kanban tasks are
+preserved.
 
 ## Provider-neutral project bootstrap
 
@@ -68,7 +69,7 @@ It writes only the ignored discovery packet under
 .aihaus/state/bootstrap/. Dry-run and status modes do not write. The packet maps
 safe source evidence to all eight canonical memory files, while the active
 agent performs semantic synthesis under .aihaus/INIT.md. Existing memory,
-secret-bearing paths, global configuration, graph consent, and files outside
+secret-bearing paths, global configuration, and files outside
 the Git repository remain untouched.
 
 Discovery reports `readyForSynthesis`, `evidenceLevel`, and `memoryReadiness`.

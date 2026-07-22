@@ -26,16 +26,17 @@ Identity and scope:
    repository file:
       npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus setup --target . --check --json
    In this mode require mode: check, created/refreshed/seeded to be empty, and
-   inspect changesRequired, wouldCreate, wouldRefresh, and wouldSeed. On a first
-   installation verification.ok may be false because the preview does not write
-   the missing package surface.
+   inspect changesRequired, wouldCreate, wouldRefresh, wouldSeed, and
+   wouldRemove. On a first installation verification.ok may be false because
+   the preview does not write the missing package surface.
 4. Run the setup command to install or update only missing or changed package
    surfaces:
       npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus setup --target . --json
 5. Treat the JSON result as authoritative. Require:
    - ok: true and scope: repository-local;
    - mode: apply and forced: false for a normal setup;
-   - changesRequired plus created, refreshed, unchanged, seeded, and preserved;
+   - changesRequired plus created, refreshed, unchanged, seeded, preserved,
+     removed, and wouldRemove;
    - preflight Node and Git values;
    - source.distribution: github-release;
    - source.version, source.commit, and source.ref;
@@ -57,6 +58,9 @@ Identity and scope:
    created/refreshed arrays, and package paths under unchanged. Use --force
    only for explicit package repair; it still must preserve project memory,
    text outside managed blocks, and user-owned host-skill collisions.
+   Starting with v1.3.0, removed/wouldRemove report cleanup of known artifacts
+   from the retired graph runtime; Markdown memory and kanban files are outside
+   that cleanup allowlist.
 7. Do not use /aih-env or any old global command suite. Claude Code may expose
    the repository skill as /aih-init. Codex exposes it as $aih-init or through
    /skills; do not claim that Codex supports the exact custom /aih-init slash
@@ -75,8 +79,8 @@ Identity and scope:
    sources and the reviewed commit, and never convert an inference into an
    accepted rule or decision.
 10. Do not read paths reported as skipped, record secret values, access the
-   network, upload data, start a service, deploy, write outside this repository,
-   or create .aih-graph-consent.
+   network, upload data, start a service, deploy, or write outside this
+   repository.
 11. After synthesis, rerun the discovery command, then run:
       node .aihaus/tools/init.mjs --repo . --status --json
     Require status.initialized: true, status.memoryReadiness: ready, and
@@ -90,8 +94,7 @@ Identity and scope:
 
 ## Source-install fallback
 
-Use source installation only for aihaus development, unreleased evaluation, or
-the current optional `aih-graph` binary helper:
+Use source installation only for aihaus development or unreleased evaluation:
 
 ```text
 1. Refuse to continue if .aihaus-download already exists.
@@ -106,19 +109,3 @@ the current optional `aih-graph` binary helper:
 6. Resolve the real path and delete only the .aihaus-download child after all
    requested source helpers have finished.
 ```
-
-## Optional local index through the source fallback
-
-If the user asks for the code index, install the matching released `aih-graph`
-binary into `.aihaus/bin/` before deleting the temporary clone. Indexing consent
-must remain explicit; do not create `.aih-graph-consent` on the user's behalf.
-
-After consent, verify with:
-
-```bash
-node .aihaus/tools/graph.mjs refresh --json
-node .aihaus/tools/graph.mjs status --json
-```
-
-The index is generated local state. Project Markdown and source files remain the
-source of truth.
