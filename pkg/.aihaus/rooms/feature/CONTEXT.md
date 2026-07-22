@@ -5,7 +5,7 @@ Use for a business-visible behavior change.
 ## Load
 
 - `memory/project/business-rules.md`
-- relevant decisions, procedures, and graph context
+- relevant decisions, procedures, and project context
 - `contracts/evidence.md`; add adversarial review before completion
 
 ## Path

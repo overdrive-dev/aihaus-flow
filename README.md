@@ -83,13 +83,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.2.0`):
+Current published release (`v1.3.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.2.0/aihaus-flow-v1.2.0.tgz -- aihaus setup --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.3.0/aihaus-flow-v1.3.0.tgz -- aihaus setup --target . --json
 ```
 
-For another release, replace both occurrences of `v1.2.0` with the same tag.
+For another release, replace both occurrences of `v1.3.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -186,7 +186,7 @@ It writes only the ignored packet
 hashes, Git/worktree provenance, safe manifest and layout facts, exclusions,
 conflicts, and a source plan for all eight canonical memory files. It does not
 read excluded secret-bearing paths, access the network, upload data, run
-services, deploy, or enable graph consent.
+services, or deploy.
 
 The JSON includes `readyForSynthesis`, `evidenceLevel`, and `memoryReadiness`.
 When `readyForSynthesis` is false, keep the templates unchanged and add an
@@ -226,7 +226,7 @@ readyForSynthesis is true, using verified repository evidence. Otherwise
 preserve the templates and report the blocker. Preserve existing content, cite
 source paths and the reviewed commit, keep inferences and conflicts explicit,
 and do not read or record secrets. Do not use global aihaus state, network
-access, or graph indexing.
+access, or hosted state.
 ~~~
 
 ## Start using aihaus
@@ -277,8 +277,9 @@ Repair every package-owned surface even when it already matches:
 npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus setup --target . --force --json
 ```
 
-`--check` reports `wouldCreate`, `wouldRefresh`, and `wouldSeed` and never
-writes adapters, state, memory, or package files. `--force` still preserves
+`--check` reports `wouldCreate`, `wouldRefresh`, `wouldSeed`, and
+`wouldRemove` and never writes adapters, state, memory, or package files.
+`--force` still preserves
 project memory, text outside managed root blocks, and user-owned host-skill
 collisions. The two flags cannot be combined.
 
@@ -289,7 +290,10 @@ marker. A pre-existing user-owned skill at the same path is preserved and
 listed in `conflicts` instead of being overwritten; that host capability then
 reports `available: false` until the collision is reconciled.
 Review `changesRequired`, `created`, `refreshed`, `unchanged`, `seeded`,
-`preserved`, `adapters`, `hostCapabilities`, and `conflicts` before committing.
+`preserved`, `removed`, `wouldRemove`, `adapters`, `hostCapabilities`,
+and `conflicts` before committing. Starting with v1.3.0, setup removes known
+repository-local artifacts from the retired graph runtime. Markdown project
+memory and file-kanban tasks are never part of that cleanup.
 
 ## Install from source
 
@@ -311,39 +315,6 @@ A source checkout without the matching release tag reports
 `source.pinned: false`. Do not describe it as a released installation. The
 GitHub Release command remains the recommended customer path.
 
-## Optional local code index
-
-`aih-graph/` adds repository relationship and search commands. It stores its
-generated index locally and never replaces project source files or Markdown
-memory. The current binary helper is available through the source-install
-fallback; run it before `.aihaus-download` is removed.
-
-Install a released binary while the temporary clone still exists:
-
-```bash
-bash .aihaus-download/pkg/scripts/install-aih-graph-binary.sh --bin .aihaus/bin/aih-graph
-```
-
-On Windows:
-
-```powershell
-& .aihaus-download/pkg/scripts/install-aih-graph-binary.ps1 -Bin .aihaus/bin/aih-graph.exe
-```
-
-To enable indexing, create `.aih-graph-consent` in the repository or use the
-engine's one-run consent flag, then use the repository-local wrapper:
-
-```bash
-node .aihaus/tools/graph.mjs refresh --json
-node .aihaus/tools/graph.mjs query --json "authentication boundary"
-node .aihaus/tools/graph.mjs impact --json path/to/file
-```
-
-aihaus will not create `.aih-graph-consent` on your behalf. After consent,
-generated results remain local and Markdown continues to be the source of
-truth. See
-[aih-graph/PRD.md](aih-graph/PRD.md) for the detailed capability contract.
-
 ## Evidence and safety
 
 aihaus expects executable completion criteria to be supported by tool- or
@@ -353,11 +324,10 @@ CI-produced evidence with exit code 0. Evidence documents can be checked with:
 node .aihaus/tools/evidence-validate.mjs path/to/evidence.json
 ```
 
-aihaus does not install global hooks, change user-level agent settings, upload
-repository data, or enable indexing consent during normal setup. Its prompts,
-adapters, and local checks improve workflow consistency but are not a security
-sandbox. Continue using isolated environments and least-privilege credentials
-for production work.
+aihaus does not install global hooks, change user-level agent settings, or
+upload repository data. Its prompts, adapters, and local checks improve
+workflow consistency but are not a security sandbox. Continue using isolated
+environments and least-privilege credentials for production work.
 
 ## Troubleshooting
 
@@ -421,7 +391,7 @@ node tools/aihaus-lab.mjs reset --json
 
 The controller verifies realpath containment and nested Git identity before
 destructive reset or clean operations. CI runs the contract suite on Linux,
-macOS, and Windows, plus the `aih-graph` release matrix.
+macOS, and Windows.
 
 Architecture details live in [docs/architecture.md](docs/architecture.md); the
 refactor/deletion ledger is [docs/provenance.md](docs/provenance.md).

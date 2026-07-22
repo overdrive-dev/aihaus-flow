@@ -65,6 +65,21 @@ test("portable contracts and durable project memory are present", async () => {
   );
 });
 
+test("retired graph runtime is absent", async () => {
+  const manifest = JSON.parse(await readFile(path.join(root, "pkg", "package.json"), "utf8"));
+  assert.ok(!manifest.files.includes("scripts/**/*"));
+  assert.ok(!manifest.files.some((file) => file.startsWith("AIH_GRAPH")));
+  for (const file of [
+    "pkg/.aihaus/tools/graph.mjs",
+    "pkg/scripts/install-aih-graph-binary.sh",
+    ".github/workflows/aih-graph-ci.yml",
+    ".github/workflows/aih-graph-release.yml",
+    "aih-graph/go.mod",
+  ]) {
+    await assert.rejects(readFile(path.join(root, ...file.split("/")), "utf8"));
+  }
+});
+
 test("repository-local host adapters expose only the supported init workflow", async () => {
   const claude = await readFile(
     path.join(root, "pkg", "adapters", "claude", "skills", "aih-init", "SKILL.md"),

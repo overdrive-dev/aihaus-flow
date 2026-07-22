@@ -52,17 +52,48 @@ async function roomExists(repo, room) {
   return exists(path.join(repo, ".aihaus", "rooms", room, "CONTEXT.md"));
 }
 
-async function createTask({ title, room }) {
+async function createTask({ title, room, externalId }) {
   const { repo, board } = await taskBoard();
   if (!title) throw new Error("create requires --title");
   if (!room || !(await roomExists(repo, room))) throw new Error(`unknown room: ${room || "(missing)"}`);
+  const normalizedExternalId = externalId == null ? null : oneLine(externalId, "--external-id");
+  if (normalizedExternalId) {
+    const duplicate = (await tasks()).find(
+      (task) => task.external_id?.toLowerCase() === normalizedExternalId.toLowerCase(),
+    );
+    if (duplicate) {
+      throw new Error(
+        `external task already exists: ${normalizedExternalId} (${duplicate.id}, ${duplicate.status})`,
+      );
+    }
+  }
   const id = `T-${dateStamp()}-${randomBytes(3).toString("hex")}-${slug(title)}`;
   const destination = path.join(board, "backlog", `${id}.md`);
   await assertPathWithin({ root: board, candidate: destination });
   const created = new Date().toISOString();
-  const body = `---\nid: ${id}\nroom: ${room}\ncreated: ${created}\n---\n\n# Goal\n\n${title.trim()}\n\n## Acceptance\n\n- [ ] Define executable acceptance evidence.\n\n## Context\n\n## Owned files\n\n## Business-rule gaps\n\n## Log\n\n## Evidence\n`;
+  const externalIdField = normalizedExternalId
+    ? `external_id: ${JSON.stringify(normalizedExternalId)}\n`
+    : "";
+  const body = `---\nid: ${id}\nroom: ${room}\n${externalIdField}created: ${created}\n---\n\n# Goal\n\n${title.trim()}\n\n## Acceptance\n\n- [ ] Define executable acceptance evidence.\n\n## Context\n\n## Owned files\n\n## Business-rule gaps\n\n## Log\n\n## Evidence\n`;
   await writeFile(destination, body, { encoding: "utf8", flag: "wx" });
-  return { ok: true, id, status: "backlog", file: path.relative(repo, destination) };
+  return {
+    ok: true,
+    id,
+    ...(normalizedExternalId ? { external_id: normalizedExternalId } : {}),
+    status: "backlog",
+    file: path.relative(repo, destination),
+  };
+}
+
+function frontmatterString(content, field) {
+  const raw = content.match(new RegExp(`^${field}:\\s*(.+)$`, "m"))?.[1]?.trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "string" ? parsed : raw;
+  } catch {
+    return raw;
+  }
 }
 
 async function tasks() {
@@ -76,8 +107,16 @@ async function tasks() {
       const content = await readFile(full, "utf8");
       const id = content.match(/^id:\s*(.+)$/m)?.[1]?.trim() || path.basename(file, ".md");
       const room = content.match(/^room:\s*(.+)$/m)?.[1]?.trim() || null;
+      const externalId = frontmatterString(content, "external_id");
       const title = content.match(/^# Goal\s*\r?\n\s*\r?\n([^\r\n]+)/m)?.[1]?.trim() || id;
-      result.push({ id, title, room, status, file: path.relative(repo, full) });
+      result.push({
+        id,
+        title,
+        room,
+        ...(externalId ? { external_id: externalId } : {}),
+        status,
+        file: path.relative(repo, full),
+      });
     }
   }
   return result.sort((left, right) => left.id.localeCompare(right.id));
@@ -101,8 +140,38 @@ async function moveTask(id, status) {
   await assertPathWithin({ root: board, candidate: source });
   await assertPathWithin({ root: board, candidate: destination });
   if (await exists(destination)) throw new Error(`destination already exists: ${path.relative(repo, destination)}`);
+  if (statuses.indexOf(status) > statuses.indexOf(task.status)) {
+    validateTransition(await readFile(source, "utf8"), status);
+  }
   await rename(source, destination);
   return { ok: true, id: task.id, from: task.status, status, file: path.relative(repo, destination) };
+}
+
+function section(content, heading) {
+  const marker = `## ${heading}`;
+  const start = content.indexOf(marker);
+  if (start < 0) return "";
+  const body = content.slice(start + marker.length).replace(/^\s*\r?\n/, "");
+  const end = body.search(/^## /m);
+  return (end < 0 ? body : body.slice(0, end)).trim();
+}
+
+function validateTransition(content, status) {
+  const missing = [];
+  const acceptance = section(content, "Acceptance");
+  const ownedFiles = section(content, "Owned files");
+  if (!acceptance || acceptance.includes("- [ ] Define executable acceptance evidence.")) {
+    missing.push("Acceptance");
+  }
+  if (!ownedFiles) missing.push("Owned files");
+  if (status === "doing" && !section(content, "Context") && !section(content, "Log")) {
+    missing.push("Context or Log");
+  }
+  if (["review", "done"].includes(status)) {
+    if (!section(content, "Log")) missing.push("Log");
+    if (!section(content, "Evidence")) missing.push("Evidence");
+  }
+  if (missing.length) throw new Error(`task is not ready for ${status}; fill: ${missing.join(", ")}`);
 }
 
 function oneLine(value, field) {
@@ -154,6 +223,7 @@ function parseArgs(args) {
     json: false,
     title: null,
     room: null,
+    externalId: null,
     text: null,
     question: null,
     draftRule: null,
@@ -164,6 +234,11 @@ function parseArgs(args) {
     if (arg === "--json") options.json = true;
     else if (arg === "--title") options.title = args.shift() ?? null;
     else if (arg === "--room") options.room = args.shift() ?? null;
+    else if (arg === "--external-id") {
+      const value = args.shift();
+      if (!value || value.startsWith("--")) throw new Error("--external-id requires a value");
+      options.externalId = value;
+    }
     else if (arg === "--text") options.text = args.shift() ?? null;
     else if (arg === "--question") options.question = args.shift() ?? null;
     else if (arg === "--draft-rule") options.draftRule = args.shift() ?? null;

@@ -3,7 +3,7 @@
 This is the provider-neutral initialization routine for repository-local
 aihaus. It works with Codex, Grok, Claude Code, and other coding agents that can
 read files and run Node.js 22+. It does not use slash commands, global hooks,
-provider settings, network access, or the optional graph index.
+provider settings, or network access.
 
 ## Phase 1: deterministic local discovery
 
@@ -56,8 +56,8 @@ Only continue when `readyForSynthesis` is true.
 7. Do not read excluded paths or record secret values. Environment memory may
    name credential locations and access expectations, never credentials.
 8. Report conflicting evidence instead of silently choosing a side. Do not
-   create .aih-graph-consent, run graph indexing, access the network, start a
-   service, or perform a deployment as part of initialization.
+   access the network, start a service, or perform a deployment as part of
+   initialization.
 9. Rerun the discovery command. With unchanged repository inputs it must report
    packet.action as unchanged. Then run:
 
@@ -75,4 +75,4 @@ of preserved files, conflicts, and unresolved gaps.
     only verified repository evidence. Preserve existing content, cite source
     paths and the reviewed commit, keep inferences and conflicts explicit, and
     do not read or record secrets. Do not use slash commands, global aihaus
-    state, network access, or graph indexing.
+    state or network access.

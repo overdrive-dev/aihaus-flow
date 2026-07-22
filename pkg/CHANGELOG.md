@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0 - 2026-07-22
+
+- Removed the retired graph runtime, Ollama/embedding support, release
+  workflows, wrappers, installers, and tests.
+- Made setup remove known repository-local graph binaries and generated SQLite
+  artifacts during upgrades while preserving Markdown memory and file kanban.
+- Added optional external task identifiers with case-insensitive deduplication
+  across every kanban status.
+- Defined one-task-per-worktree ownership and branch-local kanban snapshots.
+- Rejected forward task transitions with placeholder acceptance, missing scope,
+  or missing review evidence, without rewriting existing tasks.
+- Made scope checks preserve Unicode paths and include deleted files reported
+  by Git.
+
 ## 1.2.0 - 2026-07-15
 
 - Added thin repository-local `aih-init` skills for Claude Code and Codex while
@@ -37,10 +51,7 @@ repository-local package.
 - Added the `aihaus setup` CLI, npm-compatible GitHub Release tarball,
   release provenance manifest and checksum, and an end-to-end release-package
   smoke test with no visible source clone.
-- Added deterministic evidence, path, online-action, task, and graph-wrapper
-  tools.
-- Kept `aih-graph` as the single optional semantic/relationship index with
-  explicit consent and repository-local state.
+- Added deterministic evidence, path, online-action, and task tools.
 - Removed the archived plugin/marketplace preview, specialist prompt swarm,
   global Claude hooks/settings pipeline, SQLite kanban, Notion core,
   manifest/status bureaucracy, and their migration fixtures.

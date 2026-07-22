@@ -1,14 +1,13 @@
 # aihaus repository map
 
 aihaus is a downloadable GitHub package, not a website. The publishable payload
-lives in `pkg/`; repository-only tests, lab tooling, docs, and the `aih-graph`
-source live outside it.
+lives in `pkg/`; repository-only tests, lab tooling, and docs live outside it.
 
 Before changing the package:
 
 1. Read `pkg/.aihaus/contracts/harness.md` for the operating contract.
 2. Read `pkg/.aihaus/MAP.md` and load only the matching room/contracts.
-3. Treat Markdown project memory as truth and indexes as rebuildable state.
+3. Treat Markdown project memory and file kanban as truth.
 4. Keep user content and global instruction files untouched.
 
 Implementation rules:

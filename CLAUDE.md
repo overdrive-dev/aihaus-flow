@@ -5,7 +5,7 @@ Read `AGENTS.md`, then `pkg/.aihaus/MAP.md` and
 context needed for the task.
 
 The public product is a downloadable, repository-local package. Do not add a
-site, hosted service, global agent mutation, or implicit indexing consent.
+site, hosted service, global agent mutation, or hosted state.
 
 Validate package changes with:
 

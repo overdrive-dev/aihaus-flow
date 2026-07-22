@@ -37,7 +37,7 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     assert.equal(firstResult.mode, "apply");
     assert.equal(firstResult.forced, false);
     assert.equal(firstResult.changesRequired, true);
-    assert.equal(firstResult.source.version, "1.2.0");
+    assert.equal(firstResult.source.version, "1.3.0");
     assert.match(firstResult.preflight.node, /^\d+\.\d+\.\d+/);
     assert.match(firstResult.preflight.git, /^git version /);
     assert.deepEqual(firstResult.created, firstResult.installed);
@@ -361,5 +361,53 @@ test("canonical setup rejects a dangling host-skill symlink", { skip: process.pl
   } finally {
     await rm(temp, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("canonical setup removes legacy graph artifacts and preserves Markdown", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-remove-graph-"));
+  const artifacts = [
+    ".aih-graph-consent",
+    ".aihaus/bin/aih-graph",
+    ".aihaus/bin/aih-graph.exe",
+    ".aihaus/bin/aih-graph.install.json",
+    ".aihaus/state/aih-graph.db",
+    ".aihaus/state/aih-graph.db-shm",
+    ".aihaus/state/aih-graph.db-wal",
+    ".aihaus/state/aih-graph.db-journal",
+  ];
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    for (const relative of artifacts) {
+      const file = path.join(temp, ...relative.split("/"));
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, "legacy graph artifact\n", "utf8");
+    }
+    const graphWrapper = path.join(temp, ".aihaus", "tools", "graph.mjs");
+    const task = path.join(temp, ".aihaus", "memory", "kanban", "doing", "T-keep.md");
+    await mkdir(path.dirname(graphWrapper), { recursive: true });
+    await mkdir(path.dirname(task), { recursive: true });
+    await writeFile(graphWrapper, "legacy wrapper\n", "utf8");
+    await writeFile(task, "# Keep this task\n", "utf8");
+
+    const preview = JSON.parse(
+      run(process.execPath, [setup, "--target", temp, "--check", "--json"], temp).stdout,
+    );
+    assert.deepEqual(preview.removed, []);
+    assert.deepEqual(preview.wouldRemove, artifacts);
+    assert.equal(await readFile(task, "utf8"), "# Keep this task\n");
+
+    const result = JSON.parse(
+      run(process.execPath, [setup, "--target", temp, "--json"], temp).stdout,
+    );
+    assert.deepEqual(result.removed, artifacts);
+    assert.deepEqual(result.wouldRemove, []);
+    for (const relative of artifacts) {
+      await assert.rejects(readFile(path.join(temp, ...relative.split("/")), "utf8"));
+    }
+    await assert.rejects(readFile(graphWrapper, "utf8"));
+    assert.equal(await readFile(task, "utf8"), "# Keep this task\n");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
   }
 });
