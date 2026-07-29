@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { access, cp, lstat, mkdir, readFile, readdir, realpath, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertPathWithin } from "./.aihaus/tools/path-safety.mjs";
@@ -11,11 +11,12 @@ const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 const sourceCheckoutRoot = path.resolve(packageRoot, "..");
 const sourceRoot = path.join(packageRoot, ".aihaus");
 const managedDirectories = ["roles", "rooms", "contracts", "tools"];
-const managedFiles = ["MAP.md", "conventions.md", "INIT.md"];
+const managedFiles = ["MAP.md", "conventions.md", "REFRESH.md"];
 const metadataFiles = ["VERSION"];
 const minimumNodeMajor = 22;
-const legacyGraphArtifacts = [
+const retiredArtifacts = [
   ".aih-graph-consent",
+  ".aihaus/INIT.md",
   ".aihaus/bin/aih-graph",
   ".aihaus/bin/aih-graph.exe",
   ".aihaus/bin/aih-graph.install.json",
@@ -24,15 +25,19 @@ const legacyGraphArtifacts = [
   ".aihaus/state/aih-graph.db-wal",
   ".aihaus/state/aih-graph.db-journal",
 ];
+const retiredHostSkills = [
+  ".claude/skills/aih-init/SKILL.md",
+  ".agents/skills/aih-init/SKILL.md",
+];
 const requiredSurface = [
   ".aihaus/VERSION",
   ".aihaus/MAP.md",
-  ".aihaus/INIT.md",
+  ".aihaus/REFRESH.md",
   ".aihaus/contracts/harness.md",
   ".aihaus/contracts/project-bootstrap.md",
   ".aihaus/roles/orchestrator.md",
   ".aihaus/rooms/feature/CONTEXT.md",
-  ".aihaus/tools/init.mjs",
+  ".aihaus/tools/refresh.mjs",
 ];
 const memoryFiles = [
   "project/README.md",
@@ -53,20 +58,20 @@ const hostAdapterMarker = "<!-- AIHAUS-MANAGED: repository-local-host-adapter-v1
 const hostSkillAdapters = [
   {
     host: "claudeCode",
-    source: path.join(packageRoot, "adapters", "claude", "skills", "aih-init", "SKILL.md"),
-    relative: ".claude/skills/aih-init/SKILL.md",
+    source: path.join(packageRoot, "adapters", "claude", "skills", "aih-refresh", "SKILL.md"),
+    relative: ".claude/skills/aih-refresh/SKILL.md",
     capability: {
-      invoke: "/aih-init",
+      invoke: "/aih-refresh",
       menu: "/",
       restartMayBeRequired: true,
     },
   },
   {
     host: "codex",
-    source: path.join(packageRoot, "adapters", "codex", "skills", "aih-init", "SKILL.md"),
-    relative: ".agents/skills/aih-init/SKILL.md",
+    source: path.join(packageRoot, "adapters", "codex", "skills", "aih-refresh", "SKILL.md"),
+    relative: ".agents/skills/aih-refresh/SKILL.md",
     capability: {
-      invoke: "$aih-init",
+      invoke: "$aih-refresh",
       menu: "/skills",
       customSlash: false,
       restartMayBeRequired: true,
@@ -299,18 +304,38 @@ async function cleanupState(repositoryRoot) {
     : { path: null, pending: false };
 }
 
-async function removeLegacyGraphArtifacts(repositoryRoot, { check = false } = {}) {
+async function removeRetiredArtifacts(repositoryRoot, { check = false } = {}) {
   const matches = [];
-  for (const relative of legacyGraphArtifacts) {
+  for (const relative of retiredArtifacts) {
     const candidate = path.join(repositoryRoot, ...relative.split("/"));
     await assertPathWithin({ root: repositoryRoot, candidate });
     const kind = await entryKind(candidate);
     if (kind === "missing") continue;
     if (kind !== "file") {
-      throw new Error(`refusing non-regular legacy graph artifact: ${candidate}`);
+      throw new Error(`refusing non-regular retired artifact: ${candidate}`);
     }
     matches.push(relative);
     if (!check) await rm(candidate);
+  }
+  return matches;
+}
+
+async function removeRetiredHostSkills(repositoryRoot, { check = false } = {}) {
+  const matches = [];
+  for (const relative of retiredHostSkills) {
+    const candidate = path.join(repositoryRoot, ...relative.split("/"));
+    await assertPathWithin({ root: repositoryRoot, candidate });
+    const kind = await entryKind(candidate);
+    if (kind !== "file") continue;
+    // only aihaus-managed skills are removed; user-owned files stay untouched
+    if (!(await readFile(candidate, "utf8")).includes(hostAdapterMarker)) continue;
+    matches.push(relative);
+    if (!check) {
+      await rm(candidate);
+      try {
+        await rmdir(path.dirname(candidate));
+      } catch {}
+    }
   }
   return matches;
 }
@@ -464,7 +489,10 @@ async function install(target, { check = false, force = false } = {}) {
       }),
     );
   }
-  const legacyGraphCleanup = await removeLegacyGraphArtifacts(repositoryRoot, { check });
+  const retiredCleanup = [
+    ...await removeRetiredArtifacts(repositoryRoot, { check }),
+    ...await removeRetiredHostSkills(repositoryRoot, { check }),
+  ];
 
   const seeded = [];
   const wouldSeed = [];
@@ -513,7 +541,7 @@ async function install(target, { check = false, force = false } = {}) {
   const conflicts = [];
   const hostCapabilities = {
     universal: {
-      invoke: "node .aihaus/tools/init.mjs --repo . --json",
+      invoke: "node .aihaus/tools/refresh.mjs --repo . --json",
     },
   };
   for (const specification of hostSkillAdapters) {
@@ -552,7 +580,7 @@ async function install(target, { check = false, force = false } = {}) {
     plannedRefreshed.length > 0 ||
     seeded.length > 0 ||
     wouldSeed.length > 0 ||
-    legacyGraphCleanup.length > 0 ||
+    retiredCleanup.length > 0 ||
     adapterChanges ||
     hostChanges;
   const verification = await verifyInstalledSurface(repositoryRoot);
@@ -577,18 +605,18 @@ async function install(target, { check = false, force = false } = {}) {
     wouldRefresh: check ? plannedRefreshed : [],
     seeded,
     wouldSeed,
-    removed: check ? [] : legacyGraphCleanup,
-    wouldRemove: check ? legacyGraphCleanup : [],
+    removed: check ? [] : retiredCleanup,
+    wouldRemove: check ? retiredCleanup : [],
     preserved,
     adapters,
     hostCapabilities,
     conflicts,
     verification,
     bootstrap: {
-      command: "node .aihaus/tools/init.mjs --repo . --json",
-      dryRun: "node .aihaus/tools/init.mjs --repo . --dry-run --json",
-      status: "node .aihaus/tools/init.mjs --repo . --status --json",
-      instruction: ".aihaus/INIT.md",
+      command: "node .aihaus/tools/refresh.mjs --repo . --json",
+      dryRun: "node .aihaus/tools/refresh.mjs --repo . --dry-run --json",
+      status: "node .aihaus/tools/refresh.mjs --repo . --status --json",
+      instruction: ".aihaus/REFRESH.md",
       contract: ".aihaus/contracts/project-bootstrap.md",
     },
     cleanup: await cleanupState(repositoryRoot),

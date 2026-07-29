@@ -56,11 +56,11 @@ test("portable contracts and durable project memory are present", async () => {
   ]);
 
   assert.match(
-    await readFile(path.join(packageRoot, "INIT.md"), "utf8"),
-    /provider-neutral initialization routine/i,
+    await readFile(path.join(packageRoot, "REFRESH.md"), "utf8"),
+    /provider-neutral memory routine/i,
   );
   assert.match(
-    await readFile(path.join(packageRoot, "tools", "init.mjs"), "utf8"),
+    await readFile(path.join(packageRoot, "tools", "refresh.mjs"), "utf8"),
     /aihaus\.bootstrap\.discovery\.v1/,
   );
 });
@@ -82,18 +82,18 @@ test("retired graph runtime is absent", async () => {
 
 test("repository-local host adapters expose only the supported init workflow", async () => {
   const claude = await readFile(
-    path.join(root, "pkg", "adapters", "claude", "skills", "aih-init", "SKILL.md"),
+    path.join(root, "pkg", "adapters", "claude", "skills", "aih-refresh", "SKILL.md"),
     "utf8",
   );
   const codex = await readFile(
-    path.join(root, "pkg", "adapters", "codex", "skills", "aih-init", "SKILL.md"),
+    path.join(root, "pkg", "adapters", "codex", "skills", "aih-refresh", "SKILL.md"),
     "utf8",
   );
 
   for (const adapter of [claude, codex]) {
-    assert.match(adapter, /name: aih-init/);
+    assert.match(adapter, /name: aih-refresh/);
     assert.match(adapter, /AIHAUS-MANAGED: repository-local-host-adapter-v1/);
-    assert.match(adapter, /\.aihaus\/INIT\.md/);
+    assert.match(adapter, /\.aihaus\/REFRESH\.md/);
     assert.match(adapter, /project-bootstrap\.md/);
     assert.doesNotMatch(adapter, /allowed-tools|hooks:|!`/);
   }
@@ -128,17 +128,17 @@ test("agent install guide distinguishes repository adapters from global installa
   const guide = await readFile(path.join(root, "INSTALL-VIA-LLM.md"), "utf8");
   assert.match(guide, /not a global Codex skill/i);
   assert.match(guide, /npm exec/);
-  assert.match(guide, /aihaus setup/);
+  assert.match(guide, /aihaus init/);
   assert.match(guide, /--check/);
   assert.match(guide, /--force/);
   assert.match(guide, /changesRequired/);
   assert.match(guide, /github-release/);
   assert.match(guide, /source\.pinned/);
   assert.match(guide, /package-owned/i);
-  assert.ok(guide.includes("node .aihaus/tools/init.mjs --repo . --json"));
+  assert.ok(guide.includes("node .aihaus/tools/refresh.mjs --repo . --json"));
   assert.ok(guide.includes(".aihaus/contracts/project-bootstrap.md"));
-  assert.ok(guide.includes(".claude/skills/aih-init/SKILL.md"));
-  assert.ok(guide.includes(".agents/skills/aih-init/SKILL.md"));
+  assert.ok(guide.includes(".claude/skills/aih-refresh/SKILL.md"));
+  assert.ok(guide.includes(".agents/skills/aih-refresh/SKILL.md"));
   assert.ok(guide.includes("Do not use /aih-env"));
 });
 
@@ -150,9 +150,9 @@ test("customer README leads with GitHub Release setup and keeps cloning as fallb
   assert.ok(sourceStart > releaseStart);
   const primary = readme.slice(releaseStart, sourceStart);
   assert.match(primary, /npm exec/);
-  assert.match(primary, /aihaus setup/);
+  assert.match(primary, /aihaus init/);
   assert.match(primary, /--check/);
   assert.match(primary, /--force/);
   assert.doesNotMatch(primary, /git clone|rm -rf|Remove-Item/);
-  assert.ok(primary.includes(".aihaus/tools/init.mjs"));
+  assert.ok(primary.includes(".aihaus/tools/refresh.mjs"));
 });

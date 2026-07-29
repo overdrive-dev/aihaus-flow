@@ -1,6 +1,6 @@
 {
   "name": "aihaus-flow",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Repository-local workflow, memory, and evidence contracts for coding agents",
   "private": true,
   "license": "MIT",

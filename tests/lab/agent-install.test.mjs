@@ -67,13 +67,13 @@ test("agent install stays local and reports provenance, preservation, and cleanu
     assert.equal(report.adapters["CLAUDE.md"], "appended");
     assert.equal(report.hostCapabilities.claudeCode.status, "created");
     assert.equal(report.hostCapabilities.claudeCode.available, true);
-    assert.equal(report.hostCapabilities.claudeCode.invoke, "/aih-init");
+    assert.equal(report.hostCapabilities.claudeCode.invoke, "/aih-refresh");
     assert.equal(report.hostCapabilities.codex.status, "created");
     assert.equal(report.hostCapabilities.codex.available, true);
-    assert.equal(report.hostCapabilities.codex.invoke, "$aih-init");
+    assert.equal(report.hostCapabilities.codex.invoke, "$aih-refresh");
     assert.equal(report.hostCapabilities.codex.customSlash, false);
     assert.equal(report.verification.ok, true);
-    assert.equal(report.bootstrap.command, "node .aihaus/tools/init.mjs --repo . --json");
+    assert.equal(report.bootstrap.command, "node .aihaus/tools/refresh.mjs --repo . --json");
 
     assert.match(await readFile(path.join(consumer, "README.md"), "utf8"), /User work in progress/);
     assert.match(await readFile(path.join(consumer, "AGENTS.md"), "utf8"), /# Consumer agents/);
@@ -88,17 +88,17 @@ test("agent install stays local and reports provenance, preservation, and cleanu
     );
     assert.match(
       await readFile(
-        path.join(consumer, ".claude", "skills", "aih-init", "SKILL.md"),
+        path.join(consumer, ".claude", "skills", "aih-refresh", "SKILL.md"),
         "utf8",
       ),
       /disable-model-invocation: true/,
     );
     assert.match(
       await readFile(
-        path.join(consumer, ".agents", "skills", "aih-init", "SKILL.md"),
+        path.join(consumer, ".agents", "skills", "aih-refresh", "SKILL.md"),
         "utf8",
       ),
-      /name: aih-init/,
+      /name: aih-refresh/,
     );
     assert.equal(await readFile(sentinel, "utf8"), "outside remains untouched\n");
     assert.equal(run("git", ["check-ignore", ".aihaus-download"], consumer).status, 0);

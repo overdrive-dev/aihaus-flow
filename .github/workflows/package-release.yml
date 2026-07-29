@@ -41,7 +41,7 @@ jobs:
             Run from the root of the Git repository that should use aihaus:
 
             ```bash
-            npm exec --yes --package=https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aihaus-flow-${{ github.ref_name }}.tgz -- aihaus setup --target . --json
+            npm exec --yes --package=https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aihaus-flow-${{ github.ref_name }}.tgz -- aihaus init --target . --json
             ```
 
             The command uses the versioned GitHub Release package, installs or

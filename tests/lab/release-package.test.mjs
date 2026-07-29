@@ -41,7 +41,7 @@ test("release package metadata exposes one lifecycle-free aihaus command", async
   assert.deepEqual(manifest.dependencies, undefined);
 });
 
-test("GitHub Release tarball runs aihaus setup without a visible clone", async () => {
+test("GitHub Release tarball runs aihaus init without a visible clone", async () => {
   const labRoot = await mkdtemp(path.join(os.tmpdir(), "aihaus-release-package-"));
   const dist = path.join(labRoot, "dist");
   const consumer = path.join(labRoot, "consumer");
@@ -102,10 +102,10 @@ test("GitHub Release tarball runs aihaus setup without a visible clone", async (
     assert.equal(installed.source.pinned, true);
     assert.equal(installed.verification.ok, true);
     assert.deepEqual(installed.cleanup, { path: null, pending: false });
-    assert.equal(installed.hostCapabilities.claudeCode.invoke, "/aih-init");
+    assert.equal(installed.hostCapabilities.claudeCode.invoke, "/aih-refresh");
     assert.equal(installed.hostCapabilities.claudeCode.status, "created");
     assert.equal(installed.hostCapabilities.claudeCode.available, true);
-    assert.equal(installed.hostCapabilities.codex.invoke, "$aih-init");
+    assert.equal(installed.hostCapabilities.codex.invoke, "$aih-refresh");
     assert.equal(installed.hostCapabilities.codex.status, "created");
     assert.equal(installed.hostCapabilities.codex.available, true);
     assert.equal(installed.hostCapabilities.codex.customSlash, false);
@@ -114,7 +114,7 @@ test("GitHub Release tarball runs aihaus setup without a visible clone", async (
       run(
         process.execPath,
         [
-          path.join(consumer, ".aihaus", "tools", "init.mjs"),
+          path.join(consumer, ".aihaus", "tools", "refresh.mjs"),
           "--repo",
           consumer,
           "--dry-run",
@@ -135,17 +135,17 @@ test("GitHub Release tarball runs aihaus setup without a visible clone", async (
     );
     assert.match(
       await readFile(
-        path.join(consumer, ".claude", "skills", "aih-init", "SKILL.md"),
+        path.join(consumer, ".claude", "skills", "aih-refresh", "SKILL.md"),
         "utf8",
       ),
-      /name: aih-init/,
+      /name: aih-refresh/,
     );
     assert.match(
       await readFile(
-        path.join(consumer, ".agents", "skills", "aih-init", "SKILL.md"),
+        path.join(consumer, ".agents", "skills", "aih-refresh", "SKILL.md"),
         "utf8",
       ),
-      /name: aih-init/,
+      /name: aih-refresh/,
     );
 
     const updated = JSON.parse(run(npmCommand, [...npmPrefix, ...command], consumer, environment).stdout);
@@ -163,7 +163,7 @@ test("GitHub Release tarball runs aihaus setup without a visible clone", async (
       consumer,
       environment,
     );
-    assert.match(help.stdout, /aihaus setup/);
+    assert.match(help.stdout, /aihaus init/);
     assert.match(help.stdout, /--check/);
     assert.match(help.stdout, /--force/);
   } finally {

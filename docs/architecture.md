@@ -31,11 +31,11 @@ as review lenses instead of permanent agent identities.
 
 ## Host adapters
 
-The portable initialization semantics live in `.aihaus/tools/init.mjs`,
-`.aihaus/INIT.md`, and the project-bootstrap contract. Setup may add thin
-repository-local discovery wrappers at `.claude/skills/aih-init/SKILL.md` and
-`.agents/skills/aih-init/SKILL.md`. Claude Code exposes its wrapper as
-`/aih-init`; Codex exposes its repository skill as `$aih-init` or through
+The portable initialization semantics live in `.aihaus/tools/refresh.mjs`,
+`.aihaus/REFRESH.md`, and the project-bootstrap contract. Setup may add thin
+repository-local discovery wrappers at `.claude/skills/aih-refresh/SKILL.md` and
+`.agents/skills/aih-refresh/SKILL.md`. Claude Code exposes its wrapper as
+`/aih-refresh`; Codex exposes its repository skill as `$aih-refresh` or through
 `/skills`. The package does not emulate unsupported command syntax.
 
 Host skills contain an aihaus ownership marker. Setup refreshes only marked
@@ -48,7 +48,7 @@ hook, enables network access, or owns the canonical project memory.
 Repository bootstrap follows the authoritative-memory boundary. The Node-only
 init tool deterministically discovers safe local evidence and writes the
 rebuildable .aihaus/state/bootstrap/discovery.json packet. The provider-neutral
-routine in .aihaus/INIT.md guides an active coding agent through a reviewed
+routine in .aihaus/REFRESH.md guides an active coding agent through a reviewed
 synthesis into canonical Markdown under .aihaus/memory/project/. Discovery
 never promotes inference to an accepted rule and never replaces semantic
 memory with generated state.

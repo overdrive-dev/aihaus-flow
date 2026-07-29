@@ -37,7 +37,7 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     assert.equal(firstResult.mode, "apply");
     assert.equal(firstResult.forced, false);
     assert.equal(firstResult.changesRequired, true);
-    assert.equal(firstResult.source.version, "1.3.0");
+    assert.equal(firstResult.source.version, "1.4.0");
     assert.match(firstResult.preflight.node, /^\d+\.\d+\.\d+/);
     assert.match(firstResult.preflight.git, /^git version /);
     assert.deepEqual(firstResult.created, firstResult.installed);
@@ -47,38 +47,38 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     assert.ok(!firstResult.seeded.includes("memory/project/decisions.md"));
     assert.equal(firstResult.verification.ok, true);
     assert.ok(firstResult.verification.required.includes(".aihaus/MAP.md"));
-    assert.ok(firstResult.verification.required.includes(".aihaus/INIT.md"));
+    assert.ok(firstResult.verification.required.includes(".aihaus/REFRESH.md"));
     assert.ok(
       firstResult.verification.required.includes(".aihaus/contracts/project-bootstrap.md"),
     );
-    assert.ok(firstResult.verification.required.includes(".aihaus/tools/init.mjs"));
+    assert.ok(firstResult.verification.required.includes(".aihaus/tools/refresh.mjs"));
     assert.deepEqual(firstResult.cleanup, { path: null, pending: false });
     assert.equal(
       firstResult.bootstrap.command,
-      "node .aihaus/tools/init.mjs --repo . --json",
+      "node .aihaus/tools/refresh.mjs --repo . --json",
     );
-    assert.equal(firstResult.bootstrap.instruction, ".aihaus/INIT.md");
+    assert.equal(firstResult.bootstrap.instruction, ".aihaus/REFRESH.md");
     assert.deepEqual(firstResult.conflicts, []);
     assert.deepEqual(firstResult.hostCapabilities.claudeCode, {
-      adapter: ".claude/skills/aih-init/SKILL.md",
+      adapter: ".claude/skills/aih-refresh/SKILL.md",
       status: "created",
       available: true,
-      invoke: "/aih-init",
+      invoke: "/aih-refresh",
       menu: "/",
       restartMayBeRequired: true,
     });
     assert.deepEqual(firstResult.hostCapabilities.codex, {
-      adapter: ".agents/skills/aih-init/SKILL.md",
+      adapter: ".agents/skills/aih-refresh/SKILL.md",
       status: "created",
       available: true,
-      invoke: "$aih-init",
+      invoke: "$aih-refresh",
       menu: "/skills",
       customSlash: false,
       restartMayBeRequired: true,
     });
     assert.equal(
       firstResult.hostCapabilities.universal.invoke,
-      "node .aihaus/tools/init.mjs --repo . --json",
+      "node .aihaus/tools/refresh.mjs --repo . --json",
     );
     const second = run(process.execPath, [setup, "--target", temp, "--json"], temp);
     const secondResult = JSON.parse(second.stdout);
@@ -93,8 +93,8 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     assert.equal(secondResult.hostCapabilities.codex.status, "unchanged");
 
     await writeFile(
-      path.join(temp, ".claude", "skills", "aih-init", "SKILL.md"),
-      await readFile(path.join(temp, ".claude", "skills", "aih-init", "SKILL.md"), "utf8") +
+      path.join(temp, ".claude", "skills", "aih-refresh", "SKILL.md"),
+      await readFile(path.join(temp, ".claude", "skills", "aih-refresh", "SKILL.md"), "utf8") +
         "\npackage-owned drift\n",
       "utf8",
     );
@@ -121,7 +121,7 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     );
     await assert.rejects(readFile(path.join(temp, ".aihaus", "roles", "stale.md"), "utf8"));
     await assert.rejects(readFile(path.join(temp, ".aihaus", "agents", "planner.md"), "utf8"));
-    await assert.rejects(readFile(path.join(temp, ".aihaus", "skills", "aih-init", "SKILL.md"), "utf8"));
+    await assert.rejects(readFile(path.join(temp, ".aihaus", "skills", "aih-refresh", "SKILL.md"), "utf8"));
     assert.match(
       await readFile(path.join(temp, ".aihaus", "contracts", "harness.md"), "utf8"),
       /# Contract: harness/,
@@ -156,8 +156,8 @@ test("canonical setup supports read-only check and explicit force modes", async 
     await assert.rejects(readFile(path.join(temp, "AGENTS.md"), "utf8"));
     await assert.rejects(readFile(path.join(temp, "CLAUDE.md"), "utf8"));
     await assert.rejects(readFile(path.join(temp, ".gitignore"), "utf8"));
-    await assert.rejects(readFile(path.join(temp, ".claude", "skills", "aih-init", "SKILL.md"), "utf8"));
-    await assert.rejects(readFile(path.join(temp, ".agents", "skills", "aih-init", "SKILL.md"), "utf8"));
+    await assert.rejects(readFile(path.join(temp, ".claude", "skills", "aih-refresh", "SKILL.md"), "utf8"));
+    await assert.rejects(readFile(path.join(temp, ".agents", "skills", "aih-refresh", "SKILL.md"), "utf8"));
 
     const incompatible = run(
       process.execPath,
@@ -183,7 +183,7 @@ test("canonical setup supports read-only check and explicit force modes", async 
     assert.deepEqual(cleanCheck.unchanged, cleanCheck.installed);
 
     const mapPath = path.join(temp, ".aihaus", "MAP.md");
-    const claudeSkill = path.join(temp, ".claude", "skills", "aih-init", "SKILL.md");
+    const claudeSkill = path.join(temp, ".claude", "skills", "aih-refresh", "SKILL.md");
     await writeFile(mapPath, "# Local package drift\n", "utf8");
     await writeFile(claudeSkill, `${await readFile(claudeSkill, "utf8")}\npackage drift\n`, "utf8");
 
@@ -221,8 +221,8 @@ test("canonical setup preserves colliding user-owned host skills", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-collision-"));
   try {
     run("git", ["init", "-b", "main"], temp);
-    const claudeSkill = path.join(temp, ".claude", "skills", "aih-init", "SKILL.md");
-    const codexSkill = path.join(temp, ".agents", "skills", "aih-init", "SKILL.md");
+    const claudeSkill = path.join(temp, ".claude", "skills", "aih-refresh", "SKILL.md");
+    const codexSkill = path.join(temp, ".agents", "skills", "aih-refresh", "SKILL.md");
     await mkdir(path.dirname(claudeSkill), { recursive: true });
     await mkdir(path.dirname(codexSkill), { recursive: true });
     await writeFile(claudeSkill, "# User-owned Claude init\n", "utf8");
@@ -238,7 +238,7 @@ test("canonical setup preserves colliding user-owned host skills", async () => {
     assert.equal(result.hostCapabilities.codex.available, false);
     assert.deepEqual(
       result.conflicts.map((conflict) => conflict.path).sort(),
-      [".agents/skills/aih-init/SKILL.md", ".claude/skills/aih-init/SKILL.md"],
+      [".agents/skills/aih-refresh/SKILL.md", ".claude/skills/aih-refresh/SKILL.md"],
     );
     assert.ok(result.warnings.some((warning) => /user-owned host skill/.test(warning)));
     assert.equal(await readFile(claudeSkill, "utf8"), "# User-owned Claude init\n");
@@ -255,7 +255,7 @@ test("canonical setup never writes through hardlinks outside the repository", as
     await mkdir(hostRepo);
     run("git", ["init", "-b", "main"], hostRepo);
     const externalHostSkill = path.join(lab, "external-host-skill.md");
-    const linkedHostSkill = path.join(hostRepo, ".claude", "skills", "aih-init", "SKILL.md");
+    const linkedHostSkill = path.join(hostRepo, ".claude", "skills", "aih-refresh", "SKILL.md");
     const markedExternal =
       "<!-- AIHAUS-MANAGED: repository-local-host-adapter-v1 -->\n# External file\n";
     await writeFile(externalHostSkill, markedExternal, "utf8");
@@ -348,7 +348,7 @@ test("canonical setup rejects a dangling host-skill symlink", { skip: process.pl
   const outside = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-dangling-outside-"));
   try {
     run("git", ["init", "-b", "main"], temp);
-    const destination = path.join(temp, ".claude", "skills", "aih-init", "SKILL.md");
+    const destination = path.join(temp, ".claude", "skills", "aih-refresh", "SKILL.md");
     const outsideTarget = path.join(outside, "created-through-symlink.md");
     await mkdir(path.dirname(destination), { recursive: true });
     await symlink(outsideTarget, destination, "file");
@@ -407,6 +407,40 @@ test("canonical setup removes legacy graph artifacts and preserves Markdown", as
     }
     await assert.rejects(readFile(graphWrapper, "utf8"));
     assert.equal(await readFile(task, "utf8"), "# Keep this task\n");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("upgrade retires INIT.md and aihaus-marked aih-init skills, preserving user-owned files", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-retire-init-"));
+  const marker = "<!-- AIHAUS-MANAGED: repository-local-host-adapter-v1 -->";
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    const oldInit = path.join(temp, ".aihaus", "INIT.md");
+    const oldClaudeSkill = path.join(temp, ".claude", "skills", "aih-init", "SKILL.md");
+    const userCodexSkill = path.join(temp, ".agents", "skills", "aih-init", "SKILL.md");
+    for (const file of [oldInit, oldClaudeSkill, userCodexSkill]) {
+      await mkdir(path.dirname(file), { recursive: true });
+    }
+    await writeFile(oldInit, "# Initialize project memory\n", "utf8");
+    await writeFile(oldClaudeSkill, `---\nname: aih-init\n---\n\n${marker}\n`, "utf8");
+    await writeFile(userCodexSkill, "---\nname: aih-init\ndescription: User workflow\n---\n", "utf8");
+
+    const result = JSON.parse(
+      run(process.execPath, [setup, "--target", temp, "--json"], temp).stdout,
+    );
+    assert.ok(result.removed.includes(".aihaus/INIT.md"));
+    assert.ok(result.removed.includes(".claude/skills/aih-init/SKILL.md"));
+    assert.ok(!result.removed.includes(".agents/skills/aih-init/SKILL.md"));
+    await assert.rejects(readFile(oldInit, "utf8"));
+    await assert.rejects(readFile(oldClaudeSkill, "utf8"));
+    assert.match(await readFile(userCodexSkill, "utf8"), /User workflow/);
+    assert.match(await readFile(path.join(temp, ".aihaus", "REFRESH.md"), "utf8"), /refresh\.mjs/);
+    assert.match(
+      await readFile(path.join(temp, ".claude", "skills", "aih-refresh", "SKILL.md"), "utf8"),
+      /name: aih-refresh/,
+    );
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

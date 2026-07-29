@@ -1,6 +1,6 @@
-# Initialize project memory
+# Initialize or refresh project memory
 
-This is the provider-neutral initialization routine for repository-local
+This is the provider-neutral memory routine for repository-local
 aihaus. It works with Codex, Grok, Claude Code, and other coding agents that can
 read files and run Node.js 22+. It does not use slash commands, global hooks,
 provider settings, or network access.
@@ -9,11 +9,11 @@ provider settings, or network access.
 
 From the Git repository root, preview discovery:
 
-    node .aihaus/tools/init.mjs --repo . --dry-run --json
+    node .aihaus/tools/refresh.mjs --repo . --dry-run --json
 
 Create or refresh the ignored discovery packet:
 
-    node .aihaus/tools/init.mjs --repo . --json
+    node .aihaus/tools/refresh.mjs --repo . --json
 
 The command writes only .aihaus/state/bootstrap/discovery.json. It records
 repository-relative source paths, hashes, Git/worktree provenance, safe
@@ -23,8 +23,13 @@ rebuildable state, not canonical memory.
 
 Check `readyForSynthesis` before continuing. When it is false, the repository
 does not contain authoritative project evidence yet. Preserve every memory
-template, report the blocker and ask the user to add a README,
-PROJECT-BRIEF.md, manifest, or application source. Do not fill the files with
+template and report the blocker. Then either ask the user to add a README,
+PROJECT-BRIEF.md, manifest, or application source, or offer a short scope
+interview: ask the user for purpose, users and outcomes, in and out of scope,
+Definition of Done, and known rules or constraints. Write only their answers to
+PROJECT-BRIEF.md at the repository root, attributed to the owner and date, then
+rerun discovery and continue with synthesis from that brief. Never invent
+answers the user did not give, and do not fill the memory files with
 placeholder, aihaus-installation, host-toolchain, or unresolved-only content.
 
 ## Phase 2: agent synthesis
@@ -61,16 +66,32 @@ Only continue when `readyForSynthesis` is true.
 9. Rerun the discovery command. With unchanged repository inputs it must report
    packet.action as unchanged. Then run:
 
-    node .aihaus/tools/init.mjs --repo . --status --json
+    node .aihaus/tools/refresh.mjs --repo . --status --json
 
 Completion requires status.initialized true, status.stale false, reviewed
 changes to canonical Markdown, `memoryReadiness` equal to `ready`, and a report
 of preserved files, conflicts, and unresolved gaps.
 
+## Maintenance: memory gaps and stale claims
+
+The status command also reports two advisory, read-only signals:
+
+- `memoryGaps`: memory pages still untouched templates although discovery
+  cataloged candidate sources for them. Treat each gap as a synthesis target:
+  inspect the candidates and fill the page, or ask the owner what the evidence
+  cannot answer.
+- `staleClaims`: pages whose cited sources changed or disappeared since the
+  page's newest cited review commit. Re-verify only the flagged claims and
+  patch additively with fresh provenance. Mark claims you cannot re-verify as
+  unresolved; never silently delete or rewrite them.
+
+When either list is non-empty, propose a memory refresh to the user before
+relying on the affected pages.
+
 ## Copy-paste prompt for any coding agent
 
     Read .aihaus/MAP.md, .aihaus/contracts/harness.md,
-    .aihaus/contracts/project-bootstrap.md, and .aihaus/INIT.md. Run the local
+    .aihaus/contracts/project-bootstrap.md, and .aihaus/REFRESH.md. Run the local
     bootstrap discovery command. Then populate .aihaus/memory/project/ using
     only verified repository evidence. Preserve existing content, cite source
     paths and the reviewed commit, keep inferences and conflicts explicit, and
