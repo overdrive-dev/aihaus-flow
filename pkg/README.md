@@ -3,11 +3,11 @@
 `pkg/` contains the installable aihaus payload and the npm-compatible package
 used to build versioned GitHub Release assets.
 
-The customer command is `aihaus setup`. A GitHub Release exposes it through its
+The customer command is `aihaus init`. A GitHub Release exposes it through its
 versioned tarball without adding aihaus to the consumer's `package.json`:
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus setup --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus init --target . --json
 ```
 
 `cli.mjs` forwards setup to the canonical `setup.mjs` implementation. The
@@ -59,26 +59,28 @@ preserved.
 
 ## Provider-neutral project bootstrap
 
-Setup also installs .aihaus/tools/init.mjs, .aihaus/INIT.md, and the
+Setup also installs .aihaus/tools/refresh.mjs, .aihaus/REFRESH.md, and the
 project-bootstrap contract. The deterministic command is Node-only, offline,
 and repository-scoped:
 
-    node .aihaus/tools/init.mjs --repo . --json
+    node .aihaus/tools/refresh.mjs --repo . --json
 
 It writes only the ignored discovery packet under
 .aihaus/state/bootstrap/. Dry-run and status modes do not write. The packet maps
 safe source evidence to all eight canonical memory files, while the active
-agent performs semantic synthesis under .aihaus/INIT.md. Existing memory,
+agent performs semantic synthesis under .aihaus/REFRESH.md. Existing memory,
 secret-bearing paths, global configuration, and files outside
 the Git repository remain untouched.
 
 Discovery reports `readyForSynthesis`, `evidenceLevel`, and `memoryReadiness`.
+Status mode adds the advisory `memoryGaps` and `staleClaims` signals for
+agent-proposed memory refreshes; it never writes.
 Generated aihaus routers and host skills do not count as project evidence. An
 empty repository remains uninitialized and keeps its memory templates until an
 authoritative project source is available.
 
-Claude Code exposes the thin wrapper as `/aih-init`. Codex exposes its
-repository skill as `$aih-init` or through `/skills`; exact custom slash parity
+Claude Code exposes the thin wrapper as `/aih-refresh`. Codex exposes its
+repository skill as `$aih-refresh` or through `/skills`; exact custom slash parity
 is not promised. Both wrappers delegate to the same provider-neutral Node and
 Markdown contract.
 

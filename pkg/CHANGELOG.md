@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.4.0 - 2026-07-29
+
+- Renamed the installer command from `aihaus setup` to `aihaus init`;
+  `aihaus setup` remains a deprecated alias for one release window.
+- Renamed the memory bootstrap surface: `.aihaus/tools/init.mjs` became
+  `.aihaus/tools/refresh.mjs`, `.aihaus/INIT.md` became `.aihaus/REFRESH.md`,
+  and the host skills `aih-init` became `aih-refresh` (`/aih-refresh`,
+  `$aih-refresh`). A deprecated `init.mjs` forwarding stub is kept for one
+  release window.
+- Upgrades retire the old `.aihaus/INIT.md` and aihaus-marked `aih-init` host
+  skills; user-owned files at those paths are preserved.
+- Status mode now reports advisory `memoryGaps` (template memory pages with
+  cataloged candidate sources) and `staleClaims` (cited sources changed or
+  missing since the page's newest cited review commit); both are read-only and
+  only inform an agent-proposed refresh.
+- When synthesis is blocked in a fresh repository, REFRESH.md now offers a
+  scope interview whose owner answers are written to a root PROJECT-BRIEF.md
+  as the authoritative source, then discovery is rerun.
+- The router now suggests checking refresh status before substantive work and
+  proposing a memory refresh when gaps or stale claims are reported.
+
 ## 1.3.0 - 2026-07-22
 
 - Removed the retired graph runtime, Ollama/embedding support, release

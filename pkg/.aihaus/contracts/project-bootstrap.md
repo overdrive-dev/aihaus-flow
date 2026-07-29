@@ -10,9 +10,11 @@ or settings, Bash, symlinks, or a hosted service.
 
 ## Deterministic discovery
 
-Run node .aihaus/tools/init.mjs --repo . --json only from the Git repository
+Run node .aihaus/tools/refresh.mjs --repo . --json only from the Git repository
 root. The command may write .aihaus/state/bootstrap/discovery.json and nothing
-else. Dry-run and status modes are read-only.
+else. Dry-run and status modes are read-only. Status additionally reports the
+advisory `memoryGaps` and `staleClaims` signals; they inform an agent-proposed
+refresh and never trigger automatic memory writes.
 
 Discovery must:
 
@@ -32,7 +34,9 @@ The packet is disposable. Canonical project memory remains the Markdown under
 If `readyForSynthesis` is false, synthesis is blocked. Preserve the templates
 and report `no-authoritative-project-sources`. Generated aihaus adapters,
 installation metadata, the repository name alone, and transient host-tool
-versions do not make an empty repository ready.
+versions do not make an empty repository ready. Owner answers from a scope
+interview become authoritative evidence only after they are written to a
+reviewable repository file such as PROJECT-BRIEF.md and discovery is rerun.
 
 ## Evidence authority
 
@@ -49,7 +53,7 @@ or higher-authority artifact resolves them.
 
 ## Memory synthesis
 
-Use the mapping and target statuses in the packet, then follow .aihaus/INIT.md.
+Use the mapping and target statuses in the packet, then follow .aihaus/REFRESH.md.
 Fill untouched templates with source-backed statements. Patch non-template
 files minimally and preserve manual edits. Never replace existing memory
 wholesale.

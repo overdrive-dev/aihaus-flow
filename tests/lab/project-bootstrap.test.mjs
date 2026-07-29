@@ -58,7 +58,7 @@ function install(repository) {
     run(process.execPath, [setup, "--target", repository, "--json"], repository).stdout,
   );
   assert.equal(report.ok, true);
-  return path.join(repository, ".aihaus", "tools", "init.mjs");
+  return path.join(repository, ".aihaus", "tools", "refresh.mjs");
 }
 
 test("bootstrap discovers safe local evidence, preserves memory, and is idempotent", async () => {
@@ -110,7 +110,7 @@ test("bootstrap discovers safe local evidence, preserves memory, and is idempote
     commitAll(repository, "seed consumer");
 
     const init = install(repository);
-    assert.equal(await exists(path.join(repository, ".aihaus", "INIT.md")), true);
+    assert.equal(await exists(path.join(repository, ".aihaus", "REFRESH.md")), true);
     assert.equal(
       await exists(path.join(repository, ".aihaus", "contracts", "project-bootstrap.md")),
       true,
@@ -295,14 +295,14 @@ test("bootstrap blocks synthesis in an empty repository and ignores generated ad
     assert.ok(
       result.skipped.some(
         (entry) =>
-          entry.path === ".claude/skills/aih-init/SKILL.md" &&
+          entry.path === ".claude/skills/aih-refresh/SKILL.md" &&
           entry.reason === "host-skill-adapter",
       ),
     );
     assert.ok(
       result.skipped.some(
         (entry) =>
-          entry.path === ".agents/skills/aih-init/SKILL.md" &&
+          entry.path === ".agents/skills/aih-refresh/SKILL.md" &&
           entry.reason === "host-skill-adapter",
       ),
     );
@@ -346,9 +346,9 @@ test("bootstrap rejects incidental files and host skills as authoritative eviden
     {
       name: "colliding-host-skill",
       seed: async (repository) => {
-        const skill = path.join(repository, ".claude", "skills", "aih-init", "SKILL.md");
+        const skill = path.join(repository, ".claude", "skills", "aih-refresh", "SKILL.md");
         await mkdir(path.dirname(skill), { recursive: true });
-        await writeFile(skill, "---\nname: aih-init\ndescription: User workflow\n---\n", "utf8");
+        await writeFile(skill, "---\nname: aih-refresh\ndescription: User workflow\n---\n", "utf8");
       },
     },
   ];
@@ -372,7 +372,7 @@ test("bootstrap rejects incidental files and host skills as authoritative eviden
       assert.deepEqual(result.memory.readiness.evidence.authoritativeSources, [], fixture.name);
       assert.equal(result.memory.readiness.evidence.applicationSourceCount, 0, fixture.name);
       assert.ok(
-        !result.sources.some((source) => source.path.includes("skills/aih-init/SKILL.md")),
+        !result.sources.some((source) => source.path.includes("skills/aih-refresh/SKILL.md")),
         fixture.name,
       );
     } finally {
@@ -509,5 +509,62 @@ test("bootstrap reports conflicting project identities without choosing one", as
     assert.equal(await exists(path.join(repository, ".aihaus", "state", "bootstrap")), false);
   } finally {
     await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("status reports memory gaps and stale claims as advisory signals", async () => {
+  const labRoot = await mkdtemp(path.join(os.tmpdir(), "aihaus-bootstrap-insights-"));
+  const repository = path.join(labRoot, "consumer");
+  try {
+    await initializeGit(repository);
+    await mkdir(path.join(repository, ".github", "workflows"), { recursive: true });
+    await mkdir(path.join(repository, "src"), { recursive: true });
+    await writeFile(path.join(repository, "README.md"), "# Acme Billing\n", "utf8");
+    await writeFile(path.join(repository, ".github", "workflows", "deploy.yml"), "name: Deploy\n", "utf8");
+    await writeFile(path.join(repository, "src", "service.mjs"), "export const ready = true;\n", "utf8");
+    commitAll(repository, "seed consumer");
+    const tool = install(repository);
+    run(process.execPath, [tool, "--repo", repository, "--json"], repository);
+
+    const status = () => JSON.parse(
+      run(process.execPath, [tool, "--repo", repository, "--status", "--json"], repository).stdout,
+    ).status;
+
+    let current = status();
+    assert.ok(
+      current.memoryGaps.some(
+        (gap) =>
+          gap.target === ".aihaus/memory/project/deployment.md" &&
+          gap.status === "template" &&
+          gap.candidateExamples.includes(".github/workflows/deploy.yml"),
+      ),
+    );
+    assert.deepEqual(current.staleClaims, []);
+
+    const head = run("git", ["rev-parse", "HEAD"], repository).stdout.trim();
+    await writeFile(
+      path.join(repository, ".aihaus", "memory", "project", "knowledge.md"),
+      "# Knowledge\n\n- src/service.mjs exports ready (verified at " + head + ")\n",
+      "utf8",
+    );
+
+    current = status();
+    assert.ok(!current.memoryGaps.some((gap) => gap.target.endsWith("knowledge.md")));
+    assert.deepEqual(current.staleClaims, []);
+
+    await writeFile(path.join(repository, "src", "service.mjs"), "export const ready = false;\n", "utf8");
+    current = status();
+    assert.deepEqual(current.staleClaims, [{
+      page: ".aihaus/memory/project/knowledge.md",
+      source: "src/service.mjs",
+      reviewed: head,
+      reason: "source-changed-since-review",
+    }]);
+
+    await rm(path.join(repository, "src", "service.mjs"));
+    current = status();
+    assert.equal(current.staleClaims[0].reason, "source-missing");
+  } finally {
+    await rm(labRoot, { recursive: true, force: true });
   }
 });

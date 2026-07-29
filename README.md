@@ -34,11 +34,11 @@ This README documents the provider-neutral repository-local package.
 
 | Host | Repository-local adapter | Initialization |
 |---|---|---|
-| Claude Code | `.claude/skills/aih-init/SKILL.md` | `/aih-init` |
-| Codex | `.agents/skills/aih-init/SKILL.md` | `$aih-init`, or discover it through `/skills` |
-| Grok or another coding agent | No host adapter required | `node .aihaus/tools/init.mjs --repo . --json` |
+| Claude Code | `.claude/skills/aih-refresh/SKILL.md` | `/aih-refresh` |
+| Codex | `.agents/skills/aih-refresh/SKILL.md` | `$aih-refresh`, or discover it through `/skills` |
+| Grok or another coding agent | No host adapter required | `node .aihaus/tools/refresh.mjs --repo . --json` |
 
-The exact custom slash form `/aih-init` is a Claude Code capability; Codex does
+The exact custom slash form `/aih-refresh` is a Claude Code capability; Codex does
 not expose repository skills through that spelling. The old global `/aih-env`
 and multi-command Claude suite are not installed. aihaus does not add global
 hooks or change user settings. Older documentation paths such as
@@ -64,17 +64,17 @@ clone the source repository.
 Follow the version-pinned installation contract at:
 https://raw.githubusercontent.com/overdrive-dev/aihaus-flow/<release-tag>/INSTALL-VIA-LLM.md
 
-Run the versioned GitHub Release package with npm exec and the `aihaus setup`
+Run the versioned GitHub Release package with npm exec and the `aihaus init`
 command. Require source.distribution to be github-release and require
 source.pinned and verification.ok to be true. Report the installed version,
 package-owned changes, preserved content, adapters, hostCapabilities,
 conflicts, warnings, and readiness.
 
-Then run node .aihaus/tools/init.mjs --repo . --json. Read .aihaus/INIT.md and
+Then run node .aihaus/tools/refresh.mjs --repo . --json. Read .aihaus/REFRESH.md and
 .aihaus/contracts/project-bootstrap.md. Synthesize the discovered evidence into
 .aihaus/memory/project/ only when readyForSynthesis is true. Otherwise preserve
 the memory templates and report the blocker. Preserve existing content and
-finish with node .aihaus/tools/init.mjs --repo . --status --json.
+finish with node .aihaus/tools/refresh.mjs --repo . --status --json.
 ```
 
 The full agent contract is also available in
@@ -83,13 +83,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.3.0`):
+Current published release (`v1.4.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.3.0/aihaus-flow-v1.3.0.tgz -- aihaus setup --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.4.0/aihaus-flow-v1.4.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.3.0` with the same tag.
+For another release, replace both occurrences of `v1.4.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -117,8 +117,8 @@ show the portable bootstrap, host capabilities, and collision status:
     "ok": true
   },
   "bootstrap": {
-    "command": "node .aihaus/tools/init.mjs --repo . --json",
-    "instruction": ".aihaus/INIT.md"
+    "command": "node .aihaus/tools/refresh.mjs --repo . --json",
+    "instruction": ".aihaus/REFRESH.md"
   },
   "created": [],
   "refreshed": [],
@@ -126,11 +126,11 @@ show the portable bootstrap, host capabilities, and collision status:
   "hostCapabilities": {
     "claudeCode": {
       "available": true,
-      "invoke": "/aih-init"
+      "invoke": "/aih-refresh"
     },
     "codex": {
       "available": true,
-      "invoke": "$aih-init",
+      "invoke": "$aih-refresh",
       "customSlash": false
     }
   },
@@ -147,11 +147,11 @@ repository-local download directory behind.
 
 Starting with `v1.2.0`, the installed entry points are:
 
-- .aihaus/INIT.md;
-- .aihaus/tools/init.mjs;
+- .aihaus/REFRESH.md;
+- .aihaus/tools/refresh.mjs;
 - .aihaus/contracts/project-bootstrap.md;
-- `.claude/skills/aih-init/SKILL.md`;
-- `.agents/skills/aih-init/SKILL.md`;
+- `.claude/skills/aih-refresh/SKILL.md`;
+- `.agents/skills/aih-refresh/SKILL.md`;
 - `.aihaus/VERSION`;
 - `.aihaus/MAP.md`;
 - `.aihaus/contracts/harness.md`;
@@ -162,13 +162,13 @@ Starting with `v1.2.0`, the installed entry points are:
 
 | Path | Purpose | Ownership on update |
 |---|---|---|
-| .aihaus/INIT.md | Provider-neutral memory synthesis routine | Package-owned; refreshed only when different or with `--force` |
+| .aihaus/REFRESH.md | Provider-neutral memory synthesis routine | Package-owned; refreshed only when different or with `--force` |
 | `.aihaus/MAP.md`, `rooms/`, `roles/`, `contracts/`, `tools/` | Portable aihaus workflow | Package-owned; refreshed only when different or with `--force` |
 | `.aihaus/VERSION` | Installed package version | Package-owned; refreshed only when different or with `--force` |
 | `.aihaus/memory/project/` | Project rules, decisions, knowledge, and procedures | Project-owned and preserved |
 | `.aihaus/memory/kanban/` | File-based task history | Project-owned and preserved |
 | `AGENTS.md`, `CLAUDE.md` | Thin host routers | Only the bounded aihaus block is managed |
-| `.claude/skills/aih-init/SKILL.md`, `.agents/skills/aih-init/SKILL.md` | Thin host-native wrappers around the portable bootstrap | Refreshed only when the aihaus ownership marker is present; otherwise preserved and reported as a conflict |
+| `.claude/skills/aih-refresh/SKILL.md`, `.agents/skills/aih-refresh/SKILL.md` | Thin host-native wrappers around the portable bootstrap | Refreshed only when the aihaus ownership marker is present; otherwise preserved and reported as a conflict |
 | `.gitignore` | Ignores local aihaus state and temporary download | Only the bounded aihaus block is managed |
 
 Text outside `AIHAUS:START` / `AIHAUS:END` blocks is preserved. `CLAUDE.md` is
@@ -179,7 +179,7 @@ an adapter for compatible hosts, not a dependency on Claude.
 Setup installs preserved templates but does not guess project meaning. Run the
 deterministic offline discovery command:
 
-    node .aihaus/tools/init.mjs --repo . --json
+    node .aihaus/tools/refresh.mjs --repo . --json
 
 It writes only the ignored packet
 .aihaus/state/bootstrap/discovery.json. The packet contains source paths,
@@ -191,11 +191,19 @@ services, or deploy.
 The JSON includes `readyForSynthesis`, `evidenceLevel`, and `memoryReadiness`.
 When `readyForSynthesis` is false, keep the templates unchanged and add an
 authoritative project source such as a README, manifest, project brief, or
-application code before trying again. This prevents a fresh repository from
-being marked initialized with invented or unresolved-only memory.
+application code before trying again — or let the agent interview you and
+record your answers in a root PROJECT-BRIEF.md, which becomes that
+authoritative source. This prevents a fresh repository from being marked
+initialized with invented or unresolved-only memory.
+
+The status mode additionally reports two advisory signals: `memoryGaps`
+(template pages that already have cataloged candidate sources) and
+`staleClaims` (memory pages whose cited sources changed or disappeared since
+their newest cited review commit). Both are read-only hints for an
+agent-proposed refresh; nothing rewrites memory automatically.
 
 When `readyForSynthesis` is true, ask the active coding agent to follow
-.aihaus/INIT.md and .aihaus/contracts/project-bootstrap.md. The agent reviews
+.aihaus/REFRESH.md and .aihaus/contracts/project-bootstrap.md. The agent reviews
 candidate sources and updates .aihaus/memory/project/ without replacing
 existing content or turning inferences into accepted rules. This semantic phase
 is deliberately provider-neutral and reviewable instead of being hidden inside
@@ -203,24 +211,24 @@ deterministic code.
 
 Host-native shortcuts call the same routine:
 
-- Claude Code: `/aih-init` (restart the session if a newly installed skill is
+- Claude Code: `/aih-refresh` (restart the session if a newly installed skill is
   not yet visible);
-- Codex: `$aih-init`, or select it through `/skills`;
-- every host: `node .aihaus/tools/init.mjs --repo . --json`.
+- Codex: `$aih-refresh`, or select it through `/skills`;
+- every host: `node .aihaus/tools/refresh.mjs --repo . --json`.
 
 Preview without writing:
 
-    node .aihaus/tools/init.mjs --repo . --dry-run --json
+    node .aihaus/tools/refresh.mjs --repo . --dry-run --json
 
 Check whether the discovery packet matches current inputs:
 
-    node .aihaus/tools/init.mjs --repo . --status --json
+    node .aihaus/tools/refresh.mjs --repo . --status --json
 
 Copy-paste prompt:
 
 ~~~text
 Read .aihaus/MAP.md, .aihaus/contracts/harness.md,
-.aihaus/contracts/project-bootstrap.md, and .aihaus/INIT.md. Run the local
+.aihaus/contracts/project-bootstrap.md, and .aihaus/REFRESH.md. Run the local
 bootstrap discovery command. Populate .aihaus/memory/project/ only if
 readyForSynthesis is true, using verified repository evidence. Otherwise
 preserve the templates and report the blocker. Preserve existing content, cite
@@ -253,7 +261,7 @@ No special aihaus command is required for ordinary agent work.
 
 ## Update aihaus
 
-Use the same `aihaus setup` command with the newer release tag. Setup compares
+Use the same `aihaus init` command with the newer release tag. Setup compares
 the released package with the installed package and writes only missing or
 different package-owned surfaces. Repeating the same release with unchanged
 files is a no-op: `changesRequired` is false, `created` and `refreshed` are
@@ -262,19 +270,19 @@ empty, and package paths are listed in `unchanged`.
 Preview an install or update without writing:
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus setup --target . --check --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus init --target . --check --json
 ```
 
 Apply only required changes:
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus setup --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus init --target . --json
 ```
 
 Repair every package-owned surface even when it already matches:
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus setup --target . --force --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus init --target . --force --json
 ```
 
 `--check` reports `wouldCreate`, `wouldRefresh`, `wouldSeed`, and
@@ -331,12 +339,12 @@ environments and least-privilege credentials for production work.
 
 ## Troubleshooting
 
-- **`/aih-init` is missing in Claude Code:** verify
-  `.claude/skills/aih-init/SKILL.md` exists, then restart the Claude Code
+- **`/aih-refresh` is missing in Claude Code:** verify
+  `.claude/skills/aih-refresh/SKILL.md` exists, then restart the Claude Code
   session. Skills created after a session starts may require rediscovery.
-- **`/aih-init` is missing in Codex:** use `$aih-init` or `/skills`. Codex
+- **`/aih-refresh` is missing in Codex:** use `$aih-refresh` or `/skills`. Codex
   repository skills do not promise the exact custom slash spelling. If
-  `aih-init` is not listed after setup, restart Codex so it rediscovers skills.
+  `aih-refresh` is not listed after setup, restart Codex so it rediscovers skills.
 - **Host skill conflict:** setup preserved a user-owned skill at the adapter
   path. Review `conflicts`; rename or reconcile it explicitly rather than
   deleting it automatically.
@@ -344,8 +352,8 @@ environments and least-privilege credentials for production work.
   README, manifest, project brief, or application source. Do not fill memory
   with the repository name or aihaus installation metadata.
 - **Bootstrap packet missing or stale:** run
-  node .aihaus/tools/init.mjs --repo . --json, complete the synthesis in
-  .aihaus/INIT.md, rerun discovery, and require status.stale to be false.
+  node .aihaus/tools/refresh.mjs --repo . --json, complete the synthesis in
+  .aihaus/REFRESH.md, rerun discovery, and require status.stale to be false.
 - **Conflicting bootstrap evidence:** preserve existing memory and report the
   conflict; do not choose a business rule or project identity silently.
 - **`target must be the repository root`:** change to the Git repository root

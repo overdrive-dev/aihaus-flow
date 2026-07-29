@@ -11,13 +11,14 @@ const setup = path.join(packageRoot, "setup.mjs");
 function usage() {
   return [
     "Usage:",
-    "  aihaus setup [--target <git-root>] [--check | --force] [--json]",
+    "  aihaus init [--target <git-root>] [--check | --force] [--json]",
     "  aihaus version [--json]",
     "  aihaus --help",
     "",
-    "setup installs or updates only changed repository-local package files.",
+    "init installs or updates only changed repository-local package files.",
     "Use --check to preview changes without writing, or --force to rewrite package-owned files.",
-    "After setup, run node .aihaus/tools/init.mjs --repo . --json.",
+    "After init, run node .aihaus/tools/refresh.mjs --repo . --json.",
+    "(aihaus setup remains as a deprecated alias for init.)",
   ].join("\n");
 }
 
@@ -43,7 +44,7 @@ async function main() {
     process.stdout.write(`${usage()}\n`);
     return;
   }
-  if (command === "setup") {
+  if (command === "init" || command === "setup") {
     runSetup(args);
     return;
   }
