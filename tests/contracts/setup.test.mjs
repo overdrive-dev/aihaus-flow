@@ -51,7 +51,7 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     assert.equal(firstResult.mode, "apply");
     assert.equal(firstResult.forced, false);
     assert.equal(firstResult.changesRequired, true);
-    assert.equal(firstResult.source.version, "1.4.0");
+    assert.equal(firstResult.source.version, (await readFile(path.join(root, "pkg", "VERSION"), "utf8")).trim());
     assert.match(firstResult.preflight.node, /^\d+\.\d+\.\d+/);
     assert.match(firstResult.preflight.git, /^git version /);
     assert.deepEqual(firstResult.created, firstResult.installed);
