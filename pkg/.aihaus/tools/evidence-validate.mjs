@@ -44,6 +44,7 @@ export function validateEvidenceDocument(document) {
       errors.push(`${prefix}.evidence must be an array`);
       continue;
     }
+    if (item.evidence.length === 0) errors.push(`${prefix}.evidence must contain at least one rung`);
 
     for (const [evidenceIndex, evidence] of item.evidence.entries()) {
       if (!evidence || typeof evidence !== "object" || !RUNGS.has(evidence.rung)) {
@@ -68,6 +69,13 @@ export function validateEvidenceDocument(document) {
       if (!credible) {
         errors.push(`${prefix} lacks trusted ran/verified evidence with command and exit_code 0`);
       }
+    }
+    if (document.verdict === "PASS" && item.executable === false) {
+      const supported = item.evidence.some((evidence) =>
+        evidence && ["written", "ran", "verified"].includes(evidence.rung)
+        && [evidence.artifact, evidence.detail].some((value) => typeof value === "string" && value.trim() !== "")
+      );
+      if (!supported) errors.push(`${prefix} lacks non-blocked supporting evidence with artifact or detail`);
     }
   }
 

@@ -29,6 +29,13 @@ responsibility; rooms describe work. Specialist heuristics such as security,
 migration, integration, complexity, and goal-backward verification are loaded
 as review lenses instead of permanent agent identities.
 
+The harness requires a context check at task start, resumption, handoff, and
+relevant source changes. The agent resolves its worktree and task, reads native
+instructions for owned paths, checks discovery status, and retrieves only
+matching memory entries and their sources. The task records references, scope,
+gaps, and verification requirements; workers reopen sources rather than treating
+delegation summaries as authority.
+
 ## Host adapters
 
 The portable initialization semantics live in `.aihaus/tools/refresh.mjs`,
@@ -37,6 +44,19 @@ repository-local discovery wrappers at `.claude/skills/aih-refresh/SKILL.md` and
 `.agents/skills/aih-refresh/SKILL.md`. Claude Code exposes its wrapper as
 `/aih-refresh`; Codex exposes its repository skill as `$aih-refresh` or through
 `/skills`. The package does not emulate unsupported command syntax.
+
+The managed AGENTS.md block holds the portable router. CLAUDE.md uses the native
+`@AGENTS.md` import so shared instructions outside the managed block also reach
+Claude. This follows Claude's documented [memory and imports](https://code.claude.com/docs/en/memory).
+Directory-specific instructions retain their native scope; discovery indexes
+do not activate those instructions globally. Host-local automatic memory cannot
+replace the versioned project record.
+
+Codex can select a nonempty AGENTS.override.md instead of AGENTS.md within a
+directory, subject to its instruction hierarchy and size limit. Setup preserves
+a root override and reports `instructionWarnings`, independently of skill
+availability. See the official [AGENTS.md guide](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+The installer cannot guarantee that a running host has reloaded its instructions.
 
 Host skills contain an aihaus ownership marker. Setup refreshes only marked
 files; a pre-existing unmarked file at either path is user-owned, preserved,
@@ -58,10 +78,30 @@ skills are excluded as project sources. When no authoritative project evidence
 exists, `readyForSynthesis` is false, canonical templates remain unchanged, and
 status cannot report the repository as initialized.
 
+The memory README is a small retrieval map; discovery.json catalogs safe sources,
+hashes, revisions, and candidate targets. Neither is a semantic index or an
+authority layer. Search existing Markdown by task domain, rule/decision IDs,
+and paths, then inspect the matching entry and its source. No embedding service,
+graph, or additional state store is needed for this flow.
+
+Status checks memory content/provenance structure and reports incomplete pages
+and stale claims. Review commits belong to individual claims; worktree/untracked
+claims use source hashes. Ambiguous legacy citations require review instead of
+using the newest page citation to validate older claims. These checks detect
+known gaps, not semantic correctness, acceptance, or instruction compliance.
+The designated writer preserves manual/history text while adding verified
+replacements and marking obsolete claims. Conflicting business decisions stay
+unresolved until an authoritative source or owner resolves them.
+
 Project Markdown and task files are authoritative. `.aihaus/state/` contains
 only rebuildable discovery and tool state. Deleting generated state must not
 erase rules, decisions, knowledge, or task history. Task status is the Markdown
 file's folder under `.aihaus/memory/kanban/`.
+
+A transition to done requires a valid PASS evidence document inside the
+repository that covers exactly the checked acceptance criteria and resolved
+business-rule questions. Evidence validation rejects empty/blocked-only support;
+an independent verifier must still inspect artifacts or rerun applicable checks.
 
 ## Evolution rule
 

@@ -27,8 +27,8 @@ export function isAllowed(file, allow) {
 
 async function changedFiles(repo) {
   const groups = [
-    git(["diff", "--name-only", "--diff-filter=ACMRD", "-z"], repo, { nul: true }),
-    git(["diff", "--cached", "--name-only", "--diff-filter=ACMRD", "-z"], repo, { nul: true }),
+    git(["diff", "--no-renames", "--name-only", "-z"], repo, { nul: true }),
+    git(["diff", "--cached", "--no-renames", "--name-only", "-z"], repo, { nul: true }),
     git(["ls-files", "--others", "--exclude-standard", "-z"], repo, { nul: true }),
   ];
   return [...new Set(groups.flat().map(normalize))].sort();

@@ -17,8 +17,10 @@ Load `conventions.md` whenever files or durable memory may change. Select one
 primary role from `roles/`: orchestrator, planner, implementer, researcher,
 reviewer, or verifier. Roles describe responsibility; rooms describe the work.
 
-Project context is pulled on demand from `memory/project/` and the current
-Markdown task in `memory/kanban/`.
+Follow the harness context check before substantive work and on resumption.
+`memory/project/README.md` maps questions to memory pages; retrieve only relevant
+entries and verify their cited sources. The current Markdown task in
+`memory/kanban/` carries scope, rule/decision references, gaps, and evidence.
 
 If no row fits, use the smallest existing room and record the missing case in
 the task. A new room requires repeated lab evidence, not a one-off request.

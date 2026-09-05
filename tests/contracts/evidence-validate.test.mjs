@@ -50,3 +50,15 @@ test("rejects non-zero execution and partial PASS criteria", () => {
   assert.equal(partial.ok, false);
   assert.match(partial.errors.join("\n"), /must be satisfied/);
 });
+
+test("non-executable PASS requires supporting evidence", () => {
+  for (const evidence of [[], [{ rung: "blocked", detail: "Reviewer unavailable" }], [{ rung: "written" }]]) {
+    assert.equal(validateEvidenceDocument(document(evidence, { executable: false })).ok, false);
+  }
+  for (const support of [{ artifact: "review/approved.png" }, { detail: "Reviewer approved the wording." }]) {
+    assert.equal(validateEvidenceDocument(document([{ rung: "written", ...support }], { executable: false })).ok, true);
+  }
+  const blocked = document([{ rung: "blocked", detail: "Reviewer unavailable" }], { executable: false, status: "not_satisfied" });
+  blocked.verdict = "BLOCKED";
+  assert.equal(validateEvidenceDocument(blocked).ok, true);
+});

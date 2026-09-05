@@ -13,8 +13,8 @@ or settings, Bash, symlinks, or a hosted service.
 Run node .aihaus/tools/refresh.mjs --repo . --json only from the Git repository
 root. The command may write .aihaus/state/bootstrap/discovery.json and nothing
 else. Dry-run and status modes are read-only. Status additionally reports the
-advisory `memoryGaps` and `staleClaims` signals; they inform an agent-proposed
-refresh and never trigger automatic memory writes.
+advisory `memoryGaps` and `staleClaims` signals; the active agent uses them to
+review relevant context. The command never writes canonical memory.
 
 Discovery must:
 
@@ -58,10 +58,12 @@ Fill untouched templates with source-backed statements. Patch non-template
 files minimally and preserve manual edits. Never replace existing memory
 wholesale.
 
-Every durable automatic statement must cite a repository-relative source and
-the reviewed commit where practical. Mark dirty tracked sources as worktree and
-new sources as untracked. Record only explicit accepted rules and decisions;
-keep inferred candidates and gaps visibly unaccepted.
+Every durable automatic statement must keep its repository-relative source and
+reviewed commit together on that claim. For dirty tracked or untracked sources,
+record worktree/untracked plus the source hash from discovery instead of claiming
+HEAD represents those bytes. Follow the examples in REFRESH.md. Record only
+explicit accepted rules and decisions; keep inferred candidates and gaps visibly
+unaccepted. Preserve the original scope of directory-specific instructions.
 
 Do not copy secret values. Environment and deployment memory may describe
 topology, credential locations, approval boundaries, smoke checks, and
@@ -73,4 +75,8 @@ Unchanged repository inputs produce byte-identical discovery state and no
 writes on a second run. Completion requires sufficient authoritative evidence,
 a fresh packet, reviewed canonical Markdown, preserved existing content,
 explicit conflicts and gaps, and status reporting initialized true,
-memoryReadiness ready, and stale false.
+memoryReadiness ready, and stale false. Readiness checks content and provenance
+structure; it does not certify semantic truth or owner approval. Resolve the
+stale claims and source conflicts applicable to the current task before use.
+The designated writer may maintain verified context within authorized work;
+conflicting business rules require an owner decision, not an automatic rewrite.
