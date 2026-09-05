@@ -49,7 +49,19 @@ task state.
    through `review` and `done`. Promote durable memory separately.
 
 Forward transitions are rejected when required task sections still contain the
-new-task placeholder or are empty. Existing tasks are not rewritten.
+new-task placeholder or are empty. `done` additionally requires checked, unique
+acceptance items, answered business-rule gaps, and a valid PASS evidence artifact
+covering exactly the acceptance texts. Existing tasks are not rewritten.
+
+Reference that artifact under `## Evidence` as
+`Artifact: evidence/task-result.json` (relative to the Git root). See
+`contracts/evidence.md` for the JSON contract. A reviewer may receive blocked
+results in `review`; they are never enough to complete the task.
+
+Record applicable rule/decision IDs and source revisions in `Context`. Include
+the next action, unresolved gaps, owned files, and commands already run in
+`Log` before handoff. A resumed agent checks those sources and current memory
+status instead of relying on a previous conversation's summary.
 
 Portable commands:
 

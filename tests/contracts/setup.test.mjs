@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { link, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, link, mkdtemp, mkdir, readFile, readdir, readlink, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -16,6 +16,20 @@ function run(command, args, cwd, allowFailure = false) {
     throw new Error(`${command} ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
   }
   return result;
+}
+
+async function projectSnapshot(directory, relative = "") {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const snapshot = [];
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (entry.name === ".git") continue;
+    const name = path.join(relative, entry.name);
+    const file = path.join(directory, entry.name);
+    const content = entry.isSymbolicLink() ? `link:${await readlink(file)}` : entry.isDirectory() ? "directory" : await readFile(file, "utf8");
+    snapshot.push([name, content]);
+    if (entry.isDirectory()) snapshot.push(...await projectSnapshot(file, name));
+  }
+  return snapshot;
 }
 
 test("canonical setup is local, idempotent, and preserves project memory", async () => {
@@ -37,7 +51,7 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     assert.equal(firstResult.mode, "apply");
     assert.equal(firstResult.forced, false);
     assert.equal(firstResult.changesRequired, true);
-    assert.equal(firstResult.source.version, "1.4.0");
+    assert.equal(firstResult.source.version, (await readFile(path.join(root, "pkg", "VERSION"), "utf8")).trim());
     assert.match(firstResult.preflight.node, /^\d+\.\d+\.\d+/);
     assert.match(firstResult.preflight.git, /^git version /);
     assert.deepEqual(firstResult.created, firstResult.installed);
@@ -48,6 +62,7 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     assert.equal(firstResult.verification.ok, true);
     assert.ok(firstResult.verification.required.includes(".aihaus/MAP.md"));
     assert.ok(firstResult.verification.required.includes(".aihaus/REFRESH.md"));
+    assert.ok(firstResult.verification.required.includes(".aihaus/memory/project/project.md"));
     assert.ok(
       firstResult.verification.required.includes(".aihaus/contracts/project-bootstrap.md"),
     );
@@ -443,5 +458,193 @@ test("upgrade retires INIT.md and aihaus-marked aih-init skills, preserving user
     );
   } finally {
     await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("setup rejects duplicate and reversed markers in every root adapter", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-markers-"));
+  const start = "<!-- AIHAUS:START -->";
+  const end = "<!-- AIHAUS:END -->";
+  const malformed = [
+    `${start}\nUser rule\n${start}\nOld router\n${end}`,
+    `${start}\nOld router\n${end}\nUser rule\n${end}`,
+    `${end}\nUser rule\n${start}`,
+    `${start}\nOld router\n${end}\n${start}\nSecond router\n${end}`,
+  ];
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    for (const file of ["AGENTS.md", "CLAUDE.md", ".gitignore"]) {
+      for (const body of malformed) {
+        await writeFile(path.join(temp, file), `User prefix\n${body}\nUser suffix\n`);
+        const before = await projectSnapshot(temp);
+        for (const flags of [["--check"], [], ["--force"]]) {
+          const result = run(process.execPath, [setup, "--target", temp, ...flags], temp, true);
+          assert.equal(result.status, 2, `${file}: ${flags.join(" ")}`);
+          assert.match(result.stderr, /malformed managed block/);
+          assert.deepEqual(await projectSnapshot(temp), before);
+        }
+      }
+      await rm(path.join(temp, file));
+    }
+  } finally {
+    assert.equal(path.dirname(temp), os.tmpdir());
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("setup validates late adapter errors before updating the installed package", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-preflight-"));
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    run(process.execPath, [setup, "--target", temp], temp);
+    await writeFile(path.join(temp, ".aihaus", "VERSION"), "0.0.0\n");
+    await writeFile(path.join(temp, ".aihaus", "roles", "reviewer.md"), "# Previous reviewer\n");
+    await writeFile(path.join(temp, ".aihaus", "INIT.md"), "# Previous entry point\n");
+    for (const file of ["AGENTS.md", "CLAUDE.md", ".gitignore"]) {
+      const destination = path.join(temp, file);
+      const original = await readFile(destination, "utf8");
+      await writeFile(destination, "User rule\n<!-- AIHAUS:START -->\n");
+      const before = await projectSnapshot(temp);
+      for (const flags of [["--check"], [], ["--force"]]) {
+        const result = run(process.execPath, [setup, "--target", temp, ...flags], temp, true);
+        assert.equal(result.status, 2);
+        assert.match(result.stderr, /malformed managed block/);
+        assert.deepEqual(await projectSnapshot(temp), before);
+      }
+      await writeFile(destination, original);
+    }
+  } finally {
+    assert.equal(path.dirname(temp), os.tmpdir());
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("setup preview reports missing directories and rejects obstructions without writing", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-directories-"));
+  const directories = [".aihaus/memory/kanban/todo", ".aihaus/state"];
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    run(process.execPath, [setup, "--target", temp], temp);
+    for (const relative of directories) await rmdir(path.join(temp, relative));
+    const before = await projectSnapshot(temp);
+    const preview = JSON.parse(run(process.execPath, [setup, "--target", temp, "--check"], temp).stdout);
+    assert.equal(preview.changesRequired, true);
+    assert.deepEqual(preview.wouldCreateDirectories, directories);
+    assert.deepEqual(preview.createdDirectories, []);
+    assert.equal(preview.verification.ok, false);
+    for (const relative of directories) assert.ok(preview.verification.missing.includes(relative));
+    assert.deepEqual(await projectSnapshot(temp), before);
+    const applied = JSON.parse(run(process.execPath, [setup, "--target", temp], temp).stdout);
+    assert.deepEqual(applied.createdDirectories, directories);
+    assert.deepEqual(applied.wouldCreateDirectories, []);
+    assert.equal(applied.verification.ok, true);
+    assert.equal(JSON.parse(run(process.execPath, [setup, "--target", temp, "--check"], temp).stdout).changesRequired, false);
+
+    for (const relative of directories) {
+      const destination = path.join(temp, relative);
+      await rmdir(destination);
+      await writeFile(destination, "User-owned obstruction\n");
+      const obstructed = await projectSnapshot(temp);
+      for (const flags of [["--check"], [], ["--force"]]) {
+        const result = run(process.execPath, [setup, "--target", temp, ...flags], temp, true);
+        assert.equal(result.status, 2, relative);
+        assert.deepEqual(await projectSnapshot(temp), obstructed);
+      }
+      await rm(destination);
+      await mkdir(destination);
+    }
+  } finally {
+    assert.equal(path.dirname(temp), os.tmpdir());
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("setup preflights incomplete sources and invalid release metadata without changing the target", async () => {
+  const lab = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-source-preflight-"));
+  try {
+    const target = path.join(lab, "consumer");
+    const source = path.join(lab, "download", "pkg");
+    await mkdir(target);
+    run("git", ["init", "-b", "main"], target);
+    await cp(path.join(root, "pkg"), source, { recursive: true });
+    run(process.execPath, [setup, "--target", target], target);
+    await writeFile(path.join(target, ".aihaus", "VERSION"), "0.0.0\n");
+    await rm(path.join(target, ".aihaus", "memory", "project", "glossary.md"));
+    const before = await projectSnapshot(target);
+    for (const relative of [".aihaus/memory/project/glossary.md", ".aihaus/rooms/feature/CONTEXT.md", "adapters/codex/skills/aih-refresh/SKILL.md", "RELEASE.json"]) {
+      const file = path.join(source, relative);
+      if (relative === "RELEASE.json") await writeFile(file, "invalid JSON");
+      else await rm(file);
+      for (const flags of [["--check"], [], ["--force"]]) {
+        const result = run(process.execPath, [path.join(source, "setup.mjs"), "--target", target, ...flags], target, true);
+        assert.equal(result.status, 2, relative);
+        assert.deepEqual(await projectSnapshot(target), before);
+      }
+      if (relative !== "RELEASE.json") await cp(path.join(root, "pkg", relative), file);
+    }
+  } finally {
+    assert.equal(path.dirname(lab), os.tmpdir());
+    await rm(lab, { recursive: true, force: true });
+  }
+});
+
+test("setup imports project instructions for Claude and reports Codex router shadowing", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-instructions-"));
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    const prefix = "# Project-owned instructions\n";
+    const suffix = "\n# Preserve this rule\n";
+    for (const file of ["AGENTS.md", "CLAUDE.md"]) {
+      await writeFile(path.join(temp, file), `${prefix}<!-- AIHAUS:START -->\nOld router\n<!-- AIHAUS:END -->${suffix}`);
+    }
+    const override = "# Private project override\nDo not expose this rule in installer output.\n";
+    await writeFile(path.join(temp, "AGENTS.override.md"), override);
+    const result = run(process.execPath, [setup, "--target", temp], temp);
+    const report = JSON.parse(result.stdout);
+    for (const file of ["AGENTS.md", "CLAUDE.md"]) {
+      const body = await readFile(path.join(temp, file), "utf8");
+      assert.ok(body.startsWith(prefix));
+      assert.ok(body.endsWith(suffix));
+    }
+    assert.match(await readFile(path.join(temp, "CLAUDE.md"), "utf8"), /<!-- AIHAUS:START -->\n@AGENTS\.md\n<!-- AIHAUS:END -->/);
+    assert.match(await readFile(path.join(temp, "AGENTS.md"), "utf8"), /\.aihaus\/MAP\.md/);
+    assert.equal(await readFile(path.join(temp, "AGENTS.override.md"), "utf8"), override);
+    assert.deepEqual(report.instructionWarnings.map((warning) => warning.path), ["AGENTS.override.md"]);
+    assert.ok(report.instructionWarnings[0].reason);
+    assert.ok(report.warnings.some((warning) => warning.includes("AGENTS.override.md")));
+    assert.equal(report.hostCapabilities.codex.available, true);
+    assert.ok(!result.stdout.includes("Do not expose this rule"));
+    await writeFile(path.join(temp, "AGENTS.override.md"), "\n");
+    assert.deepEqual(JSON.parse(run(process.execPath, [setup, "--target", temp, "--check"], temp).stdout).instructionWarnings, []);
+  } finally {
+    assert.equal(path.dirname(temp), os.tmpdir());
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("setup rejects non-regular memory seeds before writing", async () => {
+  for (const kind of ["directory", "junction"]) {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-memory-kind-"));
+    try {
+      run("git", ["init", "-b", "main"], temp);
+      const destination = path.join(temp, ".aihaus", "memory", "project", "project.md");
+      if (kind === "directory") {
+        await mkdir(destination, { recursive: true });
+      } else {
+        const manual = path.join(path.dirname(destination), "manual-memory");
+        await mkdir(manual, { recursive: true });
+        await symlink(manual, destination, "junction");
+      }
+      const before = await projectSnapshot(temp);
+      for (const flags of [["--check"], [], ["--force"]]) {
+        const result = run(process.execPath, [setup, "--target", temp, ...flags], temp, true);
+        assert.equal(result.status, 2, `${kind}: ${flags.join(" ")}`);
+        assert.match(result.stderr, /non-regular project memory/);
+        assert.deepEqual(await projectSnapshot(temp), before);
+      }
+    } finally {
+      assert.equal(path.dirname(temp), os.tmpdir());
+      await rm(temp, { recursive: true, force: true });
+    }
   }
 });

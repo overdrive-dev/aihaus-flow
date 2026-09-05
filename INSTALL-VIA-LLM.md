@@ -26,7 +26,7 @@ Identity and scope:
    repository file:
       npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus init --target . --check --json
    In this mode require mode: check, created/refreshed/seeded to be empty, and
-   inspect changesRequired, wouldCreate, wouldRefresh, wouldSeed, and
+   inspect changesRequired, wouldCreate, wouldCreateDirectories, wouldRefresh, wouldSeed, and
    wouldRemove. On a first installation verification.ok may be false because
    the preview does not write the missing package surface.
 4. Run the setup command to install or update only missing or changed package
@@ -35,16 +35,16 @@ Identity and scope:
 5. Treat the JSON result as authoritative. Require:
    - ok: true and scope: repository-local;
    - mode: apply and forced: false for a normal setup;
-   - changesRequired plus created, refreshed, unchanged, seeded, preserved,
+   - changesRequired plus created, createdDirectories, refreshed, unchanged, seeded, preserved,
      removed, and wouldRemove;
    - preflight Node and Git values;
    - source.distribution: github-release;
    - source.version, source.commit, and source.ref;
    - source.pinned: true;
    - verification.ok: true, including .aihaus/VERSION and the required package
-     entry points;
+     entry points and required kanban/state directories;
    - bootstrap.command, bootstrap.instruction, and bootstrap.contract;
-   - adapters, hostCapabilities, and conflicts results;
+   - adapters, hostCapabilities, conflicts, and instructionWarnings results;
    - cleanup.path: null and cleanup.pending: false.
 6. Interpret ownership precisely. Paths in created/refreshed are package-owned;
    refreshing them may replace prior package files. Project memory listed in
@@ -54,6 +54,10 @@ Identity and scope:
    `.agents/skills/aih-refresh/SKILL.md` only when their aihaus ownership marker is
    present. It must preserve a user-owned collision, report it in conflicts,
    and set that host capability's available field to false.
+   The managed CLAUDE.md block imports AGENTS.md with @AGENTS.md so Claude also
+   reads shared user instructions. A nonempty root AGENTS.override.md is
+   preserved and reported in instructionWarnings because Codex can select it
+   instead of AGENTS.md; this does not disable an otherwise valid refresh skill.
    Repeating an unchanged release should report changesRequired: false, empty
    created/refreshed arrays, and package paths under unchanged. Use --force
    only for explicit package repair; it still must preserve project memory,
@@ -76,7 +80,8 @@ Identity and scope:
    the packet into canonical Markdown one target at a time only when
    readyForSynthesis is true. If false, preserve all memory templates and report
    the evidence blocker. Preserve existing content, cite repository-relative
-   sources and the reviewed commit, and never convert an inference into an
+   sources and the reviewed commit on each claim (or the discovery hash for
+   worktree/untracked bytes), and never convert an inference into an
    accepted rule or decision.
 10. Do not read paths reported as skipped, record secret values, access the
    network, upload data, start a service, deploy, or write outside this
@@ -86,9 +91,11 @@ Identity and scope:
     Require status.initialized: true, status.memoryReadiness: ready, and
     status.stale: false. When synthesis was blocked for insufficient evidence,
     require status.initialized: false and status.memoryReadiness: uninitialized
-    instead.
+    instead. Readiness is a structural check, not proof of semantic review or
+    owner approval. Resolve stale claims and conflicts relevant to the task
+    before relying on them; preserve and report unresolved gaps honestly.
 12. Report version/ref provenance, package-owned changes, preserved content,
-    adapter and hostCapabilities results, bootstrap sources, canonical memory
+    adapter, hostCapabilities and instructionWarnings results, bootstrap sources, canonical memory
     changes, conflicts, unresolved gaps, verification, warnings, and readiness.
 ```
 

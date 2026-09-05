@@ -55,9 +55,9 @@ Only continue when `readyForSynthesis` is true.
    Never replace existing project memory wholesale.
 5. Label every claim as verified, accepted, inferred candidate, or unresolved.
    Never promote an inference to an accepted business rule or decision.
-6. Attach repository-relative source provenance and the reviewed commit when
-   practical. Use worktree or untracked when the packet says a source is not
-   represented by the reviewed commit.
+6. Attach provenance to each claim using the format below. Use the reviewed
+   commit for clean tracked sources, or the source's discovery hash for
+   worktree/untracked content. A page-level timestamp cannot review every claim.
 7. Do not read excluded paths or record secret values. Environment memory may
    name credential locations and access expectations, never credentials.
 8. Report conflicting evidence instead of silently choosing a side. Do not
@@ -70,23 +70,49 @@ Only continue when `readyForSynthesis` is true.
 
 Completion requires status.initialized true, status.stale false, reviewed
 changes to canonical Markdown, `memoryReadiness` equal to `ready`, and a report
-of preserved files, conflicts, and unresolved gaps.
+of preserved files, conflicts, and unresolved gaps. These status fields are
+structural signals, not proof that the agent reviewed or understood the prose.
+Resolve applicable stale claims and conflicts before relying on that memory.
+
+## Provenance and retrieval
+
+Keep each claim and its source/revision together in one item or paragraph:
+
+    - Verified: invoices round once at the total. Source: `src/invoice.mjs` (reviewed <commit>).
+    - Verified: checkout draft uses cents. Source: `src/checkout.mjs` (worktree; sha256: <discovery hash>).
+
+Replace placeholders with the actual commit or source hash from discovery.
+For an untracked source, use `untracked` instead of `worktree`. Use separate
+claims for sources reviewed at different revisions. Legacy page-level citations
+remain readable, but ambiguous associations need source review; adding a newer
+commit to a page does not revalidate its older claims. Preserve explicit
+owner/date provenance and record owner decisions in a reviewable project file.
+
+Select memory from `memory/project/README.md` using the active task's domain,
+rule/decision IDs, and owned paths. Read each matching entry and its source;
+do not preload all pages or treat an index hit as an accepted rule. Preserve
+the original scope of nested repository instructions. Draft, proposed,
+inferred, superseded, and unresolved entries are not accepted decisions.
+Host-local automatic memory and conversation summaries do not replace the
+canonical Markdown or authorize promoting a candidate rule.
 
 ## Maintenance: memory gaps and stale claims
 
 The status command also reports two advisory, read-only signals:
 
-- `memoryGaps`: memory pages still untouched templates although discovery
-  cataloged candidate sources for them. Treat each gap as a synthesis target:
-  inspect the candidates and fill the page, or ask the owner what the evidence
-  cannot answer.
-- `staleClaims`: pages whose cited sources changed or disappeared since the
-  page's newest cited review commit. Re-verify only the flagged claims and
-  patch additively with fresh provenance. Mark claims you cannot re-verify as
-  unresolved; never silently delete or rewrite them.
+- `memoryGaps`: missing, template, or incomplete memory pages with candidate
+  sources. Inspect candidates needed by the active task. A changed file or
+  heading alone does not establish reviewed memory.
+- `staleClaims`: claims whose source changed/disappeared, or whose review
+  provenance is missing or ambiguous. Re-verify the flagged sources before use.
 
-When either list is non-empty, propose a memory refresh to the user before
-relying on the affected pages.
+During authorized work, the designated writer repairs the affected source-backed
+context and records evidence without requesting approval for routine discovery
+or verification. Preserve manual text; mark obsolete claims superseded or
+unresolved and add a reviewed replacement. Never silently turn an inference
+into an accepted rule. Ask only when authoritative sources conflict or a missing
+business decision changes the outcome. Unrelated gaps do not block work whose
+context is established. Rerun discovery and status after memory edits.
 
 ## Copy-paste prompt for any coding agent
 

@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, cp, lstat, mkdir, readFile, readdir, realpath, rm, rmdir, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, readdir, realpath, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertPathWithin } from "./.aihaus/tools/path-safety.mjs";
@@ -52,6 +52,10 @@ const memoryFiles = [
   "kanban/README.md",
 ];
 const kanbanStatuses = ["backlog", "todo", "doing", "review", "done"];
+const requiredDirectories = [
+  ...kanbanStatuses.map((status) => `.aihaus/memory/kanban/${status}`),
+  ".aihaus/state",
+];
 const startMarker = "<!-- AIHAUS:START -->";
 const endMarker = "<!-- AIHAUS:END -->";
 const hostAdapterMarker = "<!-- AIHAUS-MANAGED: repository-local-host-adapter-v1 -->";
@@ -133,8 +137,34 @@ async function directoriesEqual(source, destination) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+async function assertDirectoryPath(root, directory) {
+  const checked = await assertPathWithin({ root, candidate: directory, allowRoot: true });
+  let ancestor = checked.candidate;
+  while (await entryKind(ancestor) === "missing") ancestor = path.dirname(ancestor);
+  if (await entryKind(ancestor) !== "directory") {
+    throw new Error(`refusing non-directory parent: ${ancestor}`);
+  }
+}
+
+async function validatePackageSource() {
+  for (const directory of managedDirectories) await treeManifest(path.join(sourceRoot, directory));
+  const files = new Set([
+    ...managedFiles.map((file) => path.join(sourceRoot, file)),
+    ...metadataFiles.map((file) => path.join(packageRoot, file)),
+    ...memoryFiles.map((file) => path.join(sourceRoot, "memory", file)),
+    ...requiredSurface.map((file) => path.join(packageRoot, file === ".aihaus/VERSION" ? "VERSION" : file)),
+    path.join(packageRoot, "adapters", "router.md"),
+    ...hostSkillAdapters.map((adapter) => adapter.source),
+  ]);
+  for (const file of files) {
+    if (await entryKind(file) !== "file") throw new Error(`missing or non-regular package source: ${file}`);
+    await readFile(file);
+  }
+}
+
 async function planManagedFile({ source, destination, root, check, force }) {
   await assertPathWithin({ root, candidate: destination });
+  await assertDirectoryPath(root, path.dirname(destination));
   const kind = await entryKind(destination);
   if (!["missing", "file"].includes(kind)) {
     throw new Error(`refusing non-regular managed file: ${destination}`);
@@ -342,14 +372,17 @@ async function removeRetiredHostSkills(repositoryRoot, { check = false } = {}) {
 
 async function verifyInstalledSurface(repositoryRoot) {
   const missing = [];
-  for (const relative of requiredSurface) {
-    try {
-      await access(path.join(repositoryRoot, relative));
-    } catch {
-      missing.push(relative);
-    }
+  const required = [
+    ...requiredSurface,
+    ...memoryFiles.map((file) => `.aihaus/memory/${file}`),
+    ...requiredDirectories,
+  ];
+  for (const relative of required) {
+    const kind = await entryKind(path.join(repositoryRoot, relative));
+    const expected = requiredDirectories.includes(relative) ? "directory" : "file";
+    if (kind !== expected) missing.push(relative);
   }
-  return { ok: missing.length === 0, required: requiredSurface, missing };
+  return { ok: missing.length === 0, required, missing };
 }
 
 async function upsertManagedBlock(file, body, { check = false } = {}) {
@@ -369,7 +402,11 @@ async function upsertManagedBlock(file, body, { check = false } = {}) {
   const current = await readFile(file, "utf8");
   const start = current.indexOf(startMarker);
   const end = current.indexOf(endMarker);
-  if ((start >= 0) !== (end >= 0) || (start >= 0 && end < start)) {
+  if (
+    (start >= 0) !== (end >= 0) ||
+    (start >= 0 && (end < start || current.indexOf(startMarker, start + startMarker.length) >= 0)) ||
+    (end >= 0 && current.indexOf(endMarker, end + endMarker.length) >= 0)
+  ) {
     throw new Error(`refusing malformed managed block in ${file}`);
   }
   if (start < 0) {
@@ -387,6 +424,7 @@ async function upsertManagedBlock(file, body, { check = false } = {}) {
 async function installHostSkill(repositoryRoot, specification, { check = false, force = false } = {}) {
   const destination = path.join(repositoryRoot, ...specification.relative.split("/"));
   await assertPathWithin({ root: repositoryRoot, candidate: destination });
+  await assertDirectoryPath(repositoryRoot, path.dirname(destination));
   const desired = await readFile(specification.source, "utf8");
 
   if (!(await exists(destination))) {
@@ -501,7 +539,12 @@ async function install(target, { check = false, force = false } = {}) {
     const source = path.join(sourceRoot, "memory", relative);
     const destination = path.join(destinationRoot, "memory", relative);
     await assertPathWithin({ root: destinationRoot, candidate: destination });
-    if (!(await exists(destination))) {
+    await assertDirectoryPath(destinationRoot, path.dirname(destination));
+    const kind = await entryKind(destination);
+    if (!["missing", "file"].includes(kind)) {
+      throw new Error(`refusing non-regular project memory: ${destination}`);
+    }
+    if (kind === "missing") {
       if (check) {
         wouldSeed.push(`memory/${relative}`);
       } else {
@@ -513,15 +556,19 @@ async function install(target, { check = false, force = false } = {}) {
       preserved.push(`memory/${relative}`);
     }
   }
-  if (!check) {
-    for (const status of kanbanStatuses) {
-      const destination = path.join(destinationRoot, "memory", "kanban", status);
-      await assertPathWithin({ root: destinationRoot, candidate: destination });
-      await mkdir(destination, { recursive: true });
+  const missingDirectories = [];
+  for (const relative of requiredDirectories) {
+    const destination = path.join(repositoryRoot, relative);
+    await assertPathWithin({ root: repositoryRoot, candidate: destination });
+    await assertDirectoryPath(repositoryRoot, path.dirname(destination));
+    const kind = await entryKind(destination);
+    if (!["missing", "directory"].includes(kind)) {
+      throw new Error(`refusing non-directory required surface: ${destination}`);
     }
-    const state = path.join(destinationRoot, "state");
-    await assertPathWithin({ root: destinationRoot, candidate: state });
-    await mkdir(state, { recursive: true });
+    if (kind === "missing") {
+      missingDirectories.push(relative);
+      if (!check) await mkdir(destination, { recursive: true });
+    }
   }
 
   const router = await readFile(path.join(packageRoot, "adapters", "router.md"), "utf8");
@@ -529,7 +576,7 @@ async function install(target, { check = false, force = false } = {}) {
   for (const file of ["AGENTS.md", "CLAUDE.md"]) {
     const destination = path.join(repositoryRoot, file);
     await assertPathWithin({ root: repositoryRoot, candidate: destination });
-    adapters[file] = await upsertManagedBlock(destination, router, { check });
+    adapters[file] = await upsertManagedBlock(destination, file === "CLAUDE.md" ? "@AGENTS.md" : router, { check });
   }
   await assertPathWithin({ root: repositoryRoot, candidate: path.join(repositoryRoot, ".gitignore") });
   adapters[".gitignore"] = await upsertManagedBlock(
@@ -558,6 +605,15 @@ async function install(target, { check = false, force = false } = {}) {
 
   const source = await sourceProvenance();
   const warnings = [];
+  const instructionWarnings = [];
+  const override = path.join(repositoryRoot, "AGENTS.override.md");
+  if (await entryKind(override) === "file" && (await readFile(override, "utf8")).trim()) {
+    instructionWarnings.push({
+      path: "AGENTS.override.md",
+      reason: "Codex loads this non-empty override instead of AGENTS.md; the installed aihaus router is shadowed.",
+    });
+    warnings.push("AGENTS.override.md shadows the aihaus router in AGENTS.md; review the override instructions.");
+  }
   if (!source.pinned) {
     warnings.push(
       `source checkout is not pinned to a release tag (v${source.version} or aihaus-v${source.version})`,
@@ -580,6 +636,7 @@ async function install(target, { check = false, force = false } = {}) {
     plannedRefreshed.length > 0 ||
     seeded.length > 0 ||
     wouldSeed.length > 0 ||
+    missingDirectories.length > 0 ||
     retiredCleanup.length > 0 ||
     adapterChanges ||
     hostChanges;
@@ -605,12 +662,15 @@ async function install(target, { check = false, force = false } = {}) {
     wouldRefresh: check ? plannedRefreshed : [],
     seeded,
     wouldSeed,
+    createdDirectories: check ? [] : missingDirectories,
+    wouldCreateDirectories: check ? missingDirectories : [],
     removed: check ? [] : retiredCleanup,
     wouldRemove: check ? retiredCleanup : [],
     preserved,
     adapters,
     hostCapabilities,
     conflicts,
+    instructionWarnings,
     verification,
     bootstrap: {
       command: "node .aihaus/tools/refresh.mjs --repo . --json",
@@ -649,7 +709,9 @@ async function main() {
       );
       return;
     }
-    const result = await install(options.target, options);
+    await validatePackageSource();
+    const preview = await install(options.target, { ...options, check: true });
+    const result = options.check ? preview : await install(options.target, options);
     process.stdout.write(`${JSON.stringify(result, null, options.json ? 2 : 0)}\n`);
   } catch (error) {
     process.stderr.write(`${JSON.stringify({ ok: false, error: error.message })}\n`);

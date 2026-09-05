@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { access, readdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { assertPathWithin } from "./path-safety.mjs";
+import { validateEvidenceDocument } from "./evidence-validate.mjs";
 
 export const statuses = ["backlog", "todo", "doing", "review", "done"];
 
@@ -141,17 +142,18 @@ async function moveTask(id, status) {
   await assertPathWithin({ root: board, candidate: destination });
   if (await exists(destination)) throw new Error(`destination already exists: ${path.relative(repo, destination)}`);
   if (statuses.indexOf(status) > statuses.indexOf(task.status)) {
-    validateTransition(await readFile(source, "utf8"), status);
+    const content = await readFile(source, "utf8");
+    validateTransition(content, status);
+    if (status === "done") await validateCompletion(content, repo);
   }
   await rename(source, destination);
   return { ok: true, id: task.id, from: task.status, status, file: path.relative(repo, destination) };
 }
 
 function section(content, heading) {
-  const marker = `## ${heading}`;
-  const start = content.indexOf(marker);
-  if (start < 0) return "";
-  const body = content.slice(start + marker.length).replace(/^\s*\r?\n/, "");
+  const marker = content.match(new RegExp(`^## ${heading}[ \\t]*\\r?$`, "m"));
+  if (!marker) return "";
+  const body = content.slice(marker.index + marker[0].length).replace(/^\s*\r?\n/, "");
   const end = body.search(/^## /m);
   return (end < 0 ? body : body.slice(0, end)).trim();
 }
@@ -172,6 +174,35 @@ function validateTransition(content, status) {
     if (!section(content, "Evidence")) missing.push("Evidence");
   }
   if (missing.length) throw new Error(`task is not ready for ${status}; fill: ${missing.join(", ")}`);
+}
+
+async function validateCompletion(content, repo) {
+  const lines = section(content, "Acceptance").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const criteria = lines.map((line) => line.match(/^-\s+\[x\]\s+(.+)$/i)?.[1]?.trim());
+  if (!criteria.length || criteria.some((criterion) => !criterion) || new Set(criteria).size !== criteria.length) {
+    throw new Error("done requires unique checked Acceptance items: - [x] criterion");
+  }
+  const questions = section(content, "Business-rule gaps").split(/^### /m).slice(1);
+  for (const question of questions) {
+    const answer = question.match(/^Answer:[ \t]*(.*)$/m)?.[1]?.trim();
+    const draftRule = question.match(/^Draft rule:[ \t]*(.*)$/m)?.[1]?.trim();
+    if ([answer, draftRule].some((value) => !value || value.toLowerCase() === "pending")) {
+      throw new Error("done requires resolved Business-rule gaps with answers and draft rules");
+    }
+  }
+  const artifacts = [...section(content, "Evidence").matchAll(/^Artifact:[ \t]*(.+)$/gm)];
+  if (artifacts.length !== 1) throw new Error("done requires one Artifact: <repository-relative.json> in Evidence");
+  const artifact = artifacts[0][1].trim();
+  if (path.isAbsolute(artifact)) throw new Error("Evidence Artifact must be repository-relative");
+  const checked = await assertPathWithin({ root: repo, candidate: path.join(repo, artifact) });
+  const document = JSON.parse(await readFile(checked.candidate, "utf8"));
+  const validation = validateEvidenceDocument(document);
+  if (!validation.ok) throw new Error(`invalid completion evidence: ${validation.errors.join(", ")}`);
+  if (document.verdict !== "PASS") throw new Error("done requires evidence verdict PASS");
+  const evidenced = document.acceptance.map((item) => item.criterion.trim());
+  if (JSON.stringify(criteria.sort()) !== JSON.stringify(evidenced.sort())) {
+    throw new Error("evidence criteria must exactly match Acceptance items without missing, extra, or duplicate criteria");
+  }
 }
 
 function oneLine(value, field) {
@@ -203,15 +234,16 @@ async function answerQuestion(id, questionId, answerText, draftRuleText) {
   const answer = oneLine(answerText, "--text");
   const draftRule = oneLine(draftRuleText, "--draft-rule");
   const content = await readFile(file, "utf8");
-  const start = content.indexOf(`### ${question}\n`);
+  let start = content.indexOf(`### ${question}\n`);
+  if (start < 0) start = content.indexOf(`### ${question}\r\n`);
   if (start < 0) throw new Error(`question not found: ${question}`);
   const next = content.indexOf("\n### ", start + 4);
   const end = next < 0 ? content.length : next;
   const block = content.slice(start, end);
-  if (!/^Answer: pending$/m.test(block)) throw new Error(`question already answered: ${question}`);
+  if (!/^Answer: pending\r?$/m.test(block)) throw new Error(`question already answered: ${question}`);
   const answered = block
-    .replace(/^Answer: pending$/m, `Answer: ${answer}`)
-    .replace(/^Draft rule: pending$/m, `Draft rule: ${draftRule}`);
+    .replace(/^Answer: pending(?=\r?$)/m, () => `Answer: ${answer}`)
+    .replace(/^Draft rule: pending(?=\r?$)/m, () => `Draft rule: ${draftRule}`);
   await writeFile(file, `${content.slice(0, start)}${answered}${content.slice(end)}`, "utf8");
   return { ok: true, id: task.id, question, draft_rule: draftRule, promoted: false, file: path.relative(repo, file) };
 }

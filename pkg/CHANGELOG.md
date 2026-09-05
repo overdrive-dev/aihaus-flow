@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.0 - 2026-09-05
+
+- Require a context check before substantive work and on resumption, with
+  scoped memory retrieval, source verification, and durable task references.
+- Track memory review provenance per claim, including worktree content hashes;
+  recognize root and dot-prefixed sources and flag missing/ambiguous reviews.
+- Keep blank/unresolved-only memory, line-ending changes, missing application
+  files, and escaping paths from creating false readiness.
+- Share AGENTS.md instructions through Claude's native import and report Codex
+  root instruction overrides separately from refresh-skill availability.
+- Preflight installation conflicts and required directories before writes;
+  reject malformed/duplicate managed markers while preserving user content.
+- Require complete PASS evidence for done tasks, reject vacuous evidence, handle
+  CRLF task answers, and include rename origins/type changes in scope checks.
+
 ## 1.4.0 - 2026-07-29
 
 - Renamed the installer command from `aihaus setup` to `aihaus init`;

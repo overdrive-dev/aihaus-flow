@@ -83,13 +83,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.4.0`):
+Current published release (`v1.5.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.4.0/aihaus-flow-v1.4.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.5.0/aihaus-flow-v1.5.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.4.0` with the same tag.
+For another release, replace both occurrences of `v1.5.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -167,12 +167,16 @@ Starting with `v1.2.0`, the installed entry points are:
 | `.aihaus/VERSION` | Installed package version | Package-owned; refreshed only when different or with `--force` |
 | `.aihaus/memory/project/` | Project rules, decisions, knowledge, and procedures | Project-owned and preserved |
 | `.aihaus/memory/kanban/` | File-based task history | Project-owned and preserved |
-| `AGENTS.md`, `CLAUDE.md` | Thin host routers | Only the bounded aihaus block is managed |
+| `AGENTS.md`, `CLAUDE.md` | Shared router in AGENTS; Claude imports it with `@AGENTS.md` | Only the bounded aihaus block is managed |
 | `.claude/skills/aih-refresh/SKILL.md`, `.agents/skills/aih-refresh/SKILL.md` | Thin host-native wrappers around the portable bootstrap | Refreshed only when the aihaus ownership marker is present; otherwise preserved and reported as a conflict |
 | `.gitignore` | Ignores local aihaus state and temporary download | Only the bounded aihaus block is managed |
 
-Text outside `AIHAUS:START` / `AIHAUS:END` blocks is preserved. `CLAUDE.md` is
-an adapter for compatible hosts, not a dependency on Claude.
+Text outside `AIHAUS:START` / `AIHAUS:END` blocks is preserved, including user
+instructions imported from AGENTS by Claude. Setup rejects malformed or repeated
+markers and preflights known file/directory conflicts before applying changes.
+A nonempty root `AGENTS.override.md` is preserved and reported in
+`instructionWarnings`: Codex can load that file instead of `AGENTS.md` even when
+its refresh skill is available.
 
 ## Initialize project memory
 
@@ -197,10 +201,13 @@ authoritative source. This prevents a fresh repository from being marked
 initialized with invented or unresolved-only memory.
 
 The status mode additionally reports two advisory signals: `memoryGaps`
-(template pages that already have cataloged candidate sources) and
-`staleClaims` (memory pages whose cited sources changed or disappeared since
-their newest cited review commit). Both are read-only hints for an
-agent-proposed refresh; nothing rewrites memory automatically.
+(missing, template, or incomplete pages with candidate sources) and
+`staleClaims` (cited sources changed/missing or review provenance absent or
+ambiguous). Provenance belongs to each claim: a newer review on the same page
+does not revalidate older claims. Dirty or untracked sources use their discovery
+hash instead of a commit that does not contain those bytes. These are read-only
+hints; discovery never rewrites memory. Readiness checks content and provenance
+structure, not semantic truth or owner approval.
 
 When `readyForSynthesis` is true, ask the active coding agent to follow
 .aihaus/REFRESH.md and .aihaus/contracts/project-bootstrap.md. The agent reviews
@@ -232,7 +239,8 @@ Read .aihaus/MAP.md, .aihaus/contracts/harness.md,
 bootstrap discovery command. Populate .aihaus/memory/project/ only if
 readyForSynthesis is true, using verified repository evidence. Otherwise
 preserve the templates and report the blocker. Preserve existing content, cite
-source paths and the reviewed commit, keep inferences and conflicts explicit,
+source paths and the reviewed commit (or worktree/untracked discovery hash) on
+each claim, keep inferences and conflicts explicit,
 and do not read or record secrets. Do not use global aihaus state, network
 access, or hosted state.
 ~~~
@@ -242,6 +250,13 @@ access, or hosted state.
 After installation, use your coding agent normally from the repository. The
 root adapter directs it to `.aihaus/MAP.md`, which selects only the workflow and
 project memory needed for the request.
+
+Before substantive work and after a handoff or context reset, the harness asks
+the agent to check refresh status, retrieve relevant rules and decisions, and
+verify their sources. Task Context/Log preserves the selected references, scope,
+gaps, and required checks for resumption. The designated writer maintains
+verified context during authorized work; a conflicting business rule needs an
+owner decision. Unrelated memory gaps do not block covered work.
 
 Example requests:
 
@@ -285,7 +300,7 @@ Repair every package-owned surface even when it already matches:
 npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus init --target . --force --json
 ```
 
-`--check` reports `wouldCreate`, `wouldRefresh`, `wouldSeed`, and
+`--check` reports `wouldCreate`, `wouldCreateDirectories`, `wouldRefresh`, `wouldSeed`, and
 `wouldRemove` and never writes adapters, state, memory, or package files.
 `--force` still preserves
 project memory, text outside managed root blocks, and user-owned host-skill
@@ -297,9 +312,10 @@ Host skill files are refreshed only when they contain the aihaus ownership
 marker. A pre-existing user-owned skill at the same path is preserved and
 listed in `conflicts` instead of being overwritten; that host capability then
 reports `available: false` until the collision is reconciled.
-Review `changesRequired`, `created`, `refreshed`, `unchanged`, `seeded`,
+Review `changesRequired`, `created`, `createdDirectories`, `refreshed`, `unchanged`, `seeded`,
 `preserved`, `removed`, `wouldRemove`, `adapters`, `hostCapabilities`,
-and `conflicts` before committing. Starting with v1.3.0, setup removes known
+`conflicts`, and `instructionWarnings` before committing. Verification includes
+required kanban/state directories. Starting with v1.3.0, setup removes known
 repository-local artifacts from the retired graph runtime. Markdown project
 memory and file-kanban tasks are never part of that cleanup.
 
@@ -332,6 +348,13 @@ CI-produced evidence with exit code 0. Evidence documents can be checked with:
 node .aihaus/tools/evidence-validate.mjs path/to/evidence.json
 ```
 
+Moving a task to `done` requires checked, unique acceptance criteria, answered
+business-rule questions, and an `Artifact: path/to/evidence.json` line in its
+Evidence section. That repository-local document must validate as PASS and
+cover exactly those criteria. Review may record blocked or incomplete work;
+prose alone cannot close the task. Verification still requires inspecting the
+artifacts: a JSON claim cannot independently prove who ran a command.
+
 aihaus does not install global hooks, change user-level agent settings, or
 upload repository data. Its prompts, adapters, and local checks improve
 workflow consistency but are not a security sandbox. Continue using isolated
@@ -348,6 +371,13 @@ environments and least-privilege credentials for production work.
 - **Host skill conflict:** setup preserved a user-owned skill at the adapter
   path. Review `conflicts`; rename or reconcile it explicitly rather than
   deleting it automatically.
+- **Codex ignores the shared router:** inspect `instructionWarnings` for a
+  nonempty root `AGENTS.override.md`. Reconcile its intended instructions with
+  the shared router; setup preserves it rather than changing its precedence.
+- **Memory remains partial:** inspect each target's content/provenance flags
+  and relevant `memoryGaps`/`staleClaims`. Blank headings, unresolved-only text,
+  and line-ending changes do not initialize memory. Reverify uncited claims;
+  do not invent citations merely to satisfy the status check.
 - **`readyForSynthesis: false`:** add authoritative project evidence such as a
   README, manifest, project brief, or application source. Do not fill memory
   with the repository name or aihaus installation metadata.
@@ -380,12 +410,6 @@ Run the contract suite:
 
 ```bash
 node tools/run-contract-tests.mjs
-```
-
-Go contributors should also run:
-
-```bash
-go test ./...
 ```
 
 The repository can maintain an ignored nested consumer for real install/update

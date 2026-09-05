@@ -31,7 +31,7 @@ const templateHashes = new Map([
 const memorySpecs = [
   {
     name: "project.md",
-    kinds: ["adapter", "readme", "manifest", "architecture", "document"],
+    kinds: ["adapter", "readme", "manifest", "architecture", "document", "application-source"],
     instruction: "Summarize purpose, users, boundaries, layout, constraints, and Definition of Done from explicit evidence.",
   },
   {
@@ -46,7 +46,7 @@ const memorySpecs = [
   },
   {
     name: "knowledge.md",
-    kinds: ["adapter", "readme", "architecture", "test-config", "document"],
+    kinds: ["adapter", "readme", "architecture", "test-config", "document", "application-source"],
     instruction: "Record verified facts, behavior locks, recurring gotchas, and useful code analogs.",
   },
   {
@@ -167,6 +167,29 @@ function digest(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function markdownText(value) {
+  return value.toString("utf8").replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+}
+
+function hasMemoryContent(text) {
+  // Structural guard only; accepted/verified claims still require agent review.
+  const unresolved = /^(?:(?:status|state):\s*)?(?:unresolved|unreviewed|unknown|pending|draft|todo|tbd|inferred candidate|gap|not yet verified)\b/i;
+  let unresolvedHeading = null;
+  for (const block of text.replace(/<!--[\s\S]*?-->/g, "").split(/\n\s*\n|\n(?=#{1,6}\s)/)) {
+    const lines = block.split("\n").map((line) => line.trim().replace(/^(?:[-*+] |\d+\. )/, "").replace(/\*\*/g, ""));
+    const heading = /^(#{1,6})\s+(.+)/.exec(lines[0]);
+    if (heading) {
+      if (unresolvedHeading && heading[1].length <= unresolvedHeading) unresolvedHeading = null;
+      if (/\b(?:unresolved|unreviewed|pending|draft|gaps?|open questions?|inferred candidates?)\b/i.test(heading[2])) {
+        unresolvedHeading = heading[1].length;
+      }
+    }
+    if (unresolvedHeading || lines.some((line) => unresolved.test(line))) continue;
+    if (lines.some((line) => line && !/^(?:#|[-=_|: ]+$|```|source:|reviewed\b)/i.test(line))) return true;
+  }
+  return false;
+}
+
 function normalize(relative) {
   return relative.replaceAll("\\", "/").replace(/^\.\//, "");
 }
@@ -260,7 +283,7 @@ function stripAihausManagedBlock(text) {
 function isGeneratedAihausAdapter(relative, text) {
   const normalized = normalize(relative);
   const lower = normalized.toLowerCase();
-  if (lower === "agents.md" || lower === "claude.md") {
+  if (["agents.md", "agents.override.md", "claude.md"].includes(lower)) {
     return text.includes(managedBlockStart) && stripAihausManagedBlock(text).trim() === "";
   }
   return false;
@@ -286,7 +309,8 @@ function classify(relative) {
   const base = path.posix.basename(lower);
   const segments = lower.split("/");
   const kinds = new Set();
-  if (base === "agents.md" || base === "claude.md") kinds.add("adapter");
+  if (["agents.md", "agents.override.md", "claude.md"].includes(base)) kinds.add("adapter");
+  if (isApplicationSource(relative)) kinds.add("application-source");
   if (/^readme(?:\..+)?$/.test(base)) kinds.add("readme");
   if (manifestNames.has(base)) kinds.add("manifest");
   if (lockfileNames.has(base)) kinds.add("lockfile");
@@ -430,10 +454,16 @@ async function memoryTargets(repository, sources, warnings) {
     await assertPathWithin({ root: repository, candidate: file });
     let status = "missing";
     let currentDigest = null;
+    let hasContent = false;
+    let hasProvenance = false;
     if (await exists(file)) {
       const content = await readFile(file);
       currentDigest = digest(content);
-      status = templateHashes.get(spec.name) === currentDigest ? "template" : "existing";
+      const text = markdownText(content);
+      status = templateHashes.get(spec.name) === digest(text) ? "template" : "existing";
+      hasContent = status === "existing" && hasMemoryContent(text);
+      hasProvenance = /\b[0-9a-f]{7,40}\b|\bsha256:\s*[0-9a-f]{64}\b/i.test(text) &&
+        citedPaths(text).some((source) => sources.some((candidate) => candidate.path === source));
     } else {
       warnings.push("canonical memory target is missing: " + relative);
     }
@@ -444,6 +474,8 @@ async function memoryTargets(repository, sources, warnings) {
       path: relative,
       status,
       sha256: currentDigest,
+      hasContent,
+      hasProvenance,
       candidateSources: candidates,
       instruction: spec.instruction,
       provenanceRequired: true,
@@ -452,18 +484,19 @@ async function memoryTargets(repository, sources, warnings) {
   return targets;
 }
 
-function readinessFor(sources, safePaths, targets) {
-  const authoritativeSources = sources.filter(isAuthoritativeSource);
-  const applicationSources = safePaths.filter(isApplicationSource);
+function readinessFor(sources, targets) {
+  const authoritativeSources = sources.filter((source) => source.bytes > 0 && source.sha256 && isAuthoritativeSource(source));
+  const applicationSources = sources.filter((source) => source.bytes > 0 && source.sha256 && source.kinds.includes("application-source"));
   const evidenceSignals = authoritativeSources.length + applicationSources.length;
   const readyForSynthesis = evidenceSignals > 0;
   const evidenceLevel = evidenceSignals === 0
     ? "insufficient"
     : evidenceSignals === 1 ? "limited" : "sufficient";
-  const existingTargets = targets.filter((target) => target.status === "existing").length;
+  const existingTargets = targets.filter((target) => target.hasContent).length;
+  const completeTargets = targets.filter((target) => target.hasContent && target.hasProvenance).length;
   const memoryReadiness = !readyForSynthesis || existingTargets === 0
     ? "uninitialized"
-    : existingTargets === targets.length ? "ready" : "partial";
+    : completeTargets === targets.length ? "ready" : "partial";
   return {
     readyForSynthesis,
     evidenceLevel,
@@ -471,7 +504,7 @@ function readinessFor(sources, safePaths, targets) {
     evidence: {
       authoritativeSources: authoritativeSources.map((source) => source.path),
       applicationSourceCount: applicationSources.length,
-      applicationSourceExamples: applicationSources.slice(0, 25),
+      applicationSourceExamples: applicationSources.slice(0, 25).map((source) => source.path),
     },
     blockers: readyForSynthesis
       ? []
@@ -485,71 +518,103 @@ function readinessFor(sources, safePaths, targets) {
 function memoryGapsFor(packet) {
   if (!packet.readiness.readyForSynthesis) return [];
   return packet.memoryTargets
-    .filter((target) => target.status !== "existing" && target.candidateSources.length > 0)
+    .filter((target) => (!target.hasContent || !target.hasProvenance) && target.candidateSources.length > 0)
     .map((target) => ({
       target: target.path,
       status: target.status,
+      reason: !target.hasContent ? "missing-memory-content" : "missing-review-provenance",
       candidateSourceCount: target.candidateSources.length,
       candidateExamples: target.candidateSources.slice(0, 3),
       instruction: target.instruction,
     }));
 }
 
-// ponytail: naive token scan; a stricter citation syntax can replace it if
-// false positives ever matter. Existence-at-review gates out most prose noise.
-const pathTokenPattern = /[A-Za-z0-9_][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_.-]+)+/g;
+// ponytail: bare legacy paths are tokenized and checked against Git/discovery;
+// use backticks for paths containing spaces, one source per hash citation.
+const pathTokenPattern = /[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*/g;
 const commitTokenPattern = /\b[0-9a-f]{7,40}\b/g;
 
-function newestCitedCommit(repository, text) {
-  let newest = null;
-  let newestTime = -1;
+function citedPaths(text) {
+  return [...new Set([
+    ...[...text.matchAll(/`([^`\n]+)`/g)].map((match) => match[1]),
+    ...(text.replace(/`[^`\n]+`/g, " ").match(pathTokenPattern) ?? []),
+  ].map((token) => normalize(token).replace(/:\d+(?:-\d+)?$/, "").replace(/\.+$/, ""))
+    .filter((token) => token && !path.posix.isAbsolute(token) && !token.split("/").includes("..")))];
+}
+
+function citedCommits(repository, text, cache) {
+  const commits = [];
   for (const token of new Set(text.match(commitTokenPattern) ?? [])) {
-    const resolved = git(
-      repository,
-      ["rev-parse", "--verify", "--quiet", token + "^{commit}"],
-      true,
-    )?.trim();
-    if (!resolved) continue;
-    const time = Number(git(repository, ["show", "-s", "--format=%ct", resolved], true)?.trim());
-    if (Number.isFinite(time) && time > newestTime) {
-      newestTime = time;
-      newest = resolved;
+    if (!cache.has(token)) {
+      cache.set(token, git(repository, ["rev-parse", "--verify", "--quiet", token + "^{commit}"], true)?.trim());
     }
+    if (cache.get(token)) commits.push(cache.get(token));
   }
-  return newest;
+  return [...new Set(commits)];
 }
 
 async function staleClaimsFor(repository, packet) {
   const claims = [];
+  const commitCache = new Map();
+  const reviewCache = new Map();
+  const currentSources = new Map(packet.sources.map((source) => [source.path, source]));
   for (const target of packet.memoryTargets) {
     if (target.status !== "existing") continue;
     const file = path.join(repository, ...target.path.split("/"));
     await assertPathWithin({ root: repository, candidate: file });
-    const text = await readFile(file, "utf8");
-    const reviewed = newestCitedCommit(repository, text);
-    if (!reviewed) continue;
-    const atReview = new Set(
-      gitPaths(repository, ["ls-tree", "-r", "--name-only", "-z", reviewed], true),
-    );
-    const changedSinceReview = new Set(
-      gitPaths(repository, ["diff", "--name-only", "-z", reviewed, "--"], true),
-    );
-    const cited = new Set(
-      (text.match(pathTokenPattern) ?? [])
-        .map((token) => normalize(token).replace(/\.+$/, ""))
-        .filter((token) => !token.includes("..")),
-    );
-    for (const source of cited) {
-      if (!atReview.has(source) || !changedSinceReview.has(source)) continue;
-      claims.push({
-        page: target.path,
-        source,
-        reviewed,
-        reason: (await exists(path.join(repository, ...source.split("/"))))
-          ? "source-changed-since-review"
-          : "source-missing",
-      });
+    const text = markdownText(await readFile(file));
+    const pageCommits = citedCommits(repository, text, commitCache);
+    const knownPaths = new Set(currentSources.keys());
+    for (const reviewed of pageCommits) {
+      if (!reviewCache.has(reviewed)) {
+        reviewCache.set(reviewed, {
+          paths: new Set(gitPaths(repository, ["ls-tree", "-r", "--name-only", "-z", reviewed], true)),
+          changed: new Set(gitPaths(repository, ["diff", "--no-renames", "--name-only", "-z", reviewed, "--"], true)),
+        });
+      }
+      for (const source of reviewCache.get(reviewed).paths) knownPaths.add(source);
     }
+    const reported = new Set();
+    const report = (source, reason, reviewed) => {
+      if (reported.has(source)) return;
+      reported.add(source);
+      claims.push({ page: target.path, ...(source ? { source } : {}), ...(reviewed ? { reviewed } : {}), reason });
+    };
+    for (const block of text.split(/\n\s*\n|\n(?=\s*(?:[-*+] |\d+\. ))/)) {
+      const declared = [...block.matchAll(/\bsource:\s*(?:`([^`]+)`|([^\s(),;]+))/gi)]
+        .map((match) => normalize(match[1] ?? match[2]).replace(/:\d+(?:-\d+)?$/, "").replace(/\.+$/, ""));
+      const sources = [...new Set([...citedPaths(block).filter((source) => knownPaths.has(source)), ...declared])]
+        .filter((source) => !isInternal(source) && !isSensitive(source) && !source.split("/").includes("..") && !path.isAbsolute(source));
+      const ownCommits = citedCommits(repository, block, commitCache);
+      const reviewedCommits = ownCommits.length ? ownCommits : pageCommits;
+      const ambiguous = !ownCommits.length && pageCommits.length > 1;
+      const hashes = [...block.matchAll(/\bsha256:\s*([0-9a-f]{64})\b/gi)].map((match) => match[1].toLowerCase());
+      for (const source of sources) {
+        if (hashes.length) {
+          if (hashes.length !== 1 || sources.length !== 1) {
+            report(source, "ambiguous-review-provenance");
+          } else if (currentSources.get(source)?.sha256 !== hashes[0]) {
+            report(source, await exists(path.join(repository, source)) ? "source-changed-since-review" : "source-missing");
+          }
+          continue;
+        }
+        if (!reviewedCommits.length || /\b(?:worktree|untracked)\b/.test(block)) {
+          report(source, "missing-review-provenance");
+          continue;
+        }
+        for (const reviewed of reviewedCommits) {
+          const review = reviewCache.get(reviewed);
+          if (!review.paths.has(source)) {
+            if (!ambiguous) report(source, "source-not-at-review", reviewed);
+          }
+          else if (review.changed.has(source)) {
+            report(source, await exists(path.join(repository, source)) ? "source-changed-since-review" : "source-missing", reviewed);
+          }
+        }
+        if (ambiguous) report(source, "ambiguous-review-provenance");
+      }
+    }
+    if (target.hasContent && !target.hasProvenance && !reported.size) report(null, "missing-review-provenance");
   }
   return claims;
 }
@@ -616,7 +681,7 @@ async function discover(repository) {
       sha256,
       tracked: tracked.has(relative),
       revision: tracked.has(relative)
-        ? changed.has(relative) ? "worktree" : commit
+        ? !commit || changed.has(relative) ? "worktree" : commit
         : "untracked",
     });
   }
@@ -629,7 +694,7 @@ async function discover(repository) {
   const conflicts = identityConflicts(manifests);
   const layout = layoutFacts(safePaths);
   const targets = await memoryTargets(repository, sources, warnings);
-  const readiness = readinessFor(sources, safePaths, targets);
+  const readiness = readinessFor(sources, targets);
   if (!commit) warnings.push("repository has no reviewed Git commit; provenance is worktree-only");
   if (sourcePaths(sources, "adapter").length === 0) {
     warnings.push("no AGENTS.md or CLAUDE.md adapter source was found");

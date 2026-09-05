@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -566,5 +566,223 @@ test("status reports memory gaps and stale claims as advisory signals", async ()
     assert.equal(current.staleClaims[0].reason, "source-missing");
   } finally {
     await rm(labRoot, { recursive: true, force: true });
+  }
+});
+
+function bootstrapResult(repository, mode = []) {
+  return JSON.parse(run(process.execPath, [
+    path.join(repository, ".aihaus", "tools", "refresh.mjs"),
+    "--repo", repository, ...mode, "--json",
+  ], repository).stdout);
+}
+
+test("refresh checks root and hidden citations at each claim's own commit", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-citations-"));
+  try {
+    await initializeGit(repository);
+    await mkdir(path.join(repository, ".github", "workflows"), { recursive: true });
+    await mkdir(path.join(repository, "src"));
+    await writeFile(path.join(repository, "README.md"), "# Billing\n\nRefunds last 30 days.\n");
+    await writeFile(path.join(repository, ".github", "workflows", "ci.yml"), "name: Old CI\n");
+    await writeFile(path.join(repository, "src", "rule.mjs"), "export const days = 30;\n");
+    commitAll(repository, "initial rules");
+    const oldCommit = run("git", ["rev-parse", "HEAD"], repository).stdout.trim();
+    install(repository);
+    const memory = path.join(repository, ".aihaus", "memory", "project", "knowledge.md");
+    await writeFile(memory, `# Knowledge\n\n- Refunds last 30 days. Source: \`README.md\` (reviewed ${oldCommit}).\n- CI is Old CI. Source: \`.github/workflows/ci.yml\` (reviewed ${oldCommit}).\n`);
+    await writeFile(path.join(repository, "README.md"), "# Billing\n\nRefunds last 7 days.\n");
+    await writeFile(path.join(repository, ".github", "workflows", "ci.yml"), "name: New CI\n");
+    bootstrapResult(repository);
+    let status = bootstrapResult(repository, ["--status"]).status;
+    assert.deepEqual(status.staleClaims.map((claim) => claim.source).sort(), [".github/workflows/ci.yml", "README.md"]);
+
+    await writeFile(path.join(repository, "src", "rule.mjs"), "export const days = 7;\n");
+    await writeFile(path.join(repository, "src", "new.mjs"), "export const active = true;\n");
+    run("git", ["add", "-A"], repository);
+    run("git", ["commit", "-m", "new separate fact"], repository, {
+      env: { ...process.env, GIT_AUTHOR_DATE: "2030-01-01T00:00:00Z", GIT_COMMITTER_DATE: "2030-01-01T00:00:00Z" },
+    });
+    const newCommit = run("git", ["rev-parse", "HEAD"], repository).stdout.trim();
+    await writeFile(memory, `# Knowledge\n\n- Refunds last 30 days. Source: \`src/rule.mjs\` (reviewed ${oldCommit}).\n- Feature is active. Source: \`src/new.mjs\` (reviewed ${newCommit}).\n`);
+    bootstrapResult(repository);
+    status = bootstrapResult(repository, ["--status"]).status;
+    assert.deepEqual(status.staleClaims.map(({ source, reviewed }) => ({ source, reviewed })), [
+      { source: "src/rule.mjs", reviewed: oldCommit },
+    ]);
+    await writeFile(memory, `# Knowledge\n\nReviewed commits: ${oldCommit}, ${newCommit}.\n\nsrc/rule.mjs still says 30 days.\n`);
+    assert.ok(bootstrapResult(repository, ["--status"]).status.staleClaims.some((claim) => claim.source === "src/rule.mjs"));
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("refresh keeps BOM and CRLF templates uninitialized and rejects empty memory", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-content-"));
+  try {
+    await initializeGit(repository);
+    await writeFile(path.join(repository, "README.md"), "# Billing\n\nProcesses invoices.\n");
+    commitAll(repository, "project evidence");
+    const reviewed = run("git", ["rev-parse", "HEAD"], repository).stdout.trim();
+    install(repository);
+    for (const name of memoryNames) {
+      const file = path.join(repository, ".aihaus", "memory", "project", name);
+      await writeFile(file, "\uFEFF" + (await readFile(file, "utf8")).replace(/\r?\n/g, "\r\n"));
+    }
+    let result = bootstrapResult(repository);
+    assert.ok(result.memory.targets.every((target) => target.status === "template"));
+    assert.equal(result.memoryReadiness, "uninitialized");
+    for (const text of [
+      "", "# Knowledge\n\n## Rules\n", "# Knowledge\n\n- Unresolved: owner must confirm every rule.\n",
+      `# Knowledge\n\n- Status: unresolved\n- Statement: owner must confirm the refund rule.\n- Source: README.md (reviewed ${reviewed}).\n`,
+      `# Knowledge\n\n## Unresolved\n\nOwner must confirm the refund rule. Source: README.md (reviewed ${reviewed}).\n`,
+      "# Knowledge\n\nVerified: invoices are processed.\n",
+    ]) {
+      for (const name of memoryNames) await writeFile(path.join(repository, ".aihaus", "memory", "project", name), text);
+      bootstrapResult(repository);
+      const status = bootstrapResult(repository, ["--status"]).status;
+      assert.equal(status.initialized, false, JSON.stringify(text));
+      assert.notEqual(status.memoryReadiness, "ready", JSON.stringify(text));
+      assert.ok(status.memoryGaps.length > 0, JSON.stringify(text));
+    }
+    for (const name of memoryNames) {
+      await writeFile(path.join(repository, ".aihaus", "memory", "project", name), `# Knowledge\n\nVerified: invoices are processed. Source: \`README.md\` (reviewed ${reviewed}).\n`);
+    }
+    result = bootstrapResult(repository);
+    assert.equal(result.memoryReadiness, "ready");
+    const status = bootstrapResult(repository, ["--status"]).status;
+    assert.equal(status.initialized, true);
+    assert.equal(status.stale, false);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("refresh counts only available regular application sources", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-source-"));
+  try {
+    await initializeGit(repository);
+    await mkdir(path.join(repository, "src"));
+    const source = path.join(repository, "src", "main.mjs");
+    await writeFile(source, "export const active = true;\n");
+    commitAll(repository, "only application source");
+    install(repository);
+    await rm(source);
+    assert.equal(bootstrapResult(repository, ["--dry-run"]).readyForSynthesis, false);
+    await mkdir(source);
+    assert.equal(bootstrapResult(repository, ["--dry-run"]).readyForSynthesis, false);
+    await rm(source, { recursive: true });
+    const target = path.join(repository, ".aihaus", "state", "link-target");
+    await mkdir(target, { recursive: true });
+    await symlink(target, source, process.platform === "win32" ? "junction" : "dir");
+    const result = bootstrapResult(repository, ["--dry-run"]);
+    assert.equal(result.readyForSynthesis, false);
+    assert.ok(result.skipped.some((entry) => entry.path === "src/main.mjs" && entry.reason === "symbolic-link"));
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("refresh hashes application worktree and untracked evidence and checks hash citations", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-hashes-"));
+  try {
+    await initializeGit(repository);
+    await mkdir(path.join(repository, "src"));
+    const tracked = path.join(repository, "src", "rule.mjs");
+    const untracked = path.join(repository, "src", "new.mjs");
+    await writeFile(tracked, "export const days = 30;\n");
+    run("git", ["add", "src/rule.mjs"], repository);
+    install(repository);
+    assert.equal(bootstrapResult(repository, ["--dry-run"]).sources.find((source) => source.path === "src/rule.mjs")?.revision, "worktree");
+    commitAll(repository, "initial code");
+    await writeFile(tracked, "export const days = 7;\n");
+    await writeFile(untracked, "export const active = true;\n");
+    let result = bootstrapResult(repository);
+    const dirtySource = result.sources.find((source) => source.path === "src/rule.mjs");
+    const newSource = result.sources.find((source) => source.path === "src/new.mjs");
+    assert.equal(dirtySource?.revision, "worktree");
+    assert.equal(newSource?.revision, "untracked");
+    assert.match(dirtySource.sha256, /^[0-9a-f]{64}$/);
+    assert.match(newSource.sha256, /^[0-9a-f]{64}$/);
+    assert.ok(result.memory.targets.find((target) => target.path.endsWith("knowledge.md")).candidateSources.includes("src/rule.mjs"));
+    const memory = path.join(repository, ".aihaus", "memory", "project", "knowledge.md");
+    await writeFile(memory, `# Knowledge\n\n- Verified: refunds last 7 days. Source: \`src/rule.mjs\` (worktree; sha256: ${dirtySource.sha256}).\n- Verified: feature is active. Source: \`src/new.mjs\` (untracked; sha256: ${newSource.sha256}).\n`);
+    bootstrapResult(repository);
+    assert.deepEqual(bootstrapResult(repository, ["--status"]).status.staleClaims, []);
+    await writeFile(untracked, "export const active = false;\n");
+    assert.equal(bootstrapResult(repository, ["--status"]).status.stale, true);
+    bootstrapResult(repository);
+    assert.ok(bootstrapResult(repository, ["--status"]).status.staleClaims.some((claim) => claim.source === "src/new.mjs"));
+    await writeFile(memory, "# Knowledge\n\nVerified: refunds last 7 days. Source: `src/rule.mjs` (worktree).\n");
+    assert.ok(bootstrapResult(repository, ["--status"]).status.staleClaims.some((claim) => claim.reason === "missing-review-provenance"));
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("refresh includes project override instructions as authoritative evidence", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-override-"));
+  try {
+    await initializeGit(repository);
+    await writeFile(path.join(repository, "AGENTS.override.md"), "# Project rules\n\nInvoices require owner approval.\n");
+    commitAll(repository, "override project rules");
+    install(repository);
+    const result = bootstrapResult(repository, ["--dry-run"]);
+    assert.ok(result.sources.find((source) => source.path === "AGENTS.override.md")?.kinds.includes("adapter"));
+    assert.ok(result.memory.readiness.evidence.authoritativeSources.includes("AGENTS.override.md"));
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("refresh preserves quoted path boundaries and sentence punctuation", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-paths-"));
+  try {
+    await initializeGit(repository);
+    await mkdir(path.join(repository, "src"));
+    await writeFile(path.join(repository, "README.md"), "# Billing\n\nHandles refunds.\n");
+    await writeFile(path.join(repository, "file.md"), "# Separate root document\n");
+    await writeFile(path.join(repository, "src", "my file.md"), "# Refund rules\n\nRefunds last 7 days.\n");
+    commitAll(repository, "source documents");
+    const reviewed = run("git", ["rev-parse", "HEAD"], repository).stdout.trim();
+    install(repository);
+    const result = bootstrapResult(repository);
+    const memory = path.join(repository, ".aihaus", "memory", "project", "knowledge.md");
+    await writeFile(memory, `# Knowledge\n\nVerified: project handles refunds. Source: README.md. Reviewed ${reviewed}.\n`);
+    const punctuation = bootstrapResult(repository, ["--status"]).status.staleClaims;
+    const hash = result.sources.find((source) => source.path === "src/my file.md").sha256;
+    await writeFile(memory, `# Knowledge\n\nVerified: refunds last 7 days. Source: \`src/my file.md\` (worktree; sha256: ${hash}).\n`);
+    const quoted = bootstrapResult(repository, ["--status"]).status.staleClaims;
+    assert.deepEqual({ punctuation, quoted }, { punctuation: [], quoted: [] });
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("refresh flags renamed sources and ambiguous legacy review commits", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-renames-"));
+  try {
+    await initializeGit(repository);
+    await mkdir(path.join(repository, "src"));
+    await writeFile(path.join(repository, "README.md"), "# Billing\n\nHandles refunds.\n");
+    await writeFile(path.join(repository, "src", "rule.mjs"), "export const days = 7;\n");
+    commitAll(repository, "original rule");
+    const first = run("git", ["rev-parse", "HEAD"], repository).stdout.trim();
+    install(repository);
+    await writeFile(path.join(repository, "README.md"), "# Billing\n\nHandles invoicing and refunds.\n");
+    commitAll(repository, "new documented context");
+    const second = run("git", ["rev-parse", "HEAD"], repository).stdout.trim();
+    const memory = path.join(repository, ".aihaus", "memory", "project", "knowledge.md");
+    await writeFile(memory, `# Knowledge\n\nReviews: ${first}, ${second}.\n\nSource: src/rule.mjs.\n`);
+    const ambiguous = bootstrapResult(repository, ["--status"]).status.staleClaims;
+    await rename(path.join(repository, "src", "rule.mjs"), path.join(repository, "src", "refunds.mjs"));
+    commitAll(repository, "rename rule source");
+    const current = run("git", ["rev-parse", "HEAD"], repository).stdout.trim();
+    await writeFile(memory, `# Knowledge\n\n- Verified: refunds last 7 days. Source: \`src/rule.mjs\` (reviewed ${second}).\n- Verified: billing handles invoicing. Source: \`README.md\` (reviewed ${current}).\n`);
+    bootstrapResult(repository);
+    const renamed = bootstrapResult(repository, ["--status"]).status.staleClaims;
+    assert.ok(ambiguous.some((claim) => claim.reason === "ambiguous-review-provenance"));
+    assert.ok(renamed.some((claim) => claim.source === "src/rule.mjs" && claim.reason === "source-missing"));
+  } finally {
+    await rm(repository, { recursive: true, force: true });
   }
 });

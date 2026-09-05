@@ -19,6 +19,41 @@ the same outcome. Split unrelated outcomes and independently deliverable epic
 children into separate tasks and worktrees. A coordination-only parent task
 tracks dependencies and does not own a product diff.
 
+## Context check and resumption
+
+At task start, after compaction or handoff, and when the branch or relevant
+sources change:
+
+1. Resolve the Git root, current worktree/branch, and active task. Run package
+   commands from that root. Never assume another worktree shares this board.
+2. Read applicable repository instructions for the owned paths. Respect the
+   host's instruction precedence and directory scope, including overrides and
+   path-specific rules; a discovery index is not an instruction loader.
+3. Run `node .aihaus/tools/refresh.mjs --repo . --status --json`. If the packet
+   is missing or stale, rebuild it with `--json` and inspect status again.
+   This updates disposable state, not accepted project memory.
+4. Use `memory/project/README.md` to choose pages. Search relevant rule IDs,
+   domain terms, and file paths, then read the matching entries and their
+   sources. Load the selected room and role, not the entire memory archive.
+5. Inspect conflicts, memory gaps, and stale claims relevant to the task.
+   A ready packet does not prove semantic review. Recheck entries with absent
+   or ambiguous provenance directly; an empty warning list is not proof.
+   Draft, proposed, inferred, and superseded entries are not accepted rules.
+6. Follow `REFRESH.md` to repair source-backed context within the current task.
+   Preserve manual content and accepted decisions. Ask only when authoritative
+   sources conflict or a missing business rule changes the outcome; an unrelated
+   memory gap must not block covered work.
+7. Record the applicable rule/decision IDs, source paths and revisions, remaining
+   gaps, owned files, and verification plan in the task's `Context` or `Log`.
+   Reuse that record when resuming instead of relying on conversation history.
+
+Delegate with the task path, outcome, acceptance criteria, branch/worktree,
+owned files, relevant instruction and memory paths, unresolved gaps, and required
+checks. Workers verify those sources before editing; copied summaries do not
+replace them. The designated writer promotes durable verified findings and
+explicit owner decisions with provenance at meaningful checkpoints. Keep
+transient progress and unresolved candidates in the task.
+
 ## Execution
 
 Keep task status in its kanban folder. Because each worktree contains a

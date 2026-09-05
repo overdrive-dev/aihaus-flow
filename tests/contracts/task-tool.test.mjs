@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { assertPathWithin } from "../../pkg/.aihaus/tools/path-safety.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const setup = path.join(root, "pkg", "setup.mjs");
@@ -111,6 +112,17 @@ test("file task tool uses folder as the only status source", async () => {
     );
     const reviewed = JSON.parse(run(process.execPath, [tool, "move", created.id, "review", "--json"], temp).stdout);
     assert.equal(reviewed.status, "review");
+    await writeFile(path.join(temp, "evidence.json"), JSON.stringify({
+      schema: "aihaus.evidence.v1",
+      verdict: "PASS",
+      acceptance: [{
+        criterion: "`node --test` exits 0.", status: "satisfied", executable: true,
+        evidence: [{ rung: "ran", source: "tool", command: "node --test", exit_code: 0 }],
+      }],
+    }));
+    await writeFile(path.join(temp, reviewed.file), (await readFile(path.join(temp, reviewed.file), "utf8"))
+      .replace("- [ ] `node --test`", "- [x] `node --test`")
+      .replace("## Evidence\n", "## Evidence\n\nArtifact: evidence.json\n"));
     const done = JSON.parse(run(process.execPath, [tool, "move", created.id, "done", "--json"], temp).stdout);
     assert.equal(done.status, "done");
 
@@ -125,6 +137,97 @@ test("file task tool uses folder as the only status source", async () => {
     );
     assert.equal(Object.hasOwn(listed.tasks.find((task) => task.id === withoutExternalId.id), "external_id"), false);
   } finally {
+    await assertPathWithin({ root: os.tmpdir(), candidate: temp });
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("done requires matching PASS evidence and resolved business-rule gaps", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-task-done-"));
+  const outside = await mkdtemp(path.join(os.tmpdir(), "aihaus-task-evidence-"));
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    run(process.execPath, [setup, "--target", temp], temp);
+    const tool = path.join(temp, ".aihaus", "tools", "task.mjs");
+    const created = JSON.parse(run(process.execPath, [tool, "create", "--title", "Complete outcome", "--room", "feature"], temp).stdout);
+    let file = path.join(temp, created.file);
+    const prepared = (await readFile(file, "utf8"))
+      .replace("- [ ] Define executable acceptance evidence.", "- [x] Feature works.")
+      .replace("## Owned files\n", "## Owned files\n\n- src/feature.mjs\n")
+      .replace("## Log\n", "## Log\n\nImplementation awaits verification.\n")
+      .replace("## Evidence\n", "## Evidence\n\nBLOCKED: no checks ran.\n");
+    await writeFile(file, prepared);
+    runFailure(process.execPath, [tool, "move", created.id, "done"], temp);
+    const review = JSON.parse(run(process.execPath, [tool, "move", created.id, "review"], temp).stdout);
+    file = path.join(temp, review.file);
+    const ready = prepared.replace("BLOCKED: no checks ran.", "Artifact: evidence.json");
+    await writeFile(file, ready);
+    const pass = {
+      schema: "aihaus.evidence.v1", verdict: "PASS",
+      acceptance: [{ criterion: "Feature works.", status: "satisfied", executable: true,
+        evidence: [{ rung: "ran", source: "tool", command: "node --test", exit_code: 0 }] }],
+    };
+    const save = (document) => writeFile(path.join(temp, "evidence.json"), JSON.stringify(document));
+    runFailure(process.execPath, [tool, "move", created.id, "done"], temp);
+    await writeFile(path.join(temp, "evidence.json"), "{invalid");
+    runFailure(process.execPath, [tool, "move", created.id, "done"], temp);
+    for (const document of [
+      { ...pass, verdict: "BLOCKED" },
+      { ...pass, schema: "wrong" },
+      { ...pass, acceptance: [] },
+      { ...pass, acceptance: [{ ...pass.acceptance[0], criterion: "A different feature works." }] },
+      { ...pass, acceptance: [pass.acceptance[0], pass.acceptance[0]] },
+      { ...pass, acceptance: [{ ...pass.acceptance[0], evidence: [{ rung: "written" }] }] },
+    ]) {
+      await save(document);
+      runFailure(process.execPath, [tool, "move", created.id, "done"], temp);
+    }
+    await save(pass);
+    await writeFile(path.join(outside, "evidence.json"), JSON.stringify(pass));
+    await symlink(outside, path.join(temp, "external"), process.platform === "win32" ? "junction" : "dir");
+    for (const body of [
+      ready.replace("- [x] Feature works.", "- [ ] Feature works."),
+      ready.replace("- [x] Feature works.", "- [x] Feature works.\n- [x] Another criterion."),
+      ready.replace("- [x] Feature works.", "- [x] Feature works.\n- [x] Feature works."),
+      ready.replace("Artifact: evidence.json", `Artifact: ${path.relative(temp, path.join(outside, "evidence.json"))}`),
+      ready.replace("Artifact: evidence.json", `Artifact: ${path.join(temp, "evidence.json")}`),
+      ready.replace("Artifact: evidence.json", "Artifact: external/evidence.json"),
+      ready.replace("Artifact: evidence.json", "Artifact: evidence.json\nArtifact: evidence.json"),
+    ]) {
+      await writeFile(file, body);
+      runFailure(process.execPath, [tool, "move", created.id, "done"], temp);
+    }
+    await writeFile(file, ready);
+    const asked = JSON.parse(run(process.execPath, [tool, "question", created.id, "--text", "Can this delete client data?"], temp).stdout);
+    runFailure(process.execPath, [tool, "move", created.id, "done"], temp);
+    run(process.execPath, [tool, "answer", created.id, "--question", asked.question, "--text", "No", "--draft-rule", "Preserve client data."], temp);
+    await writeFile(file, (await readFile(file, "utf8")).replaceAll("\n", "\r\n"));
+    assert.equal(JSON.parse(run(process.execPath, [tool, "move", created.id, "done"], temp).stdout).status, "done");
+  } finally {
+    await assertPathWithin({ root: os.tmpdir(), candidate: temp });
+    await rm(temp, { recursive: true, force: true });
+    await assertPathWithin({ root: os.tmpdir(), candidate: outside });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("question answers accept CRLF tasks without changing unrelated content", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-task-crlf-"));
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    run(process.execPath, [setup, "--target", temp], temp);
+    const tool = path.join(temp, ".aihaus", "tools", "task.mjs");
+    const created = JSON.parse(run(process.execPath, [tool, "create", "--title", "Windows task", "--room", "feature"], temp).stdout);
+    const asked = JSON.parse(run(process.execPath, [tool, "question", created.id, "--text", "Keep behavior?"], temp).stdout);
+    const file = path.join(temp, created.file);
+    const body = (await readFile(file, "utf8")).replaceAll("\n", "\r\n");
+    await writeFile(file, body);
+    const answer = "Keep literal $& and $' tokens.";
+    const rule = "Preserve $` and $$ in customer text.";
+    run(process.execPath, [tool, "answer", created.id, "--question", asked.question, "--text", answer, "--draft-rule", rule], temp);
+    assert.equal(await readFile(file, "utf8"), body.replace("Answer: pending", () => `Answer: ${answer}`).replace("Draft rule: pending", () => `Draft rule: ${rule}`));
+  } finally {
+    await assertPathWithin({ root: os.tmpdir(), candidate: temp });
     await rm(temp, { recursive: true, force: true });
   }
 });
