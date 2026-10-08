@@ -25,6 +25,11 @@ describing the actual review. For example:
 Validators check the document contract; source labels and exit codes are not
 cryptographic proof. The verifier must inspect artifacts and rerun checks.
 
+A required judgment pass (review or verification) may be an acceptance criterion
+whose evidence names its verdict receipt, as an artifact or in `detail`. An
+optional `commit` field on the document or a rung is unvalidated metadata: it
+does not prove the evidence applies to that commit.
+
 ## Completing a file task
 
 Use checked, unique `- [x] criterion text` items in `## Acceptance`. In

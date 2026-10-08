@@ -11,6 +11,7 @@ const tests = [
   "tests/contracts/scope-check.test.mjs",
   "tests/contracts/task-tool.test.mjs",
   "tests/contracts/evidence-validate.test.mjs",
+  "tests/contracts/assignments.test.mjs",
   "tests/contracts/online-action-gate.test.mjs",
   "tests/contracts/path-safety.test.mjs",
   "tests/lab/agent-install.test.mjs",

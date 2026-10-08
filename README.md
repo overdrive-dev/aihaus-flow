@@ -83,13 +83,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.5.0`):
+Current published release (`v1.6.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.5.0/aihaus-flow-v1.5.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.6.0/aihaus-flow-v1.6.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.5.0` with the same tag.
+For another release, replace both occurrences of `v1.6.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -318,6 +318,15 @@ Review `changesRequired`, `created`, `createdDirectories`, `refreshed`, `unchang
 required kanban/state directories. Starting with v1.3.0, setup removes known
 repository-local artifacts from the retired graph runtime. Markdown project
 memory and file-kanban tasks are never part of that cleanup.
+
+Customized installations (local edits under `.aihaus/`, in managed AIHAUS
+blocks, or in marked host skills) follow the runbook in
+[INSTALL-VIA-LLM.md](INSTALL-VIA-LLM.md). Move local routes and runbooks into
+project memory (`.aihaus/memory/project/`) before updating, because package-owned
+files are replaced. Any update removes `.aihaus/INIT.md` when it exists, even if
+customized; `--check` lists it in `wouldRemove`, so copy it first. When an
+accepted project decision names an external tracker as task authority, the file
+kanban is inactive even though setup still creates its empty folders.
 
 ## Install from source
 

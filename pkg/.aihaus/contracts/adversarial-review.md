@@ -18,3 +18,19 @@ and goal-backward verification.
 
 Output confirmed findings by severity, criterion results, commands actually run,
 and one verdict: `ship`, `ship-with-changes`, or `blocked`.
+
+## Verdict receipt
+
+Record each verdict as a receipt with:
+
+- assignment or lens, and reviewer;
+- task reference;
+- candidate SHA and comparison base;
+- scope: `full`, or `recheck` of named earlier findings;
+- commands run, with exit codes;
+- verdict (`ship`, `ship-with-changes`, or `blocked`) and recipient.
+
+A verdict applies only to its candidate SHA. Any later product change needs a
+new pass. A recheck covers only the named findings and cannot approve
+unrelated changes. Approval is not operational authorization: merge permission
+comes only from an explicit project rule, and `ops-safety.md` still applies.

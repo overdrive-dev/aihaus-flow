@@ -96,12 +96,21 @@ unresolved until an authoritative source or owner resolves them.
 Project Markdown and task files are authoritative. `.aihaus/state/` contains
 only rebuildable discovery and tool state. Deleting generated state must not
 erase rules, decisions, knowledge, or task history. Task status is the Markdown
-file's folder under `.aihaus/memory/kanban/`.
+file's folder under `.aihaus/memory/kanban/`, unless an accepted project decision
+names an external tracker as task authority (see Delegation below).
 
 A transition to done requires a valid PASS evidence document inside the
 repository that covers exactly the checked acceptance criteria and resolved
 business-rule questions. Evidence validation rejects empty/blocked-only support;
 an independent verifier must still inspect artifacts or rerun applicable checks.
+
+## Delegation
+
+Delegation has two coordination levels: orchestrators assign outcomes, and
+executors perform them. The delegation rules are in `.aihaus/contracts/harness.md`
+(Context check and resumption, Execution). Project-specific assignments live in
+project memory (`procedures.md`, "Assignments"). Host watching and messaging are
+not package state.
 
 ## Evolution rule
 

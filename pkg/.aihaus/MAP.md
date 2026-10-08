@@ -19,8 +19,14 @@ reviewer, or verifier. Roles describe responsibility; rooms describe the work.
 
 Follow the harness context check before substantive work and on resumption.
 `memory/project/README.md` maps questions to memory pages; retrieve only relevant
-entries and verify their cited sources. The current Markdown task in
-`memory/kanban/` carries scope, rule/decision references, gaps, and evidence.
+entries and verify their cited sources. The current task carries scope,
+rule/decision references, gaps, and evidence: a Markdown file in
+`memory/kanban/`, or the external tracker item when an accepted decision makes
+that tracker the task authority.
+
+Project routes and specialist assignments live in project memory, not in
+package-owned files (see conventions.md). When delegating, load the Assignments
+section of `memory/project/procedures.md` if the project defines one.
 
 If no row fits, use the smallest existing room and record the missing case in
 the task. A new room requires repeated lab evidence, not a one-off request.

@@ -54,15 +54,36 @@ replace them. The designated writer promotes durable verified findings and
 explicit owner decisions with provenance at meaningful checkpoints. Keep
 transient progress and unresolved candidates in the task.
 
+Use two coordination levels: the orchestrator assigns outcomes and executors
+perform them. Do not add a distributor agent; the written assignment carries the
+route. Each delegation also names the assignment or lens and the runbook paths
+to load, the output and its destination, the next recipient on pass, rework,
+and blocked, and the escalation owner. Project-specific assignments live in the
+"Assignments" section of `memory/project/procedures.md` when the project defines
+one.
+
+Execution lenses load in the implementer's context. Judgment passes (review and
+verification) run in a separate context, read-only, against a fixed
+candidate SHA, and never by the agent that wrote that candidate. If the host
+cannot provide a separate context, report the pass as degraded. Author and
+reviewer may exchange verdicts directly; the designated writer keeps task state.
+
 ## Execution
 
-Keep task status in its kanban folder. Because each worktree contains a
-branch-local kanban snapshot, the orchestrator or a designated intake worktree
-is the single writer for task ingestion, status transitions, and shared memory
-promotion. Implementers own scoped product changes and return evidence to that
-writer; reviewers remain read-only; verifiers independently rerun affected
-checks. Create and commit the task on the shared coordination base before
-branching its implementation worktree.
+Keep task status in its kanban folder unless an accepted project decision names
+an external tracker as task authority. That decision states where the task,
+acceptance criteria, status writer, business-rule questions, and evidence live;
+the file kanban is then inactive even if setup recreates its empty folders, and
+the evidence contract still applies.
+
+The orchestrator or a designated intake worktree is the single writer for task
+ingestion, status transitions, and shared memory promotion. Implementers own
+scoped product changes and return evidence to that writer; reviewers remain
+read-only; verifiers independently rerun affected checks. With the file kanban,
+each worktree carries a branch-local board snapshot, so create and commit the
+task on the shared coordination base before branching its implementation
+worktree. With an external tracker, follow its accepted intake instead of
+creating a shadow file task.
 
 Completion means acceptance criteria mapped to real artifacts and executable
 evidence. A tool or CI exit code may prove execution; prose cannot.

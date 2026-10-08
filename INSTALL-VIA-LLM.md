@@ -29,6 +29,22 @@ Identity and scope:
    inspect changesRequired, wouldCreate, wouldCreateDirectories, wouldRefresh, wouldSeed, and
    wouldRemove. On a first installation verification.ok may be false because
    the preview does not write the missing package surface.
+   For an existing installation this preview is required. For a customized
+   installation (local edits under .aihaus/, inside the AIHAUS blocks of
+   AGENTS.md or CLAUDE.md, or in host skills carrying the aihaus marker):
+   - Keep a full copy of .aihaus/ and of those files before applying the update.
+   - Inspect adapters and hostCapabilities: setup rewrites the managed AIHAUS
+     blocks and marked host skills. Move customizations outside the managed
+     block, or remove the marker so setup preserves the skill as user-owned.
+   - Inspect every file inside each wouldRefresh directory, not only the
+     directory path, and each path listed in wouldRemove (these are files).
+   - Move local routes and runbooks into .aihaus/memory/project/, and custom
+     tools outside .aihaus/tools/, before updating. Package-owned files are
+     replaced on upgrade.
+   - Setup deletes .aihaus/INIT.md (shipped through v1.3.0, replaced by
+     REFRESH.md in v1.4.0) whenever it exists, customized or not; back it up
+     first.
+   - If the original baseline is unknown, report that uncertainty.
 4. Run the setup command to install or update only missing or changed package
    surfaces:
       npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/<release-tag>/aihaus-flow-<release-tag>.tgz -- aihaus init --target . --json

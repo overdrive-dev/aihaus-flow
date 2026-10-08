@@ -41,3 +41,6 @@ Maintainer runbook:
   README install pins in the PR; after merge push tag `v<VERSION>` to run
   `package-release.yml`.
 - The suite takes about 30 s; Windows skips one symlink test.
+- Setup replaces package-owned surfaces and never reseeds existing memory;
+  `refresh.mjs` hashes memory templates. Ship new guidance through MAP,
+  contracts, rooms, roles, or the router, not memory templates.

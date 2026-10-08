@@ -13,6 +13,8 @@ Use for a business-visible behavior change.
 1. State the outcome and Given/When/Then acceptance criteria.
 2. Resolve only true business-rule gaps; use `tools/task.mjs question/answer`
    to retain the answer and candidate rule. Mechanics are decided locally.
+   With an accepted external tracker, record questions and answers where that
+   decision says.
 3. Identify affected callers, tests, and an owned-file scope.
 4. Establish a failing or absent acceptance check.
 5. Implement the smallest coherent slice and run verification.
