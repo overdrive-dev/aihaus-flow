@@ -2,7 +2,8 @@
 
 A task is one Markdown file under exactly one status folder:
 `backlog`, `todo`, `doing`, `review`, or `done`. Folder location is the sole
-status source; do not duplicate it in frontmatter.
+status source unless an accepted external tracker is the task authority
+(`contracts/harness.md`); do not duplicate it in frontmatter.
 
 Filename: `T-yyMMdd-rand6-short-title.md`.
 
@@ -18,7 +19,7 @@ Minimum body:
 ```
 
 Move tasks atomically and let one writer own a transition. The task files and
-their status folders are authoritative.
+their status folders are authoritative under the same condition.
 
 ## Worktree ownership
 

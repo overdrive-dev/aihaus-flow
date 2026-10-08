@@ -17,5 +17,5 @@ This repository uses the local `.aihaus/` package.
 6. Require the evidence contract before moving a task to `done`.
    Operational instructions and hooks are not a security sandbox.
 
-Keep project-specific detail out of this router. Put it in the appropriate
-room or `.aihaus/memory/project/` page.
+Keep project-specific detail, routes, and runbooks in `.aihaus/memory/project/`.
+Upgrades replace package-owned files (see `.aihaus/conventions.md`).

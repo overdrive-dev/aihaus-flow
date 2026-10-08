@@ -2,7 +2,8 @@
 
 - Durable facts, rules, decisions, and procedures are versioned Markdown.
 - `.aihaus/state/` and caches are generated, ignored, and safely rebuildable.
-- A task's status is its kanban folder; do not duplicate status in frontmatter.
+- A task's status is its kanban folder, unless an accepted external tracker is the
+  task authority; do not duplicate status in frontmatter.
 - One active implementation task owns one worktree, branch, and reviewable change.
   Backend, frontend, migrations, and tests for the same outcome stay together;
   unrelated outcomes use separate worktrees.
@@ -19,3 +20,6 @@
 - Production safety comes from external containment and least privilege, not
   from prompts, rooms, or hooks.
 - Managed instruction-file edits use bounded markers and preserve user text.
+- Package-owned files (MAP.md, conventions.md, REFRESH.md, roles/, rooms/,
+  contracts/, tools/) are replaced on upgrade. Project routes, assignments, and
+  runbooks belong in `.aihaus/memory/project/`.

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.6.0 - 2026-10-08
+
+- Define two coordination levels: orchestrators assign outcomes and executors
+  perform them; the written assignment carries the route, next recipients on
+  pass/rework/blocked, and the escalation owner. No distributor agent.
+- Keep project-specific assignments in project memory (`procedures.md`,
+  "Assignments"); package-owned files stay replaceable on upgrade.
+- Bind judgment passes to a candidate SHA, run them in a separate context,
+  and record verdict receipts; a recheck never approves unrelated changes.
+- Let an accepted decision name an external tracker as task authority; the
+  file kanban is then inactive even though setup recreates its folders.
+- Add an upgrade runbook for customized installs covering `wouldRefresh`,
+  `wouldRemove`, and `.aihaus/INIT.md` removal.
+- The root router now sends project-specific detail to `.aihaus/memory/project/`
+  instead of rooms, which upgrades replace.
+
 ## 1.5.0 - 2026-09-05
 
 - Require a context check before substantive work and on resumption, with
