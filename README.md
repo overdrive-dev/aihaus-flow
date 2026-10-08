@@ -147,7 +147,8 @@ show the portable bootstrap, host capabilities, and collision status:
 `cleanup.pending: false` confirms that the GitHub Release setup did not leave a
 repository-local download directory behind.
 
-Starting with `v1.2.0`, the installed entry points are:
+Starting with `v1.4.0` (which renamed `INIT.md`/`init.mjs` from `v1.2.0`), the
+installed entry points are:
 
 - .aihaus/REFRESH.md;
 - .aihaus/tools/refresh.mjs;
