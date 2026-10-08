@@ -5,7 +5,7 @@
 Project bootstrap is repository-local, provider-neutral, offline, and
 two-phase. The deterministic command discovers evidence and writes rebuildable
 state. The active coding agent synthesizes reviewed Markdown. Neither phase
-depends on Claude slash commands, global aihaus installation, user-level hooks
+depends on host-specific command syntax, global aihaus installation, user-level hooks
 or settings, Bash, symlinks, or a hosted service.
 
 ## Deterministic discovery
