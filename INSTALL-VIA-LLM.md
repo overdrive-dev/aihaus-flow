@@ -29,8 +29,13 @@ Identity and scope:
    inspect changesRequired, wouldCreate, wouldCreateDirectories, wouldRefresh, wouldSeed, and
    wouldRemove. On a first installation verification.ok may be false because
    the preview does not write the missing package surface.
-   For a customized installation (local edits under .aihaus/):
-   - Keep a full copy of .aihaus/ before applying the update.
+   For an existing installation this preview is required. For a customized
+   installation (local edits under .aihaus/, inside the AIHAUS blocks of
+   AGENTS.md or CLAUDE.md, or in host skills carrying the aihaus marker):
+   - Keep a full copy of .aihaus/ and of those files before applying the update.
+   - Inspect adapters and hostCapabilities: setup rewrites the managed AIHAUS
+     blocks and marked host skills. Move customizations outside the managed
+     block, or remove the marker so setup preserves the skill as user-owned.
    - Inspect every file inside each wouldRefresh directory, not only the
      directory path, and each path listed in wouldRemove (these are files).
    - Move local routes and runbooks into .aihaus/memory/project/, and custom

@@ -319,7 +319,8 @@ required kanban/state directories. Starting with v1.3.0, setup removes known
 repository-local artifacts from the retired graph runtime. Markdown project
 memory and file-kanban tasks are never part of that cleanup.
 
-Customized installations (local edits under `.aihaus/`) follow the runbook in
+Customized installations (local edits under `.aihaus/`, in managed AIHAUS
+blocks, or in marked host skills) follow the runbook in
 [INSTALL-VIA-LLM.md](INSTALL-VIA-LLM.md). Move local routes and runbooks into
 project memory (`.aihaus/memory/project/`) before updating, because package-owned
 files are replaced. Any update removes `.aihaus/INIT.md` when it exists, even if
