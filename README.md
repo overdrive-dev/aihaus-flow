@@ -9,6 +9,8 @@ Use aihaus when you want an agent to:
 
 - follow project rules and prior decisions instead of starting from scratch;
 - route feature, bug-fix, and research work through a consistent workflow;
+- hand security, QA, or release work to independent agents with a defined
+  next step;
 - keep durable project memory in versioned Markdown;
 - support completion claims with executable evidence;
 - work without sending project memory to an aihaus service.
@@ -273,6 +275,23 @@ Research the safest migration path for the users table and record the decision.
 ```
 
 No special aihaus command is required for ordinary agent work.
+
+### Delegate to specialist agents
+
+aihaus keeps six general roles and two coordination levels: an orchestrator
+assigns outcomes and executors perform them, with no distributor agent in
+between. To route recurring specialist work such as security review, QA, or
+release promotion, add an `Assignments` section to
+`.aihaus/memory/project/procedures.md`. Upgrades never overwrite it.
+
+| Assignment | Role | Load | Trigger | Context | Output | Next on pass / rework / blocked | Escalation |
+|---|---|---|---|---|---|---|---|
+| security | reviewer | `contracts/adversarial-review.md` plus project security notes | `payments/**`, `auth/**` | separate, read-only, candidate SHA | verdict receipt | qa / author / orchestrator | owner |
+| qa | verifier | `contracts/evidence.md` | every task | separate, read-only, candidate SHA | evidence JSON | orchestrator / author / orchestrator | owner |
+
+Reviews and verification run in a separate context against a fixed commit and
+record a verdict receipt; a recheck never approves unrelated changes. Watching
+for stalled agents, messaging, and process health stay with your host tool.
 
 ## Update aihaus
 
