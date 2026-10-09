@@ -306,7 +306,7 @@ may use one provider or several:
 | `claude` | reviewer | Claude Code / Anthropic | `opus` | xhigh | subagent in a fresh context |
 | `openai` | orchestrator | Codex / OpenAI | `gpt-6-astra` | xhigh | the session you talk to |
 | `openai` | planner (optional), reviewer | Codex / OpenAI | `gpt-6-astra` | xhigh | `codex exec ... -s read-only` |
-| `openai` | executors | Codex / OpenAI | `gpt-6.1-sol` | xhigh | Codex subagents, one worktree per outcome |
+| `openai` | executors | Codex / OpenAI | `gpt-6.1-sol` | xhigh | one `codex exec` run per outcome worktree |
 | `mixed` | orchestrator | Claude Code / Anthropic | `fable` | xhigh | the session you talk to |
 | `mixed` | planner (optional), reviewer | Codex / OpenAI | `gpt-6-astra` | xhigh | `codex exec ... -s read-only` |
 | `mixed` | executors | Claude Code / Anthropic | `haiku` | max | multi-agent workflow, one worktree per outcome |
