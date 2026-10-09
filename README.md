@@ -85,13 +85,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.6.0`):
+Current published release (`v1.6.1`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.6.0/aihaus-flow-v1.6.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.6.1/aihaus-flow-v1.6.1.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.6.0` with the same tag.
+For another release, replace both occurrences of `v1.6.1` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
