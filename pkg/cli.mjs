@@ -18,7 +18,6 @@ function usage() {
     "init installs or updates only changed repository-local package files.",
     "Use --check to preview changes without writing, or --force to rewrite package-owned files.",
     "After init, run node .aihaus/tools/refresh.mjs --repo . --json.",
-    "(aihaus setup remains as a deprecated alias for init.)",
   ].join("\n");
 }
 
@@ -44,7 +43,7 @@ async function main() {
     process.stdout.write(`${usage()}\n`);
     return;
   }
-  if (command === "init" || command === "setup") {
+  if (command === "init") {
     runSetup(args);
     return;
   }

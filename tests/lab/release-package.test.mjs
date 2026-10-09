@@ -87,7 +87,7 @@ test("GitHub Release tarball runs aihaus init without a visible clone", async ()
       `--package=${release.asset}`,
       "--",
       "aihaus",
-      "setup",
+      "init",
       "--target",
       consumer,
       "--json",
@@ -169,6 +169,16 @@ test("GitHub Release tarball runs aihaus init without a visible clone", async ()
   } finally {
     await rm(labRoot, { recursive: true, force: true });
   }
+});
+
+test("aihaus CLI no longer accepts the expired setup alias", () => {
+  const result = spawnSync(process.execPath, [path.join(root, "pkg", "cli.mjs"), "setup", "--check"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /^unknown command: setup/);
+  assert.doesNotMatch(result.stderr, /aihaus setup/);
 });
 
 test("release builder rejects a tag that does not match pkg/VERSION", async () => {

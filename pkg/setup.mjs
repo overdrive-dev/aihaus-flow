@@ -239,7 +239,10 @@ function gitTopLevel(target) {
 }
 
 async function assertRepositoryRoot(target) {
-  const [requested, top] = await Promise.all([realpath(target), realpath(gitTopLevel(target))]);
+  const requested = await realpath(target).catch((error) => {
+    throw error.code === "ENOENT" ? new Error(`target does not exist: ${target}`) : error;
+  });
+  const top = await realpath(gitTopLevel(target));
   if (!samePath(requested, top)) {
     throw new Error(`target must be the repository root: ${top}`);
   }
@@ -399,7 +402,12 @@ async function upsertManagedBlock(file, body, { check = false } = {}) {
   if (info.nlink > 1) {
     throw new Error(`refusing hard-linked managed block file: ${file}`);
   }
-  const current = await readFile(file, "utf8");
+  const raw = await readFile(file);
+  const current = raw.toString("utf8");
+  // a UTF-8 rewrite would corrupt UTF-16 or legacy code-page files
+  if (raw.includes(0) || !Buffer.from(current, "utf8").equals(raw)) {
+    throw new Error(`refusing to rewrite ${file}: not UTF-8 text; convert it to UTF-8 first`);
+  }
   const start = current.indexOf(startMarker);
   const end = current.indexOf(endMarker);
   if (
@@ -514,19 +522,6 @@ async function install(target, { check = false, force = false } = {}) {
       }),
     );
   }
-  for (const file of metadataFiles) {
-    const destination = path.join(destinationRoot, file);
-    managedStatus.set(
-      `.aihaus/${file}`,
-      await planManagedFile({
-        source: path.join(packageRoot, file),
-        destination,
-        root: destinationRoot,
-        check,
-        force,
-      }),
-    );
-  }
   const retiredCleanup = [
     ...await removeRetiredArtifacts(repositoryRoot, { check }),
     ...await removeRetiredHostSkills(repositoryRoot, { check }),
@@ -601,6 +596,20 @@ async function install(target, { check = false, force = false } = {}) {
         installedHostSkill.conflict === null && installedHostSkill.status !== "would-create",
       ...specification.capability,
     };
+  }
+  // VERSION goes last so a failed run never pairs a new version with stale files
+  for (const file of metadataFiles) {
+    const destination = path.join(destinationRoot, file);
+    managedStatus.set(
+      `.aihaus/${file}`,
+      await planManagedFile({
+        source: path.join(packageRoot, file),
+        destination,
+        root: destinationRoot,
+        check,
+        force,
+      }),
+    );
   }
 
   const source = await sourceProvenance();
