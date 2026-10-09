@@ -107,10 +107,22 @@ an independent verifier must still inspect artifacts or rerun applicable checks.
 ## Delegation
 
 Delegation has two coordination levels: orchestrators assign outcomes, and
-executors perform them. The delegation rules are in `.aihaus/contracts/harness.md`
-(Context check and resumption, Execution). Project-specific assignments live in
-project memory (`procedures.md`, "Assignments"). Host watching and messaging are
-not package state.
+executors perform them. Planning is optional and star-shaped: a read-only
+planner returns its plan to the orchestrator, which dispatches executors and
+receives their deliveries, so planning adds no coordination level. The
+delegation rules are in `.aihaus/contracts/harness.md` (Context check and
+resumption, Delegation, Execution); the start/resume loop is in
+`roles/orchestrator.md`.
+
+Projects own their delegation data in project memory (`procedures.md`):
+"Assignments" holds routes, named profiles, and the default role and profile
+for the user-facing session; "Autonomy" holds accepted permissions. The package
+names no profile and grants no permission. Because an installer cannot
+guarantee that a running host reloaded its instructions, the orchestrator
+explicitly rereads instructions, MAP, harness, and task context on resume.
+Existing installs whose `procedures.md` lacks these sections keep their current
+role selection: one room and one primary role per task. Setup never seeds
+either section. Host watching and messaging are not package state.
 
 ## Evolution rule
 

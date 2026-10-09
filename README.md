@@ -85,13 +85,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.6.1`):
+Current published release (`v1.7.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.6.1/aihaus-flow-v1.6.1.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.7.0/aihaus-flow-v1.7.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.6.1` with the same tag.
+For another release, replace both occurrences of `v1.7.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -281,18 +281,82 @@ No special aihaus command is required for ordinary agent work.
 
 aihaus keeps six general roles and two coordination levels: an orchestrator
 assigns outcomes and executors perform them, with no distributor agent in
-between. To route recurring specialist work such as security review, QA, or
-release promotion, add an `Assignments` section to
-`.aihaus/memory/project/procedures.md`. Upgrades never overwrite it.
+between. An optional planner returns its plan to the orchestrator, which still
+dispatches every executor. Delegation settings live in
+`.aihaus/memory/project/procedures.md`, which upgrades never overwrite. The
+examples below are illustrative; they become rules only when you accept them in
+that file.
+
+To route recurring specialist work such as security review, QA, or release
+promotion, add an `Assignments` section:
 
 | Assignment | Role | Load | Trigger | Context | Output | Next on pass / rework / blocked | Escalation |
 |---|---|---|---|---|---|---|---|
 | security | reviewer | `contracts/adversarial-review.md` plus project security notes | `payments/**`, `auth/**` | separate, read-only, candidate SHA | verdict receipt | qa / author / orchestrator | owner |
 | qa | verifier | `contracts/evidence.md` | every task | separate, read-only, candidate SHA | evidence JSON | orchestrator / author / orchestrator | owner |
 
+In the same section, name profiles for the hosts and models you use. A profile
+may use one provider or several:
+
+| Profile | Role | Host / provider | Model | Effort | Invoked as |
+|---|---|---|---|---|---|
+| `claude` | orchestrator | Claude Code / Anthropic | `fable` | xhigh | the session you talk to |
+| `claude` | planner (optional) | Claude Code / Anthropic | `opus` | xhigh | read-only subagent |
+| `claude` | executors | Claude Code / Anthropic | `haiku` | max | multi-agent workflow, one worktree per outcome |
+| `claude` | reviewer | Claude Code / Anthropic | `opus` | xhigh | subagent in a fresh context |
+| `openai` | orchestrator | Codex / OpenAI | `gpt-6-astra` | xhigh | the session you talk to |
+| `openai` | planner (optional), reviewer | Codex / OpenAI | `gpt-6-astra` | xhigh | `codex exec ... -s read-only` |
+| `openai` | executors | Codex / OpenAI | `gpt-6.1-sol` | xhigh | one `codex exec` run per outcome worktree |
+| `mixed` | orchestrator | Claude Code / Anthropic | `fable` | xhigh | the session you talk to |
+| `mixed` | planner (optional), reviewer | Codex / OpenAI | `gpt-6-astra` | xhigh | `codex exec ... -s read-only` |
+| `mixed` | executors | Claude Code / Anthropic | `haiku` | max | multi-agent workflow, one worktree per outcome |
+
+Then set the default for the session you talk to:
+
+```text
+Main session: orchestrator. Default profile: claude.
+Delegation: everything except trivial requests. Up to 4 executors; tests run one at a time.
+```
+
+With these defaults no kickoff prompt is needed: you talk in natural language,
+and that session triages, plans, delegates per the profile, reviews, and
+integrates within Autonomy unless you direct otherwise. Without them, the agent
+selects one room and one primary role per task. Selecting a profile does not
+switch the running session's model; the agent reports unavailable requirements
+instead of silently substituting. For each profile, record allowed fallbacks by
+role, or `none`. If a requirement is unavailable, the agent uses only a recorded
+fallback and reports the actual model/settings; otherwise it pauses the affected
+assignment.
+
+Use a moving alias when the host supports one, or an exact model ID when
+reproducibility matters. Record the requested alias/ID and the resolved
+model/settings when exposed by the host; otherwise record that resolution was
+unavailable.
+
+Record what the orchestrator may do alone in an `Autonomy` section:
+
+```markdown
+## Autonomy
+
+- May: push, open a change request, and squash-merge to the integration branch
+  after green required checks and a `ship` verdict.
+- Needs the owner: tags and releases, deploys, production actions.
+```
+
+Neither a profile nor a review verdict grants permission. Without applicable
+authorization from you or an accepted project rule, the orchestrator stops
+before the first remote write and reports the integration-ready result.
+
 Reviews and verification run in a separate context against a fixed commit and
-record a verdict receipt; a recheck never approves unrelated changes. Watching
-for stalled agents, messaging, and process health stay with your host tool.
+record a verdict receipt; a recheck never approves unrelated changes. On a host
+that does not reload instructions after compaction or a handoff, resume with:
+
+```text
+Resume <task> with its recorded profile; reload aihaus context and reconcile integrated work before acting.
+```
+
+Host-specific multi-agent opt-ins stay in host configuration; messaging and
+process watching use your host tool.
 
 ## Update aihaus
 
