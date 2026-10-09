@@ -13,8 +13,9 @@ For every acceptance criterion:
 6. reject vague/style-only findings without a reproduction or `path:line`.
 
 Use task-specific lenses when triggered: security/threat path, migration
-reversibility and data loss, integration existence-versus-wiring, complexity,
-and goal-backward verification.
+reversibility and data loss, integration existence-versus-wiring, capacity
+(worst-case input against time, memory, and token limits, including downstream
+stages when volume rises), complexity, and goal-backward verification.
 
 Output confirmed findings by severity, criterion results, commands actually run,
 and one verdict: `ship`, `ship-with-changes`, or `blocked`.
@@ -35,6 +36,9 @@ Record each verdict as a receipt with:
 
 A verdict applies only to its candidate SHA. Any later product change needs a
 new pass. A recheck covers only the named findings and cannot approve
-unrelated changes. Approval is not operational authorization: merge permission
-comes only from the user or an explicit project rule, and `ops-safety.md` still
-applies.
+unrelated changes; it names every earlier finding fixed in the delivery and
+reruns their reproductions. A finding is dismissed as not applicable only when
+its recheck receipt records a command or `path:line` showing the state it
+requires is absent or unreachable. Approval is not operational authorization:
+merge permission comes only from the user or an explicit project rule, and
+`ops-safety.md` still applies.

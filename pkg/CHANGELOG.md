@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.8.0 - 2026-10-09
+
+Review integrity and delegation fixes from field feedback.
+
+- Judgment passes: for delegated work the orchestrator assigns each required
+  pass, and an executor's review of its own delivery, even through a subagent,
+  is a self-check that never satisfies a required pass. A recheck names every
+  earlier finding fixed in the delivery and reruns their reproductions; a
+  finding is dismissed as not applicable only with a recorded command or
+  `path:line`. Reviews gain a capacity lens (worst-case input against time,
+  memory, and token limits, including downstream stages when volume rises).
+- Evidence: reruns use a clean checkout or export of the candidate SHA; a check
+  that passes only with files outside the commit or leftover environment is a
+  defect, not a degraded check. The verifier role points to it.
+- Delegation briefs carry the base or candidate SHA and any other source by path
+  and revision; other local copies do not replace them. For rules over open
+  inputs, the brief gives a decision rule and case table, not example lists.
+- Orchestrator: a failed status read is unknown, not a result; a fix that opens
+  a new case in the same logic counts toward the retry limit, and the last
+  cycle rewrites the brief as a decision rule and case table instead of
+  patching.
+- Implementers turn reviewer reproductions that can run as tests into
+  regression tests that fail before the fix.
+- README's Autonomy example notes per-permission conditions such as an
+  integration window when merging deploys.
+- Project memory templates are unchanged.
+
 ## 1.7.0 - 2026-10-09
 
 Replace pasted orchestrator prompts with package guidance plus project data.

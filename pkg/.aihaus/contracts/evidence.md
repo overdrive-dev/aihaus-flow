@@ -44,6 +44,10 @@ describing the actual review. For example:
 `{ "rung": "written", "artifact": "review/approved.png" }`.
 Validators check the document contract; source labels and exit codes are not
 cryptographic proof. The verifier must inspect artifacts and rerun checks.
+Reruns use a clean checkout or export of the candidate SHA, not the executor's
+working copy; a check that passes only with files outside the commit (beyond
+documented setup) or environment another test left behind is a defect to
+report, not a degraded check.
 
 A required judgment pass (review or verification) may be an acceptance criterion
 whose evidence names its verdict receipt, as an artifact or in `detail`. An
