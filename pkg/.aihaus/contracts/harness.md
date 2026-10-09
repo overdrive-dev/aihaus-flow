@@ -83,10 +83,12 @@ Execution lenses load in the implementer's context. Judgment passes (review and
 verification) run in a separate context, read-only, against a fixed
 candidate SHA, and never by the agent that wrote that candidate, whatever the
 selected profile. If the host cannot provide a separate context, report the
-pass as degraded. For delegated work the orchestrator assigns each required
-pass; an executor's review of its own delivery, even through a subagent, is a
-self-check and never satisfies a required pass. Author and reviewer may
-exchange verdicts directly; the designated writer keeps task state.
+pass as degraded. When an executor wrote the candidate, the orchestrator
+assigns each required pass; the executor's own review, even through a
+subagent, is a self-check and never satisfies a required pass. A session that
+wrote the candidate without delegating it may start the separate context
+itself. Author and reviewer may exchange verdicts directly; the designated
+writer keeps task state.
 
 ## Execution
 

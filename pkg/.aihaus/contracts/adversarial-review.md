@@ -36,9 +36,11 @@ Record each verdict as a receipt with:
 
 A verdict applies only to its candidate SHA. Any later product change needs a
 new pass. A recheck covers only the named findings and cannot approve
-unrelated changes; it names every earlier finding fixed in the delivery and
-reruns their reproductions. A finding is dismissed as not applicable only when
-its recheck receipt records a command or `path:line` showing the state it
-requires is absent or unreachable. Approval is not operational authorization:
-merge permission comes only from the user or an explicit project rule, and
-`ops-safety.md` still applies.
+unrelated changes; its assignment lists every earlier finding fixed on this
+task, across all rounds, and the recheck reruns their reproductions. A finding
+is dismissed as not applicable only when its recheck receipt records a command
+or `path:line` showing the candidate cannot reach the state it requires;
+absence from current data suffices only for a historical state the candidate
+cannot recreate. Approval is not operational authorization: merge permission
+comes only from the user or an explicit project rule, and `ops-safety.md` still
+applies.

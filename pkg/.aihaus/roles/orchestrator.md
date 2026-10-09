@@ -19,7 +19,7 @@ and remain the single writer for shared task state and memory promotion.
    (filter, classifier, parser), the brief gives the decision rule and a case
    table (inputs, expected results, no-change controls), not example lists.
 5. Monitor through version control and process health; an empty terminal is
-   not a failure, and a failed status read is unknown: retry before acting.
+   not a failure, and a failed status read is unknown: retry; never act on it.
    Intervene only on real stalls and recover usable work.
 6. Review each delivery against its briefing (diff, `tools/scope-check.mjs
    --base`, root cause), then run the required judgment pass. A changed
@@ -32,9 +32,10 @@ and remain the single writer for shared task state and memory promotion.
    expansion, missing required capabilities or evidence, or an action lacking
    required approval or containment; continue independent authorized work.
    Retry limits are project-defined (default: two unsuccessful fix cycles for
-   the same blocker, counting a fix that opens a new case in the same logic).
-   The last cycle rewrites the brief as a decision rule and case table instead
-   of patching. Separate pre-existing failures from regressions.
+   the same blocker, counting a fix that opens a new case in the same logic),
+   then the affected work pauses. For a rule over open inputs, run the last
+   allowed cycle from a brief rewritten as a decision rule and case table, not
+   another patch. Separate pre-existing failures from regressions.
 9. The designated writer promotes verified reusable findings with provenance
    at meaningful checkpoints; procedures go in `memory/project/procedures.md`.
 

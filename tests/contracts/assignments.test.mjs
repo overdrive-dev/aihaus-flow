@@ -98,6 +98,7 @@ test("harness contract names the two coordination levels and delegation fields",
       "assigns each required pass",
       "self-check",
       "never satisfies a required pass",
+      "without delegating it may start the separate context",
     ],
     "harness contract",
   );
@@ -117,9 +118,11 @@ test("adversarial review contract binds verdicts to a candidate SHA", async () =
       "resolution was unavailable",
       "never infer the resolved version",
       "capacity (",
-      "every earlier finding fixed",
+      "every earlier finding fixed on this task",
+      "across all rounds",
       "reruns their reproductions",
-      "absent or unreachable",
+      "cannot reach the state it requires",
+      "historical state the candidate cannot recreate",
     ],
     "adversarial review contract",
   );
@@ -232,7 +235,9 @@ test("orchestrator role carries the start/resume loop", async () => {
       "failed status read is unknown",
       "decision rule and a case table",
       "counting a fix that opens a new case",
-      "rewrites the brief as a decision rule",
+      "brief rewritten as a decision rule",
+      "affected work pauses",
+      "never act on it",
     ],
     "orchestrator role",
   );
@@ -247,7 +252,7 @@ test("implementer and verifier roles carry the review-fix rules", async () => {
   );
   assertAnchors(
     await text(path.join(packageRoot, "roles", "verifier.md")),
-    ["clean checkout of the candidate SHA"],
+    ["clean checkout or export of the candidate SHA"],
     "verifier role",
   );
 });
