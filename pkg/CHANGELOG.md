@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.8.0 - 2026-10-09
+
+Review integrity and delegation fixes from field feedback.
+
+- Judgment passes: when an executor wrote the candidate, the orchestrator
+  assigns each required pass, and the executor's own review, even through a
+  subagent, is a self-check that never satisfies a required pass; an authoring
+  session that is not a delegated executor may start the separate context
+  itself. The recheck assignment lists every earlier finding fixed on the task,
+  across all rounds, and the recheck reruns their reproductions. A finding is
+  dismissed as not applicable only with a recorded command or `path:line`
+  showing the candidate cannot reach the required state; absence from current
+  data suffices only for a historical state the candidate cannot recreate.
+  Reviews gain a capacity lens (worst-case input against time, memory, and
+  token limits, including downstream stages when volume rises).
+- Evidence: reruns use a clean checkout or export of the candidate SHA; a check
+  that passes only with files outside the commit (beyond documented setup) or
+  leftover environment is a defect, not a degraded check. The verifier role
+  runs its checks the same way.
+- Delegation briefs carry the base or candidate SHA and any other source by path
+  and revision; other local copies do not replace them. For rules over open
+  inputs, the brief gives a decision rule and case table, not example lists.
+- Orchestrator: a failed status read is unknown and never triggers action; a
+  fix that opens a new case in the same logic counts toward the retry limit,
+  then the affected work pauses; for a rule over open inputs the last allowed
+  cycle runs from a brief rewritten as a decision rule and case table, not
+  another patch.
+- Implementers turn reviewer reproductions that can run as tests into
+  regression tests that fail before the fix.
+- README's Autonomy example notes per-permission conditions such as an
+  integration window when merging deploys.
+- Project memory templates are unchanged.
+
 ## 1.7.0 - 2026-10-09
 
 Replace pasted orchestrator prompts with package guidance plus project data.

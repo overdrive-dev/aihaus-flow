@@ -93,6 +93,12 @@ test("harness contract names the two coordination levels and delegation fields",
       "authorized fallback",
       "requested capabilities",
       "Autonomy",
+      "base or candidate SHA",
+      "path and revision",
+      "assigns each required pass",
+      "self-check",
+      "never satisfies a required pass",
+      "not a delegated executor may start the separate context",
     ],
     "harness contract",
   );
@@ -111,6 +117,12 @@ test("adversarial review contract binds verdicts to a candidate SHA", async () =
       "resolved model and settings",
       "resolution was unavailable",
       "never infer the resolved version",
+      "capacity (",
+      "every earlier finding fixed on this task",
+      "across all rounds",
+      "reruns their reproductions",
+      "cannot reach the state it requires",
+      "historical state the candidate cannot recreate",
     ],
     "adversarial review contract",
   );
@@ -119,7 +131,7 @@ test("adversarial review contract binds verdicts to a candidate SHA", async () =
 test("evidence contract accepts commit metadata as unvalidated", async () => {
   assertAnchors(
     await text(path.join(packageRoot, "contracts", "evidence.md")),
-    ["commit", "unvalidated metadata"],
+    ["commit", "unvalidated metadata", "clean checkout or export", "not a degraded check"],
     "evidence contract",
   );
 });
@@ -220,10 +232,29 @@ test("orchestrator role carries the start/resume loop", async () => {
       "pre-existing failures from regressions",
       "provenance",
       "procedures.md",
+      "failed status read is unknown",
+      "decision rule and a case table",
+      "counting a fix that opens a new case",
+      "brief rewritten as a decision rule",
+      "affected work pauses",
+      "never act on it",
     ],
     "orchestrator role",
   );
   assert.ok(lineCount(role) <= 50, "orchestrator role must stay compact");
+});
+
+test("implementer and verifier roles carry the review-fix rules", async () => {
+  assertAnchors(
+    await text(path.join(packageRoot, "roles", "implementer.md")),
+    ["regression test that fails before the fix"],
+    "implementer role",
+  );
+  assertAnchors(
+    await text(path.join(packageRoot, "roles", "verifier.md")),
+    ["clean checkout or export of the candidate SHA"],
+    "verifier role",
+  );
 });
 
 test("planner role returns a read-only plan to the orchestrator", async () => {

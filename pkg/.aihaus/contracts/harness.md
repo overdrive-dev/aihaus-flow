@@ -49,12 +49,13 @@ sources change:
 
 ## Delegation
 
-Delegate with the task path, outcome, acceptance criteria, branch/worktree,
-owned files, relevant instruction and memory paths, unresolved gaps, and required
-checks. Workers verify those sources before editing; copied summaries do not
-replace them. The designated writer promotes durable verified findings and
-explicit owner decisions with provenance at meaningful checkpoints. Keep
-transient progress and unresolved candidates in the task.
+Delegate with the task path, outcome, acceptance criteria, branch/worktree and
+base or candidate SHA, owned files, relevant instruction and memory paths, any
+other source to read by path and revision, unresolved gaps, and required checks.
+Workers verify those sources before editing; copied summaries and other local
+copies do not replace them. The designated writer promotes durable verified
+findings and explicit owner decisions with provenance at meaningful
+checkpoints. Keep transient progress and unresolved candidates in the task.
 
 Use two coordination levels: the orchestrator assigns outcomes and executors
 perform them. Do not add a distributor agent; the written assignment carries the
@@ -82,8 +83,12 @@ Execution lenses load in the implementer's context. Judgment passes (review and
 verification) run in a separate context, read-only, against a fixed
 candidate SHA, and never by the agent that wrote that candidate, whatever the
 selected profile. If the host cannot provide a separate context, report the
-pass as degraded. Author and reviewer may exchange verdicts directly; the
-designated writer keeps task state.
+pass as degraded. When an executor wrote the candidate, the orchestrator
+assigns each required pass; the executor's own review, even through a
+subagent, is a self-check and never satisfies a required pass. An authoring
+session that is not a delegated executor may start the separate context
+itself. Author and reviewer may exchange verdicts directly; the designated
+writer keeps task state.
 
 ## Execution
 
