@@ -47,6 +47,8 @@ sources change:
    gaps, owned files, and verification plan in the task's `Context` or `Log`.
    Reuse that record when resuming instead of relying on conversation history.
 
+## Delegation
+
 Delegate with the task path, outcome, acceptance criteria, branch/worktree,
 owned files, relevant instruction and memory paths, unresolved gaps, and required
 checks. Workers verify those sources before editing; copied summaries do not
@@ -62,11 +64,26 @@ and blocked, and the escalation owner. Project-specific assignments live in the
 "Assignments" section of `memory/project/procedures.md` when the project defines
 one.
 
+Planning is an optional read-only assignment whose result returns to the
+orchestrator, not another coordination level; the orchestrator validates the
+plan and dispatches executors. Model selection follows the selected project
+profile. Selecting a profile does not change or prove the running session's
+model. Report unavailable requirements instead of silently substituting, and
+follow only an authorized fallback. Autonomy records accepted permissions and
+conditions; neither a profile nor a review verdict grants permission, and
+accepted authorization stays valid regardless of its heading or location.
+
+Before starting, an executor verifies source access, its worktree and base,
+required commands, requested capabilities, and permissions. An unsupported
+capability needs an explicit authorized fallback or a degraded or blocked
+report.
+
 Execution lenses load in the implementer's context. Judgment passes (review and
 verification) run in a separate context, read-only, against a fixed
-candidate SHA, and never by the agent that wrote that candidate. If the host
-cannot provide a separate context, report the pass as degraded. Author and
-reviewer may exchange verdicts directly; the designated writer keeps task state.
+candidate SHA, and never by the agent that wrote that candidate, whatever the
+selected profile. If the host cannot provide a separate context, report the
+pass as degraded. Author and reviewer may exchange verdicts directly; the
+designated writer keeps task state.
 
 ## Execution
 

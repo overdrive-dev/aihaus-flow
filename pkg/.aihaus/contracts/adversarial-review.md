@@ -24,6 +24,9 @@ and one verdict: `ship`, `ship-with-changes`, or `blocked`.
 Record each verdict as a receipt with:
 
 - assignment or lens, and reviewer;
+- requested model alias or ID, and the resolved model and settings when the
+  host exposes them; otherwise record that resolution was unavailable, and
+  never infer the resolved version;
 - task reference;
 - candidate SHA and comparison base;
 - scope: `full`, or `recheck` of named earlier findings;
@@ -33,4 +36,5 @@ Record each verdict as a receipt with:
 A verdict applies only to its candidate SHA. Any later product change needs a
 new pass. A recheck covers only the named findings and cannot approve
 unrelated changes. Approval is not operational authorization: merge permission
-comes only from an explicit project rule, and `ops-safety.md` still applies.
+comes only from the user or an explicit project rule, and `ops-safety.md` still
+applies.

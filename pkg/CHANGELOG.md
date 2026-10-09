@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.7.0 - 2026-10-09
+
+Replace pasted orchestrator prompts with package guidance plus project data.
+
+- The router adopts a default role and profile for the user-facing session when
+  accepted project Assignments define them; without them, each task still gets
+  one room and one primary role. Orchestration starts and resumes through the
+  orchestrator role.
+- The orchestrator role carries the start/resume loop: reread context and
+  reconcile integrated work, group by outcome, brief and monitor executors,
+  review each delivery, integrate only under explicit authorization (otherwise
+  stop before the first remote write), pause on blockers, and promote verified
+  findings.
+- Planning is an optional read-only assignment that returns to the
+  orchestrator, not another coordination level.
+- The harness gains a Delegation section with executor preflight and
+  profile-based model selection; unavailable requirements are reported, never
+  silently substituted.
+- MAP points to project Assignments (profiles, default session role) and
+  Autonomy, checked before any integration, including solo work.
+- Verdict receipts record the requested model and, when the host exposes it,
+  the resolved model and settings.
+- README documents illustrative profiles, the default-session setting, Autonomy,
+  model naming, and a fallback resume prompt. Project memory templates are
+  unchanged, and installs without these sections keep their behavior.
+
 ## 1.6.1 - 2026-10-09
 
 Fixes from an independent audit of 1.6.0.

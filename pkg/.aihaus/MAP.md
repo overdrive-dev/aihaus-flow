@@ -24,9 +24,13 @@ rule/decision references, gaps, and evidence: a Markdown file in
 `memory/kanban/`, or the external tracker item when an accepted decision makes
 that tracker the task authority.
 
-Project routes and specialist assignments live in project memory, not in
-package-owned files (see conventions.md). When delegating, load the Assignments
-section of `memory/project/procedures.md` if the project defines one.
+Project routes, assignments, profiles, and permissions live in project memory,
+not in package-owned files (see conventions.md). When the project defines them,
+`memory/project/procedures.md` holds Assignments (routes, profiles, and the
+default role and profile for the user-facing session) and Autonomy (accepted
+integration permissions). Load Assignments before delegating or adopting the
+default session role. Check Autonomy before any integration, including solo
+work; without applicable authorization, stop before the first remote write.
 
 If no row fits, use the smallest existing room and record the missing case in
 the task. A new room requires repeated lab evidence, not a one-off request.
