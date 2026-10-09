@@ -6,8 +6,8 @@ Review integrity and delegation fixes from field feedback.
 
 - Judgment passes: when an executor wrote the candidate, the orchestrator
   assigns each required pass, and the executor's own review, even through a
-  subagent, is a self-check that never satisfies a required pass; a session
-  that wrote the candidate without delegating it may start the separate context
+  subagent, is a self-check that never satisfies a required pass; an authoring
+  session that is not a delegated executor may start the separate context
   itself. The recheck assignment lists every earlier finding fixed on the task,
   across all rounds, and the recheck reruns their reproductions. A finding is
   dismissed as not applicable only with a recorded command or `path:line`

@@ -85,8 +85,8 @@ candidate SHA, and never by the agent that wrote that candidate, whatever the
 selected profile. If the host cannot provide a separate context, report the
 pass as degraded. When an executor wrote the candidate, the orchestrator
 assigns each required pass; the executor's own review, even through a
-subagent, is a self-check and never satisfies a required pass. A session that
-wrote the candidate without delegating it may start the separate context
+subagent, is a self-check and never satisfies a required pass. An authoring
+session that is not a delegated executor may start the separate context
 itself. Author and reviewer may exchange verdicts directly; the designated
 writer keeps task state.
 

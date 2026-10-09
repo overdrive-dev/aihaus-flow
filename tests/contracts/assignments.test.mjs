@@ -98,7 +98,7 @@ test("harness contract names the two coordination levels and delegation fields",
       "assigns each required pass",
       "self-check",
       "never satisfies a required pass",
-      "without delegating it may start the separate context",
+      "not a delegated executor may start the separate context",
     ],
     "harness contract",
   );
