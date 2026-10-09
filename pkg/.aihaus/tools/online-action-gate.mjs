@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
 import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ONLINE_PATTERNS = [
-  { kind: "git-push", pattern: /(?:^|[;&|]\s*)git\s+push\b/i },
+  { kind: "git-push", pattern: /(?:^|[\n;&|(`])\s*git(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+push\b/i },
   { kind: "github-release", pattern: /\bgh\s+release\s+(?:create|upload|delete)\b/i },
   { kind: "package-publish", pattern: /\b(?:npm|pnpm|yarn)\s+publish\b/i },
   { kind: "container-push", pattern: /\bdocker\s+(?:image\s+)?push\b/i },
   { kind: "kubernetes-mutate", pattern: /\bkubectl\s+(?:apply|create|delete|patch|replace|rollout)\b/i },
   { kind: "terraform-mutate", pattern: /\bterraform\s+(?:apply|destroy|import)\b/i },
-  { kind: "cloud-deploy", pattern: /\b(?:vercel|fly|wrangler|railway|heroku)\b[^\n]*(?:deploy|--prod|up|release)\b/i },
+  { kind: "cloud-deploy", pattern: /\b(?:vercel|flyctl|fly|wrangler|railway|heroku)\b[^\n]*(?:deploy|--prod|up|release)\b/i },
 ];
 
 async function exists(target) {
@@ -35,11 +36,7 @@ export async function evaluateOnlineAction({ command, repo = process.cwd() }) {
     return { allowed: true, reason: classification.kind, ...classification };
   }
 
-  const sentinels = [
-    path.join(repo, ".aihaus", "state", "active-flow"),
-    path.join(repo, ".claude", "_state", "active-flow"),
-  ];
-  const activeFlow = (await Promise.all(sentinels.map(exists))).some(Boolean);
+  const activeFlow = await exists(path.join(repo, ".aihaus", "state", "active-flow"));
   return activeFlow
     ? { allowed: true, reason: "active-flow", ...classification }
     : { allowed: false, reason: "online-action-without-active-flow", ...classification };
@@ -69,6 +66,14 @@ async function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
+function isEntryPoint() {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
   await main();
 }

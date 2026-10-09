@@ -12,6 +12,15 @@ must be ported, intentionally dropped, or archived before deletion.
 - executable evidence semantics from AIPI `step-result.js`;
 - realpath-scoped destructive operations for the local lab.
 
+## Intentionally dropped
+
+- `online-actions.sh` patterns for `helm`, `aws`
+  ecs/lambda/cloudformation/elasticbeanstalk/amplify, `netlify deploy`,
+  `serverless`/`sls deploy`, `gh workflow run`, `docker compose -f` with
+  staging/production files, `kubectl scale`/`set image`, and named-environment
+  deploy scripts; the gate is advisory and covers a small recognized set, and
+  production containment is external per `ops-safety.md`.
+
 ## Preserve as on-demand review lenses
 
 - security threat-to-code verification;

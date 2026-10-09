@@ -1,8 +1,5 @@
-#!/usr/bin/env node
-
 import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 async function exists(target) {
   try {
@@ -13,7 +10,7 @@ async function exists(target) {
   }
 }
 
-export async function realpathAllowMissing(target) {
+async function realpathAllowMissing(target) {
   let probe = path.resolve(target);
   const suffix = [];
 
@@ -57,35 +54,4 @@ export async function assertPathWithin({ root, candidate, allowRoot = false }) {
   }
 
   return { root: resolvedRoot, candidate: resolvedCandidate };
-}
-
-function parseArgs(args) {
-  const out = { root: null, candidate: null, allowRoot: false, json: false };
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--root") out.root = args[++index] ?? null;
-    else if (arg === "--candidate") out.candidate = args[++index] ?? null;
-    else if (arg === "--allow-root") out.allowRoot = true;
-    else if (arg === "--json") out.json = true;
-    else throw new Error(`unknown argument: ${arg}`);
-  }
-  if (!out.root || !out.candidate) {
-    throw new Error("--root and --candidate are required");
-  }
-  return out;
-}
-
-async function main() {
-  try {
-    const options = parseArgs(process.argv.slice(2));
-    const result = await assertPathWithin(options);
-    process.stdout.write(`${JSON.stringify({ ok: true, ...result })}\n`);
-  } catch (error) {
-    process.stderr.write(`${JSON.stringify({ ok: false, error: error.message })}\n`);
-    process.exitCode = 2;
-  }
-}
-
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  await main();
 }

@@ -90,7 +90,8 @@ evidence. A tool or CI exit code may prove execution; prose cannot.
 
 Before staging or handing off parallel work, compare changed files to the owned
 scope with `tools/scope-check.mjs`. An explicit allowlist is required; unrelated
-or untracked files fail the check instead of being silently included.
+or untracked files fail the check instead of being silently included. Handoffs
+of committed work pass `--base` with the commit the branch started from.
 
 ## Safety
 
