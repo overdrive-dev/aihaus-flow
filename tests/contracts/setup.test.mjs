@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cp, link, mkdtemp, mkdir, readFile, readdir, readlink, rm, rmdir, symlink, writeFile } from "node:fs/promises";
+import { chmod, cp, link, mkdtemp, mkdir, readFile, readdir, readlink, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -340,6 +340,18 @@ test("canonical setup refuses a non-root target", async () => {
   }
 });
 
+test("canonical setup reports a nonexistent target without a stack trace", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-missing-"));
+  try {
+    const missing = path.join(temp, "missing");
+    const result = run(process.execPath, [setup, "--target", missing], temp, true);
+    assert.equal(result.status, 2);
+    assert.deepEqual(JSON.parse(result.stderr), { ok: false, error: `target does not exist: ${missing}` });
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("canonical setup rejects a managed junction that escapes the repository", async () => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-escape-"));
   const outside = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-outside-"));
@@ -513,6 +525,59 @@ test("setup validates late adapter errors before updating the installed package"
       }
       await writeFile(destination, original);
     }
+  } finally {
+    assert.equal(path.dirname(temp), os.tmpdir());
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("setup refuses non-UTF-8 root files before writing anything", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-encoding-"));
+  const encodings = [
+    Buffer.from("﻿# Rules\n", "utf16le"),
+    Buffer.from("# Rules\n", "utf16le"),
+    Buffer.from([0x41, 0xe7, 0xe3, 0x6f]),
+  ];
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    for (const file of ["AGENTS.md", "CLAUDE.md", ".gitignore"]) {
+      const destination = path.join(temp, file);
+      for (const bytes of encodings) {
+        await writeFile(destination, bytes);
+        const before = await projectSnapshot(temp);
+        for (const flags of [["--check"], [], ["--force"]]) {
+          const result = run(process.execPath, [setup, "--target", temp, ...flags], temp, true);
+          assert.equal(result.status, 2, `${file}: ${flags.join(" ")}`);
+          assert.match(result.stderr, /not UTF-8 text/);
+          assert.deepEqual(await readFile(destination), bytes);
+          assert.deepEqual(await projectSnapshot(temp), before);
+        }
+      }
+      await rm(destination);
+    }
+    await writeFile(path.join(temp, "AGENTS.md"), "﻿# BOM rules\n", "utf8");
+    run(process.execPath, [setup, "--target", temp], temp);
+    assert.ok((await readFile(path.join(temp, "AGENTS.md"), "utf8")).startsWith("﻿# BOM rules\n"));
+  } finally {
+    assert.equal(path.dirname(temp), os.tmpdir());
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+// root ignores the read-only bit, so the late write failure cannot be triggered
+test("setup writes VERSION last so a late failure keeps the previous version", { skip: process.getuid?.() === 0 }, async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-version-last-"));
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    run(process.execPath, [setup, "--target", temp], temp);
+    const agents = path.join(temp, "AGENTS.md");
+    await writeFile(path.join(temp, ".aihaus", "VERSION"), "0.0.0\n");
+    await writeFile(agents, "<!-- AIHAUS:START -->\nOld router\n<!-- AIHAUS:END -->\n");
+    await chmod(agents, 0o444);
+    const result = run(process.execPath, [setup, "--target", temp], temp, true);
+    await chmod(agents, 0o644);
+    assert.equal(result.status, 2);
+    assert.equal(await readFile(path.join(temp, ".aihaus", "VERSION"), "utf8"), "0.0.0\n");
   } finally {
     assert.equal(path.dirname(temp), os.tmpdir());
     await rm(temp, { recursive: true, force: true });

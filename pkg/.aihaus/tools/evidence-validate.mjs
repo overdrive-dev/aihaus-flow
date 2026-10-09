@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,7 +68,7 @@ export function validateEvidenceDocument(document) {
         && evidence.exit_code === 0
       );
       if (!credible) {
-        errors.push(`${prefix} lacks trusted ran/verified evidence with command and exit_code 0`);
+        errors.push(`${prefix} lacks trusted ran/verified evidence: needs source "tool" or "ci", a command, and exit_code 0`);
       }
     }
     if (document.verdict === "PASS" && item.executable === false) {
@@ -91,7 +92,7 @@ async function main() {
   }
 
   try {
-    const document = JSON.parse(await readFile(path.resolve(file), "utf8"));
+    const document = JSON.parse((await readFile(path.resolve(file), "utf8")).replace(/^\uFEFF/, ""));
     const result = validateEvidenceDocument(document);
     process.stdout.write(`${JSON.stringify(result)}\n`);
     if (!result.ok) process.exitCode = 2;
@@ -101,6 +102,14 @@ async function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
+function isEntryPoint() {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
   await main();
 }

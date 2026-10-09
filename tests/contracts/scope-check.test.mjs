@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -95,3 +95,64 @@ for (const change of ["rename", "type"]) {
     }
   });
 }
+
+test("scope check compares committed work with --base", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-scope-base-"));
+  const commit = (message) => {
+    run("git", ["add", "."], temp);
+    run("git", ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", message], temp);
+  };
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    await writeFile(path.join(temp, "seed.md"), "seed\n", "utf8");
+    commit("base");
+    const base = run("git", ["rev-parse", "HEAD"], temp).stdout.trim();
+    await mkdir(path.join(temp, "allowed"));
+    await writeFile(path.join(temp, "allowed", "inside.md"), "ok\n", "utf8");
+    commit("inside");
+    const args = [scopeCheck, "--allow", "allowed", "--base", base, "--json"];
+    const accepted = JSON.parse(run(process.execPath, args, temp).stdout);
+    assert.deepEqual(accepted.changed, ["allowed/inside.md"]);
+    assert.equal(accepted.ok, true);
+
+    await writeFile(path.join(temp, "outside.md"), "drift\n", "utf8");
+    commit("outside");
+    const rejected = spawnSync(process.execPath, args, { cwd: temp, encoding: "utf8" });
+    assert.equal(rejected.status, 2, rejected.stderr || rejected.stdout);
+    assert.deepEqual(JSON.parse(rejected.stdout).outside, ["outside.md"]);
+
+    for (const bad of ["no-such-ref", "--output=x"]) {
+      const invalid = spawnSync(process.execPath, [scopeCheck, "--allow", "allowed", "--base", bad], { cwd: temp, encoding: "utf8" });
+      assert.equal(invalid.status, 2, invalid.stdout);
+      assert.equal(JSON.parse(invalid.stderr).ok, false);
+    }
+  } finally {
+    await assertPathWithin({ root: os.tmpdir(), candidate: temp });
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("tool CLIs run when invoked through a linked directory", async (context) => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-entry-link-"));
+  const link = path.join(temp, "tools");
+  try {
+    try {
+      await symlink(path.dirname(scopeCheck), link, process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      context.skip(`symlink creation unavailable: ${error.code}`);
+      return;
+    }
+    try {
+      for (const tool of ["evidence-validate.mjs", "scope-check.mjs", "online-action-gate.mjs"]) {
+        const result = spawnSync(process.execPath, [path.join(link, tool)], { cwd: temp, encoding: "utf8" });
+        assert.equal(result.status, 2, `${tool}: ${result.stderr || result.stdout}`);
+        assert.notEqual(`${result.stdout}${result.stderr}`.trim(), "", tool);
+      }
+    } finally {
+      await unlink(link);
+    }
+  } finally {
+    await assertPathWithin({ root: os.tmpdir(), candidate: temp });
+    await rm(temp, { recursive: true, force: true });
+  }
+});

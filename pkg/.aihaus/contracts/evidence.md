@@ -11,9 +11,29 @@ Each acceptance criterion records:
 - `evidence`: one or more rungs.
 
 Rungs are `written`, `ran`, `verified`, or `blocked`. A passing executable
-criterion requires a `ran` or `verified` rung produced by a tool or CI, with a
-non-empty command and integer `exit_code: 0`. Self-reported execution is only
+criterion requires a `ran` or `verified` rung with `source` `tool` or `ci`, a
+non-empty `command`, and integer `exit_code: 0`. Self-reported execution is only
 `written`, even when it uses stronger language.
+
+A document carries `schema`, `verdict` (`PASS`, `BLOCKED`, or `FAIL`), and the
+`acceptance` criteria. Minimal passing example:
+
+```json
+{
+  "schema": "aihaus.evidence.v1",
+  "verdict": "PASS",
+  "acceptance": [
+    {
+      "criterion": "contract tests pass",
+      "status": "satisfied",
+      "executable": true,
+      "evidence": [
+        { "rung": "ran", "source": "tool", "command": "node --test", "exit_code": 0 }
+      ]
+    }
+  ]
+}
+```
 
 A PASS document cannot contain partial/not-satisfied criteria. Missing tooling
 must be reported as degraded or blocked, never silently counted as passing.

@@ -10,6 +10,9 @@ Staging, production, destructive, or secret-touching actions require explicit
 human approval and the appropriate external containment.
 
 `tools/online-action-gate.mjs` blocks recognized promotion commands outside an
-active flow when a host adapter invokes it. This tool, hooks, and instruction
-files are not a sandbox or privilege boundary. Least-privilege credentials,
-environment isolation, and provider controls remain mandatory.
+active flow when a host adapter invokes it. The orchestrator or designated
+writer creates `.aihaus/state/active-flow` only after the required human
+approval and removes it when the flow ends; it records intent, not approval, so
+the gate stays advisory. This tool, hooks, and instruction files are not a
+sandbox or privilege boundary. Least-privilege credentials, environment
+isolation, and provider controls remain mandatory.

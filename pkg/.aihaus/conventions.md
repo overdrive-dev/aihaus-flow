@@ -23,3 +23,7 @@
 - Package-owned files (MAP.md, conventions.md, REFRESH.md, roles/, rooms/,
   contracts/, tools/) are replaced on upgrade. Project routes, assignments, and
   runbooks belong in `.aihaus/memory/project/`.
+- Procedure text in seeded memory READMEs (`memory/kanban/README.md`,
+  `memory/project/README.md`) may date from an earlier version; where it
+  conflicts with a package-owned file, the package-owned file wins. Accepted
+  project decisions keep their authority under `contracts/harness.md`.

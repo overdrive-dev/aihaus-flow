@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.6.1 - 2026-10-09
+
+Fixes from an independent audit of 1.6.0.
+
+- Setup refuses to rewrite AGENTS.md, CLAUDE.md, or .gitignore when the file is
+  not UTF-8 text instead of silently corrupting it, writes `.aihaus/VERSION`
+  last, and reports a missing `--target` as a normal error.
+- evidence-validate, scope-check, and online-action-gate no longer exit 0 without
+  checking when invoked through a symlinked or junctioned path.
+- `scope-check --base <ref>` also checks committed changes, so committed
+  out-of-scope files fail the handoff check.
+- task.mjs keeps titles on one line, reads identity fields only from
+  frontmatter, files questions under the real `## Business-rule gaps` heading,
+  tolerates status folders lost in a clone, accepts BOM-prefixed evidence and
+  non-ASCII titles, and replaces task files atomically through a private temp
+  file (never writing through a hard link). The discovery packet is replaced
+  the same way.
+- evidence.md documents the required evidence JSON, including the rung `source`.
+- online-action-gate recognizes newline, subshell, git global-option, and
+  `flyctl` forms; the host-specific `.claude/_state` sentinel is gone, and
+  ops-safety.md defines `.aihaus/state/active-flow`. Vendor deploy families of
+  the retired hook list are recorded as intentionally dropped.
+- Package-owned files take precedence over procedure text in memory READMEs
+  seeded by earlier versions.
+- Removed the deprecated `aihaus setup` alias and `.aihaus/tools/init.mjs`
+  stub announced in 1.4.0; use `aihaus init` and `.aihaus/tools/refresh.mjs`.
+- Discovery no longer reads a Maven parent as the project identity or reports
+  aihaus host-skill folders as project layout.
+
 ## 1.6.0 - 2026-10-08
 
 - Define two coordination levels: orchestrators assign outcomes and executors
@@ -41,7 +70,8 @@
   `$aih-refresh`). A deprecated `init.mjs` forwarding stub is kept for one
   release window.
 - Upgrades retire the old `.aihaus/INIT.md` and aihaus-marked `aih-init` host
-  skills; user-owned files at those paths are preserved.
+  skills; unmarked user-owned skills are preserved. (Correction: `.aihaus/INIT.md`
+  is removed whenever it exists, customized or not.)
 - Status mode now reports advisory `memoryGaps` (template memory pages with
   cataloged candidate sources) and `staleClaims` (cited sources changed or
   missing since the page's newest cited review commit); both are read-only and

@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { access, readdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { assertPathWithin } from "./path-safety.mjs";
 import { validateEvidenceDocument } from "./evidence-validate.mjs";
@@ -33,8 +33,7 @@ function slug(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 48);
-  if (!normalized) throw new Error("task title must contain letters or numbers");
-  return normalized;
+  return normalized || "task";
 }
 
 function dateStamp(now = new Date()) {
@@ -56,6 +55,7 @@ async function roomExists(repo, room) {
 async function createTask({ title, room, externalId }) {
   const { repo, board } = await taskBoard();
   if (!title) throw new Error("create requires --title");
+  const normalizedTitle = oneLine(title, "--title");
   if (!room || !(await roomExists(repo, room))) throw new Error(`unknown room: ${room || "(missing)"}`);
   const normalizedExternalId = externalId == null ? null : oneLine(externalId, "--external-id");
   if (normalizedExternalId) {
@@ -68,14 +68,15 @@ async function createTask({ title, room, externalId }) {
       );
     }
   }
-  const id = `T-${dateStamp()}-${randomBytes(3).toString("hex")}-${slug(title)}`;
+  const id = `T-${dateStamp()}-${randomBytes(3).toString("hex")}-${slug(normalizedTitle)}`;
   const destination = path.join(board, "backlog", `${id}.md`);
   await assertPathWithin({ root: board, candidate: destination });
+  await mkdir(path.dirname(destination), { recursive: true });
   const created = new Date().toISOString();
   const externalIdField = normalizedExternalId
     ? `external_id: ${JSON.stringify(normalizedExternalId)}\n`
     : "";
-  const body = `---\nid: ${id}\nroom: ${room}\n${externalIdField}created: ${created}\n---\n\n# Goal\n\n${title.trim()}\n\n## Acceptance\n\n- [ ] Define executable acceptance evidence.\n\n## Context\n\n## Owned files\n\n## Business-rule gaps\n\n## Log\n\n## Evidence\n`;
+  const body = `---\nid: ${id}\nroom: ${room}\n${externalIdField}created: ${created}\n---\n\n# Goal\n\n${normalizedTitle}\n\n## Acceptance\n\n- [ ] Define executable acceptance evidence.\n\n## Context\n\n## Owned files\n\n## Business-rule gaps\n\n## Log\n\n## Evidence\n`;
   await writeFile(destination, body, { encoding: "utf8", flag: "wx" });
   return {
     ok: true,
@@ -86,8 +87,16 @@ async function createTask({ title, room, externalId }) {
   };
 }
 
-function frontmatterString(content, field) {
-  const raw = content.match(new RegExp(`^${field}:\\s*(.+)$`, "m"))?.[1]?.trim();
+function frontmatter(content) {
+  return content.match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/)?.[1] ?? "";
+}
+
+function frontmatterField(front, field) {
+  return front.match(new RegExp(`^${field}:[ \\t]*(.+)$`, "m"))?.[1]?.trim() || null;
+}
+
+function frontmatterString(front, field) {
+  const raw = frontmatterField(front, field);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
@@ -102,13 +111,18 @@ async function tasks() {
   const result = [];
   for (const status of statuses) {
     const directory = path.join(board, status);
-    for (const file of await readdir(directory)) {
+    const files = await readdir(directory).catch((error) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    for (const file of files) {
       if (!file.endsWith(".md")) continue;
       const full = path.join(directory, file);
       const content = await readFile(full, "utf8");
-      const id = content.match(/^id:\s*(.+)$/m)?.[1]?.trim() || path.basename(file, ".md");
-      const room = content.match(/^room:\s*(.+)$/m)?.[1]?.trim() || null;
-      const externalId = frontmatterString(content, "external_id");
+      const front = frontmatter(content);
+      const id = frontmatterField(front, "id") || path.basename(file, ".md");
+      const room = frontmatterField(front, "room");
+      const externalId = frontmatterString(front, "external_id");
       const title = content.match(/^# Goal\s*\r?\n\s*\r?\n([^\r\n]+)/m)?.[1]?.trim() || id;
       result.push({
         id,
@@ -146,6 +160,7 @@ async function moveTask(id, status) {
     validateTransition(content, status);
     if (status === "done") await validateCompletion(content, repo);
   }
+  await mkdir(path.dirname(destination), { recursive: true });
   await rename(source, destination);
   return { ok: true, id: task.id, from: task.status, status, file: path.relative(repo, destination) };
 }
@@ -195,13 +210,27 @@ async function validateCompletion(content, repo) {
   const artifact = artifacts[0][1].trim();
   if (path.isAbsolute(artifact)) throw new Error("Evidence Artifact must be repository-relative");
   const checked = await assertPathWithin({ root: repo, candidate: path.join(repo, artifact) });
-  const document = JSON.parse(await readFile(checked.candidate, "utf8"));
+  const document = JSON.parse((await readFile(checked.candidate, "utf8")).replace(/^\uFEFF/, ""));
   const validation = validateEvidenceDocument(document);
   if (!validation.ok) throw new Error(`invalid completion evidence: ${validation.errors.join(", ")}`);
   if (document.verdict !== "PASS") throw new Error("done requires evidence verdict PASS");
   const evidenced = document.acceptance.map((item) => item.criterion.trim());
   if (JSON.stringify(criteria.sort()) !== JSON.stringify(evidenced.sort())) {
     throw new Error("evidence criteria must exactly match Acceptance items without missing, extra, or duplicate criteria");
+  }
+}
+
+async function replaceFile(file, content) {
+  // Rename a sibling temp file over the task so hard links to the old inode stay unchanged.
+  const { mode } = await stat(file);
+  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${randomBytes(6).toString("hex")}.tmp`);
+  try {
+    await writeFile(temporary, content, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    await chmod(temporary, mode & 0o7777);
+    await rename(temporary, file);
+  } catch (error) {
+    if (error.code !== "EEXIST") await rm(temporary, { force: true });
+    throw error;
   }
 }
 
@@ -217,14 +246,16 @@ async function addQuestion(id, text) {
   const questionId = `Q-${randomBytes(3).toString("hex")}`;
   let content = await readFile(file, "utf8");
   const heading = "## Business-rule gaps";
-  if (!content.includes(heading)) content = `${content.trimEnd()}\n\n${heading}\n`;
-  const start = content.indexOf(heading) + heading.length;
+  const marker = /^## Business-rule gaps[ \t]*\r?$/m;
+  if (!marker.test(content)) content = `${content.trimEnd()}\n\n${heading}\n`;
+  const match = content.match(marker);
+  const start = match.index + match[0].length;
   const nextHeading = content.indexOf("\n## ", start);
   const insertion = `\n\n### ${questionId}\n\nQuestion: ${question}\n\nAnswer: pending\n\nDraft rule: pending\n`;
   content = nextHeading < 0
     ? `${content.trimEnd()}${insertion}`
     : `${content.slice(0, nextHeading).trimEnd()}${insertion}\n${content.slice(nextHeading + 1)}`;
-  await writeFile(file, content, "utf8");
+  await replaceFile(file, content);
   return { ok: true, id: task.id, question: questionId, file: path.relative(repo, file) };
 }
 
@@ -244,7 +275,7 @@ async function answerQuestion(id, questionId, answerText, draftRuleText) {
   const answered = block
     .replace(/^Answer: pending(?=\r?$)/m, () => `Answer: ${answer}`)
     .replace(/^Draft rule: pending(?=\r?$)/m, () => `Draft rule: ${draftRule}`);
-  await writeFile(file, `${content.slice(0, start)}${answered}${content.slice(end)}`, "utf8");
+  await replaceFile(file, `${content.slice(0, start)}${answered}${content.slice(end)}`);
   return { ok: true, id: task.id, question, draft_rule: draftRule, promoted: false, file: path.relative(repo, file) };
 }
 

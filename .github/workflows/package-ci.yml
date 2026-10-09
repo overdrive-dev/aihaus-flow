@@ -15,6 +15,9 @@ on:
       - 'CLAUDE.md'
       - 'INSTALL-VIA-LLM.md'
       - 'README.md'
+      - 'docs/**'
+      - '.gitignore'
+      - '.gitattributes'
       - '.github/workflows/package-ci.yml'
       - '.github/workflows/package-release.yml'
   pull_request:
@@ -30,6 +33,9 @@ on:
       - 'CLAUDE.md'
       - 'INSTALL-VIA-LLM.md'
       - 'README.md'
+      - 'docs/**'
+      - '.gitignore'
+      - '.gitattributes'
       - '.github/workflows/package-ci.yml'
       - '.github/workflows/package-release.yml'
 
