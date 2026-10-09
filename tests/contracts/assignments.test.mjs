@@ -263,6 +263,7 @@ test("README delegation section documents profiles, session defaults, and Autono
       "moving alias",
       "exact model ID",
       "resolution was unavailable",
+      "allowed fallbacks by role",
       "## Autonomy",
       "first remote write",
       "Resume <task> with its recorded profile",

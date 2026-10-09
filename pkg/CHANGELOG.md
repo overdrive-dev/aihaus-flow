@@ -24,7 +24,8 @@ Replace pasted orchestrator prompts with package guidance plus project data.
   the resolved model and settings.
 - README documents illustrative profiles, the default-session setting, Autonomy,
   model naming, and a fallback resume prompt. Project memory templates are
-  unchanged, and installs without these sections keep their behavior.
+  unchanged; installs without these sections retain per-task role selection
+  without acquiring session defaults or integration permissions.
 
 ## 1.6.1 - 2026-10-09
 

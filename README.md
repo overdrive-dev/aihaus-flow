@@ -323,7 +323,10 @@ and that session triages, plans, delegates per the profile, reviews, and
 integrates within Autonomy unless you direct otherwise. Without them, the agent
 selects one room and one primary role per task. Selecting a profile does not
 switch the running session's model; the agent reports unavailable requirements
-instead of silently substituting.
+instead of silently substituting. For each profile, record allowed fallbacks by
+role, or `none`. If a requirement is unavailable, the agent uses only a recorded
+fallback and reports the actual model/settings; otherwise it pauses the affected
+assignment.
 
 Use a moving alias when the host supports one, or an exact model ID when
 reproducibility matters. Record the requested alias/ID and the resolved
