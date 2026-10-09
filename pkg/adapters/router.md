@@ -11,7 +11,7 @@ This repository uses the local `.aihaus/` package.
    `.aihaus/memory/project/README.md` to select memory; indexes only locate
    sources and never establish authority or prove that a claim is current.
 4. Recheck affected sources when memory is stale, incomplete, or unverified.
-   Follow `.aihaus/REFRESH.md`; ask only about unresolved business conflicts.
+   Follow `.aihaus/REFRESH.md`.
 5. Preserve applicable user instructions, including scoped instruction files.
    Record task context and evidence so another agent can resume from files.
 6. Require the evidence contract before moving a task to `done`.

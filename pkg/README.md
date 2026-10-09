@@ -85,4 +85,4 @@ is not promised. Both wrappers delegate to the same provider-neutral Node and
 Markdown contract.
 
 The public product contract, usage, and verification commands are documented in
-the repository [README](../README.md).
+the repository [README](https://github.com/overdrive-dev/aihaus-flow#readme).

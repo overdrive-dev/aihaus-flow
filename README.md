@@ -326,8 +326,8 @@ npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/d
 project memory, text outside managed root blocks, and user-owned host-skill
 collisions. The two flags cannot be combined.
 
-Normal and forced setup seed only newly introduced memory files and preserve
-existing project memory plus text outside managed root blocks.
+Normal and forced setup seed any missing memory page, never overwrite existing
+project memory, and preserve text outside managed root blocks.
 Host skill files are refreshed only when they contain the aihaus ownership
 marker. A pre-existing user-owned skill at the same path is preserved and
 listed in `conflicts` instead of being overwritten; that host capability then

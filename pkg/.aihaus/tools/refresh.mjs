@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { access, lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { access, chmod, lstat, mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { assertPathWithin } from "./path-safety.mjs";
 
@@ -399,7 +399,8 @@ function parseManifest(source, text, warnings) {
     } else if (base === "go.mod") {
       fact.projectName = /^\s*module\s+([^\s]+)\s*$/m.exec(text)?.[1] ?? null;
     } else if (base === "pom.xml") {
-      fact.projectName = /<artifactId>\s*([^<]+)\s*<\/artifactId>/.exec(text)?.[1] ?? null;
+      const project = text.replace(/<parent\b[\s\S]*?<\/parent>/, "");
+      fact.projectName = /<artifactId>\s*([^<]+)\s*<\/artifactId>/.exec(project)?.[1] ?? null;
     } else if (base === "composer.json") {
       const value = JSON.parse(text);
       fact.projectName = typeof value.name === "string" ? value.name : null;
@@ -692,7 +693,7 @@ async function discover(repository) {
     .filter((source) => source.kinds.includes("manifest"))
     .map((source) => parseManifest(source, sourceText.get(source.path) ?? "", warnings));
   const conflicts = identityConflicts(manifests);
-  const layout = layoutFacts(safePaths);
+  const layout = layoutFacts(safePaths.filter((relative) => !hostAdapterPaths.has(normalize(relative))));
   const targets = await memoryTargets(repository, sources, warnings);
   const readiness = readinessFor(sources, targets);
   if (!commit) warnings.push("repository has no reviewed Git commit; provenance is worktree-only");
@@ -718,7 +719,6 @@ async function discover(repository) {
       uploaded: false,
       readsSensitivePaths: false,
       writesOutsideRepository: false,
-      graphConsentCreated: false,
     },
     sources,
     excluded,
@@ -799,6 +799,20 @@ function baseResult(repository, mode, packet, warnings, state) {
   };
 }
 
+// Replace by rename so a hard link at the packet path never redirects the write.
+async function replaceFile(file, content) {
+  const mode = await stat(file).then((info) => info.mode & 0o7777, () => null);
+  const temporary = path.join(path.dirname(file), "." + path.basename(file) + "." + randomUUID() + ".tmp");
+  try {
+    await writeFile(temporary, content, { encoding: "utf8", flag: "wx" });
+    if (mode !== null) await chmod(temporary, mode);
+    await rename(temporary, file);
+  } catch (error) {
+    if (error.code !== "EEXIST") await rm(temporary, { force: true });
+    throw error;
+  }
+}
+
 async function execute(options) {
   assertNodeRuntime();
   const repository = await repositoryRoot(options.repo);
@@ -835,7 +849,7 @@ async function execute(options) {
     await assertPathWithin({ root: repository, candidate: state.file });
     await mkdir(path.dirname(state.file), { recursive: true });
     await assertPathWithin({ root: repository, candidate: state.file });
-    await writeFile(state.file, state.next, "utf8");
+    await replaceFile(state.file, state.next);
     if (state.present) result.updated.push(packetRelative);
     else result.created.push(packetRelative);
   }

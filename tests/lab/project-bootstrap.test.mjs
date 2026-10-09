@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { linkSync } from "node:fs";
+import { access, chmod, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -782,6 +783,83 @@ test("refresh flags renamed sources and ambiguous legacy review commits", async 
     const renamed = bootstrapResult(repository, ["--status"]).status.staleClaims;
     assert.ok(ambiguous.some((claim) => claim.reason === "ambiguous-review-provenance"));
     assert.ok(renamed.some((claim) => claim.source === "src/rule.mjs" && claim.reason === "source-missing"));
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+async function packetAfterRefresh(repository) {
+  const result = bootstrapResult(repository);
+  const packet = JSON.parse(
+    await readFile(path.join(repository, ".aihaus", "state", "bootstrap", "discovery.json"), "utf8"),
+  );
+  return { result, packet };
+}
+
+test("refresh replaces a hard-linked discovery packet without writing through the link", async (t) => {
+  const labRoot = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-hardlink-"));
+  const repository = path.join(labRoot, "consumer");
+  const outside = path.join(labRoot, "outside.json");
+  try {
+    await initializeGit(repository);
+    await writeFile(path.join(repository, "README.md"), "# Billing\n");
+    commitAll(repository, "project evidence");
+    install(repository);
+    const bootstrap = path.join(repository, ".aihaus", "state", "bootstrap");
+    const packetPath = path.join(bootstrap, "discovery.json");
+    await mkdir(bootstrap, { recursive: true });
+    await writeFile(outside, "outside bytes\n");
+    await chmod(outside, 0o640);
+    try {
+      linkSync(outside, packetPath);
+    } catch {
+      t.skip("hard links are unavailable");
+      return;
+    }
+    const { result, packet } = await packetAfterRefresh(repository);
+    assert.equal(result.packet.action, "updated");
+    assert.equal(packet.schema, "aihaus.bootstrap.discovery.v1");
+    assert.equal(await readFile(outside, "utf8"), "outside bytes\n");
+    assert.deepEqual(await readdir(bootstrap), ["discovery.json"]);
+    if (process.platform !== "win32") assert.equal((await stat(packetPath)).mode & 0o777, 0o640);
+  } finally {
+    await rm(labRoot, { recursive: true, force: true });
+  }
+});
+
+test("refresh reads the Maven project artifactId, not its parent", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-maven-"));
+  try {
+    await initializeGit(repository);
+    await writeFile(
+      path.join(repository, "pom.xml"),
+      "<project>\n  <parent>\n    <groupId>org.example</groupId>\n    <artifactId>example-parent</artifactId>\n  </parent>\n  <artifactId>demo</artifactId>\n</project>\n",
+    );
+    await writeFile(path.join(repository, "package.json"), "{\n  \"name\": \"demo\"\n}\n");
+    commitAll(repository, "maven and node manifests");
+    install(repository);
+    const { result, packet } = await packetAfterRefresh(repository);
+    assert.equal(packet.facts.manifests.find((manifest) => manifest.path === "pom.xml").projectName, "demo");
+    assert.deepEqual(result.conflicts, []);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("refresh layout ignores directories that hold only aihaus host skills", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-layout-"));
+  try {
+    await initializeGit(repository);
+    await writeFile(path.join(repository, "README.md"), "# Billing\n");
+    commitAll(repository, "project evidence");
+    install(repository);
+    let directories = (await packetAfterRefresh(repository)).packet.facts.layout.topLevelDirectories;
+    assert.ok(!directories.includes(".claude") && !directories.includes(".agents"), JSON.stringify(directories));
+    await writeFile(path.join(repository, ".claude", "settings.json"), "{}\n");
+    run("git", ["add", ".claude/settings.json"], repository);
+    run("git", ["commit", "-m", "project claude settings"], repository);
+    directories = (await packetAfterRefresh(repository)).packet.facts.layout.topLevelDirectories;
+    assert.ok(directories.includes(".claude") && !directories.includes(".agents"), JSON.stringify(directories));
   } finally {
     await rm(repository, { recursive: true, force: true });
   }
