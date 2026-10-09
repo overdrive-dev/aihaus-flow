@@ -223,13 +223,13 @@ async function validateCompletion(content, repo) {
 async function replaceFile(file, content) {
   // Rename a sibling temp file over the task so hard links to the old inode stay unchanged.
   const { mode } = await stat(file);
-  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${randomBytes(6).toString("hex")}.tmp`);
   try {
-    await writeFile(temporary, content, { encoding: "utf8", flag: "wx" });
+    await writeFile(temporary, content, { encoding: "utf8", flag: "wx", mode: 0o600 });
     await chmod(temporary, mode & 0o7777);
     await rename(temporary, file);
   } catch (error) {
-    await rm(temporary, { force: true });
+    if (error.code !== "EEXIST") await rm(temporary, { force: true });
     throw error;
   }
 }
@@ -246,8 +246,10 @@ async function addQuestion(id, text) {
   const questionId = `Q-${randomBytes(3).toString("hex")}`;
   let content = await readFile(file, "utf8");
   const heading = "## Business-rule gaps";
-  if (!content.includes(heading)) content = `${content.trimEnd()}\n\n${heading}\n`;
-  const start = content.indexOf(heading) + heading.length;
+  const marker = /^## Business-rule gaps[ \t]*\r?$/m;
+  if (!marker.test(content)) content = `${content.trimEnd()}\n\n${heading}\n`;
+  const match = content.match(marker);
+  const start = match.index + match[0].length;
   const nextHeading = content.indexOf("\n## ", start);
   const insertion = `\n\n### ${questionId}\n\nQuestion: ${question}\n\nAnswer: pending\n\nDraft rule: pending\n`;
   content = nextHeading < 0

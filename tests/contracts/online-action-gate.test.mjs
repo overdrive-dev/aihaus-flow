@@ -24,12 +24,16 @@ test("classifies chained, subshell, and global-option promotion spellings", () =
     "git -C . push",
     "git --no-pager push",
     "git -c k=v push origin main",
+    "git --git-dir .git push",
+    "git --git-dir=.git push",
+    "git --work-tree . push origin main",
+    'git -C "repo with spaces" push',
     "  git push",
   ]) {
     assert.equal(classifyOnlineAction(command).kind, "git-push", command);
   }
   assert.equal(classifyOnlineAction("flyctl deploy").kind, "cloud-deploy");
-  for (const command of ["git -C . status", "git commit -m push", "echo git push", "git log --grep=push"]) {
+  for (const command of ["git -C . status", "git --git-dir .git status", "git commit -m push", "echo git push", "git log --grep=push"]) {
     assert.equal(classifyOnlineAction(command).online, false, command);
   }
 });

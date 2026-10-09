@@ -12,9 +12,11 @@ Fixes from an independent audit of 1.6.0.
 - `scope-check --base <ref>` also checks committed changes, so committed
   out-of-scope files fail the handoff check.
 - task.mjs keeps titles on one line, reads identity fields only from
-  frontmatter, tolerates status folders lost in a clone, accepts BOM-prefixed
-  evidence and non-ASCII titles, and replaces task files atomically (never
-  writing through a hard link). The discovery packet is replaced the same way.
+  frontmatter, files questions under the real `## Business-rule gaps` heading,
+  tolerates status folders lost in a clone, accepts BOM-prefixed evidence and
+  non-ASCII titles, and replaces task files atomically through a private temp
+  file (never writing through a hard link). The discovery packet is replaced
+  the same way.
 - evidence.md documents the required evidence JSON, including the rung `source`.
 - online-action-gate recognizes newline, subshell, git global-option, and
   `flyctl` forms; the host-specific `.claude/_state` sentinel is gone, and

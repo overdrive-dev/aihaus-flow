@@ -804,7 +804,7 @@ async function replaceFile(file, content) {
   const mode = await stat(file).then((info) => info.mode & 0o7777, () => null);
   const temporary = path.join(path.dirname(file), "." + path.basename(file) + "." + randomUUID() + ".tmp");
   try {
-    await writeFile(temporary, content, { encoding: "utf8", flag: "wx" });
+    await writeFile(temporary, content, { encoding: "utf8", flag: "wx", mode: 0o600 });
     if (mode !== null) await chmod(temporary, mode);
     await rename(temporary, file);
   } catch (error) {

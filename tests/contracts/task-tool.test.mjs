@@ -318,7 +318,25 @@ test("done accepts a BOM-prefixed evidence artifact", () => withRepo("aihaus-tas
   assert.equal(JSON.parse(run(process.execPath, [tool, "move", created.id, "done"], temp).stdout).status, "done");
 }));
 
-test("non-ASCII titles fall back to the task slug", () => withRepo("aihaus-task-slug-", async (temp, tool) => {
+test("a title naming the gaps heading cannot hide a pending question from done", () => withRepo("aihaus-task-gap-title-", async (temp, tool) => {
+  const created = JSON.parse(run(process.execPath, [tool, "create", "--title", "Clarify ## Business-rule gaps behavior", "--room", "feature"], temp).stdout);
+  const file = path.join(temp, created.file);
+  await writeFile(file, (await readFile(file, "utf8"))
+    .replace("- [ ] Define executable acceptance evidence.", "- [x] Feature works.")
+    .replace("## Owned files\n", "## Owned files\n\n- src/feature.mjs\n")
+    .replace("## Log\n", "## Log\n\nDone.\n")
+    .replace("## Evidence\n", "## Evidence\n\nArtifact: evidence.json\n"));
+  await writeFile(path.join(temp, "evidence.json"), JSON.stringify({
+    schema: "aihaus.evidence.v1", verdict: "PASS",
+    acceptance: [{ criterion: "Feature works.", status: "satisfied", executable: true,
+      evidence: [{ rung: "ran", source: "tool", command: "node --test", exit_code: 0 }] }],
+  }));
+  run(process.execPath, [tool, "question", created.id, "--text", "Who approves?"], temp);
+  assert.match(await readFile(file, "utf8"), /^## Business-rule gaps\n\n### Q-[0-9a-f]{6}\n\nQuestion: Who approves\?/m);
+  assert.match(runFailure(process.execPath, [tool, "move", created.id, "done"], temp).stderr, /Business-rule gaps/);
+}));
+
+test("non-ASCII titles fall back to the task slug",() => withRepo("aihaus-task-slug-", async (temp, tool) => {
   const created = JSON.parse(run(process.execPath, [tool, "create", "--title", "Исправить вход", "--room", "feature"], temp).stdout);
   assert.match(created.id, /^T-\d{6}-[0-9a-f]{6}-task$/);
   assert.match(await readFile(path.join(temp, created.file), "utf8"), /^# Goal\n\nИсправить вход$/m);

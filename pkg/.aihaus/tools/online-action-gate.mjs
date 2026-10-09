@@ -5,8 +5,11 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const GIT_VALUE = String.raw`(?:"[^"]*"|'[^']*'|\S+)`;
+const GIT_OPTION = String.raw`(?:-[Cc]\s+${GIT_VALUE}|--(?:git-dir|work-tree|namespace|exec-path|config-env)(?:=|\s+)${GIT_VALUE}|--?[\w-]+(?:=${GIT_VALUE})?)`;
+
 const ONLINE_PATTERNS = [
-  { kind: "git-push", pattern: /(?:^|[\n;&|(`])\s*git(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+push\b/i },
+  { kind: "git-push", pattern: new RegExp(String.raw`(?:^|[\n;&|(\x60])\s*git(?:\s+${GIT_OPTION})*\s+push\b`, "i") },
   { kind: "github-release", pattern: /\bgh\s+release\s+(?:create|upload|delete)\b/i },
   { kind: "package-publish", pattern: /\b(?:npm|pnpm|yarn)\s+publish\b/i },
   { kind: "container-push", pattern: /\bdocker\s+(?:image\s+)?push\b/i },
