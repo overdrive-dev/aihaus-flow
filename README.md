@@ -311,15 +311,17 @@ may use one provider or several:
 | `mixed` | planner (optional), reviewer | Codex / OpenAI | `gpt-6-astra` | xhigh | `codex exec ... -s read-only` |
 | `mixed` | executors | Claude Code / Anthropic | `haiku` | max | multi-agent workflow, one worktree per outcome |
 
-A profile may also record escalation triggers per role: when the planner runs
-and when executors move to a stronger model. The orchestrator applies only
-recorded triggers, and an escalated model follows the fallback rule below:
+A profile may also record upgrade triggers per role: when the planner runs
+and when executors move to a stronger model. Models change only on a recorded
+trigger, and the planner also runs for large or unfamiliar scope. If an
+upgraded model is unavailable, the fallback rule below applies; the profile
+model counts only when recorded as a fallback:
 
 ```text
-Escalation (claude): run the planner (opus, xhigh) for more than one outcome,
-an open business rule, unfamiliar code, or auth, payments, or migrations;
-otherwise the orchestrator plans. Executors move from haiku to sonnet (xhigh)
-for those risk areas or a rule over open inputs.
+Upgrades (claude): also run the planner for more than one outcome, an
+unresolved business rule, auth, payments, or migrations. Executors move from
+haiku to sonnet (max) for auth, payments, migrations, or a rule over open
+inputs (filter, classifier, parser).
 ```
 
 Then set the default for the session you talk to:
