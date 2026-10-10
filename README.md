@@ -311,6 +311,20 @@ may use one provider or several:
 | `mixed` | planner (optional), reviewer | Codex / OpenAI | `gpt-6-astra` | xhigh | `codex exec ... -s read-only` |
 | `mixed` | executors | Claude Code / Anthropic | `haiku` | max | multi-agent workflow, one worktree per outcome |
 
+A profile may also record upgrade triggers per role: when the planner runs
+and when executors move to a stronger model. In the example below, executors
+upgrade on the listed triggers; the planner also runs for large or unfamiliar
+scope under orchestrator step 3. If an upgraded model is unavailable, the
+fallback rule below applies; the profile model counts only when recorded as a
+fallback:
+
+```text
+Upgrades (claude): also run the planner for more than one outcome, an
+unresolved business rule, auth, payments, or migrations. Executors move from
+haiku to sonnet (max) for auth, payments, migrations, or a rule over open
+inputs (filter, classifier, parser).
+```
+
 Then set the default for the session you talk to:
 
 ```text
