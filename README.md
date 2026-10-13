@@ -85,13 +85,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.8.0`):
+Current published release (`v1.9.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.8.0/aihaus-flow-v1.8.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.9.0/aihaus-flow-v1.9.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.8.0` with the same tag.
+For another release, replace both occurrences of `v1.9.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -302,14 +302,23 @@ may use one provider or several:
 |---|---|---|---|---|---|
 | `claude` | orchestrator | Claude Code / Anthropic | `fable` | xhigh | the session you talk to |
 | `claude` | planner (optional) | Claude Code / Anthropic | `opus` | xhigh | read-only subagent |
-| `claude` | executors | Claude Code / Anthropic | `haiku` | max | multi-agent workflow, one worktree per outcome |
+| `claude` | executors | Claude Code / Anthropic | `haiku` | max | one subagent per packet or outcome |
 | `claude` | reviewer | Claude Code / Anthropic | `opus` | xhigh | subagent in a fresh context |
 | `openai` | orchestrator | Codex / OpenAI | `gpt-6-astra` | xhigh | the session you talk to |
 | `openai` | planner (optional), reviewer | Codex / OpenAI | `gpt-6-astra` | xhigh | `codex exec ... -s read-only` |
-| `openai` | executors | Codex / OpenAI | `gpt-6.1-sol` | xhigh | one `codex exec` run per outcome worktree |
+| `openai` | executors | Codex / OpenAI | `gpt-6.1-sol` | xhigh | one `codex exec` run per packet or outcome |
 | `mixed` | orchestrator | Claude Code / Anthropic | `fable` | xhigh | the session you talk to |
 | `mixed` | planner (optional), reviewer | Codex / OpenAI | `gpt-6-astra` | xhigh | `codex exec ... -s read-only` |
-| `mixed` | executors | Claude Code / Anthropic | `haiku` | max | multi-agent workflow, one worktree per outcome |
+| `mixed` | executors | Claude Code / Anthropic | `haiku` | max | one subagent per packet or outcome |
+| `luna` | orchestrator | Claude Code / Anthropic | `opus` | xhigh | the session you talk to |
+| `luna` | planner | Claude Code / Anthropic | `opus` | xhigh | read-only subagent that returns the spec |
+| `luna` | reviewer | Codex / OpenAI | `gpt-6.1-sol` | xhigh | `codex exec ... -s read-only` |
+| `luna` | executors | Codex / OpenAI | `gpt-6-luna` | max | one `codex exec` run per packet |
+
+Executors must be able to run the project's tests. On Windows, the Codex
+unelevated sandbox blocks child processes (`node --test` fails with
+`spawn EPERM`); run each Codex executor in an isolated worktree with
+`-s danger-full-access`, or use the elevated sandbox.
 
 A profile may also record upgrade triggers per role: when the planner runs
 and when executors move to a stronger model. In the example below, executors
@@ -328,8 +337,8 @@ inputs (filter, classifier, parser).
 Then set the default for the session you talk to:
 
 ```text
-Main session: orchestrator. Default profile: claude.
-Delegation: everything except trivial requests. Up to 4 executors; tests run one at a time.
+Main session: orchestrator. Default profile: claude. Default mode: normal.
+Limits: up to 4 executors; tests run one at a time.
 ```
 
 With these defaults no kickoff prompt is needed: you talk in natural language,
@@ -341,6 +350,34 @@ instead of silently substituting. For each profile, record allowed fallbacks by
 role, or `none`. If a requirement is unavailable, the agent uses only a recorded
 fallback and reports the actual model/settings; otherwise it pauses the affected
 assignment.
+
+Name an execution mode in a request, optionally with a profile; otherwise the
+recorded `Default mode:` applies. Without either, a recorded `Delegation:`
+policy, such as everything except trivial requests, applies as before. The
+agent never switches modes on its own; it may recommend one in a single line.
+
+| Mode | Who implements | Review |
+|---|---|---|
+| `pure` | the session you talk to, alone | none; reported as unreviewed, naming each skipped pass |
+| `normal` | the session you talk to | the profile's reviewer or one you name, in a separate context, preferably another model family |
+| `workflow` | executors, one per packet of the planner's spec | the spec before dispatch, then the candidate after the full suite |
+
+In `normal` and `workflow`, the agent lists the decisions it assumed on
+ambiguous requirements that change behavior and waits for your confirmation
+before implementing. Review fixes run in a fresh context, not in the session
+that wrote the code. Example requests:
+
+```text
+Mode: pure. Fix the typo in the install section.
+```
+
+```text
+Mode: normal. Add CSV export to the invoice list and prove each criterion.
+```
+
+```text
+Mode: workflow. Profile: luna. Fix the findings listed in docs/audit.md.
+```
 
 Use a moving alias when the host supports one, or an exact model ID when
 reproducibility matters. Record the requested alias/ID and the resolved
