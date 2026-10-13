@@ -90,6 +90,49 @@ session that is not a delegated executor may start the separate context
 itself. Author and reviewer may exchange verdicts directly; the designated
 writer keeps task state.
 
+## Execution modes
+
+A request may name an execution mode, `pure`, `normal`, or `workflow`,
+optionally with a profile (`Mode: workflow. Profile: <name>.`). Otherwise the
+default mode recorded in Assignments (`Default mode: <mode>.`) applies; without
+either, the project's delegation policy applies unchanged. A mode replaces the
+delegation policy for that request, not the project's concurrency limits. The
+agent never switches modes on its own; it may recommend one in a single line.
+The task records the mode and profile used.
+
+- `pure`: the user-facing session works alone, with no planner, executor, or
+  judgment pass. It runs the deterministic checks the task requires and reports
+  the result as unreviewed, naming each required pass it skipped. Evidence,
+  Autonomy, and `ops-safety.md` still apply; a skipped pass satisfies no
+  Autonomy condition, while a valid receipt for the unchanged candidate SHA
+  still does.
+- `normal`: the user-facing session implements the change itself and runs the
+  deterministic checks; a judgment pass then reviews the candidate SHA.
+- `workflow`: the read-only planner (profile planner model) returns a spec as
+  `roles/planner.md` describes; the orchestrator saves it, and the task links
+  it by path and revision. Before any dispatch, a judgment pass reviews the
+  spec; its findings return to the planner in a fresh context, at most two
+  cycles. Executors (profile executor model) then implement the packets in
+  parallel, each in its own files, running their own tests. After all packets,
+  the orchestrator runs the full deterministic suite and allows one rework from
+  its output; a final judgment pass then reviews the candidate SHA. Past either
+  limit, the affected work pauses.
+
+In `normal` and `workflow`, the profile's reviewer, or the reviewer the user
+names, runs these judgment passes, preferably from another model family when
+one is available; other required passes run as assigned. Before implementation
+(in `workflow`, after the spec review and before dispatch), list the decisions
+assumed on ambiguous requirements that change behavior and get the user's
+confirmation, or say that there are none. Review fixes run in a fresh context
+(an executor or a new session briefed with the candidate diff and the
+findings), never by resuming the authoring session. Spec reviews, their verdict
+receipts, and rechecks follow `adversarial-review.md`.
+
+Keep all orchestration thin: dispatch executors directly, one subagent or CLI
+run per packet or outcome; run the deterministic checks; and rely on summaries
+and `tools/scope-check.mjs`. A host multi-agent workflow engine is not
+required; use one only when the user asks for it.
+
 ## Execution
 
 Keep task status in its kanban folder unless an accepted project decision names

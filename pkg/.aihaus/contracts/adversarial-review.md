@@ -20,6 +20,15 @@ stages when volume rises), complexity, and goal-backward verification.
 Output confirmed findings by severity, criterion results, commands actually run,
 and one verdict: `ship`, `ship-with-changes`, or `blocked`.
 
+## Spec review
+
+In `workflow` mode, review the spec before dispatch against the request and the
+code, not against tests derived from it: a wrong spec passes its own suite. For
+each criterion, check the cited root cause, the exact behavior, the case table,
+and the tests to add. Report every ambiguous requirement the spec resolves
+without listing it under Assumed decisions, and check that packets own disjoint
+files.
+
 ## Verdict receipt
 
 Record each verdict as a receipt with:
@@ -29,18 +38,19 @@ Record each verdict as a receipt with:
   host exposes them; otherwise record that resolution was unavailable, and
   never infer the resolved version;
 - task reference;
-- candidate SHA and comparison base;
+- candidate SHA and comparison base; for a plan or spec review, the spec's path
+  and revision (commit SHA or content hash) instead;
 - scope: `full`, or `recheck` of named earlier findings;
 - commands run, with exit codes;
 - verdict (`ship`, `ship-with-changes`, or `blocked`) and recipient.
 
-A verdict applies only to its candidate SHA. Any later product change needs a
-new pass. A recheck covers only the named findings and cannot approve
-unrelated changes; its assignment lists every earlier finding fixed on this
-task, across all rounds, and the recheck reruns their reproductions. A finding
-is dismissed as not applicable only when its recheck receipt records a command
-or `path:line` showing the candidate cannot reach the state it requires;
-absence from current data suffices only for a historical state the candidate
-cannot recreate. Approval is not operational authorization: merge permission
-comes only from the user or an explicit project rule, and `ops-safety.md` still
-applies.
+A verdict applies only to its candidate SHA or spec revision. Any later product
+or spec change needs a new pass. A recheck covers only the named findings and
+cannot approve unrelated changes; its assignment lists every earlier finding
+fixed on this task, across all rounds, and the recheck reruns their
+reproductions. A finding is dismissed as not applicable only when its recheck
+receipt records a command or `path:line` showing the candidate cannot reach the
+state it requires; absence from current data suffices only for a historical
+state the candidate cannot recreate. Approval is not operational authorization:
+merge permission comes only from the user or an explicit project rule, and
+`ops-safety.md` still applies.

@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.9.0 - 2026-10-13
+
+Execution modes: choose per request how a task is executed.
+
+- The harness gains Execution modes: `pure`, `normal`, and `workflow`. A
+  request may name its mode, optionally with a profile; otherwise the default
+  mode recorded in Assignments applies, and without either the delegation
+  policy applies unchanged. The agent never switches modes on its own, may
+  recommend one in a single line, and records the mode and profile on the task.
+- `pure`: the user-facing session works alone and reports the result as
+  unreviewed, naming each required pass it skipped; evidence, Autonomy, and
+  ops-safety still apply, and a skipped pass satisfies no Autonomy condition.
+  `normal`: the session implements, then the profile's reviewer (or one the
+  user names) runs the judgment pass, preferably from another model family.
+  `workflow`: a judgment pass reviews the planner's spec before dispatch (at
+  most two cycles), executors implement its packets in parallel, and the full
+  suite (one rework) precedes the final judgment pass.
+- In `normal` and `workflow`, the user confirms the decisions assumed on
+  ambiguous requirements that change behavior before implementation. Review
+  fixes run in a fresh context, never by resuming the authoring session.
+  Executors are dispatched directly; a host multi-agent workflow engine runs
+  only when the user asks.
+- The read-only planner returns the `workflow` spec, and the orchestrator
+  saves it. The spec splits work into packets with disjoint owned files and
+  gives, per criterion, the root cause at `path:line`, the exact behavior, a
+  case table for rules over open inputs, and the tests to add, plus an
+  "Assumed decisions" list.
+- Adversarial review gains a Spec review section; a plan or spec verdict
+  receipt binds to the spec's path and revision (commit SHA or content hash).
+- The router, MAP, orchestrator role, and architecture doc point to the modes.
+- README documents the modes with request examples. The session defaults add
+  `Default mode: normal.` and keep only concurrency limits, since a default
+  mode replaces the delegation line. A `luna` profile pairs an Opus planner, a
+  Codex Sol reviewer, and Codex Luna executors at max, with the Codex Windows
+  sandbox note (`spawn EPERM`). Executor rows dispatch directly instead of
+  through a multi-agent workflow.
+- Project memory templates are unchanged.
+
 ## 1.8.0 - 2026-10-09
 
 Review integrity and delegation fixes from field feedback.

@@ -124,6 +124,14 @@ Existing installs whose `procedures.md` lacks these sections keep their current
 role selection: one room and one primary role per task. Setup never seeds
 either section. Host watching and messaging are not package state.
 
+Execution modes set, per request, who implements and who reviews: `pure` (the
+session alone, reported as unreviewed), `normal` (the session implements; a
+separate context reviews), or `workflow` (a planner's spec, reviewed before
+dispatch, then parallel executors and a final review). A request names its
+mode, or Assignments record a default; without either, the delegation policy
+applies unchanged. The spec review exists because a spec error reaches every
+executor and every test derived from the spec. The rules are in the harness.
+
 ## Evolution rule
 
 Start with feature, bugfix, and research rooms. Add roles, rooms, adapters, or
