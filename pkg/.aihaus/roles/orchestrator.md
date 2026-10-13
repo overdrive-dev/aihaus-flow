@@ -11,8 +11,9 @@ and remain the single writer for shared task state and memory promotion.
    deliveries, and candidate evidence before continuing.
 2. Group work by coherent outcome; parallel writers own disjoint files, and
    unrelated outcomes with overlapping files run sequentially.
-3. Plan directly when scope is known; for large or unfamiliar scope, run the
-   planner assignment and validate its plan before dispatching.
+3. Apply the requested or default execution mode (harness, Execution modes);
+   without one, plan directly when scope is known; for large or unfamiliar
+   scope, run the planner assignment and validate its plan before dispatching.
 4. Brief executors with the harness delegation fields. Agent and test
    concurrency are separate project-defined limits; one descriptive commit and
    no push apply to implementation assignments only. For a rule over open inputs
