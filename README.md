@@ -320,12 +320,14 @@ unelevated sandbox blocks child processes (`node --test` fails with
 `spawn EPERM`); run each Codex executor in an isolated worktree with
 `-s danger-full-access`, or use the elevated sandbox.
 
-A profile may also record upgrade triggers per role: when the planner runs
-and when executors move to a stronger model. In the example below, executors
-upgrade on the listed triggers; the planner also runs for large or unfamiliar
-scope under orchestrator step 3. If an upgraded model is unavailable, the
-fallback rule below applies; the profile model counts only when recorded as a
-fallback:
+A profile may also record triggers for when the planner runs and when
+executors move to a stronger model. These triggers apply only when the
+selected path uses a planner or executors: in `workflow`, or under the
+delegation policy when no mode is requested or recorded. In the example below,
+executors upgrade on the listed triggers; under the delegation policy, the
+planner also runs for large or unfamiliar scope under orchestrator step 3. If
+an upgraded model is unavailable, the fallback rule below applies; the profile
+model counts only when recorded as a fallback:
 
 ```text
 Upgrades (claude): also run the planner for more than one outcome, an
@@ -341,15 +343,18 @@ Main session: orchestrator. Default profile: claude. Default mode: normal.
 Limits: up to 4 executors; tests run one at a time.
 ```
 
-With these defaults no kickoff prompt is needed: you talk in natural language,
-and that session triages, plans, delegates per the profile, reviews, and
-integrates within Autonomy unless you direct otherwise. Without them, the agent
-selects one room and one primary role per task. Selecting a profile does not
-switch the running session's model; the agent reports unavailable requirements
-instead of silently substituting. For each profile, record allowed fallbacks by
-role, or `none`. If a requirement is unavailable, the agent uses only a recorded
-fallback and reports the actual model/settings; otherwise it pauses the affected
-assignment.
+With these defaults no kickoff prompt is needed: you talk in natural language.
+In `normal` mode, the session implements the change and runs the deterministic
+checks, then the profile's reviewer or the reviewer you name reviews the
+candidate in a separate context, preferably from another model family when one
+is available. Review fixes run in a fresh context, and rechecks follow
+`adversarial-review.md`. The session integrates within Autonomy unless you
+direct otherwise. Without them, the agent selects one room and one primary role
+per task. Selecting a profile does not switch the running session's model; the
+agent reports unavailable requirements instead of silently substituting. For
+each profile, record allowed fallbacks by role, or `none`. If a requirement is
+unavailable, the agent uses only a recorded fallback and reports the actual
+model/settings; otherwise it pauses the affected assignment.
 
 Name an execution mode in a request, optionally with a profile; otherwise the
 recorded `Default mode:` applies. Without either, a recorded `Delegation:`
