@@ -12,9 +12,10 @@ This repository uses the local `.aihaus/` package.
    for the user-facing session, adopt them unless the user or higher-priority
    instructions direct otherwise. A request may name an execution mode and
    profile, and Assignments may also record a default mode. Apply the
-   requested or default mode (see Execution modes in the harness), or else the
-   project's delegation policy, within the requested scope and existing
-   authorization. Delegated agents retain their assigned roles. Without these
+   requested or default mode, or else `auto` (see Execution modes in the
+   harness), within the requested scope and existing authorization; a recorded
+   `Default mode: delegation.` applies the project's delegation policy instead.
+   Delegated agents retain their assigned roles. Without these
    defaults, select one room and one primary role per task.
 4. Route orchestration starts and resumes through the MAP, harness, task
    context, and `.aihaus/roles/orchestrator.md`.

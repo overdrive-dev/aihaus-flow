@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.10.0 - 2026-10-14
+
+Automatic execution mode: `auto` is the default.
+
+- Without a requested or recorded mode, `auto` applies instead of the
+  delegation policy. Before starting, the agent selects the mode and states it
+  with its reason in one line, then proceeds; the user may switch it, and the
+  task records the reason. A request that changes no repository file needs no
+  mode; one coherent outcome selects `normal`; two or more independent
+  outcomes with disjoint files select `workflow`; when unsure, `normal`.
+  `auto` never selects `pure`.
+- `Default mode: delegation.` keeps the project's delegation policy. Projects
+  that record a `Delegation:` policy and no `Default mode:` move to `auto` on
+  update unless they record it.
+- A profile named alone in a request keeps the default mode. Once the mode is
+  set, the agent never switches modes on its own.
+- The router, orchestrator role, architecture doc, and README follow. The
+  README session defaults use `Default mode: auto.`, the modes table gains an
+  `auto` row, and an example shows the one-line announcement.
+- Project memory templates are unchanged.
+
 ## 1.9.0 - 2026-10-13
 
 Execution modes: choose per request how a task is executed.

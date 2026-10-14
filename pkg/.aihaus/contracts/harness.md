@@ -93,12 +93,21 @@ writer keeps task state.
 ## Execution modes
 
 A request may name an execution mode, `pure`, `normal`, or `workflow`,
-optionally with a profile (`Mode: workflow. Profile: <name>.`). Otherwise the
-default mode recorded in Assignments (`Default mode: <mode>.`) applies; without
-either, the project's delegation policy applies unchanged. A mode replaces the
-delegation policy for that request, not the project's concurrency limits. The
-agent never switches modes on its own; it may recommend one in a single line.
-The task records the mode and profile used.
+optionally with a profile (`Mode: workflow. Profile: <name>.`); a profile named
+alone keeps the default mode. Otherwise the default mode recorded in
+Assignments (`Default mode: <mode>.`) applies; without either, `auto` applies.
+A recorded `Default mode: delegation.` applies the project's delegation policy
+instead of a mode. A mode replaces the delegation policy for that request, not
+the project's concurrency limits. Once the mode is set, the agent never
+switches modes on its own; it may recommend one in a single line. The task
+records the mode and profile used.
+
+- `auto`: before starting, the agent selects the mode and states it with its
+  reason in one line, then proceeds; the user may switch it, and the task
+  records the reason. A request that changes no repository file, such as a
+  question or read-only analysis, needs no mode. One coherent outcome selects
+  `normal`; two or more independent outcomes with disjoint files select
+  `workflow`; when unsure, `normal`. `auto` never selects `pure`.
 
 - `pure`: the user-facing session works alone, with no planner, executor, or
   judgment pass. It runs the deterministic checks the task requires and reports
