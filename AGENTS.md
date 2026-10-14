@@ -39,8 +39,8 @@ Maintainer runbook:
   contract suite on Ubuntu, macOS, and Windows for package paths.
 - Release: bump `pkg/VERSION`, `pkg/package.json`, `pkg/CHANGELOG.md`, and
   README install pins in the PR; after merge push tag `v<VERSION>` to run
-  `package-release.yml`; retitle its notes `AIHAUS FLOW v<VERSION>: <theme>`
-  with What changed, Install or update, and a migration note on new defaults.
+  `package-release.yml`; retitle notes `AIHAUS FLOW v<VERSION>: <theme>` with
+  What changed; Install or update; migration note with opt-out for new defaults.
 - The suite takes about 30 s; Windows skips one symlink test. On Windows the
   read-only Codex reviewer cannot run it, so the author runs it.
 - Setup replaces package-owned surfaces and never reseeds existing memory;
