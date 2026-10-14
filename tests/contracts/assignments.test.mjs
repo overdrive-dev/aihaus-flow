@@ -101,12 +101,22 @@ test("harness contract names the two coordination levels and delegation fields",
       "not a delegated executor may start the separate context",
       "## Execution modes",
       "A request may name an execution mode",
-      "`pure`, `normal`, or `workflow`",
+      "`pure`, `normal`, `workflow`, or `auto`",
       "optionally with a profile",
       "Mode: workflow. Profile: <name>.",
       "default mode recorded in Assignments",
       "(`Default mode: <mode>.`) applies",
-      "without either, the project's delegation policy applies unchanged",
+      "a profile named alone keeps the default mode",
+      "without either, `auto` applies",
+      "A recorded `Default mode: delegation.` applies the project's delegation policy instead of a mode",
+      "Once the mode is set, the agent never switches modes on its own",
+      "`auto`: before starting, the agent selects the mode and states it with its reason in one line, then proceeds",
+      "the user may switch it, and the task records the reason",
+      "A request that changes no repository file, such as a question or read-only analysis, needs no mode",
+      "One coherent outcome selects `normal`",
+      "two or more independent outcomes with disjoint files select `workflow`",
+      "when unsure, `normal`",
+      "`auto` never selects `pure`",
       "A mode replaces the delegation policy for that request",
       "not the project's concurrency limits",
       "never switches modes on its own",
@@ -269,7 +279,8 @@ test("router points project routes at project memory, not rooms", async () => {
       "Assignments may also record a default mode",
       "Apply the requested or default mode",
       "(see Execution modes in the harness)",
-      "or else the project's delegation policy",
+      "or else `auto`",
+      "a recorded `Default mode: delegation.` applies the project's delegation policy instead",
     ],
     "router adapter",
   );
@@ -311,8 +322,8 @@ test("orchestrator role carries the start/resume loop", async () => {
       "brief rewritten as a decision rule",
       "affected work pauses",
       "never act on it",
-      "Apply the requested or default execution mode",
-      "(harness, Execution modes); without one, plan directly",
+      "Apply the requested, default, or `auto` execution mode",
+      "(harness, Execution modes); under the delegation policy, plan directly",
     ],
     "orchestrator role",
   );
@@ -393,7 +404,7 @@ test("README delegation section documents profiles, session defaults, and Autono
       "On Windows, the Codex unelevated sandbox blocks child processes",
       "spawn EPERM",
       "run each Codex executor in an isolated worktree with `-s danger-full-access`, or use the elevated sandbox",
-      "Default profile: claude. Default mode: normal.",
+      "Default profile: claude. Default mode: auto.",
       "Limits: up to 4 executors; tests run one at a time.",
       "`normal` mode, the session implements the change and runs the deterministic checks",
       "the profile's reviewer or the reviewer you name reviews the candidate in a separate context",
@@ -401,11 +412,18 @@ test("README delegation section documents profiles, session defaults, and Autono
       "Review fixes run in a fresh context",
       "rechecks follow `adversarial-review.md`",
       "integrates within Autonomy unless you direct otherwise",
-      "These triggers apply only when the selected path uses a planner or executors: in `workflow`, or under the delegation policy when no mode is requested or recorded",
+      "These triggers apply only when the selected path uses a planner or executors: in `workflow`, or under the delegation policy (`Default mode: delegation.`)",
       "under the delegation policy, the planner also runs for large or unfamiliar scope under orchestrator step 3",
       "Name an execution mode in a request, optionally with a profile",
       "otherwise the recorded `Default mode:` applies",
-      "Without either, a recorded `Delegation:` policy, such as everything except trivial requests, applies as before",
+      "and without one, `auto`",
+      "To keep a recorded `Delegation:` policy, such as everything except trivial requests, record `Default mode: delegation.`",
+      "In `auto`, the agent selects the mode for each request and states it with its reason in one line before starting",
+      "`normal` for one coherent outcome, `workflow` for two or more independent outcomes with disjoint files, and no mode for a question or read-only analysis",
+      "When unsure it selects `normal`, and it never selects `pure`",
+      "`auto` is also what applies when no default mode is recorded",
+      "| `auto` | as the mode it selects: `normal` or `workflow` | as the mode it selects |",
+      "Mode: workflow (five independent findings in separate files).",
       "never switches modes on its own",
       "it may recommend one in a single line",
       "| Mode | Who implements | Review |",
@@ -465,7 +483,9 @@ test("architecture doc describes two coordination levels and assignments", async
       "`normal` (the session implements; a separate context reviews)",
       "`workflow` (a planner's spec, reviewed before dispatch, then parallel executors and a final review)",
       "A request names its mode, or Assignments record a default",
-      "without either, the delegation policy applies unchanged",
+      "without either, `auto` selects `normal` or `workflow` per request and says why",
+      "`Default mode: delegation.` keeps the delegation policy",
+      "`auto` never selects `pure`, because skipping review must be the user's choice",
       "a spec error reaches every executor and every test derived from the spec",
       "The rules are in the harness",
     ],
@@ -480,6 +500,22 @@ test("release version is consistent across changelog and README install pin", as
   assert.ok(readme.includes(`releases/download/v${version}/aihaus-flow-v${version}.tgz`));
   const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
   assert.match(changelog, new RegExp(`^## ${escapeRegExp(version)} - `, "m"));
+});
+
+test("1.10.0 changelog documents migration and opt-out", async () => {
+  const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
+  const start = changelog.indexOf("## 1.10.0 - ");
+  assert.notEqual(start, -1, "1.10.0 changelog entry must exist");
+  const end = changelog.indexOf("\n## ", start + 1);
+  assertAnchors(
+    changelog.slice(start, end === -1 ? undefined : end),
+    [
+      "Projects that record a `Delegation:` policy and no `Default mode:` " +
+        "move to `auto` on update unless they record it",
+      "`Default mode: delegation.` keeps the project's delegation policy",
+    ],
+    "1.10.0 changelog entry",
+  );
 });
 
 test("root CLAUDE.md imports AGENTS.md as its first non-empty line", async () => {

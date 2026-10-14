@@ -85,13 +85,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.9.0`):
+Current published release (`v1.10.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.9.0/aihaus-flow-v1.9.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.10.0/aihaus-flow-v1.10.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.9.0` with the same tag.
+For another release, replace both occurrences of `v1.10.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -323,7 +323,7 @@ unelevated sandbox blocks child processes (`node --test` fails with
 A profile may also record triggers for when the planner runs and when
 executors move to a stronger model. These triggers apply only when the
 selected path uses a planner or executors: in `workflow`, or under the
-delegation policy when no mode is requested or recorded. In the example below,
+delegation policy (`Default mode: delegation.`). In the example below,
 executors upgrade on the listed triggers; under the delegation policy, the
 planner also runs for large or unfamiliar scope under orchestrator step 3. If
 an upgraded model is unavailable, the fallback rule below applies; the profile
@@ -339,33 +339,41 @@ inputs (filter, classifier, parser).
 Then set the default for the session you talk to:
 
 ```text
-Main session: orchestrator. Default profile: claude. Default mode: normal.
+Main session: orchestrator. Default profile: claude. Default mode: auto.
 Limits: up to 4 executors; tests run one at a time.
 ```
 
 With these defaults no kickoff prompt is needed: you talk in natural language.
-In `normal` mode, the session implements the change and runs the deterministic
-checks, then the profile's reviewer or the reviewer you name reviews the
-candidate in a separate context, preferably from another model family when one
-is available. Review fixes run in a fresh context, and rechecks follow
-`adversarial-review.md`. The session integrates within Autonomy unless you
-direct otherwise. Without them, the agent selects one room and one primary role
-per task. Selecting a profile does not switch the running session's model; the
-agent reports unavailable requirements instead of silently substituting. For
-each profile, record allowed fallbacks by role, or `none`. If a requirement is
-unavailable, the agent uses only a recorded fallback and reports the actual
-model/settings; otherwise it pauses the affected assignment.
+In `auto`, the agent selects the mode for each request and states it with its
+reason in one line before starting: `normal` for one coherent outcome,
+`workflow` for two or more independent outcomes with disjoint files, and no
+mode for a question or read-only analysis. When unsure it selects `normal`,
+and it never selects `pure`. `auto` is also what applies when no default mode
+is recorded. In `normal` mode, the session implements the change and runs the
+deterministic checks, then the profile's reviewer or the reviewer you name
+reviews the candidate in a separate context, preferably from another model
+family when one is available. Review fixes run in a fresh context, and
+rechecks follow `adversarial-review.md`. The session integrates within
+Autonomy unless you direct otherwise. Without them, the agent selects one room
+and one primary role per task. Selecting a profile does not switch the running
+session's model; the agent reports unavailable requirements instead of
+silently substituting. For each profile, record allowed fallbacks by role, or
+`none`. If a requirement is unavailable, the agent uses only a recorded
+fallback and reports the actual model/settings; otherwise it pauses the
+affected assignment.
 
 Name an execution mode in a request, optionally with a profile; otherwise the
-recorded `Default mode:` applies. Without either, a recorded `Delegation:`
-policy, such as everything except trivial requests, applies as before. The
-agent never switches modes on its own; it may recommend one in a single line.
+recorded `Default mode:` applies, and without one, `auto`. To keep a recorded
+`Delegation:` policy, such as everything except trivial requests, record
+`Default mode: delegation.` Once the mode is set, the agent never switches
+modes on its own; it may recommend one in a single line.
 
 | Mode | Who implements | Review |
 |---|---|---|
 | `pure` | the session you talk to, alone | none; reported as unreviewed, naming each skipped pass |
 | `normal` | the session you talk to | the profile's reviewer or one you name, in a separate context, preferably another model family |
 | `workflow` | executors, one per packet of the planner's spec | the spec before dispatch, then the candidate after the full suite |
+| `auto` | as the mode it selects: `normal` or `workflow` | as the mode it selects |
 
 In `normal` and `workflow`, the agent lists the decisions it assumed on
 ambiguous requirements that change behavior and waits for your confirmation
@@ -382,6 +390,14 @@ Mode: normal. Add CSV export to the invoice list and prove each criterion.
 
 ```text
 Mode: workflow. Profile: luna. Fix the findings listed in docs/audit.md.
+```
+
+Without a mode, `auto` answers with a line such as
+`Mode: workflow (five independent findings in separate files).` before it
+starts:
+
+```text
+Fix the findings listed in docs/audit.md.
 ```
 
 Use a moving alias when the host supports one, or an exact model ID when
