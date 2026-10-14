@@ -101,7 +101,7 @@ test("harness contract names the two coordination levels and delegation fields",
       "not a delegated executor may start the separate context",
       "## Execution modes",
       "A request may name an execution mode",
-      "`pure`, `normal`, or `workflow`",
+      "`pure`, `normal`, `workflow`, or `auto`",
       "optionally with a profile",
       "Mode: workflow. Profile: <name>.",
       "default mode recorded in Assignments",
@@ -500,6 +500,22 @@ test("release version is consistent across changelog and README install pin", as
   assert.ok(readme.includes(`releases/download/v${version}/aihaus-flow-v${version}.tgz`));
   const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
   assert.match(changelog, new RegExp(`^## ${escapeRegExp(version)} - `, "m"));
+});
+
+test("1.10.0 changelog documents migration and opt-out", async () => {
+  const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
+  const start = changelog.indexOf("## 1.10.0 - ");
+  assert.notEqual(start, -1, "1.10.0 changelog entry must exist");
+  const end = changelog.indexOf("\n## ", start + 1);
+  assertAnchors(
+    changelog.slice(start, end === -1 ? undefined : end),
+    [
+      "Projects that record a `Delegation:` policy and no `Default mode:` " +
+        "move to `auto` on update unless they record it",
+      "`Default mode: delegation.` keeps the project's delegation policy",
+    ],
+    "1.10.0 changelog entry",
+  );
 });
 
 test("root CLAUDE.md imports AGENTS.md as its first non-empty line", async () => {
