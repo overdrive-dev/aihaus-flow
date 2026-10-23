@@ -15,7 +15,10 @@ One run per task under host workflow engines.
 - A standing host opt-in counts as asking for a host run. A host run never
   selects or changes the mode; its script carries the orchestrator's written
   assignment and the mode's sequence, gates, and limits within project
-  concurrency limits. Run a mode's consecutive steps in one host run; end it
+  concurrency limits. When a host run is used, run a mode's consecutive steps
+  in one host run; in `normal`, it starts after the session's own
+  implementation and covers the judgment pass, review fixes, and rechecks.
+  Without a host engine, follow the same sequence directly. End a host run
   early only for an unconfirmed assumed decision, a business-rule question, a
   reached limit, a pause under `roles/orchestrator.md` step 8 or
   `ops-safety.md`, a step that outlasts the host's agent limits, or before the

@@ -167,10 +167,13 @@ required; use one only when the user asks for it. A standing host opt-in counts
 as asking. A host run is a mechanism, not a mode: it never selects or changes
 the mode, and its script is the orchestrator's written assignment, carrying the
 selected mode's sequence, gates, and limits as code within the project's
-concurrency limits. Run a mode's consecutive steps in one host run, and end it
-early only for an unconfirmed assumed decision, a business-rule question, a
-reached limit, a pause under `roles/orchestrator.md` step 8 or `ops-safety.md`,
-a step that outlasts the host's agent limits, or before the first remote write.
+concurrency limits. When a host run is used, run a mode's consecutive steps in
+one host run; in `normal`, it starts after the session's own implementation and
+covers the judgment pass, review fixes, and rechecks. Without a host engine,
+follow the same sequence directly. End a host run early only for an
+unconfirmed assumed decision, a business-rule question, a reached limit, a
+pause under `roles/orchestrator.md` step 8 or `ops-safety.md`, a step that
+outlasts the host's agent limits, or before the first remote write.
 
 ## Execution
 

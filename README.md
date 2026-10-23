@@ -446,11 +446,11 @@ Resume <task> with its recorded profile; reload aihaus context and reconcile int
 Host-specific multi-agent opt-ins stay in host configuration; messaging and
 process watching use your host tool. In Claude Code, ultracode is a standing
 opt-in to workflows: aihaus runs a mode's consecutive steps in one workflow
-and stops between workflows only for an open decision, a reached limit, or an
-approval. A fork inherits the session's conversation and model, so it never
-reviews or fixes review findings; `CLAUDE_CODE_FORK_SUBAGENT=0` turns forks off.
-To keep cost bounded, type the `ultracode` keyword per prompt instead of
-turning it on for the whole session.
+and stops between workflows only at the early exits the harness lists
+(Execution modes). A fork inherits the session's conversation and model, so it
+never reviews or fixes review findings; `CLAUDE_CODE_FORK_SUBAGENT=0` turns
+forks off. To keep cost bounded, type the `ultracode` keyword per prompt instead
+of turning it on for the whole session.
 
 ## Update aihaus
 
