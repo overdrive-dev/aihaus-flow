@@ -85,13 +85,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.10.0`):
+Current published release (`v1.11.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.10.0/aihaus-flow-v1.10.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.11.0/aihaus-flow-v1.11.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.10.0` with the same tag.
+For another release, replace both occurrences of `v1.11.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -318,7 +318,15 @@ may use one provider or several:
 Executors must be able to run the project's tests. On Windows, the Codex
 unelevated sandbox blocks child processes (`node --test` fails with
 `spawn EPERM`); run each Codex executor in an isolated worktree with
-`-s danger-full-access`, or use the elevated sandbox.
+`-s danger-full-access`, or use the elevated sandbox. An agent that hosts a CLI
+executor or reviewer waits for the process to exit, reads the exit code from a
+file the process itself writes, and returns it with the result; a call that
+was stopped or timed out yields no verdict, never an earlier round's findings.
+A hosting agent's shell calls have a time limit, so it polls in bounded calls;
+when a step can outlast the hosting agent, run it from the session's background
+shell and start the next run from its recorded result. On Windows, a
+workspace-write Codex executor cannot commit in a linked worktree (`index.lock`
+is denied), so the hosting agent commits the packet.
 
 A profile may also record triggers for when the planner runs and when
 executors move to a stronger model. These triggers apply only when the
@@ -352,15 +360,17 @@ and it never selects `pure`. `auto` is also what applies when no default mode
 is recorded. In `normal` mode, the session implements the change and runs the
 deterministic checks, then the profile's reviewer or the reviewer you name
 reviews the candidate in a separate context, preferably from another model
-family when one is available. Review fixes run in a fresh context, and
-rechecks follow `adversarial-review.md`. The session integrates within
-Autonomy unless you direct otherwise. Without them, the agent selects one room
-and one primary role per task. Selecting a profile does not switch the running
-session's model; the agent reports unavailable requirements instead of
-silently substituting. For each profile, record allowed fallbacks by role, or
-`none`. If a requirement is unavailable, the agent uses only a recorded
-fallback and reports the actual model/settings; otherwise it pauses the
-affected assignment.
+family when one is available. The session writes the change in its own turns,
+even when a host option such as Claude Code's ultracode would start a workflow;
+only read-only helpers, the review, and review fixes run in fresh agents.
+Review fixes run in a fresh context, and rechecks follow
+`adversarial-review.md`. The session integrates within Autonomy unless you
+direct otherwise. Without them, the agent selects one room and one primary
+role per task. Selecting a profile does not switch the running session's
+model; the agent reports unavailable requirements instead of silently
+substituting. For each profile, record allowed fallbacks by role, or `none`.
+If a requirement is unavailable, the agent uses only a recorded fallback and
+reports the actual model/settings; otherwise it pauses the affected assignment.
 
 Name an execution mode in a request, optionally with a profile; otherwise the
 recorded `Default mode:` applies, and without one, `auto`. To keep a recorded
@@ -377,8 +387,11 @@ modes on its own; it may recommend one in a single line.
 
 In `normal` and `workflow`, the agent lists the decisions it assumed on
 ambiguous requirements that change behavior and waits for your confirmation
-before implementing. Review fixes run in a fresh context, not in the session
-that wrote the code. Example requests:
+before implementing; when there are none, it says so and continues. Only your
+answer to that list confirms it; a general go-ahead does not. To skip the wait
+for one request, add `Assumed decisions: accept.`; the agent records the
+decisions and reports them with the result. Review fixes run in a fresh
+context, not in the session that wrote the code. Example requests:
 
 ```text
 Mode: pure. Fix the typo in the install section.
@@ -431,7 +444,13 @@ Resume <task> with its recorded profile; reload aihaus context and reconcile int
 ```
 
 Host-specific multi-agent opt-ins stay in host configuration; messaging and
-process watching use your host tool.
+process watching use your host tool. In Claude Code, ultracode is a standing
+opt-in to workflows: aihaus runs a mode's consecutive steps in one workflow
+and stops between workflows only for an open decision, a reached limit, or an
+approval. A fork inherits the session's conversation and model, so it never
+reviews or fixes review findings; `CLAUDE_CODE_FORK_SUBAGENT=0` turns forks off.
+To keep cost bounded, type the `ultracode` keyword per prompt instead of
+turning it on for the whole session.
 
 ## Update aihaus
 

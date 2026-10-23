@@ -161,6 +161,21 @@ test("harness contract names the two coordination levels and delegation fields",
       "run the deterministic checks; and rely on summaries and `tools/scope-check.mjs`",
       "multi-agent workflow engine is not required",
       "only when the user asks",
+      "fills only a role whose profile model is the session's",
+      "is not a separate context",
+      "directly or as a step of its host run",
+      "with no host run, fork, or subagent",
+      "not through host-run agents or forks",
+      "including ambiguities the spec review reports as unlisted",
+      "say that there are none and continue without stopping",
+      "a general go-ahead does not",
+      "`Assumed decisions: accept.`",
+      "counts as resuming",
+      "A spec amended after its review, by anyone, needs a new spec review",
+      "count across runs against their limits",
+      "A standing host opt-in counts as asking",
+      "never selects or changes the mode",
+      "end it early only for",
     ],
     "harness contract",
   );
@@ -272,6 +287,7 @@ test("router points project routes at project memory, not rooms", async () => {
       "delegation policy",
       "existing authorization",
       "retain their assigned roles",
+      "and select no mode",
       "Without these defaults",
       "starts and resumes",
       ".aihaus/roles/orchestrator.md",
@@ -432,6 +448,13 @@ test("README delegation section documents profiles, session defaults, and Autono
       "| `workflow` | executors, one per packet of the planner's spec | the spec before dispatch, then the candidate after the full suite |",
       "In `normal` and `workflow`, the agent lists the decisions it assumed on ambiguous requirements that change behavior",
       "waits for your confirmation before implementing",
+      "when there are none, it says so and continues",
+      "a general go-ahead does not",
+      "`Assumed decisions: accept.`",
+      "yields no verdict",
+      "even when a host option such as Claude Code's ultracode would start " +
+        "a workflow",
+      "standing opt-in to workflows",
       "Review fixes run in a fresh context, not in the session that wrote the code",
       "Mode: pure. Fix the typo in the install section.",
       "Mode: normal. Add CSV export to the invoice list and prove each criterion.",
@@ -500,6 +523,25 @@ test("release version is consistent across changelog and README install pin", as
   assert.ok(readme.includes(`releases/download/v${version}/aihaus-flow-v${version}.tgz`));
   const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
   assert.match(changelog, new RegExp(`^## ${escapeRegExp(version)} - `, "m"));
+});
+
+test("1.11.0 changelog documents migration and opt-out", async () => {
+  const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
+  const start = changelog.indexOf("## 1.11.0 - ");
+  assert.notEqual(start, -1, "1.11.0 changelog entry must exist");
+  const end = changelog.indexOf("\n## ", start + 1);
+  assertAnchors(
+    changelog.slice(start, end === -1 ? undefined : end),
+    [
+      "Under a standing host opt-in, `normal` no longer delegates " +
+        "implementation to host-run agents; request `Mode: workflow.` " +
+        "to delegate.",
+      "A standing host opt-in now counts as asking for a host run; " +
+        "to keep host runs per request, turn the opt-in off and ask " +
+        "per prompt.",
+    ],
+    "1.11.0 changelog entry",
+  );
 });
 
 test("1.10.0 changelog documents migration and opt-out", async () => {

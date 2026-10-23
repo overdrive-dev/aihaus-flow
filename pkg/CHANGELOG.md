@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.11.0 - 2026-10-23
+
+One run per task under host workflow engines.
+
+- Confirmation stops only for a non-empty assumed-decisions list; the README
+  now matches the harness. Include ambiguities the spec review reports as
+  unlisted. Only the user's answer to the list confirms it; a general go-ahead
+  does not.
+- A request may accept assumed decisions in advance with
+  `Assumed decisions: accept.` for that request only, never as a recorded
+  default or by inference. Record the decisions on the task, include them in
+  the final judgment pass's brief, and report them with the result.
+- A standing host opt-in counts as asking for a host run. A host run never
+  selects or changes the mode; its script carries the orchestrator's written
+  assignment and the mode's sequence, gates, and limits within project
+  concurrency limits. Run a mode's consecutive steps in one host run; end it
+  early only for an unconfirmed assumed decision, a business-rule question, a
+  reached limit, a pause under `roles/orchestrator.md` step 8 or
+  `ops-safety.md`, a step that outlasts the host's agent limits, or before the
+  first remote write.
+- In `normal`, the session writes the change in its own turns, even under a
+  standing host opt-in; read-only helpers, the judgment pass, and review fixes
+  may run in fresh agents. In `pure`, it uses no host run, fork, or subagent;
+  if a request also asks for one, it names the conflict and follows the mode.
+- Agents that inherit the author's conversation are not a separate context;
+  a fresh agent on the committed candidate SHA is, even in the same host run.
+  An agent that inherits the session's model fills only roles whose profile
+  model is the session's.
+- Continuing the author by message or fork counts as resuming; review fixes
+  need a fresh context. A fix and its recheck may run in one host run. A spec
+  amended after its review, by anyone, needs a new spec review within the same
+  cycle limit. Spec and fix cycles count across runs against their limits;
+  the session passes them into each run, the designated writer records each
+  new cycle, and past a limit the affected work pauses until the user directs
+  otherwise.
+- The router says delegated agents retain their assigned roles and select no
+  mode.
+- README documents CLI executor and reviewer hosting: process-written exit
+  codes, no verdict from a stopped or timed-out call, bounded polling,
+  background-shell results for longer steps, and the hosting agent's commit
+  handoff for Windows linked worktrees. Host notes cover standing opt-ins,
+  inherited conversation and model, disabling forks, and per-prompt runs.
+- Migration: Under a standing host opt-in, `normal` no longer delegates
+  implementation to host-run agents; request `Mode: workflow.` to delegate.
+  A standing host opt-in now counts as asking for a host run; to keep host
+  runs per request, turn the opt-in off and ask per prompt.
+- Project memory templates are unchanged.
+
 ## 1.10.0 - 2026-10-14
 
 Automatic execution mode: `auto` is the default.
