@@ -21,11 +21,7 @@ Implementation rules:
   that demonstrates the need.
 - Generated dogfood state belongs only under ignored `.aihaus-lab/`.
 
-Validation:
-
-```text
-node tools/run-contract-tests.mjs
-```
+Validation: `node tools/run-contract-tests.mjs`.
 
 See `docs/architecture.md` for boundaries and `docs/provenance.md` before any
 deletion wave.
@@ -40,9 +36,12 @@ Maintainer runbook:
   README install pins in the PR; after merge push tag `v<VERSION>` to run
   `package-release.yml`; retitle notes `AIHAUS FLOW v<VERSION>: <theme>` with
   What changed; Install or update; migration note with opt-out for new defaults.
-- Suite ~30 s; on Windows it skips one symlink test and Codex can't run it.
-- Host A/B lab in `.aihaus-lab/`: `claude -p --effort ultracode --restricted
-  --strict-mcp-config`, `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`, ≤2 at once.
+- Suite ~30 s; Windows skips one symlink test. The author runs it: the Codex
+  unelevated sandbox on Windows cannot spawn its child processes.
+- Host A/B labs in `.aihaus-lab/`, at most two Claude sessions at once: run
+  `claude -p --model opus --effort ultracode --restricted --strict-mcp-config
+  --tools <tools> --allowedTools <commands> --permission-mode acceptEdits
+  --max-budget-usd 15` with `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` set.
 - Setup replaces package-owned surfaces and never reseeds existing memory;
   `refresh.mjs` hashes memory templates. Ship new guidance through MAP,
   contracts, rooms, roles, or the router, not memory templates.
