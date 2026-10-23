@@ -32,11 +32,11 @@ deletion wave.
 
 Maintainer runbook:
 
-- Tasks come from GitHub issues/PRs on `overdrive-dev/aihaus-flow`.
-  `pkg/.aihaus/memory/` is the shipped consumer template; never record this
-  repository's facts or tasks there.
-- Integration branch is `main` (squash merge). `package-ci.yml` runs the
-  contract suite on Ubuntu, macOS, and Windows for package paths.
+- Tasks come from owner requests or open GitHub issues/PRs on
+  `overdrive-dev/aihaus-flow`. `pkg/.aihaus/memory/` is the shipped consumer
+  template; never record this repository's facts or tasks there.
+- Merge to `main` with `gh pr merge --squash --delete-branch`; `package-ci.yml`
+  runs on Ubuntu, macOS, and Windows for package paths; macOS may queue ~10 min.
 - Release: bump `pkg/VERSION`, `pkg/package.json`, `pkg/CHANGELOG.md`, and
   README install pins in the PR; after merge push tag `v<VERSION>` to run
   `package-release.yml`; retitle notes `AIHAUS FLOW v<VERSION>: <theme>` with
