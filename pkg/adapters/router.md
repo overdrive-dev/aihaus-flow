@@ -15,8 +15,8 @@ This repository uses the local `.aihaus/` package.
    requested or default mode, or else `auto` (see Execution modes in the
    harness), within the requested scope and existing authorization; a recorded
    `Default mode: delegation.` applies the project's delegation policy instead.
-   Delegated agents retain their assigned roles. Without these
-   defaults, select one room and one primary role per task.
+   Delegated agents retain their assigned roles and select no mode. Without
+   these defaults, select one room and one primary role per task.
 4. Route orchestration starts and resumes through the MAP, harness, task
    context, and `.aihaus/roles/orchestrator.md`.
 5. Use `.aihaus/memory/project/README.md` to select memory; indexes only locate
