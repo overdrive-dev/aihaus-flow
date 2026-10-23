@@ -32,17 +32,17 @@ deletion wave.
 
 Maintainer runbook:
 
-- Tasks come from owner requests or open GitHub issues/PRs on
-  `overdrive-dev/aihaus-flow`. `pkg/.aihaus/memory/` is the shipped consumer
-  template; never record this repository's facts or tasks there.
+- Tasks: owner requests or open issues/PRs on `overdrive-dev/aihaus-flow`; never
+  record repo facts or tasks in `pkg/.aihaus/memory/` (consumer template).
 - main: `gh pr merge --squash --delete-branch`; package-ci.yml runs the contract
   suite on Ubuntu/macOS/Windows for package paths only; macOS may queue ~10 min.
 - Release: bump `pkg/VERSION`, `pkg/package.json`, `pkg/CHANGELOG.md`, and
   README install pins in the PR; after merge push tag `v<VERSION>` to run
   `package-release.yml`; retitle notes `AIHAUS FLOW v<VERSION>: <theme>` with
   What changed; Install or update; migration note with opt-out for new defaults.
-- The suite takes about 30 s; Windows skips one symlink test. On Windows the
-  read-only Codex reviewer cannot run it, so the author runs it.
+- Suite ~30 s; on Windows it skips one symlink test and Codex can't run it.
+- Host A/B lab in `.aihaus-lab/`: `claude -p --effort ultracode --restricted
+  --strict-mcp-config`, `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`, ≤2 at once.
 - Setup replaces package-owned surfaces and never reseeds existing memory;
   `refresh.mjs` hashes memory templates. Ship new guidance through MAP,
   contracts, rooms, roles, or the router, not memory templates.
