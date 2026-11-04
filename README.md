@@ -85,13 +85,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.11.0`):
+Current published release (`v1.12.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.11.0/aihaus-flow-v1.11.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.12.0/aihaus-flow-v1.12.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.11.0` with the same tag.
+For another release, replace both occurrences of `v1.12.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -276,6 +276,13 @@ Research the safest migration path for the users table and record the decision.
 ```
 
 No special aihaus command is required for ordinary agent work.
+
+Code changes follow the reuse-first ladder in `.aihaus/conventions.md`, adapted
+from [Ponytail](https://github.com/DietrichGebert/ponytail) (MIT). aihaus does
+not install Ponytail. If you install its plugin yourself, the aihaus evidence
+and review contracts still decide tests and verdicts: `/ponytail-review` can
+serve as a review lens, but it does not produce the verdict receipt that
+`.aihaus/contracts/adversarial-review.md` requires.
 
 ### Delegate to specialist agents
 

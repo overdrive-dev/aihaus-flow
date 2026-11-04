@@ -260,6 +260,33 @@ test("conventions name package-owned files and external trackers", async () => {
   );
 });
 
+test("conventions and review carry the reuse-first change ladder", async () => {
+  assertAnchors(
+    await text(path.join(packageRoot, "conventions.md")),
+    [
+      "Code changes take the first option that fully works",
+      "skip what nobody asked for and name it in the report",
+      "reuse what the repository already has",
+      "then the standard library or platform",
+      "never a new one for a few lines",
+      "Finish every caller, test, fixture, and export",
+      "Never trade away, even in moved or merged code, validation at trust boundaries",
+      "`shortcut: <the limit>, <when to upgrade>`",
+    ],
+    "conventions.md",
+  );
+  assertAnchors(
+    await text(path.join(packageRoot, "contracts", "adversarial-review.md")),
+    ["complexity (code that need not exist", "a `shortcut:` comment that names its limit is a decision"],
+    "adversarial review contract",
+  );
+  assertAnchors(
+    await text(path.join(packageRoot, "roles", "implementer.md")),
+    ["what you skipped or left unchecked"],
+    "implementer role",
+  );
+});
+
 test("feature room explains the external tracker override", async () => {
   assertAnchors(
     await text(path.join(packageRoot, "rooms", "feature", "CONTEXT.md")),
@@ -527,6 +554,21 @@ test("release version is consistent across changelog and README install pin", as
   assert.ok(readme.includes(`releases/download/v${version}/aihaus-flow-v${version}.tgz`));
   const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
   assert.match(changelog, new RegExp(`^## ${escapeRegExp(version)} - `, "m"));
+});
+
+test("1.12.0 changelog documents migration and opt-out", async () => {
+  const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
+  const start = changelog.indexOf("## 1.12.0 - ");
+  assert.notEqual(start, -1, "1.12.0 changelog entry must exist");
+  const end = changelog.indexOf("\n## ", start + 1);
+  assertAnchors(
+    changelog.slice(start, end === -1 ? undefined : end),
+    [
+      "the ladder applies to every code change",
+      "To keep a different rule, state it in repository instructions or an accepted project rule",
+    ],
+    "1.12.0 changelog entry",
+  );
 });
 
 test("1.11.0 changelog documents migration and opt-out", async () => {

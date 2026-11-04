@@ -16,6 +16,19 @@
 - Parallel writers must own disjoint file sets; shared files merge sequentially.
 - Business-visible ambiguity is a rule gap. Ask once and record the answer.
 - Technical mechanics follow repository conventions without option menus.
+- Code changes take the first option that fully works: skip what nobody asked
+  for and name it in the report; reuse what the repository already has, the
+  way the surrounding code uses it; then the standard library or platform; then
+  an installed dependency, never a new one for a few lines; only then the least
+  new code that stays readable. Finish every caller, test, fixture, and export
+  the change reaches.
+- Add no abstraction, option, config, or code for later that the task does not
+  need; deletion beats addition, and the repository's layers and interfaces
+  stay. Never trade away, even in moved or merged code, validation at trust
+  boundaries, error handling that prevents data loss, security, accessibility,
+  or anything requested.
+- A shortcut with a known limit carries a `shortcut: <the limit>, <when to
+  upgrade>` comment.
 - Claims cite `path:line`; executable claims also carry command and exit code.
 - Production safety comes from external containment and least privilege, not
   from prompts, rooms, or hooks.

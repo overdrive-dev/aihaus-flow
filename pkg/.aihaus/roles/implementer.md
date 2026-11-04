@@ -9,5 +9,5 @@ run as a test into a regression test that fails before the fix. Run real
 verification before reporting.
 
 Do not mutate shared memory, unrelated files, production environments, or a
-reviewer's artifacts. Return changed files, commands, exit codes, and residual
-risk.
+reviewer's artifacts. Return changed files, commands, exit codes, what you
+skipped or left unchecked, and residual risk.

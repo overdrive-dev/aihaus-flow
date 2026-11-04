@@ -29,6 +29,14 @@ must be ported, intentionally dropped, or archived before deletion.
 - integration existence-versus-wiring checks;
 - business-rule calibration and complexity deletion pressure.
 
+## Adapted from external sources
+
+- [Ponytail](https://github.com/DietrichGebert/ponytail) (MIT, read at
+  `96608e0`): the reuse-first change ladder, the never-trade-away list, and the
+  `shortcut:` comment in `conventions.md`; the lean checklist in the
+  adversarial-review complexity lens. The text is paraphrased. Its levels,
+  hooks, status band, and skills are not shipped.
+
 ## Port as workflow contracts
 
 - OKF Map/rooms and six general roles;

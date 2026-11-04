@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.12.0 - 2026-11-03
+
+Reuse-first change ladder, adapted from Ponytail.
+
+- `conventions.md` gives code changes a ladder: skip what nobody asked for and
+  name it; reuse what the repository has; then the standard library or
+  platform; then an installed dependency, never a new one for a few lines; only
+  then the least new code that stays readable. Changes finish every caller,
+  test, fixture, and export they reach, add no speculative abstraction or
+  option, and never trade away validation at trust boundaries, error handling
+  that prevents data loss, security, accessibility, or anything requested.
+- A shortcut with a known limit carries a `shortcut: <the limit>, <when to
+  upgrade>` comment; the review complexity lens treats it as a decision unless
+  the expected load crosses it.
+- The adversarial-review complexity lens lists what it looks for: dead code,
+  unused options, speculative features, rewrites of existing helpers or
+  platform features, new dependencies for a few lines, one-implementation
+  abstractions, and near-copies.
+- Implementer reports name what was skipped or left unchecked.
+- README credits Ponytail (MIT); aihaus does not install it, and
+  `/ponytail-review` does not replace the verdict receipt.
+- Migration: package-owned conventions, roles, and contracts are replaced on
+  update, so the ladder applies to every code change. To keep a different
+  rule, state it in repository instructions or an accepted project rule, which
+  rank above package guidance.
+- Project memory templates are unchanged.
+
 ## 1.11.0 - 2026-10-23
 
 One run per task under host workflow engines.
