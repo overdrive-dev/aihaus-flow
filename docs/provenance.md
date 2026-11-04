@@ -23,6 +23,11 @@ must be ported, intentionally dropped, or archived before deletion.
   ambiguous requirement the same way, and every executor shipped it with a
   green suite); spec review before dispatch; fresh-context review fixes with
   cycle limits; and the v1.11.0 end-to-end stop list;
+- `package-ci.yml`, the pull-request CI on Ubuntu, macOS, and Windows (removed
+  after v1.14.0): maintainers run the suite natively and with
+  `run-contract-tests.mjs --docker` on Linux, and the release workflow still
+  runs it on Linux. macOS is no longer tested; the code branches only on
+  Windows versus everything else;
 - `online-actions.sh` patterns for `helm`, `aws`
   ecs/lambda/cloudformation/elasticbeanstalk/amplify, `netlify deploy`,
   `serverless`/`sls deploy`, `gh workflow run`, `docker compose -f` with
@@ -85,5 +90,5 @@ must be ported, intentionally dropped, or archived before deletion.
   kanban, core Notion integration, global hooks, and their migration fixtures.
 
 The deletion was applied only after the 104-check legacy baseline and focused
-replacement contracts passed locally. Package CI now runs the replacement
-install/lab contracts on Windows, Linux, and macOS.
+replacement contracts passed locally. Package CI then ran the replacement
+install/lab contracts on Windows, Linux, and macOS until its removal after v1.14.0.

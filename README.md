@@ -638,7 +638,12 @@ Run the contract suite:
 
 ```bash
 node tools/run-contract-tests.mjs
+node tools/run-contract-tests.mjs --docker
 ```
+
+The `--docker` run repeats the suite on Linux in a `node:22` container and
+needs Docker. There is no pull-request CI; the release workflow reruns the
+suite on Linux before publishing.
 
 The repository can maintain an ignored nested consumer for real install/update
 experiments:
@@ -650,8 +655,7 @@ node tools/aihaus-lab.mjs reset --json
 ```
 
 The controller verifies realpath containment and nested Git identity before
-destructive reset or clean operations. CI runs the contract suite on Linux,
-macOS, and Windows.
+destructive reset or clean operations.
 
 Architecture details live in [docs/architecture.md](docs/architecture.md); the
 refactor/deletion ledger is [docs/provenance.md](docs/provenance.md).
