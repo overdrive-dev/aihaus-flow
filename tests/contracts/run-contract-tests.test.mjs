@@ -1,10 +1,26 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { getCommand, runTests } from "../../tools/run-contract-tests.mjs";
+
+process.env.AIHAUS_RUNNER_NO_RUN = "1";
+const { getCommand, runTests } = await import("../../tools/run-contract-tests.mjs");
+delete process.env.AIHAUS_RUNNER_NO_RUN;
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+test("runner executes by default when imported without an explicit opt-out", () => {
+  const result = spawnSync(process.execPath, ["--input-type=module", "--eval", `
+    import childProcess from "node:child_process";
+    import { syncBuiltinESMExports } from "node:module";
+    childProcess.spawnSync = () => ({ status: 7 });
+    syncBuiltinESMExports();
+    await import(${JSON.stringify(new URL("../../tools/run-contract-tests.mjs", import.meta.url).href)});
+  `], { encoding: "utf8" });
+
+  assert.equal(result.status, 7, result.stderr);
+});
 
 test("native runner uses Node's test runner and includes its own contracts", () => {
   const [command, args] = getCommand([]);

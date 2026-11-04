@@ -42,6 +42,6 @@ export function runTests(argv, spawn = spawnSync) {
   return result.status ?? 1;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.env.AIHAUS_RUNNER_NO_RUN === undefined) {
   process.exitCode = runTests(process.argv.slice(2));
 }
