@@ -29,8 +29,8 @@ Maintainer runbook:
 
 - Tasks: owner requests or open issues/PRs on `overdrive-dev/aihaus-flow`; never
   record repo facts or tasks in `pkg/.aihaus/memory/` (consumer template).
-- main: `gh pr merge --squash --delete-branch`; package-ci.yml runs the contract
-  suite on Ubuntu/macOS/Windows for package paths only; macOS may queue ~10 min.
+- main: `gh pr merge --squash --delete-branch`; no PR CI: before merging, the
+  author runs the suite natively and with `--docker` (Linux); releases rerun it.
 - Release: bump `pkg/VERSION`, `pkg/package.json`, `pkg/CHANGELOG.md`, and
   README install pins in the PR; after merge push tag `v<VERSION>` to run
   `package-release.yml`; retitle notes `AIHAUS FLOW v<VERSION>: <theme>` with
