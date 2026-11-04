@@ -14,6 +14,15 @@ must be ported, intentionally dropped, or archived before deletion.
 
 ## Intentionally dropped
 
+- execution modes `pure`, `normal`, `workflow`, and `auto`, with
+  `Default mode:` (v1.9.0 to v1.13.0), and the host-run choreography from
+  v1.11.0; since v1.14.0 the agent chooses how to work. Their guarantees stay
+  under Working style in the harness: a separate-context judgment pass that
+  only the user can skip; confirmation of assumed decisions that change
+  observable behavior (v1.9.0 evidence: every spec silently resolved one
+  ambiguous requirement the same way, and every executor shipped it with a
+  green suite); spec review before dispatch; fresh-context review fixes with
+  cycle limits; and the v1.11.0 end-to-end stop list;
 - `online-actions.sh` patterns for `helm`, `aws`
   ecs/lambda/cloudformation/elasticbeanstalk/amplify, `netlify deploy`,
   `serverless`/`sls deploy`, `gh workflow run`, `docker compose -f` with

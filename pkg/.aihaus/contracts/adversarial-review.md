@@ -27,7 +27,7 @@ and one verdict: `ship`, `ship-with-changes`, or `blocked`.
 
 ## Spec review
 
-In `workflow` mode, review the spec before dispatch against the request and the
+When a spec drives executors, review it before dispatch against the request and the
 code, not against tests derived from it: a wrong spec passes its own suite. For
 each criterion, check the cited root cause, the exact behavior, the case table,
 and the tests to add. Report every ambiguous requirement the spec resolves

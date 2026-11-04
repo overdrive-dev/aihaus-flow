@@ -10,13 +10,10 @@ This repository uses the local `.aihaus/` package.
 3. Load one task room and one primary role. When accepted project Assignments
    in `.aihaus/memory/project/procedures.md` define a default role and profile
    for the user-facing session, adopt them unless the user or higher-priority
-   instructions direct otherwise. A request may name an execution mode and
-   profile, and Assignments may also record a default mode. Apply the
-   requested or default mode, or else `auto` (see Execution modes in the
-   harness), within the requested scope and existing authorization; a recorded
-   `Default mode: delegation.` applies the project's delegation policy instead.
-   Delegated agents retain their assigned roles and select no mode. Without
-   these defaults, select one room and one primary role per task.
+   instructions direct otherwise. Choose how to carry out the request under
+   Working style in the harness, within the requested scope and existing
+   authorization. Delegated agents retain their assigned roles. Without these
+   defaults, select one room and one primary role per task.
 4. Route orchestration starts and resumes through the MAP, harness, task
    context, and `.aihaus/roles/orchestrator.md`.
 5. Use `.aihaus/memory/project/README.md` to select memory; indexes only locate

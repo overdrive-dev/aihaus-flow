@@ -95,85 +95,63 @@ is a self-check and never satisfies a required pass. An authoring session that
 is not a delegated executor may start the separate context itself. Author and
 reviewer may exchange verdicts directly; the designated writer keeps task state.
 
-## Execution modes
+## Working style
 
-A request may name an execution mode, `pure`, `normal`, `workflow`, or `auto`,
-optionally with a profile (`Mode: workflow. Profile: <name>.`); a profile named
-alone keeps the default mode. Otherwise the default mode recorded in Assignments
-(`Default mode: <mode>.`) applies; without either, `auto` applies. A recorded
-`Default mode: delegation.` applies the project's delegation policy instead of
-a mode. A mode replaces the delegation policy for that request, not the
-project's concurrency limits. Once the mode is set, the agent never switches
-modes on its own; it may recommend one in a single line. The task records the
-mode and profile used.
+The agent chooses how to carry out each request: alone, with a planner and
+executors, in parallel, or through a host multi-agent workflow engine when the
+host enables one. It stays within the request, the selected room, Assignments
+(routes, profiles, a recorded delegation policy, and concurrency limits),
+Autonomy, `ops-safety.md`, and these rules. The task records who implemented,
+who reviewed, and the profile used.
 
-- `auto`: before starting, the agent selects the mode and states it with its
-  reason in one line, then proceeds; the user may switch it, and the task
-  records the reason. A request that changes no repository file, such as a
-  question or read-only analysis, needs no mode. One coherent outcome selects
-  `normal`; two or more independent outcomes with disjoint files select
-  `workflow`; when unsure, `normal`. `auto` never selects `pure`.
+- Judgment passes. A behavior change gets a judgment pass on its candidate SHA
+  before completion or integration; a covered, low-risk mechanical edit on the
+  feature room's quick path needs none. The profile's reviewer, or the reviewer
+  the user names, runs it, preferably from another model family when one is
+  available. Only the user's request skips a required pass: the agent reports
+  the result as unreviewed and names each skipped pass, and a skipped pass
+  satisfies no Autonomy condition, while a valid receipt for the unchanged
+  candidate SHA still does.
+- Assumed decisions. A requirement resolved silently passes its own tests, and
+  a spec spreads that choice to every executor. Before implementing a behavior
+  change, and before dispatching executors from a spec, list the decisions
+  assumed on ambiguous requirements that change behavior users or callers can
+  observe, including ambiguities a spec review reports as unlisted, and get the
+  user's confirmation; with none, say so and continue without stopping.
+  Technical mechanics follow `conventions.md` and are not listed. Only the
+  user's answer to the list shown confirms it; a general go-ahead does not. A
+  request may accept the assumed decisions in advance with
+  `Assumed decisions: accept.`: this applies to that request only, never as a
+  recorded default or by inference, and the agent records the decisions on the
+  task, includes them in the final judgment pass's brief, and reports them with
+  the result.
+- Specs that drive executors. A read-only planner (profile planner model)
+  returns the spec as `roles/planner.md` describes; the orchestrator saves it,
+  and the task links it by path and revision. Before any dispatch, a judgment
+  pass reviews the spec; its findings return to the planner in a fresh context,
+  at most two cycles. Executors (profile executor model) implement the packets
+  in parallel, each in its own files, running their own tests. After all
+  packets, the orchestrator runs the full deterministic suite and allows one
+  rework from its output; a final judgment pass then reviews the candidate SHA.
+  Past either limit, the affected work pauses.
+- Review fixes run in a fresh context (an executor or a new session briefed with
+  the candidate diff and the findings), never by resuming the authoring session;
+  continuing the author's conversation, by message or as a fork, counts as
+  resuming. A fix and its recheck may run in the same host run. A spec amended
+  after its review, by anyone, needs a new spec review within the same cycle
+  limit. Spec and fix cycles recorded on the task count across runs against
+  their limits (`roles/orchestrator.md` step 8): the session passes them into
+  each run, the designated writer records each new cycle, and past a limit the
+  affected work pauses until the user directs otherwise. Spec reviews, their
+  verdict receipts, and rechecks follow `adversarial-review.md`.
+- End to end. A task runs to completion and stops only for an unconfirmed
+  assumed decision, a business-rule question, a reached limit, a pause under
+  `roles/orchestrator.md` step 8 or `ops-safety.md`, a step that outlasts the
+  host's agent limits, or before the first remote write without authorization.
 
-- `pure`: the user-facing session works alone, with no planner, executor, or
-  judgment pass. It runs the deterministic checks the task requires and reports
-  the result as unreviewed, naming each required pass it skipped. Evidence,
-  Autonomy, and `ops-safety.md` still apply; a skipped pass satisfies no
-  Autonomy condition, while a valid receipt for the unchanged candidate SHA
-  still does. It works in its own turns, with no host run, fork, or subagent;
-  when a request also asks for one, the agent names the conflict in one line
-  and follows the mode.
-- `normal`: the user-facing session implements the change itself and runs the
-  deterministic checks; a judgment pass then reviews the candidate SHA. The
-  session writes the change in its own turns, not through host-run agents or
-  forks, even under a standing host opt-in; read-only helpers, the judgment
-  pass, and review fixes may run in fresh agents.
-- `workflow`: the read-only planner (profile planner model) returns a spec as
-  `roles/planner.md` describes; the orchestrator saves it, and the task links
-  it by path and revision. Before any dispatch, a judgment pass reviews the
-  spec; its findings return to the planner in a fresh context, at most two
-  cycles. Executors (profile executor model) then implement the packets in
-  parallel, each in its own files, running their own tests. After all packets,
-  the orchestrator runs the full deterministic suite and allows one rework from
-  its output; a final judgment pass then reviews the candidate SHA. Past either
-  limit, the affected work pauses.
-
-In `normal` and `workflow`, the profile's reviewer, or the reviewer the user
-names, runs these judgment passes, preferably from another model family when
-one is available; other required passes run as assigned. Before implementation
-(in `workflow`, after the spec review and before dispatch), list the decisions
-assumed on ambiguous requirements that change behavior, including ambiguities
-the spec review reports as unlisted, and get the user's confirmation, or say
-that there are none and continue without stopping. Only the user's answer to
-the list shown confirms it; a general go-ahead does not. A request may instead
-accept the assumed decisions in advance with `Assumed decisions: accept.`:
-this applies to that request only, never as a recorded default or by inference,
-and the agent records the decisions on the task, includes them in the final
-judgment pass's brief, and reports them with the result. Review fixes run in a
-fresh context (an executor or a new session briefed with the candidate diff and
-the findings), never by resuming the authoring session; continuing the author's
-conversation, by message or as a fork, counts as resuming. A fix and its recheck
-may run in the same host run. A spec amended after its review, by anyone, needs
-a new spec review within the same cycle limit. Spec and fix cycles recorded on
-the task count across runs against their limits (`roles/orchestrator.md` step
-8): the session passes them into each run, the designated writer records each
-new cycle, and past a limit the affected work pauses until the user directs
-otherwise. Spec reviews, their verdict receipts, and rechecks follow
-`adversarial-review.md`.
-
-Keep all orchestration thin: dispatch executors directly, one subagent or CLI
-run per packet or outcome; run the deterministic checks; and rely on summaries
-and `tools/scope-check.mjs`. A host multi-agent workflow engine is not
-required; use one only when the user asks for it. A standing host opt-in counts
-as asking. A host run is a mechanism, not a mode: it never selects or changes
-the mode, and its script is the orchestrator's written assignment, carrying the
-selected mode's sequence, gates, and limits as code within the project's
-concurrency limits. When a host run is used, run a mode's consecutive steps in
-one host run; in `normal`, it starts after the session's own implementation and
-covers the judgment pass, review fixes, and rechecks. Without a host engine,
-follow the same sequence directly. End a host run early only for an
-unconfirmed assumed decision, a business-rule question, a reached limit, a
-pause under `roles/orchestrator.md` step 8 or `ops-safety.md`, a step that
-outlasts the host's agent limits, or before the first remote write.
+Keep orchestration thin: dispatch executors directly, one subagent, CLI run, or
+host workflow agent per packet or outcome; run the deterministic checks; and
+rely on summaries and `tools/scope-check.mjs`.
 
 ## Execution
 

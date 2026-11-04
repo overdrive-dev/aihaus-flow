@@ -14,8 +14,8 @@ single business-rule question that genuinely blocks execution. Never dispatch
 workers or receive their deliveries; no separate artifact, worktree, or commit
 is required.
 
-In `workflow` mode (harness, Execution modes), return the plan as a spec. Split
-it into packets that own disjoint files inside the task worktree. For each
+When the plan will drive executors (harness, Working style), return it as a
+spec. Split it into packets that own disjoint files inside the task worktree. For each
 acceptance criterion, give the root cause at `path:line`, the exact behavior, a
 case table for a rule over open inputs, and the tests to add. End with an
 "Assumed decisions" list naming every decision taken on an ambiguous

@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.14.0 - 2026-11-04
+
+No execution modes: the agent chooses how to work, and the guarantees stay.
+
+- The harness drops Execution modes (`pure`, `normal`, `workflow`, `auto`)
+  and `Default mode:`. A Working style section lets the agent choose how to
+  carry out each request: alone, with a planner and executors, in parallel, or
+  through a host workflow engine. It stays within the request, the room,
+  Assignments (including a recorded `Delegation:` policy and concurrency
+  limits), Autonomy, and `ops-safety.md`.
+- These rules apply to every request:
+  - A behavior change gets a judgment pass in a separate context; a covered,
+    low-risk mechanical edit on the quick path needs none. Only the user's
+    request skips a required pass, and the result is reported as unreviewed.
+  - Decisions assumed on ambiguous requirements that change behavior users or
+    callers can observe are listed and confirmed before implementation or
+    dispatch. Technical mechanics are not listed. `Assumed decisions: accept.`
+    still works for one request.
+  - A spec that drives executors is reviewed before dispatch (at most two
+    cycles), the full suite runs after the packets (one rework), and a final
+    judgment pass reviews the candidate.
+  - Review fixes run in a fresh context, and cycles count across runs.
+  - A task runs end to end and stops only at the listed exits.
+- Dropped: the host-run choreography (when to use a host workflow engine, one
+  host run per mode sequence) and the README ultracode notes. The agent decides
+  how to use host options.
+- MAP, router, orchestrator and planner roles, adversarial review, README,
+  architecture, and provenance follow.
+- Migration: `Default mode:` lines in Assignments no longer have an effect;
+  delete them. `Default mode: delegation.` becomes the recorded `Delegation:`
+  policy, which still applies. A `Mode: ...` line in a request reads as a plain
+  instruction: `Mode: pure.` means work alone without review, reported as
+  unreviewed. To fix how work runs for a project, record a `Delegation:` policy
+  in Assignments; for one request, say it in the request.
+- Project memory templates are unchanged.
+
 ## 1.13.0 - 2026-11-04
 
 Claude Code reads AGENTS.md directly; four more rules adapted from Ponytail.

@@ -27,12 +27,11 @@ that tracker the task authority.
 Project routes, assignments, profiles, and permissions live in project memory,
 not in package-owned files (see conventions.md). When the project defines them,
 `memory/project/procedures.md` holds Assignments (routes, profiles, the default
-role and profile for the user-facing session, and the default execution mode)
-and Autonomy (accepted integration permissions). A request may name an
-execution mode instead; the harness defines the modes. Load Assignments before
-delegating or adopting the default session role. Check Autonomy before any
-integration, including solo work; without applicable authorization, stop
-before the first remote write.
+role and profile for the user-facing session, and concurrency limits) and
+Autonomy (accepted integration permissions); the harness Working style says how
+work runs. Load Assignments before delegating or adopting the default session
+role. Check Autonomy before any integration, including solo work; without
+applicable authorization, stop before the first remote write.
 
 If no row fits, use the smallest existing room and record the missing case in
 the task. A new room requires repeated lab evidence, not a one-off request.
