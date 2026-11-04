@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.13.0 - 2026-11-04
+
+Claude Code reads AGENTS.md directly; four more rules adapted from Ponytail.
+
+- Setup no longer writes CLAUDE.md by default. Claude Code v2.1.281 and later
+  reads AGENTS.md itself when the repository has no CLAUDE.md,
+  .claude/CLAUDE.md, or CLAUDE.local.md; `adapters["CLAUDE.md"]` reports
+  `not-needed`.
+- When the repository has one of those files, Claude reads it instead of
+  AGENTS.md, so setup keeps or creates the managed `@AGENTS.md` import in
+  CLAUDE.md, as before.
+- Without a root CLAUDE.md, Claude also reads subdirectory AGENTS.md files in
+  their native scope.
+- `conventions.md` adds four rules adapted from Ponytail: a vague request gets
+  the smallest version that does its core job; between options of equal size,
+  pick the one correct on edge cases; no wrapper or type conversion, and values
+  stay in the form the platform returns; comments explain only the why that the
+  code cannot show.
+- README states the Claude Code v2.1.281 requirement and the CLAUDE.md rule in
+  What setup changes, and adds a troubleshooting entry for Claude ignoring the
+  router.
+- Migration: on update, a CLAUDE.md that holds only the aihaus block is removed
+  (`--check` reports `would-remove`), and Claude reads AGENTS.md directly. A
+  CLAUDE.md with your own text keeps its import. Sessions that cannot read
+  AGENTS.md (Claude Code before v2.1.281, or the built-in AGENTS.md plugin
+  turned off) need a CLAUDE.md with your own `@AGENTS.md` line; setup keeps it.
+- Project memory templates are unchanged.
+
 ## 1.12.0 - 2026-11-03
 
 Reuse-first change ladder, adapted from Ponytail.

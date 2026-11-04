@@ -270,6 +270,11 @@ test("conventions and review carry the reuse-first change ladder", async () => {
       "then the standard library or platform",
       "never a new one for a few lines",
       "Finish every caller, test, fixture, and export",
+      "A vague request gets the smallest version that does its core job",
+      "between options of equal size, pick the one correct on edge cases",
+      "Add no abstraction, wrapper, type conversion",
+      "keep values in the form the platform returns",
+      "Comments explain only the why that the code cannot show",
       "Never trade away, even in moved or merged code, validation at trust boundaries",
       "calibration that physical hardware needs",
       "`shortcut: <the limit>, <when to upgrade>`",
@@ -564,6 +569,22 @@ test("release version is consistent across changelog and README install pin", as
   assert.match(changelog, new RegExp(`^## ${escapeRegExp(version)} - `, "m"));
 });
 
+test("1.13.0 changelog documents migration for the removed CLAUDE.md", async () => {
+  const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
+  const start = changelog.indexOf("## 1.13.0 - ");
+  assert.notEqual(start, -1, "1.13.0 changelog entry must exist");
+  const end = changelog.indexOf("\n## ", start + 1);
+  assertAnchors(
+    changelog.slice(start, end === -1 ? undefined : end),
+    [
+      "a CLAUDE.md that holds only the aihaus block is removed",
+      "A CLAUDE.md with your own text keeps its import",
+      "need a CLAUDE.md with your own `@AGENTS.md` line; setup keeps it",
+    ],
+    "1.13.0 changelog entry",
+  );
+});
+
 test("1.12.0 changelog documents migration and opt-out", async () => {
   const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
   const start = changelog.indexOf("## 1.12.0 - ");
@@ -614,9 +635,8 @@ test("1.10.0 changelog documents migration and opt-out", async () => {
   );
 });
 
-test("root CLAUDE.md imports AGENTS.md as its first non-empty line", async () => {
-  const lines = (await text(path.join(root, "CLAUDE.md"))).split(/\r?\n/).filter((line) => line.trim() !== "");
-  assert.equal(lines[0], "@AGENTS.md");
+test("maintainer repository has no root CLAUDE.md, so Claude reads AGENTS.md", async () => {
+  await assert.rejects(text(path.join(root, "CLAUDE.md")), { code: "ENOENT" });
 });
 
 test("refresh template hashes match the project memory templates", async () => {

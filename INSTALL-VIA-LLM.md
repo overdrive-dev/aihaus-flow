@@ -64,14 +64,16 @@ Identity and scope:
    - cleanup.path: null and cleanup.pending: false.
 6. Interpret ownership precisely. Paths in created/refreshed are package-owned;
    refreshing them may replace prior package files. Project memory listed in
-   preserved and text outside bounded AIHAUS blocks remain user-owned. CLAUDE.md
-   is a host adapter, not evidence of a Claude runtime dependency. The setup
+   preserved and text outside bounded AIHAUS blocks remain user-owned. The setup
    may refresh `.claude/skills/aih-refresh/SKILL.md` and
    `.agents/skills/aih-refresh/SKILL.md` only when their aihaus ownership marker is
    present. It must preserve a user-owned collision, report it in conflicts,
    and set that host capability's available field to false.
-   The managed CLAUDE.md block imports AGENTS.md with @AGENTS.md so Claude also
-   reads shared user instructions. A nonempty root AGENTS.override.md is
+   Claude Code reads AGENTS.md directly, so adapters reports CLAUDE.md as
+   not-needed. Only when the repository also has a CLAUDE.md with user text, a
+   .claude/CLAUDE.md, or a CLAUDE.local.md does setup keep or create a managed
+   @AGENTS.md import in CLAUDE.md; a CLAUDE.md holding only that block is
+   otherwise reported in adapters as would-remove or removed. A nonempty root AGENTS.override.md is
    preserved and reported in instructionWarnings because Codex can select it
    instead of AGENTS.md; this does not disable an otherwise valid refresh skill.
    Repeating an unchanged release should report changesRequired: false, empty

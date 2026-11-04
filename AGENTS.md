@@ -1,7 +1,8 @@
 # aihaus repository map
 
-aihaus is a downloadable GitHub package, not a website. The publishable payload
-lives in `pkg/`; repository-only tests, lab tooling, and docs live outside it.
+aihaus is a downloadable GitHub package: no website, hosted service or state, or
+global agent mutation. The publishable payload lives in `pkg/`; repository-only
+tests, lab tooling, and docs live outside it.
 
 Before changing the package:
 
@@ -21,10 +22,8 @@ Implementation rules:
   that demonstrates the need.
 - Generated dogfood state belongs only under ignored `.aihaus-lab/`.
 
-Validation: `node tools/run-contract-tests.mjs`.
-
-See `docs/architecture.md` for boundaries and `docs/provenance.md` before any
-deletion wave.
+Validation: `node tools/run-contract-tests.mjs`. See `docs/architecture.md` for
+boundaries and `docs/provenance.md` before any deletion wave.
 
 Maintainer runbook:
 
@@ -39,10 +38,11 @@ Maintainer runbook:
 - Suite ~50 s, run by the author (Codex sandbox can't spawn); Windows skips 1 test.
 - Host A/B labs, one consumer per arm: `AIHAUS_LAB_ROOT=.aihaus-lab/ab/<arm>
   node <checkout>/tools/aihaus-lab.mjs init`; `claude` and `gh` run in PowerShell.
-  At most two sessions: `claude -p --model opus --effort ultracode --restricted
-  --strict-mcp-config --tools <tools> --allowedTools <commands> --permission-mode
-  acceptEdits --max-budget-usd 15`, `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`. It
-  loads no CLAUDE.md or user plugins: the prompt says to read AGENTS.md.
+  At most two sessions: `claude -p --model opus --effort ultracode --strict-mcp-config
+  --tools <tools> --allowedTools <commands> --permission-mode acceptEdits
+  --max-budget-usd 15` with `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`; add `--restricted`
+  (no instruction files; prompt says read AGENTS.md) or, for native loading,
+  `--setting-sources project,local` and `claudeMdExcludes` for this AGENTS.md.
 - Setup replaces package-owned surfaces and never reseeds existing memory;
   `refresh.mjs` hashes memory templates. Ship new guidance through MAP,
   contracts, rooms, roles, or the router, not memory templates.
