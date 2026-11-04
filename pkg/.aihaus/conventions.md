@@ -26,7 +26,7 @@
   need; deletion beats addition, and the repository's layers and interfaces
   stay. Never trade away, even in moved or merged code, validation at trust
   boundaries, error handling that prevents data loss, security, accessibility,
-  or anything requested.
+  calibration that physical hardware needs, or anything requested.
 - A shortcut with a known limit carries a `shortcut: <the limit>, <when to
   upgrade>` comment.
 - Claims cite `path:line`; executable claims also carry command and exit code.
@@ -40,3 +40,5 @@
   `memory/project/README.md`) may date from an earlier version; where it
   conflicts with a package-owned file, the package-owned file wins. Accepted
   project decisions keep their authority under `contracts/harness.md`.
+
+Adapted from [Ponytail](https://github.com/DietrichGebert/ponytail), Copyright (c) 2026 DietrichGebert, MIT License; full notice in the aihaus package's `LICENSE`.

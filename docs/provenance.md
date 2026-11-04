@@ -34,8 +34,9 @@ must be ported, intentionally dropped, or archived before deletion.
 - [Ponytail](https://github.com/DietrichGebert/ponytail) (MIT, read at
   `96608e0`): the reuse-first change ladder, the never-trade-away list, and the
   `shortcut:` comment in `conventions.md`; the lean checklist in the
-  adversarial-review complexity lens. The text is paraphrased. Its levels,
-  hooks, status band, and skills are not shipped.
+  adversarial-review complexity lens. Some text follows the original closely;
+  Ponytail's full MIT notice is in `pkg/LICENSE`. Its levels, hooks, status
+  band, and skills are not shipped.
 
 ## Port as workflow contracts
 

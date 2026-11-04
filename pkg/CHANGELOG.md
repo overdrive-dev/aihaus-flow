@@ -10,7 +10,8 @@ Reuse-first change ladder, adapted from Ponytail.
   then the least new code that stays readable. Changes finish every caller,
   test, fixture, and export they reach, add no speculative abstraction or
   option, and never trade away validation at trust boundaries, error handling
-  that prevents data loss, security, accessibility, or anything requested.
+  that prevents data loss, security, accessibility, calibration that physical
+  hardware needs, or anything requested.
 - A shortcut with a known limit carries a `shortcut: <the limit>, <when to
   upgrade>` comment; the review complexity lens treats it as a decision unless
   the expected load crosses it.
@@ -21,6 +22,7 @@ Reuse-first change ladder, adapted from Ponytail.
 - Implementer reports name what was skipped or left unchecked.
 - README credits Ponytail (MIT); aihaus does not install it, and
   `/ponytail-review` does not replace the verdict receipt.
+- `pkg/LICENSE` carries Ponytail's full MIT notice.
 - Migration: package-owned conventions, roles, and contracts are replaced on
   update, so the ladder applies to every code change. To keep a different
   rule, state it in repository instructions or an accepted project rule, which

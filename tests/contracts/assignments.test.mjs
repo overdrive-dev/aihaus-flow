@@ -271,9 +271,16 @@ test("conventions and review carry the reuse-first change ladder", async () => {
       "never a new one for a few lines",
       "Finish every caller, test, fixture, and export",
       "Never trade away, even in moved or merged code, validation at trust boundaries",
+      "calibration that physical hardware needs",
       "`shortcut: <the limit>, <when to upgrade>`",
+      "Copyright (c) 2026 DietrichGebert",
     ],
     "conventions.md",
+  );
+  assertAnchors(
+    await text(path.join(root, "pkg", "LICENSE")),
+    ["Copyright (c) 2026 DietrichGebert"],
+    "package license",
   );
   assertAnchors(
     await text(path.join(packageRoot, "contracts", "adversarial-review.md")),
