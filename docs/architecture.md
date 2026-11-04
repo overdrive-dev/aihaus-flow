@@ -136,16 +136,17 @@ Existing installs whose `procedures.md` lacks these sections keep their current
 role selection: one room and one primary role per task. Setup never seeds
 either section. Host watching and messaging are not package state.
 
-Execution modes set, per request, who implements and who reviews: `pure` (the
-session alone, reported as unreviewed), `normal` (the session implements; a
-separate context reviews), or `workflow` (a planner's spec, reviewed before
-dispatch, then parallel executors and a final review). A request names its
-mode, or Assignments record a default; without either, `auto` selects `normal`
-or `workflow` per request and says why, and `Default mode: delegation.` keeps
-the delegation policy. `auto` never selects `pure`, because skipping review
-must be the user's choice. The spec review exists because a spec error reaches
-every executor and every test derived from the spec. The rules are in the
-harness.
+The agent chooses how to carry out each request: alone, with a planner and
+executors, in parallel, or through a host workflow engine. Package rules fix
+only what that choice must not lose. A behavior change gets a judgment pass in
+a separate context, and only the user can skip it. Assumed decisions that
+change observable behavior are confirmed before implementation, because a
+requirement resolved silently passes its own tests. A spec that drives
+executors is reviewed before dispatch, because a spec error reaches every
+executor and every test derived from the spec. Review fixes run in a fresh
+context, and a task stops only at its listed exits. The rules are under
+Working style in the harness; v1.9.0 through v1.13.0 expressed them as
+execution modes, which v1.14.0 removed.
 
 ## Evolution rule
 

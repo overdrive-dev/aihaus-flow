@@ -46,4 +46,4 @@ Maintainer runbook:
 - Setup replaces package-owned surfaces and never reseeds existing memory;
   `refresh.mjs` hashes memory templates. Ship new guidance through MAP,
   contracts, rooms, roles, or the router, not memory templates.
-- Execution modes apply; no Assignments here, so `auto`. Profile: README `luna`.
+- No Assignments here; harness Working style applies. Profile: README `luna`.

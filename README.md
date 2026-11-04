@@ -89,13 +89,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.13.0`):
+Current published release (`v1.14.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.13.0/aihaus-flow-v1.13.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.14.0/aihaus-flow-v1.14.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.13.0` with the same tag.
+For another release, replace both occurrences of `v1.14.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -383,12 +383,10 @@ workspace-write Codex executor cannot commit in a linked worktree (`index.lock`
 is denied), so the hosting agent commits the packet.
 
 A profile may also record triggers for when the planner runs and when
-executors move to a stronger model. These triggers apply only when the
-selected path uses a planner or executors: in `workflow`, or under the
-delegation policy (`Default mode: delegation.`). In the example below,
-executors upgrade on the listed triggers; under the delegation policy, the
-planner also runs for large or unfamiliar scope under orchestrator step 3. If
-an upgraded model is unavailable, the fallback rule below applies; the profile
+executors move to a stronger model. These triggers apply whenever the work uses
+a planner or executors. In the example below, executors upgrade on the listed
+triggers, and the planner also runs for large or unfamiliar scope under
+orchestrator step 3. If an upgraded model is unavailable, the fallback rule below applies; the profile
 model counts only when recorded as a fallback:
 
 ```text
@@ -401,70 +399,56 @@ inputs (filter, classifier, parser).
 Then set the default for the session you talk to:
 
 ```text
-Main session: orchestrator. Default profile: claude. Default mode: auto.
+Main session: orchestrator. Default profile: claude.
 Limits: up to 4 executors; tests run one at a time.
 ```
 
 With these defaults no kickoff prompt is needed: you talk in natural language.
-In `auto`, the agent selects the mode for each request and states it with its
-reason in one line before starting: `normal` for one coherent outcome,
-`workflow` for two or more independent outcomes with disjoint files, and no
-mode for a question or read-only analysis. When unsure it selects `normal`,
-and it never selects `pure`. `auto` is also what applies when no default mode
-is recorded. In `normal` mode, the session implements the change and runs the
-deterministic checks, then the profile's reviewer or the reviewer you name
-reviews the candidate in a separate context, preferably from another model
-family when one is available. The session writes the change in its own turns,
-even when a host option such as Claude Code's ultracode would start a workflow;
-only read-only helpers, the review, and review fixes run in fresh agents.
-Review fixes run in a fresh context, and rechecks follow
-`adversarial-review.md`. The session integrates within Autonomy unless you
-direct otherwise. Without them, the agent selects one room and one primary
-role per task. Selecting a profile does not switch the running session's
+The agent chooses how to carry out each request: alone, with a planner and
+executors, in parallel, or through your host's multi-agent workflow when you
+turn one on (Working style in the harness). Whatever it chooses:
+
+- A behavior change gets a review in a separate context, by the profile's
+  reviewer or one you name, preferably from another model family when one is
+  available. A covered, low-risk mechanical edit needs none. Only you can skip
+  a review, by asking in the request; the result is then reported as
+  unreviewed.
+- Before writing a behavior change, the agent lists the decisions it assumed
+  on ambiguous requirements that change what users or callers can observe, and
+  waits for your answer; when there are none, it says so and continues. Only
+  your answer to that list confirms it; a general go-ahead does not. To skip
+  the wait for one request, add `Assumed decisions: accept.`; the agent records
+  the decisions and reports them with the result.
+- When a planner's spec drives parallel executors, the spec is reviewed before
+  dispatch, the full suite runs after the packets, and the candidate gets a
+  final review.
+- Review fixes run in a fresh context, not in the session that wrote the code,
+  and rechecks follow `adversarial-review.md`.
+- The task runs end to end. It stops only for an open decision, a
+  business-rule question, a reached limit, a safety pause, or before the first
+  remote write without authorization.
+
+The session integrates within Autonomy unless you direct otherwise. Without
+Assignments, the agent selects one room and one primary role per task. Selecting a profile does not switch the running session's
 model; the agent reports unavailable requirements instead of silently
 substituting. For each profile, record allowed fallbacks by role, or `none`.
 If a requirement is unavailable, the agent uses only a recorded fallback and
 reports the actual model/settings; otherwise it pauses the affected assignment.
 
-Name an execution mode in a request, optionally with a profile; otherwise the
-recorded `Default mode:` applies, and without one, `auto`. To keep a recorded
-`Delegation:` policy, such as everything except trivial requests, record
-`Default mode: delegation.` Once the mode is set, the agent never switches
-modes on its own; it may recommend one in a single line.
-
-| Mode | Who implements | Review |
-|---|---|---|
-| `pure` | the session you talk to, alone | none; reported as unreviewed, naming each skipped pass |
-| `normal` | the session you talk to | the profile's reviewer or one you name, in a separate context, preferably another model family |
-| `workflow` | executors, one per packet of the planner's spec | the spec before dispatch, then the candidate after the full suite |
-| `auto` | as the mode it selects: `normal` or `workflow` | as the mode it selects |
-
-In `normal` and `workflow`, the agent lists the decisions it assumed on
-ambiguous requirements that change behavior and waits for your confirmation
-before implementing; when there are none, it says so and continues. Only your
-answer to that list confirms it; a general go-ahead does not. To skip the wait
-for one request, add `Assumed decisions: accept.`; the agent records the
-decisions and reports them with the result. Review fixes run in a fresh
-context, not in the session that wrote the code. Example requests:
+A recorded `Delegation:` policy in Assignments, such as everything except
+trivial requests, still applies. To steer one request, say so in plain words.
+Example requests:
 
 ```text
-Mode: pure. Fix the typo in the install section.
+Fix the typo in the install section. No review.
 ```
 
 ```text
-Mode: normal. Add CSV export to the invoice list and prove each criterion.
+Add CSV export to the invoice list and prove each criterion.
 ```
 
 ```text
-Mode: workflow. Profile: luna. Fix the findings listed in docs/audit.md.
-```
-
-Without a mode, `auto` answers with a line such as
-`Mode: workflow (five independent findings in separate files).` before it
-starts:
-
-```text
-Fix the findings listed in docs/audit.md.
+Profile: luna. Fix the findings listed in docs/audit.md, in parallel.
 ```
 
 Use a moving alias when the host supports one, or an exact model ID when
@@ -497,14 +481,11 @@ that does not reload instructions after compaction or a handoff, resume with:
 Resume <task> with its recorded profile; reload aihaus context and reconcile integrated work before acting.
 ```
 
-Host-specific multi-agent opt-ins stay in host configuration; messaging and
-process watching use your host tool. In Claude Code, ultracode is a standing
-opt-in to workflows: aihaus runs a mode's consecutive steps in one workflow
-and stops between workflows only at the early exits the harness lists
-(Execution modes). A fork inherits the session's conversation and model, so it
-never reviews or fixes review findings; `CLAUDE_CODE_FORK_SUBAGENT=0` turns
-forks off. To keep cost bounded, type the `ultracode` keyword per prompt instead
-of turning it on for the whole session.
+Host-specific multi-agent options, such as Claude Code's ultracode, stay in
+host configuration; the agent decides how to use them, and the rules above
+still apply. Messaging and process watching use your host tool. A fork inherits
+the session's conversation and model, so it never reviews or fixes review
+findings.
 
 ## Update aihaus
 
