@@ -22,7 +22,8 @@ Reuse-first change ladder, adapted from Ponytail.
 - Implementer reports name what was skipped or left unchecked.
 - README credits Ponytail (MIT); aihaus does not install it, and
   `/ponytail-review` does not replace the verdict receipt.
-- `pkg/LICENSE` carries Ponytail's full MIT notice.
+- `pkg/LICENSE` and the installed `conventions.md` carry Ponytail's full MIT
+  notice.
 - Migration: package-owned conventions, roles, and contracts are replaced on
   update, so the ladder applies to every code change. To keep a different
   rule, state it in repository instructions or an accepted project rule, which

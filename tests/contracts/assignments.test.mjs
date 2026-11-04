@@ -274,6 +274,7 @@ test("conventions and review carry the reuse-first change ladder", async () => {
       "calibration that physical hardware needs",
       "`shortcut: <the limit>, <when to upgrade>`",
       "Copyright (c) 2026 DietrichGebert",
+      "The above copyright notice and this permission notice shall be included",
     ],
     "conventions.md",
   );
