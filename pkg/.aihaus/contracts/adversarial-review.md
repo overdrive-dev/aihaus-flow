@@ -15,7 +15,12 @@ For every acceptance criterion:
 Use task-specific lenses when triggered: security/threat path, migration
 reversibility and data loss, integration existence-versus-wiring, capacity
 (worst-case input against time, memory, and token limits, including downstream
-stages when volume rises), complexity, and goal-backward verification.
+stages when volume rises), complexity (code that need not exist: dead code,
+unused options, speculative features, a rewrite of a helper or platform feature
+the repository already has, a new dependency for a few lines, an abstraction
+with one implementation, near-copies that must change together; a `shortcut:`
+comment that names its limit is a decision, not a finding, unless the expected
+load crosses it), and goal-backward verification.
 
 Output confirmed findings by severity, criterion results, commands actually run,
 and one verdict: `ship`, `ship-with-changes`, or `blocked`.
