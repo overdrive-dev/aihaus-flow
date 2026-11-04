@@ -140,7 +140,8 @@ The agent chooses how to carry out each request: alone, with a planner and
 executors, in parallel, or through a host workflow engine. Package rules fix
 only what that choice must not lose. A behavior change gets a judgment pass in
 a separate context, and only the user can skip it. Assumed decisions that
-change observable behavior are confirmed before implementation, because a
+change observable behavior are recorded on the task, checked by the reviewer,
+and reported with the result, without stopping the work, because a
 requirement resolved silently passes its own tests. A spec that drives
 executors is reviewed before dispatch, because a spec error reaches every
 executor and every test derived from the spec. Review fixes run in a fresh

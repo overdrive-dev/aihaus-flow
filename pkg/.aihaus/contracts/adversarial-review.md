@@ -12,6 +12,9 @@ For every acceptance criterion:
 5. run real verification when the claim is executable;
 6. reject vague/style-only findings without a reproduction or `path:line`.
 
+Check each assumed decision recorded on the task against the request; report
+one that contradicts the request, or that needs the owner, as a finding.
+
 Use task-specific lenses when triggered: security/threat path, migration
 reversibility and data loss, integration existence-versus-wiring, capacity
 (worst-case input against time, memory, and token limits, including downstream

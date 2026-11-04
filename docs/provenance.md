@@ -23,6 +23,11 @@ must be ported, intentionally dropped, or archived before deletion.
   ambiguous requirement the same way, and every executor shipped it with a
   green suite); spec review before dispatch; fresh-context review fixes with
   cycle limits; and the v1.11.0 end-to-end stop list;
+- the assumed-decisions confirmation stop and `Assumed decisions: accept.`
+  (v1.9.0 to v1.14.0): since v1.15.0 the decisions are recorded on the task,
+  checked in every judgment pass, and reported with the result, without
+  stopping. A missing business rule that materially changes the outcome still
+  stops as a business-rule question;
 - `package-ci.yml`, the pull-request CI on Ubuntu, macOS, and Windows (removed
   after v1.14.0): maintainers run the suite natively and with
   `run-contract-tests.mjs --docker` on Linux, and the release workflow still

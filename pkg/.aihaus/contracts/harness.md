@@ -113,18 +113,15 @@ who reviewed, and the profile used.
   satisfies no Autonomy condition, while a valid receipt for the unchanged
   candidate SHA still does.
 - Assumed decisions. A requirement resolved silently passes its own tests, and
-  a spec spreads that choice to every executor. Before implementing a behavior
-  change, and before dispatching executors from a spec, list the decisions
-  assumed on ambiguous requirements that change behavior users or callers can
-  observe, including ambiguities a spec review reports as unlisted, and get the
-  user's confirmation; with none, say so and continue without stopping.
-  Technical mechanics follow `conventions.md` and are not listed. Only the
-  user's answer to the list shown confirms it; a general go-ahead does not. A
-  request may accept the assumed decisions in advance with
-  `Assumed decisions: accept.`: this applies to that request only, never as a
-  recorded default or by inference, and the agent records the decisions on the
-  task, includes them in the final judgment pass's brief, and reports them with
-  the result.
+  a spec spreads that choice to every executor, so assumed decisions are
+  written down; they are not a stop. Record on the task each decision assumed
+  on an ambiguous requirement that changes behavior users or callers can
+  observe, including ambiguities a spec review reports as unlisted, and
+  continue. Technical mechanics follow `conventions.md` and are not listed.
+  Every judgment pass's brief includes the list, the reviewer checks each
+  decision against the request, and the result reports the list so the user
+  can overturn any decision. Ambiguity that no reasonable reading resolves, or
+  that needs owner authority, is a business-rule question instead.
 - Specs that drive executors. A read-only planner (profile planner model)
   returns the spec as `roles/planner.md` describes; the orchestrator saves it,
   and the task links it by path and revision. Before any dispatch, a judgment
@@ -144,10 +141,10 @@ who reviewed, and the profile used.
   each run, the designated writer records each new cycle, and past a limit the
   affected work pauses until the user directs otherwise. Spec reviews, their
   verdict receipts, and rechecks follow `adversarial-review.md`.
-- End to end. A task runs to completion and stops only for an unconfirmed
-  assumed decision, a business-rule question, a reached limit, a pause under
-  `roles/orchestrator.md` step 8 or `ops-safety.md`, a step that outlasts the
-  host's agent limits, or before the first remote write without authorization.
+- End to end. A task runs to completion and stops only for a business-rule
+  question, a reached limit, a pause under `roles/orchestrator.md` step 8 or
+  `ops-safety.md`, a step that outlasts the host's agent limits, or before the
+  first remote write without authorization.
 
 Keep orchestration thin: dispatch executors directly, one subagent, CLI run, or
 host workflow agent per packet or outcome; run the deterministic checks; and
