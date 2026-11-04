@@ -14,7 +14,10 @@
   status transitions.
 - One writer owns each shared memory file or task transition at a time.
 - Parallel writers must own disjoint file sets; shared files merge sequentially.
-- Business-visible ambiguity is a rule gap. Ask once and record the answer.
+- Business-visible ambiguity that a reasonable reading resolves is an assumed
+  decision: record it on the task and continue (harness, Working style). A
+  missing business rule that materially changes the outcome is a rule gap: ask
+  once and record the answer.
 - Technical mechanics follow repository conventions without option menus.
 - Code changes take the first option that fully works: skip what nobody asked
   for and name it in the report; reuse what the repository already has, the

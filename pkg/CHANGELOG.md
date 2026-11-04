@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.15.0 - 2026-11-04
+
+Assumed decisions are written down, not a stop.
+
+- The agent no longer stops to confirm its assumed decisions. It records on
+  the task each decision assumed on an ambiguous requirement that changes
+  behavior users or callers can observe, including ambiguities a spec review
+  reports as unlisted, and continues. Technical mechanics are not listed.
+- Every judgment pass's brief includes the list. The reviewer checks each
+  decision against the request and reports one that contradicts it, or that
+  needs the owner, as a finding (`adversarial-review.md`).
+- The result reports the list so the user can overturn any decision.
+- Ambiguity that no reasonable reading resolves, or that needs owner
+  authority, is still a business-rule question, and the task stops for it.
+  `conventions.md` now separates the two cases.
+- The end-to-end stop list loses "an unconfirmed assumed decision".
+- README, architecture, and provenance follow.
+- Migration: `Assumed decisions: accept.` is no longer needed and has no
+  effect. To review the assumptions before any code is written, ask for that
+  in the request.
+- Project memory templates are unchanged.
+
 ## 1.14.0 - 2026-11-04
 
 No execution modes: the agent chooses how to work, and the guarantees stay.

@@ -113,15 +113,14 @@ test("harness contract names the two coordination levels and delegation fields",
       "a skipped pass satisfies no Autonomy condition",
       "a valid receipt for the unchanged candidate SHA still does",
       "A requirement resolved silently passes its own tests",
-      "Before implementing a behavior change, and before dispatching executors from a spec",
-      "list the decisions assumed on ambiguous requirements that change behavior users or callers can observe",
+      "they are not a stop",
+      "Record on the task each decision assumed on an ambiguous requirement that changes behavior users or callers can observe",
       "including ambiguities a spec review reports as unlisted",
-      "get the user's confirmation; with none, say so and continue without stopping",
+      "and continue",
       "Technical mechanics follow `conventions.md` and are not listed",
-      "Only the user's answer to the list shown confirms it; a general go-ahead does not",
-      "`Assumed decisions: accept.`",
-      "never as a recorded default or by inference",
-      "includes them in the final judgment pass's brief",
+      "Every judgment pass's brief includes the list, the reviewer checks each decision against the request",
+      "the result reports the list so the user can overturn any decision",
+      "Ambiguity that no reasonable reading resolves, or that needs owner authority, is a business-rule question instead",
       "A read-only planner (profile planner model) returns the spec as `roles/planner.md` describes",
       "the orchestrator saves it",
       "links it by path and revision",
@@ -141,7 +140,7 @@ test("harness contract names the two coordination levels and delegation fields",
       "A spec amended after its review, by anyone, needs a new spec review",
       "count across runs against their limits",
       "Spec reviews, their verdict receipts, and rechecks follow `adversarial-review.md`",
-      "A task runs to completion and stops only for an unconfirmed assumed decision",
+      "A task runs to completion and stops only for a business-rule question",
       "before the first remote write without authorization",
       "Keep orchestration thin",
       "one subagent, CLI run, or host workflow agent per packet or outcome",
@@ -173,6 +172,7 @@ test("adversarial review contract binds verdicts to a candidate SHA", async () =
       "reruns their reproductions",
       "cannot reach the state it requires",
       "historical state the candidate cannot recreate",
+      "Check each assumed decision recorded on the task against the request",
       "## Spec review",
       "When a spec drives executors, review it before dispatch",
       "against the request and the code",
@@ -224,7 +224,7 @@ test("MAP routes assignments, project memory, and package-owned files", async ()
 test("conventions name package-owned files and external trackers", async () => {
   assertAnchors(
     await text(path.join(packageRoot, "conventions.md")),
-    ["external tracker", "package-owned"],
+    ["external tracker", "package-owned", "is an assumed decision: record it on the task and continue", "missing business rule that materially changes the outcome is a rule gap"],
     "conventions.md",
   );
 });
@@ -428,8 +428,9 @@ test("README delegation section documents profiles, session defaults, and Autono
       "The agent chooses how to carry out each request",
       "A behavior change gets a review in a separate context, by the profile's reviewer or one you name",
       "Only you can skip a review, by asking in the request",
-      "lists the decisions it assumed on ambiguous requirements that change what users or callers can observe",
-      "and waits for your answer",
+      "The agent does not stop to confirm its assumptions",
+      "records each decision it assumed on an ambiguous requirement that changes what users or callers can observe",
+      "the result lists them so you can overturn any",
       "When a planner's spec drives parallel executors, the spec is reviewed before dispatch",
       "The task runs end to end",
       "A recorded `Delegation:` policy in Assignments, such as everything except trivial requests, still applies",
@@ -442,9 +443,7 @@ test("README delegation section documents profiles, session defaults, and Autono
       "Review fixes run in a fresh context",
       "rechecks follow `adversarial-review.md`",
       "integrates within Autonomy unless you direct otherwise",
-      "when there are none, it says so and continues",
-      "a general go-ahead does not",
-      "`Assumed decisions: accept.`",
+      "It still asks when a missing business rule would materially change the outcome",
       "yields no verdict",
       "Review fixes run in a fresh context, not in the session that wrote the code",
     ],
@@ -507,6 +506,31 @@ test("release version is consistent across changelog and README install pin", as
   assert.ok(readme.includes(`releases/download/v${version}/aihaus-flow-v${version}.tgz`));
   const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
   assert.match(changelog, new RegExp(`^## ${escapeRegExp(version)} - `, "m"));
+});
+
+test("assumed decisions are recorded and reported, never a confirmation stop", async () => {
+  const stop = /get the user's confirmation|unconfirmed assumed decision|Assumed decisions: accept|waits for your answer/;
+  for (const file of [
+    path.join(packageRoot, "contracts", "harness.md"),
+    path.join(packageRoot, "conventions.md"),
+    path.join(root, "pkg", "adapters", "router.md"),
+    path.join(root, "README.md"),
+    path.join(root, "docs", "architecture.md"),
+  ]) {
+    assert.doesNotMatch(await text(file), stop, file);
+  }
+  const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
+  const start = changelog.indexOf("## 1.15.0 - ");
+  assert.notEqual(start, -1, "1.15.0 changelog entry must exist");
+  const end = changelog.indexOf("\n## ", start + 1);
+  assertAnchors(
+    changelog.slice(start, end === -1 ? undefined : end),
+    [
+      "`Assumed decisions: accept.` is no longer needed and has no effect",
+      "To review the assumptions before any code is written, ask for that in the request",
+    ],
+    "1.15.0 changelog entry",
+  );
 });
 
 test("package guidance names no execution mode", async () => {

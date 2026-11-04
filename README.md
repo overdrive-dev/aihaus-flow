@@ -89,13 +89,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.14.0`):
+Current published release (`v1.15.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.14.0/aihaus-flow-v1.14.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.15.0/aihaus-flow-v1.15.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.14.0` with the same tag.
+For another release, replace both occurrences of `v1.15.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -413,20 +413,19 @@ turn one on (Working style in the harness). Whatever it chooses:
   available. A covered, low-risk mechanical edit needs none. Only you can skip
   a review, by asking in the request; the result is then reported as
   unreviewed.
-- Before writing a behavior change, the agent lists the decisions it assumed
-  on ambiguous requirements that change what users or callers can observe, and
-  waits for your answer; when there are none, it says so and continues. Only
-  your answer to that list confirms it; a general go-ahead does not. To skip
-  the wait for one request, add `Assumed decisions: accept.`; the agent records
-  the decisions and reports them with the result.
+- The agent does not stop to confirm its assumptions. It records each decision
+  it assumed on an ambiguous requirement that changes what users or callers can
+  observe, the reviewer checks them against your request, and the result lists
+  them so you can overturn any. It still asks when a missing business rule
+  would materially change the outcome.
 - When a planner's spec drives parallel executors, the spec is reviewed before
   dispatch, the full suite runs after the packets, and the candidate gets a
   final review.
 - Review fixes run in a fresh context, not in the session that wrote the code,
   and rechecks follow `adversarial-review.md`.
-- The task runs end to end. It stops only for an open decision, a
-  business-rule question, a reached limit, a safety pause, or before the first
-  remote write without authorization.
+- The task runs end to end. It stops only for a business-rule question, a
+  reached limit, a safety pause, or before the first remote write without
+  authorization.
 
 The session integrates within Autonomy unless you direct otherwise. Without
 Assignments, the agent selects one room and one primary role per task. Selecting a profile does not switch the running session's
