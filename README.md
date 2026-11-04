@@ -13,6 +13,8 @@ Use aihaus when you want an agent to:
   next step;
 - keep durable project memory in versioned Markdown;
 - support completion claims with executable evidence;
+- make the smallest complete change, reusing what already exists, with
+  Ponytail's rules built in;
 - work without sending project memory to an aihaus service.
 
 There is no aihaus account, website, hosted control plane, or cloud memory.
@@ -166,7 +168,7 @@ installed entry points are:
 | Path | Purpose | Ownership on update |
 |---|---|---|
 | .aihaus/REFRESH.md | Provider-neutral memory synthesis routine | Package-owned; refreshed only when different or with `--force` |
-| `.aihaus/MAP.md`, `rooms/`, `roles/`, `contracts/`, `tools/` | Portable aihaus workflow | Package-owned; refreshed only when different or with `--force` |
+| `.aihaus/MAP.md`, `conventions.md`, `rooms/`, `roles/`, `contracts/`, `tools/` | Portable aihaus workflow | Package-owned; refreshed only when different or with `--force` |
 | `.aihaus/VERSION` | Installed package version | Package-owned; refreshed only when different or with `--force` |
 | `.aihaus/memory/project/` | Project rules, decisions, knowledge, and procedures | Project-owned and preserved |
 | `.aihaus/memory/kanban/` | File-based task history | Project-owned and preserved |
@@ -277,12 +279,51 @@ Research the safest migration path for the users table and record the decision.
 
 No special aihaus command is required for ordinary agent work.
 
-Code changes follow the reuse-first ladder in `.aihaus/conventions.md`, adapted
-from [Ponytail](https://github.com/DietrichGebert/ponytail) (MIT). aihaus does
-not install Ponytail. If you install its plugin yourself, the aihaus evidence
-and review contracts still decide tests and verdicts: `/ponytail-review` can
-serve as a review lens, but it does not produce the verdict receipt that
-`.aihaus/contracts/adversarial-review.md` requires.
+### Lean code changes, with Ponytail's rules built in
+
+Since v1.12.0, aihaus carries the core rules of
+[Ponytail](https://github.com/DietrichGebert/ponytail) (MIT), so you do not
+need to install the Ponytail plugin or skill to get them. The rules live in
+`.aihaus/conventions.md`, which the Map tells every agent to load whenever
+files may change. They apply on every host, including delegated executors.
+
+- **Change ladder.** Take the first option that fully works:
+  1. skip what nobody asked for, and say what was skipped;
+  2. reuse what the repository already has;
+  3. use the standard library or platform;
+  4. use an installed dependency, never a new one for a few lines;
+  5. otherwise, write the least new code that stays readable.
+- **Still complete.** A change still covers every caller, test, fixture, and
+  export it touches. It never cuts validation at trust boundaries, error
+  handling that prevents data loss, security, accessibility, hardware
+  calibration, or anything requested. The aihaus test and evidence rules still
+  apply.
+- **`shortcut:` comments.** A shortcut with a known limit carries
+  `shortcut: <the limit>, <when to upgrade>`.
+- **Review.** The complexity lens in `.aihaus/contracts/adversarial-review.md`
+  looks for code that need not exist. A `shortcut:` that names its limit is a
+  decision, not a finding, unless the expected load crosses that limit.
+- **Reports.** Implementers name what they skipped or left unchecked.
+
+The rules reach an agent through the aihaus router, not through a hook, so they
+depend on the agent following the Map. aihaus does not install Ponytail. These
+features come only with the Ponytail plugin:
+
+- the `lite`, `full`, and `ultra` levels and the `/ponytail` switch;
+- the `/ponytail-review`, `/ponytail-audit`, `/ponytail-debt`,
+  `/ponytail-gain`, and `/ponytail-help` commands;
+- hooks that inject the rules on every turn and into subagents;
+- the short-reply style on every message, and the status band.
+
+Keep the plugin only if you want those features. It does not conflict with
+aihaus, and where the two differ, the aihaus test, evidence, and review
+contracts decide. `/ponytail-review` can serve as a review lens, but it does not
+produce the verdict receipt that `.aihaus/contracts/adversarial-review.md`
+requires. Ponytail's MIT notice is at the end of the installed
+`.aihaus/conventions.md`.
+
+To keep a different rule for a project, state it in your repository
+instructions or in an accepted project rule. Both rank above package guidance.
 
 ### Delegate to specialist agents
 

@@ -29,6 +29,13 @@ responsibility; rooms describe work. Specialist heuristics such as security,
 migration, integration, complexity, and goal-backward verification are loaded
 as review lenses instead of permanent agent identities.
 
+Code-change discipline lives in `conventions.md`, which the Map loads whenever
+files may change. It holds the reuse-first ladder adapted from Ponytail (MIT)
+and the `shortcut:` comment convention, so the rules reach every role and host
+without a plugin or hook; the complexity lens holds the matching review
+checklist. Host plugins such as Ponytail remain optional and never decide tests
+or verdicts.
+
 The harness requires a context check at task start, resumption, handoff, and
 relevant source changes. The agent resolves its worktree and task, reads native
 instructions for owned paths, checks discovery status, and retrieves only
