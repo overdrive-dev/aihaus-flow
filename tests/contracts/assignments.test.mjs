@@ -510,6 +510,12 @@ test("release version is consistent across changelog and README install pin", as
 });
 
 test("package guidance names no execution mode", async () => {
+  const executionMode = /`(pure|normal|workflow|auto)`|[Ee]xecution modes?|Default mode|\bMode:\s*`?(pure|normal|workflow|auto)\b/;
+  for (const mode of ["pure", "normal", "workflow", "auto"]) {
+    assert.match(`Mode: ${mode}.`, executionMode);
+    assert.match(`Mode:\`${mode}\`.`, executionMode);
+    assert.match(`Mode:  \`${mode}\`.`, executionMode);
+  }
   const files = [
     path.join(packageRoot, "MAP.md"),
     path.join(packageRoot, "contracts", "harness.md"),
@@ -519,7 +525,7 @@ test("package guidance names no execution mode", async () => {
     path.join(root, "pkg", "adapters", "router.md"),
   ];
   for (const file of files) {
-    assert.doesNotMatch(await text(file), /`(pure|normal|workflow|auto)`|[Ee]xecution modes?|Default mode/, file);
+    assert.doesNotMatch(await text(file), executionMode, file);
   }
 });
 
