@@ -306,16 +306,20 @@ files may change. They apply on every host, including delegated executors.
 - **Reports.** Implementers name what they skipped or left unchecked.
 
 The rules reach an agent through the aihaus router, not through a hook, so they
-depend on the agent following the Map. aihaus does not install Ponytail. These
-features come only with the Ponytail plugin:
+depend on the agent following the Map. aihaus does not install Ponytail and does
+not ship these Ponytail features:
 
-- the `lite`, `full`, and `ultra` levels and the `/ponytail` switch;
-- the `/ponytail-review`, `/ponytail-audit`, `/ponytail-debt`,
-  `/ponytail-gain`, and `/ponytail-help` commands;
-- hooks that inject the rules on every turn and into subagents;
-- the short-reply style on every message, and the status band.
+- the six skills: `/ponytail` with its `lite`, `full`, and `ultra` levels,
+  `/ponytail-review`, `/ponytail-audit`, `/ponytail-debt`, `/ponytail-gain`, and
+  `/ponytail-help`. They install on their own with
+  `npx skills add DietrichGebert/ponytail` or come with the plugin;
+- the reply style that ends every message with what was skipped and the risk;
+- plugin integrations, where the host supports them: lifecycle hooks that load
+  the rules at session start, after compaction, and into subagents; a persistent
+  level; and, in Claude Code, the status band.
 
-Keep the plugin only if you want those features. It does not conflict with
+Install the skills or the plugin only if you want those features.
+It does not conflict with
 aihaus, and where the two differ, the aihaus test, evidence, and review
 contracts decide. `/ponytail-review` can serve as a review lens, but it does not
 produce the verdict receipt that `.aihaus/contracts/adversarial-review.md`
