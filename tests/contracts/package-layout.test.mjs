@@ -13,7 +13,6 @@ async function lines(file) {
 
 test("root adapters stay thin", async () => {
   assert.ok(await lines(path.join(root, "AGENTS.md")) <= 50);
-  assert.ok(await lines(path.join(root, "CLAUDE.md")) <= 50);
   assert.ok(await lines(path.join(packageRoot, "MAP.md")) <= 50);
 });
 

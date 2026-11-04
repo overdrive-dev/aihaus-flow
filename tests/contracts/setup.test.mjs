@@ -164,6 +164,7 @@ test("canonical setup supports read-only check and explicit force modes", async 
     assert.deepEqual(preview.wouldCreate, preview.installed);
     assert.ok(preview.wouldSeed.includes("memory/project/project.md"));
     assert.equal(preview.adapters["AGENTS.md"], "would-create");
+    assert.equal(preview.adapters["CLAUDE.md"], "not-needed");
     assert.equal(preview.hostCapabilities.claudeCode.status, "would-create");
     assert.equal(preview.hostCapabilities.claudeCode.available, false);
     assert.equal(preview.verification.ok, false);
@@ -514,7 +515,7 @@ test("setup validates late adapter errors before updating the installed package"
     await writeFile(path.join(temp, ".aihaus", "INIT.md"), "# Previous entry point\n");
     for (const file of ["AGENTS.md", "CLAUDE.md", ".gitignore"]) {
       const destination = path.join(temp, file);
-      const original = await readFile(destination, "utf8");
+      const original = await readFile(destination, "utf8").catch(() => null);
       await writeFile(destination, "User rule\n<!-- AIHAUS:START -->\n");
       const before = await projectSnapshot(temp);
       for (const flags of [["--check"], [], ["--force"]]) {
@@ -523,7 +524,8 @@ test("setup validates late adapter errors before updating the installed package"
         assert.match(result.stderr, /malformed managed block/);
         assert.deepEqual(await projectSnapshot(temp), before);
       }
-      await writeFile(destination, original);
+      if (original === null) await rm(destination);
+      else await writeFile(destination, original);
     }
   } finally {
     assert.equal(path.dirname(temp), os.tmpdir());
@@ -681,6 +683,43 @@ test("setup imports project instructions for Claude and reports Codex router sha
     assert.ok(!result.stdout.includes("Do not expose this rule"));
     await writeFile(path.join(temp, "AGENTS.override.md"), "\n");
     assert.deepEqual(JSON.parse(run(process.execPath, [setup, "--target", temp, "--check"], temp).stdout).instructionWarnings, []);
+  } finally {
+    assert.equal(path.dirname(temp), os.tmpdir());
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("setup writes CLAUDE.md only when another Claude file would hide AGENTS.md", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-setup-claude-"));
+  const claude = path.join(temp, "CLAUDE.md");
+  const importOnly = "<!-- AIHAUS:START -->\n@AGENTS.md\n<!-- AIHAUS:END -->\n";
+  const apply = (...flags) => JSON.parse(run(process.execPath, [setup, "--target", temp, "--json", ...flags], temp).stdout);
+  try {
+    run("git", ["init", "-b", "main"], temp);
+    assert.equal(apply().adapters["CLAUDE.md"], "not-needed");
+    await assert.rejects(readFile(claude, "utf8"));
+    const again = apply();
+    assert.equal(again.adapters["CLAUDE.md"], "not-needed");
+    assert.equal(again.changesRequired, false);
+
+    // An earlier install left an import-only CLAUDE.md.
+    await writeFile(claude, importOnly);
+    const preview = apply("--check");
+    assert.equal(preview.adapters["CLAUDE.md"], "would-remove");
+    assert.equal(preview.changesRequired, true);
+    assert.equal(await readFile(claude, "utf8"), importOnly);
+    assert.equal(apply().adapters["CLAUDE.md"], "removed");
+    await assert.rejects(readFile(claude, "utf8"));
+
+    for (const other of ["CLAUDE.local.md", path.join(".claude", "CLAUDE.md")]) {
+      await mkdir(path.dirname(path.join(temp, other)), { recursive: true });
+      await writeFile(path.join(temp, other), "# Personal Claude rules\n");
+      assert.equal(apply().adapters["CLAUDE.md"], "created");
+      assert.equal(await readFile(claude, "utf8"), importOnly);
+      assert.equal(apply().adapters["CLAUDE.md"], "unchanged");
+      await rm(path.join(temp, other));
+      assert.equal(apply().adapters["CLAUDE.md"], "removed");
+    }
   } finally {
     assert.equal(path.dirname(temp), os.tmpdir());
     await rm(temp, { recursive: true, force: true });

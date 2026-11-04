@@ -52,9 +52,14 @@ repository-local discovery wrappers at `.claude/skills/aih-refresh/SKILL.md` and
 `/aih-refresh`; Codex exposes its repository skill as `$aih-refresh` or through
 `/skills`. The package does not emulate unsupported command syntax.
 
-The managed AGENTS.md block holds the portable router. CLAUDE.md uses the native
-`@AGENTS.md` import so shared instructions outside the managed block also reach
-Claude. This follows Claude's documented [memory and imports](https://code.claude.com/docs/en/memory).
+The managed AGENTS.md block holds the portable router. Claude Code v2.1.281 and
+later reads AGENTS.md directly, but only when no CLAUDE.md, .claude/CLAUDE.md,
+or CLAUDE.local.md exists in the working directory or above it. Setup therefore
+writes a managed `@AGENTS.md` import in CLAUDE.md only when the repository has
+one of those files, and removes a CLAUDE.md that holds nothing but that block
+once it is no longer needed. Without a root CLAUDE.md, Claude also reads
+subdirectory AGENTS.md files in their native scope. This follows Claude's
+documented [AGENTS.md support](https://code.claude.com/docs/en/memory#agents-md).
 Directory-specific instructions retain their native scope; discovery indexes
 do not activate those instructions globally. Host-local automatic memory cannot
 replace the versioned project record.

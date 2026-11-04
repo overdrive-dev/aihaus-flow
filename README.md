@@ -27,7 +27,9 @@ aihaus into a global runtime, plugin, or user-level installation.
 - a Git repository;
 - Git available on the command line;
 - Node.js 22 or newer with npm;
-- a released aihaus tag for a reproducible installation.
+- a released aihaus tag for a reproducible installation;
+- for Claude Code, v2.1.281 or newer, which reads `AGENTS.md` without a
+  `CLAUDE.md`.
 
 Run installation commands from the root of the repository that will use
 aihaus.
@@ -87,13 +89,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.12.0`):
+Current published release (`v1.13.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.12.0/aihaus-flow-v1.12.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.13.0/aihaus-flow-v1.13.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.12.0` with the same tag.
+For another release, replace both occurrences of `v1.13.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -172,12 +174,12 @@ installed entry points are:
 | `.aihaus/VERSION` | Installed package version | Package-owned; refreshed only when different or with `--force` |
 | `.aihaus/memory/project/` | Project rules, decisions, knowledge, and procedures | Project-owned and preserved |
 | `.aihaus/memory/kanban/` | File-based task history | Project-owned and preserved |
-| `AGENTS.md`, `CLAUDE.md` | Shared router in AGENTS; Claude imports it with `@AGENTS.md` | Only the bounded aihaus block is managed |
+| `AGENTS.md` | Shared router that Codex and Claude Code both read | Only the bounded aihaus block is managed |
+| `CLAUDE.md` | Only when the repository also has a `CLAUDE.md` with your own text, a `.claude/CLAUDE.md`, or a `CLAUDE.local.md`: Claude then reads those instead of `AGENTS.md`, so an `@AGENTS.md` import is added | Only the bounded aihaus block is managed; a `CLAUDE.md` holding only that block is removed when no longer needed |
 | `.claude/skills/aih-refresh/SKILL.md`, `.agents/skills/aih-refresh/SKILL.md` | Thin host-native wrappers around the portable bootstrap | Refreshed only when the aihaus ownership marker is present; otherwise preserved and reported as a conflict |
 | `.gitignore` | Ignores local aihaus state and temporary download | Only the bounded aihaus block is managed |
 
-Text outside `AIHAUS:START` / `AIHAUS:END` blocks is preserved, including user
-instructions imported from AGENTS by Claude. Setup rejects malformed or repeated
+Text outside `AIHAUS:START` / `AIHAUS:END` blocks is preserved. Setup rejects malformed or repeated
 markers and preflights known file/directory conflicts before applying changes.
 A nonempty root `AGENTS.override.md` is preserved and reported in
 `instructionWarnings`: Codex can load that file instead of `AGENTS.md` even when
@@ -610,6 +612,12 @@ environments and least-privilege credentials for production work.
 - **Host skill conflict:** setup preserved a user-owned skill at the adapter
   path. Review `conflicts`; rename or reconcile it explicitly rather than
   deleting it automatically.
+- **Claude Code ignores the shared router:** run `/memory` and look for
+  `AGENTS.md`. Claude Code before v2.1.281 may not read it, and any
+  `CLAUDE.md`, `.claude/CLAUDE.md`, or `CLAUDE.local.md` in the repository or a
+  parent directory makes Claude read those instead. Rerun setup after adding one
+  inside the repository. For a parent directory, move that file or create a
+  repository `CLAUDE.md` with an `@AGENTS.md` line; setup keeps it.
 - **Codex ignores the shared router:** inspect `instructionWarnings` for a
   nonempty root `AGENTS.override.md`. Reconcile its intended instructions with
   the shared router; setup preserves it rather than changing its precedence.

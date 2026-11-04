@@ -21,10 +21,13 @@
   way the surrounding code uses it; then the standard library or platform; then
   an installed dependency, never a new one for a few lines; only then the least
   new code that stays readable. Finish every caller, test, fixture, and export
-  the change reaches.
-- Add no abstraction, option, config, or code for later that the task does not
-  need; deletion beats addition, and the repository's layers and interfaces
-  stay. Never trade away, even in moved or merged code, validation at trust
+  the change reaches. A vague request gets the smallest version that does its
+  core job; between options of equal size, pick the one correct on edge cases.
+- Add no abstraction, wrapper, type conversion, option, config, or code for
+  later that the task does not need; keep values in the form the platform
+  returns. Comments explain only the why that the code cannot show. Deletion
+  beats addition, and the repository's layers and interfaces stay. Never trade
+  away, even in moved or merged code, validation at trust
   boundaries, error handling that prevents data loss, security, accessibility,
   calibration that physical hardware needs, or anything requested.
 - A shortcut with a known limit carries a `shortcut: <the limit>, <when to

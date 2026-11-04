@@ -388,13 +388,7 @@ async function verifyInstalledSurface(repositoryRoot) {
   return { ok: missing.length === 0, required, missing };
 }
 
-async function upsertManagedBlock(file, body, { check = false } = {}) {
-  const block = `${startMarker}\n${body.trim()}\n${endMarker}`;
-  if (!(await exists(file))) {
-    if (!check) await writeFile(file, `${block}\n`, "utf8");
-    return check ? "would-create" : "created";
-  }
-
+async function readManagedText(file) {
   const info = await lstat(file);
   if (!info.isFile() || info.isSymbolicLink()) {
     throw new Error(`refusing non-regular managed block file: ${file}`);
@@ -417,6 +411,17 @@ async function upsertManagedBlock(file, body, { check = false } = {}) {
   ) {
     throw new Error(`refusing malformed managed block in ${file}`);
   }
+  return { current, start, end };
+}
+
+async function upsertManagedBlock(file, body, { check = false } = {}) {
+  const block = `${startMarker}\n${body.trim()}\n${endMarker}`;
+  if (!(await exists(file))) {
+    if (!check) await writeFile(file, `${block}\n`, "utf8");
+    return check ? "would-create" : "created";
+  }
+
+  const { current, start, end } = await readManagedText(file);
   if (start < 0) {
     const separator = current.endsWith("\n") ? "\n" : "\n\n";
     if (!check) await writeFile(file, `${current}${separator}${block}\n`, "utf8");
@@ -427,6 +432,25 @@ async function upsertManagedBlock(file, body, { check = false } = {}) {
   if (next === current) return "unchanged";
   if (!check) await writeFile(file, next, "utf8");
   return check ? "would-update" : "updated";
+}
+
+// Claude Code reads AGENTS.md itself unless a CLAUDE.md, .claude/CLAUDE.md, or
+// CLAUDE.local.md exists; only then does CLAUDE.md need the @AGENTS.md import.
+async function syncClaudeImport(repositoryRoot, { check = false } = {}) {
+  const file = path.join(repositoryRoot, "CLAUDE.md");
+  await assertPathWithin({ root: repositoryRoot, candidate: file });
+  const otherClaudeFile =
+    (await exists(path.join(repositoryRoot, ".claude", "CLAUDE.md"))) ||
+    (await exists(path.join(repositoryRoot, "CLAUDE.local.md")));
+  if (!otherClaudeFile) {
+    if (!(await exists(file))) return "not-needed";
+    const { current, start, end } = await readManagedText(file);
+    if (start >= 0 && `${current.slice(0, start)}${current.slice(end + endMarker.length)}`.trim() === "") {
+      if (!check) await rm(file);
+      return check ? "would-remove" : "removed";
+    }
+  }
+  return upsertManagedBlock(file, "@AGENTS.md", { check });
 }
 
 async function installHostSkill(repositoryRoot, specification, { check = false, force = false } = {}) {
@@ -568,11 +592,10 @@ async function install(target, { check = false, force = false } = {}) {
 
   const router = await readFile(path.join(packageRoot, "adapters", "router.md"), "utf8");
   const adapters = {};
-  for (const file of ["AGENTS.md", "CLAUDE.md"]) {
-    const destination = path.join(repositoryRoot, file);
-    await assertPathWithin({ root: repositoryRoot, candidate: destination });
-    adapters[file] = await upsertManagedBlock(destination, file === "CLAUDE.md" ? "@AGENTS.md" : router, { check });
-  }
+  const agentsFile = path.join(repositoryRoot, "AGENTS.md");
+  await assertPathWithin({ root: repositoryRoot, candidate: agentsFile });
+  adapters["AGENTS.md"] = await upsertManagedBlock(agentsFile, router, { check });
+  adapters["CLAUDE.md"] = await syncClaudeImport(repositoryRoot, { check });
   await assertPathWithin({ root: repositoryRoot, candidate: path.join(repositoryRoot, ".gitignore") });
   adapters[".gitignore"] = await upsertManagedBlock(
     path.join(repositoryRoot, ".gitignore"),
@@ -636,7 +659,7 @@ async function install(target, { check = false, force = false } = {}) {
   const plannedCreated = installed.filter((relative) => managedStatus.get(relative) === "created");
   const plannedRefreshed = installed.filter((relative) => managedStatus.get(relative) === "refreshed");
   const unchanged = installed.filter((relative) => managedStatus.get(relative) === "unchanged");
-  const adapterChanges = Object.values(adapters).some((status) => status !== "unchanged");
+  const adapterChanges = Object.values(adapters).some((status) => !["unchanged", "not-needed"].includes(status));
   const hostChanges = Object.values(hostCapabilities).some(
     (capability) => capability.status && !["unchanged", "preserved"].includes(capability.status),
   );
