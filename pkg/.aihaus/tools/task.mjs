@@ -8,7 +8,8 @@ import { assertPathWithin } from "./path-safety.mjs";
 import { validateEvidenceDocument } from "./evidence-validate.mjs";
 
 const usage = [
-  "Usage: node .aihaus/tools/task.mjs <command> [--json] [--help | -h]",
+  "Usage: node .aihaus/tools/task.mjs <command> [--json]",
+  "Help: --help or -h as the only argument.",
   "  create --title <title> --room <room> [--external-id <id>]",
   "  log --title <title> --text <text> [--room <room>]",
   "  move <task-id> <backlog|todo|doing|review|done>",
@@ -340,12 +341,15 @@ function parseArgs(args) {
 }
 
 async function main() {
-  if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
+  const args = process.argv.slice(2);
+  const help = args.find((arg) => arg === "--help" || arg === "-h");
+  if (help && args.length === 1) {
     process.stdout.write(`${usage}\n`);
     return;
   }
   try {
-    const options = parseArgs(process.argv.slice(2));
+    if (help) throw new Error(`unknown option: ${help}`);
+    const options = parseArgs(args);
     let result;
     if (options.command === "create") result = await createTask(options);
     else if (options.command === "log") result = await logTask(options);

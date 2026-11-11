@@ -6,7 +6,7 @@ Use for a business-visible behavior change.
 
 - `memory/project/business-rules.md`
 - relevant decisions, procedures, and project context
-- `contracts/evidence.md`; add adversarial review before completion
+- `contracts/evidence.md`; add adversarial review before completion (the quick path loads neither)
 
 ## Path
 
@@ -26,8 +26,9 @@ acceptance criteria, an evidence document, status moves, or planning artifacts,
 unless an accepted project rule requires a full task for every change. Run the
 checks that cover the edit, then log it with one call:
 `node .aihaus/tools/task.mjs log --title <what changed> --text <changed files; each command with its exit code; assumed decisions; what was skipped>`.
-Report the same in the result. With an accepted external tracker, log it where
-that decision says. An edit that turns out not to be covered, low-risk, and
+Report the same in the result. A delegated executor returns that text to the
+task writer instead of logging it. With an accepted external tracker, log it
+where that decision says. An edit that turns out not to be covered, low-risk, and
 mechanical leaves the quick path: create the task and follow the Path. Auth,
 payments, destructive actions, schema migrations, secrets, and production work
 never qualify as quick.

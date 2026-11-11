@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertPathWithin } from "./path-safety.mjs";
 
-const usage = "Usage: node .aihaus/tools/scope-check.mjs --allow <path> [--allow <path> ...] [--base <commit>] [--json] [--help | -h]";
+const usage = "Usage: node .aihaus/tools/scope-check.mjs --allow <path> [--allow <path> ...] [--base <commit>] [--json]\nHelp: --help or -h as the only argument.";
 
 function git(args, cwd, { nul = false } = {}) {
   const result = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
@@ -64,12 +64,15 @@ function parseArgs(args) {
 }
 
 async function main() {
-  if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
+  const args = process.argv.slice(2);
+  const help = args.find((arg) => arg === "--help" || arg === "-h");
+  if (help && args.length === 1) {
     process.stdout.write(`${usage}\n`);
     return;
   }
   try {
-    const options = parseArgs(process.argv.slice(2));
+    if (help) throw new Error(`unknown option: ${help}`);
+    const options = parseArgs(args);
     const repo = await realpath(git(["rev-parse", "--show-toplevel"], process.cwd())[0]);
     await validateAllowlist(repo, options.allow);
     const changed = await changedFiles(repo, options.base);

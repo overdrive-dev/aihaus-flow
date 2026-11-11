@@ -39,15 +39,15 @@ test("tool CLIs show bounded help before parsing or touching a repository", asyn
       ["online-action-gate.mjs", ["--command", "--repo", "--json"]],
     ]) {
       const script = path.join(path.dirname(scopeCheck), tool);
-      const help = run(process.execPath, [script, "--help"], temp).stdout;
+      const result = run(process.execPath, [script, "--help"], temp);
+      const help = result.stdout;
+      assert.equal(result.stderr, "", tool);
       assert.match(help, /usage:/i, tool);
       assert.ok(help.length <= 600, tool);
       for (const anchor of [...anchors, "--help", "-h"]) assert.ok(help.includes(anchor), `${tool}: ${anchor}`);
-      for (const args of [["-h"], ["--bogus", "--help"], ["bogus", "-h", "--bogus"], ["create", "--title", "--help"]]) {
-        const result = run(process.execPath, [script, ...args], temp);
-        assert.equal(result.stdout, help, `${tool}: ${args.join(" ")}`);
-        assert.equal(result.stderr, "", tool);
-      }
+      const shortHelp = run(process.execPath, [script, "-h"], temp);
+      assert.equal(shortHelp.stdout, help, tool);
+      assert.equal(shortHelp.stderr, "", tool);
     }
     assert.deepEqual(await readdir(temp), []);
   } finally {
@@ -55,6 +55,36 @@ test("tool CLIs show bounded help before parsing or touching a repository", asyn
     await rm(temp, { recursive: true, force: true });
   }
 });
+
+for (const [tool, prefixes, fields] of [
+  ["scope-check.mjs", [["--allow", "a"], ["--allow"]], (help) => ({ ok: false, error: `unknown option: ${help}` })],
+  ["task.mjs", [["create"], ["move", "X", "done"], ["create", "--title"]], (help) => ({ ok: false, error: `unknown option: ${help}` })],
+  ["evidence-validate.mjs", [["arquivo.json"]], (help) => ({ ok: false, errors: [`unknown option: ${help}`] })],
+  ["online-action-gate.mjs", [["--command", "git push origin main"], ["--command"]], (help) => ({ allowed: false, reason: `unknown argument: ${help}` })],
+]) {
+  test(`${tool} rejects help mixed with other arguments before execution`, async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-cli-mixed-help-"));
+    try {
+      const script = path.join(path.dirname(scopeCheck), tool);
+      const usage = run(process.execPath, [script, "--help"], temp).stdout.trimEnd();
+      for (const help of ["--help", "-h"]) {
+        for (const args of [
+          ...prefixes.map((prefix) => [...prefix, help]),
+          [help, help], [help, "--bogus"], ["--bogus", help], ["bogus", help, "--bogus"], ["create", "--title", help],
+        ]) {
+          const result = spawnSync(process.execPath, [script, ...args], { cwd: temp, encoding: "utf8" });
+          assert.equal(result.status, 2, `${tool}: ${args.join(" ")}`);
+          assert.equal(result.stdout, "", tool);
+          assert.deepEqual(JSON.parse(result.stderr), { ...fields(help), usage });
+        }
+      }
+      assert.deepEqual(await readdir(temp), []);
+    } finally {
+      await assertPathWithin({ root: os.tmpdir(), candidate: temp });
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+}
 
 test("tool CLI argument errors keep JSON on stderr and include the same usage", () => {
   for (const [tool, args, fields] of [

@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const usage = "Usage: node .aihaus/tools/evidence-validate.mjs <evidence.json> [--help | -h]";
+const usage = "Usage: node .aihaus/tools/evidence-validate.mjs <evidence.json>\nHelp: --help or -h as the only argument.";
 
 const STATUSES = new Set(["satisfied", "partial", "not_satisfied"]);
 const RUNGS = new Set(["written", "ran", "verified", "blocked"]);
@@ -87,12 +87,14 @@ export function validateEvidenceDocument(document) {
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.some((arg) => arg === "--help" || arg === "-h")) {
+  const help = args.find((arg) => arg === "--help" || arg === "-h");
+  if (help && args.length === 1) {
     process.stdout.write(`${usage}\n`);
     return;
   }
 
   try {
+    if (help) throw new Error(`unknown option: ${help}`);
     const [file] = args;
     if (!file) throw new Error("evidence file is required");
     if (file.startsWith("-")) throw new Error(`unknown option: ${file}`);

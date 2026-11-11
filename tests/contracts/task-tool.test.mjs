@@ -245,6 +245,34 @@ async function withRepo(prefix, callback) {
   }
 }
 
+test("mixed help cannot create, log, or move a task", () => withRepo("aihaus-task-help-", async (temp, tool) => {
+  const created = JSON.parse(run(process.execPath, [tool, "create", "--title", "Keep task", "--room", "feature"], temp).stdout);
+  const file = path.join(temp, created.file);
+  const body = (await readFile(file, "utf8"))
+    .replace("- [ ] Define executable acceptance evidence.", "- [ ] Keep task.")
+    .replace("## Owned files\n", "## Owned files\n\n- src/feature.mjs\n");
+  await writeFile(file, body);
+  const listed = run(process.execPath, [tool, "list"], temp).stdout;
+  const usage = run(process.execPath, [tool, "--help"], temp).stdout.trimEnd();
+  for (const help of ["--help", "-h"]) {
+    for (const args of [
+      ["create", help],
+      ["create", "--title", "New task", "--room", "feature", help],
+      ["create", "--title", help, "--room", "feature"],
+      ["log", "--title", "New log", "--text", "Checks passed", help],
+      ["move", created.id, "done", help],
+      ["move", created.id, "todo", help],
+    ]) {
+      const result = runFailure(process.execPath, [tool, ...args], temp);
+      assert.equal(result.stdout, "");
+      assert.deepEqual(JSON.parse(result.stderr), { ok: false, error: `unknown option: ${help}`, usage });
+      assert.equal(await readFile(file, "utf8"), body);
+      assert.equal(run(process.execPath, [tool, "list"], temp).stdout, listed);
+    }
+  }
+  assert.equal(JSON.parse(run(process.execPath, [tool, "move", created.id, "todo"], temp).stdout).status, "todo");
+}));
+
 test("log writes a dated quick-path record directly to done and list includes it", () => withRepo("aihaus-task-log-", async (temp, tool) => {
   const help = run(process.execPath, [tool, "--help"], temp).stdout;
   assert.match(help, /log --title <title> --text <text> \[--room <room>\]/);

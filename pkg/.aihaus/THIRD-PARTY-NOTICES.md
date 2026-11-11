@@ -1,6 +1,6 @@
 ## Third-party notice
 
-The change ladder above and the complexity lens in
+The change ladder in `conventions.md` and the complexity lens in
 `contracts/adversarial-review.md` are adapted from
 [Ponytail](https://github.com/DietrichGebert/ponytail).
 

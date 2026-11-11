@@ -19,8 +19,8 @@ Less setup before a small code change.
   harness and router start with this summary and request JSON details when
   relevant. Apply and dry-run text output is unchanged.
 - `scope-check.mjs`, `task.mjs`, `evidence-validate.mjs`, and
-  `online-action-gate.mjs` accept `--help` and `-h` anywhere and include usage
-  in argument errors.
+  `online-action-gate.mjs` accept `--help` or `-h` as the only argument and
+  include usage in argument errors.
 - `task.mjs` and `evidence-validate.mjs` now reject unknown options and extra
   arguments they previously ignored.
 - Ponytail's full MIT notice moves from `conventions.md` into the installed,
