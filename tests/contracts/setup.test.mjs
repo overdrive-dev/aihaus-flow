@@ -62,6 +62,10 @@ test("canonical setup is local, idempotent, and preserves project memory", async
     assert.equal(firstResult.verification.ok, true);
     assert.ok(firstResult.verification.required.includes(".aihaus/MAP.md"));
     assert.ok(firstResult.verification.required.includes(".aihaus/REFRESH.md"));
+    assert.ok(firstResult.created.includes(".aihaus/THIRD-PARTY-NOTICES.md"));
+    const noticesPath = path.join(temp, ".aihaus", "THIRD-PARTY-NOTICES.md");
+    const notices = await readFile(path.join(root, "pkg", ".aihaus", "THIRD-PARTY-NOTICES.md"), "utf8");
+    assert.equal(await readFile(noticesPath, "utf8"), notices);
     assert.ok(firstResult.verification.required.includes(".aihaus/memory/project/project.md"));
     assert.ok(
       firstResult.verification.required.includes(".aihaus/contracts/project-bootstrap.md"),
@@ -114,13 +118,15 @@ test("canonical setup is local, idempotent, and preserves project memory", async
       "utf8",
     );
     await writeFile(path.join(temp, ".aihaus", "roles", "stale.md"), "stale\n", "utf8");
+    await writeFile(noticesPath, "stale notice\n", "utf8");
     const repaired = JSON.parse(
       run(process.execPath, [setup, "--target", temp, "--json"], temp).stdout,
     );
     assert.equal(repaired.ok, true);
     assert.equal(repaired.changesRequired, true);
     assert.deepEqual(repaired.created, []);
-    assert.deepEqual(repaired.refreshed, [".aihaus/roles/"]);
+    assert.deepEqual(repaired.refreshed, [".aihaus/THIRD-PARTY-NOTICES.md", ".aihaus/roles/"]);
+    assert.equal(await readFile(noticesPath, "utf8"), notices);
     assert.ok(repaired.unchanged.includes(".aihaus/MAP.md"));
     assert.equal(repaired.adapters["AGENTS.md"], "unchanged");
     assert.equal(repaired.hostCapabilities.claudeCode.status, "refreshed");

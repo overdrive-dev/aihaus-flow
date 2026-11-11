@@ -21,6 +21,11 @@ Use for a business-visible behavior change.
 6. Run independent adversarial review for consequential changes.
 7. Promote only durable rules, decisions, and reusable knowledge.
 
-Quick path: for a covered, low-risk, mechanical edit, keep the same evidence
-rules but skip formal planning artifacts. Auth, payments, destructive actions,
-schema migrations, secrets, and production work never qualify as quick.
+Quick path: for a covered, low-risk, mechanical edit, make the change without a
+task file, an evidence document, or planning artifacts, unless an accepted
+project rule requires a task for every change. Run the checks that cover the
+edit and report the changed files, each command with its exit code, any assumed
+decision, and what was skipped. An edit that turns out not to be covered,
+low-risk, and mechanical leaves the quick path: create the task and follow the
+Path. Auth, payments, destructive actions, schema migrations, secrets, and
+production work never qualify as quick.

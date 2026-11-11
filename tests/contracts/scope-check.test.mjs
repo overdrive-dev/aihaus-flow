@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -27,6 +27,55 @@ test("scope check accepts exact files and directory descendants", () => {
 test("scope check normalizes separators without widening a rule", () => {
   assert.equal(isAllowed("src\\auth\\token.mjs", ["src/auth"]), true);
   assert.equal(isAllowed("other/auth/token.mjs", ["src/auth"]), false);
+});
+
+test("tool CLIs show bounded help before parsing or touching a repository", async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), "aihaus-cli-help-"));
+  try {
+    for (const [tool, anchors] of [
+      ["scope-check.mjs", ["--allow", "--base", "--json"]],
+      ["task.mjs", ["create", "move", "question", "answer", "list", "--title", "--room", "--external-id", "--text", "--question", "--draft-rule", "--json"]],
+      ["evidence-validate.mjs", ["<evidence.json>"]],
+      ["online-action-gate.mjs", ["--command", "--repo", "--json"]],
+    ]) {
+      const script = path.join(path.dirname(scopeCheck), tool);
+      const help = run(process.execPath, [script, "--help"], temp).stdout;
+      assert.match(help, /usage:/i, tool);
+      assert.ok(help.length <= 600, tool);
+      for (const anchor of [...anchors, "--help", "-h"]) assert.ok(help.includes(anchor), `${tool}: ${anchor}`);
+      for (const args of [["-h"], ["--bogus", "--help"], ["bogus", "-h", "--bogus"], ["create", "--title", "--help"]]) {
+        const result = run(process.execPath, [script, ...args], temp);
+        assert.equal(result.stdout, help, `${tool}: ${args.join(" ")}`);
+        assert.equal(result.stderr, "", tool);
+      }
+    }
+    assert.deepEqual(await readdir(temp), []);
+  } finally {
+    await assertPathWithin({ root: os.tmpdir(), candidate: temp });
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("tool CLI argument errors keep JSON on stderr and include the same usage", () => {
+  for (const [tool, args, fields] of [
+    ["scope-check.mjs", ["--repo", "."], { ok: false, error: "unknown option: --repo" }],
+    ["scope-check.mjs", ["unexpected"], { ok: false, error: "unknown option: unexpected" }],
+    ["task.mjs", ["bogus"], { ok: false, error: "unknown command: bogus" }],
+    ["task.mjs", ["list", "--bogus"], { ok: false, error: "unknown option: --bogus" }],
+    ["task.mjs", ["list", "unexpected"], { ok: false, error: "unknown argument: unexpected" }],
+    ["evidence-validate.mjs", [], { ok: false, errors: ["evidence file is required"] }],
+    ["evidence-validate.mjs", ["--bogus"], { ok: false, errors: ["unknown option: --bogus"] }],
+    ["evidence-validate.mjs", ["missing.json", "extra"], { ok: false, errors: ["unknown argument: extra"] }],
+    ["online-action-gate.mjs", ["--bogus"], { allowed: false, reason: "unknown argument: --bogus" }],
+    ["online-action-gate.mjs", ["--command", "git status", "extra"], { allowed: false, reason: "unknown argument: extra" }],
+  ]) {
+    const script = path.join(path.dirname(scopeCheck), tool);
+    const help = run(process.execPath, [script, "--help"], root).stdout.trimEnd();
+    const result = spawnSync(process.execPath, [script, ...args], { cwd: root, encoding: "utf8" });
+    assert.equal(result.status, 2, tool);
+    assert.equal(result.stdout, "", tool);
+    assert.deepEqual(JSON.parse(result.stderr), { ...fields, usage: help }, `${tool}: ${args.join(" ")}`);
+  }
 });
 
 test("scope check preserves Unicode paths reported by Git", async () => {

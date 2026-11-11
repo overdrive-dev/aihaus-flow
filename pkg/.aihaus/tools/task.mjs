@@ -7,6 +7,15 @@ import path from "node:path";
 import { assertPathWithin } from "./path-safety.mjs";
 import { validateEvidenceDocument } from "./evidence-validate.mjs";
 
+const usage = [
+  "Usage: node .aihaus/tools/task.mjs <command> [--json] [--help | -h]",
+  "  create --title <title> --room <room> [--external-id <id>]",
+  "  move <task-id> <backlog|todo|doing|review|done>",
+  "  question <task-id> --text <question>",
+  "  answer <task-id> --question <question-id> --text <answer> --draft-rule <rule>",
+  "  list (default)",
+].join("\n");
+
 export const statuses = ["backlog", "todo", "doing", "review", "done"];
 
 async function exists(target) {
@@ -305,12 +314,19 @@ function parseArgs(args) {
     else if (arg === "--text") options.text = args.shift() ?? null;
     else if (arg === "--question") options.question = args.shift() ?? null;
     else if (arg === "--draft-rule") options.draftRule = args.shift() ?? null;
+    else if (arg.startsWith("-")) throw new Error(`unknown option: ${arg}`);
     else options.positionals.push(arg);
   }
+  const count = { create: 0, move: 2, question: 1, answer: 1, list: 0 }[command];
+  if (options.positionals.length > count) throw new Error(`unknown argument: ${options.positionals[count]}`);
   return options;
 }
 
 async function main() {
+  if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
+    process.stdout.write(`${usage}\n`);
+    return;
+  }
   try {
     const options = parseArgs(process.argv.slice(2));
     let result;
@@ -329,7 +345,7 @@ async function main() {
     else throw new Error(`unknown command: ${options.command}`);
     process.stdout.write(`${JSON.stringify(result, null, options.json ? 2 : 0)}\n`);
   } catch (error) {
-    process.stderr.write(`${JSON.stringify({ ok: false, error: error.message })}\n`);
+    process.stderr.write(`${JSON.stringify({ ok: false, error: error.message, usage })}\n`);
     process.exitCode = 2;
   }
 }

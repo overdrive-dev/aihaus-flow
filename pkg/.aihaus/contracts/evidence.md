@@ -3,6 +3,9 @@
 Completion claims use `aihaus.evidence.v1` and are validated by
 `tools/evidence-validate.mjs`.
 
+The feature room's quick path makes no evidence document: its result reports
+each command and exit code.
+
 Each acceptance criterion records:
 
 - `criterion`: stable human-readable requirement;

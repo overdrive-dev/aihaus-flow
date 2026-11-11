@@ -29,9 +29,11 @@ sources change:
 2. Read applicable repository instructions for the owned paths. Respect the
    host's instruction precedence and directory scope, including overrides and
    path-specific rules; a discovery index is not an instruction loader.
-3. Run `node .aihaus/tools/refresh.mjs --repo . --status --json`. If the packet
-   is missing or stale, rebuild it with `--json` and inspect status again.
-   This updates disposable state, not accepted project memory.
+3. Run `node .aihaus/tools/refresh.mjs --repo . --status` for a short summary.
+   If the packet is missing or stale, rebuild it by running the same command
+   without `--status`, then check status again. Add `--json` to the status
+   command when a gap, stale claim, conflict, or warning it counts may bear on
+   the task. This updates disposable state, not accepted project memory.
 4. Use `memory/project/README.md` to choose pages. Search relevant rule IDs,
    domain terms, and file paths, then read the matching entries and their
    sources. Load the selected room and role, not the entire memory archive.
@@ -46,6 +48,7 @@ sources change:
 7. Record the applicable rule/decision IDs, source paths and revisions, remaining
    gaps, owned files, and verification plan in the task's `Context` or `Log`.
    Reuse that record when resuming instead of relying on conversation history.
+   The feature room's quick path has no task file and needs no such record.
 
 ## Delegation
 
@@ -117,7 +120,8 @@ who reviewed, and the profile used.
   written down; they are not a stop. Record on the task each decision assumed
   on an ambiguous requirement that changes behavior users or callers can
   observe, including ambiguities a spec review reports as unlisted, and
-  continue. Technical mechanics follow `conventions.md` and are not listed.
+  continue. Without a task file, the result alone carries the list. Technical
+  mechanics follow `conventions.md` and are not listed.
   Every judgment pass's brief includes the list, the reviewer checks each
   decision against the request, and the result reports the list so the user
   can overturn any decision. Ambiguity that no reasonable reading resolves, or
@@ -169,6 +173,8 @@ creating a shadow file task.
 
 Completion means acceptance criteria mapped to real artifacts and executable
 evidence. A tool or CI exit code may prove execution; prose cannot.
+The feature room's quick path carries no task file or evidence document; its
+result reports the changed files and each command with its exit code.
 
 Before staging or handing off parallel work, compare changed files to the owned
 scope with `tools/scope-check.mjs`. An explicit allowlist is required; unrelated

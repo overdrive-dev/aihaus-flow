@@ -115,6 +115,9 @@ A transition to done requires a valid PASS evidence document inside the
 repository that covers exactly the checked acceptance criteria and resolved
 business-rule questions. Evidence validation rejects empty/blocked-only support;
 an independent verifier must still inspect artifacts or rerun applicable checks.
+Small, covered, low-risk mechanical edits use the feature room's quick path
+without a task file or evidence document and report checks with exit codes;
+an accepted project rule can require a task for every change.
 
 ## Delegation
 

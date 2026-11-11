@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.16.0 - 2026-11-11
+
+Less setup before a small code change.
+
+- The feature room's quick path skips task files, evidence documents, and
+  planning artifacts for covered, low-risk mechanical edits. It reports the
+  changed files, commands and exit codes, assumed decisions, and skipped work.
+  The context check still applies; existing tasks keep their completion gates.
+  Auth, payments, destructive actions, schema migrations, secrets, and
+  production work never qualify. Edits that stop qualifying create a task and
+  follow the full Path; behavior changes still need a judgment pass.
+- `refresh.mjs --status` prints packet and memory readiness, source/conflict/
+  warning counts, and bounded lists of memory gaps and stale claims. The
+  harness and router start with this summary and request JSON details when
+  relevant. Apply and dry-run text output is unchanged.
+- `scope-check.mjs`, `task.mjs`, `evidence-validate.mjs`, and
+  `online-action-gate.mjs` accept `--help` and `-h` anywhere and include usage
+  in argument errors.
+- Ponytail's full MIT notice moves from `conventions.md` into the installed,
+  package-owned `THIRD-PARTY-NOTICES.md`, preserving both adaptations' attribution.
+- Migration: the quick path no longer creates task files or evidence JSON.
+  To keep them, record an accepted project rule requiring a task for every
+  change. The text of `--status` without `--json` changed; `--status --json`
+  is unchanged.
+- Project memory templates are unchanged.
+
 ## 1.15.0 - 2026-11-04
 
 Assumed decisions are written down, not a stop.

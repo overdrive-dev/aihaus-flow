@@ -39,38 +39,12 @@
 - Production safety comes from external containment and least privilege, not
   from prompts, rooms, or hooks.
 - Managed instruction-file edits use bounded markers and preserve user text.
-- Package-owned files (MAP.md, conventions.md, REFRESH.md, roles/, rooms/,
-  contracts/, tools/) are replaced on upgrade. Project routes, assignments, and
-  runbooks belong in `.aihaus/memory/project/`.
+- Package-owned files (MAP.md, conventions.md, REFRESH.md, THIRD-PARTY-NOTICES.md,
+  roles/, rooms/, contracts/, tools/) are replaced on upgrade. Project routes,
+  assignments, and runbooks belong in `.aihaus/memory/project/`.
 - Procedure text in seeded memory READMEs (`memory/kanban/README.md`,
   `memory/project/README.md`) may date from an earlier version; where it
   conflicts with a package-owned file, the package-owned file wins. Accepted
   project decisions keep their authority under `contracts/harness.md`.
 
-## Third-party notice
-
-The change ladder above and the complexity lens in
-`contracts/adversarial-review.md` are adapted from
-[Ponytail](https://github.com/DietrichGebert/ponytail).
-
-MIT License
-
-Copyright (c) 2026 DietrichGebert
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Passages adapted from Ponytail (MIT) carry their notice in `THIRD-PARTY-NOTICES.md`.

@@ -287,6 +287,11 @@ test("bootstrap blocks synthesis in an empty repository and ignores generated ad
     assert.equal(result.evidenceLevel, "insufficient");
     assert.equal(result.memoryReadiness, "uninitialized");
     assert.deepEqual(result.sources, []);
+    assert.equal(await exists(path.join(repository, ".aihaus", "THIRD-PARTY-NOTICES.md")), true);
+    const summary = run(process.execPath, [init, "--repo", repository, "--status"], repository).stdout;
+    assert.match(summary, /^packet=unchanged memory=uninitialized sources=0 conflicts=0 warnings=\d+ gaps=0 staleClaims=0\n/);
+    assert.equal(summary.trimEnd().split("\n").length, 2);
+    assert.ok(summary.length <= 1500);
     assert.ok(result.warnings.some((warning) => /insufficient authoritative/i.test(warning)));
     assert.ok(
       result.skipped.some(
@@ -576,6 +581,79 @@ function bootstrapResult(repository, mode = []) {
     "--repo", repository, ...mode, "--json",
   ], repository).stdout);
 }
+
+test("text status summarizes missing, stale, and ready packets with bounded advisory lists", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-summary-"));
+  try {
+    await initializeGit(repository);
+    await mkdir(path.join(repository, ".github", "workflows"), { recursive: true });
+    await writeFile(path.join(repository, "README.md"), "# Billing\n\nProcesses invoices.\n");
+    await writeFile(path.join(repository, "package.json"), '{"name":"billing"}\n');
+    await writeFile(path.join(repository, "pyproject.toml"), '[project]\nname = "other"\n');
+    await writeFile(path.join(repository, "architecture.md"), "# Architecture\n\nA local billing service.\n");
+    await writeFile(path.join(repository, ".github", "workflows", "ci.yml"), "name: CI\n");
+    commitAll(repository, "project evidence");
+    const reviewed = run("git", ["rev-parse", "HEAD"], repository).stdout.trim();
+    const tool = install(repository);
+    const packetPath = path.join(repository, ".aihaus", "state", "bootstrap", "discovery.json");
+    const status = () => run(process.execPath, [tool, "--repo", repository, "--status"], repository).stdout;
+    const json = () => run(process.execPath, [tool, "--repo", repository, "--status", "--json"], repository).stdout;
+    const missingJson = json();
+    const missing = JSON.parse(missingJson);
+    const assertSummary = (output, result) => {
+      const { memoryGaps, staleClaims } = result.status;
+      const lines = output.trimEnd().split("\n");
+      assert.equal(lines[0], `packet=${result.packet.action} memory=${result.memoryReadiness} sources=${result.sources.length} conflicts=${result.conflicts.length} warnings=${result.warnings.length} gaps=${memoryGaps.length} staleClaims=${staleClaims.length}`);
+      for (const [items, prefix, key] of [[memoryGaps, "gap", "target"], [staleClaims, "stale claim", "page"]]) {
+        const shown = lines.filter((line) => line.startsWith(`${prefix}: `));
+        assert.equal(shown.length, Math.min(5, items.length));
+        for (const [index, line] of shown.entries()) {
+          assert.ok(line.includes(items[index][key]));
+          assert.ok(line.includes(items[index].reason));
+        }
+        if (items.length > 5) assert.ok(lines.includes(`+${items.length - 5} more ${prefix}s`));
+      }
+      assert.equal(lines.at(-1), "Details: node .aihaus/tools/refresh.mjs --repo . --status --json");
+    };
+    assert.equal(missing.packet.action, "missing");
+    assert.equal(missing.status.memoryGaps.length, 8);
+    assert.equal(missing.conflicts.length, 1);
+    const freshText = status();
+    assertSummary(freshText, missing);
+    assert.ok(freshText.length <= 1500);
+    assert.equal(json(), missingJson);
+    assert.equal(await exists(packetPath), false);
+
+    assert.match(run(process.execPath, [tool, "--repo", repository, "--dry-run"], repository).stdout,
+      /^aihaus bootstrap dry-run: would-create, sources=\d+, conflicts=1\nNext: read .aihaus\/REFRESH.md\n$/);
+    assert.match(run(process.execPath, [tool, "--repo", repository], repository).stdout,
+      /^aihaus bootstrap apply: created, sources=\d+, conflicts=1\nNext: read .aihaus\/REFRESH.md\n$/);
+    const packetBefore = await readFile(packetPath, "utf8");
+    for (const name of memoryNames) {
+      await writeFile(path.join(repository, ".aihaus", "memory", "project", name),
+        `# Reviewed memory\n\nVerified: invoices are processed. Source: \`README.md\` (reviewed ${reviewed}).\n`);
+    }
+    let current = bootstrapResult(repository, ["--status"]);
+    assert.equal(current.packet.action, "stale");
+    assertSummary(status(), current);
+    assert.equal(await readFile(packetPath, "utf8"), packetBefore);
+    bootstrapResult(repository);
+    current = bootstrapResult(repository, ["--status"]);
+    assert.equal(current.packet.action, "unchanged");
+    assert.equal(current.status.memoryReadiness, "ready");
+    assertSummary(status(), current);
+    assert.equal(status().trimEnd().split("\n").length, 2);
+
+    await writeFile(path.join(repository, "README.md"), "# Billing\n\nProcesses refunds.\n");
+    current = bootstrapResult(repository, ["--status"]);
+    assert.equal(current.packet.action, "stale");
+    assert.equal(current.status.staleClaims.length, 8);
+    assertSummary(status(), current);
+    assert.equal(json(), JSON.stringify(current, null, 2) + "\n");
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
 
 test("refresh checks root and hidden citations at each claim's own commit", async () => {
   const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-refresh-citations-"));

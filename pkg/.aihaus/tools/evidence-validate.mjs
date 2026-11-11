@@ -5,6 +5,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const usage = "Usage: node .aihaus/tools/evidence-validate.mjs <evidence.json> [--help | -h]";
+
 const STATUSES = new Set(["satisfied", "partial", "not_satisfied"]);
 const RUNGS = new Set(["written", "ran", "verified", "blocked"]);
 const TRUSTED_EXECUTION_SOURCES = new Set(["tool", "ci"]);
@@ -84,20 +86,23 @@ export function validateEvidenceDocument(document) {
 }
 
 async function main() {
-  const file = process.argv[2];
-  if (!file) {
-    process.stderr.write("usage: evidence-validate.mjs <evidence.json>\n");
-    process.exitCode = 2;
+  const args = process.argv.slice(2);
+  if (args.some((arg) => arg === "--help" || arg === "-h")) {
+    process.stdout.write(`${usage}\n`);
     return;
   }
 
   try {
+    const [file] = args;
+    if (!file) throw new Error("evidence file is required");
+    if (file.startsWith("-")) throw new Error(`unknown option: ${file}`);
+    if (args.length > 1) throw new Error(`unknown argument: ${args[1]}`);
     const document = JSON.parse((await readFile(path.resolve(file), "utf8")).replace(/^\uFEFF/, ""));
     const result = validateEvidenceDocument(document);
     process.stdout.write(`${JSON.stringify(result)}\n`);
     if (!result.ok) process.exitCode = 2;
   } catch (error) {
-    process.stderr.write(`${JSON.stringify({ ok: false, errors: [error.message] })}\n`);
+    process.stderr.write(`${JSON.stringify({ ok: false, errors: [error.message], usage })}\n`);
     process.exitCode = 2;
   }
 }

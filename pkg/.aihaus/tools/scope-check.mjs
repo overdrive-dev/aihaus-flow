@@ -7,6 +7,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertPathWithin } from "./path-safety.mjs";
 
+const usage = "Usage: node .aihaus/tools/scope-check.mjs --allow <path> [--allow <path> ...] [--base <commit>] [--json] [--help | -h]";
+
 function git(args, cwd, { nul = false } = {}) {
   const result = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
   if (result.error) throw result.error;
@@ -62,6 +64,10 @@ function parseArgs(args) {
 }
 
 async function main() {
+  if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
+    process.stdout.write(`${usage}\n`);
+    return;
+  }
   try {
     const options = parseArgs(process.argv.slice(2));
     const repo = await realpath(git(["rev-parse", "--show-toplevel"], process.cwd())[0]);
@@ -72,7 +78,7 @@ async function main() {
     process.stdout.write(`${JSON.stringify(result, null, options.json ? 2 : 0)}\n`);
     if (outside.length) process.exitCode = 2;
   } catch (error) {
-    process.stderr.write(`${JSON.stringify({ ok: false, error: error.message })}\n`);
+    process.stderr.write(`${JSON.stringify({ ok: false, error: error.message, usage })}\n`);
     process.exitCode = 2;
   }
 }
