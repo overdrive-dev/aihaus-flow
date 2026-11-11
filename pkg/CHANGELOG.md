@@ -4,10 +4,13 @@
 
 Less setup before a small code change.
 
-- The feature room's quick path skips task files, evidence documents, and
-  planning artifacts for covered, low-risk mechanical edits. It reports the
-  changed files, commands and exit codes, assumed decisions, and skipped work.
-  The context check still applies; existing tasks keep their completion gates.
+- The feature room's quick path leaves one log record in `memory/kanban/done/`
+  via `task.mjs log` for covered, low-risk mechanical edits, without acceptance
+  criteria, evidence documents, status moves, or planning artifacts. The log
+  record and result list changed files, commands and exit codes, assumed
+  decisions, and skipped work. With an accepted external tracker, log it where
+  that decision says. The context check still applies; existing tasks keep
+  their completion gates.
   Auth, payments, destructive actions, schema migrations, secrets, and
   production work never qualify. Edits that stop qualifying create a task and
   follow the full Path; behavior changes still need a judgment pass.
@@ -18,12 +21,15 @@ Less setup before a small code change.
 - `scope-check.mjs`, `task.mjs`, `evidence-validate.mjs`, and
   `online-action-gate.mjs` accept `--help` and `-h` anywhere and include usage
   in argument errors.
+- `task.mjs` and `evidence-validate.mjs` now reject unknown options and extra
+  arguments they previously ignored.
 - Ponytail's full MIT notice moves from `conventions.md` into the installed,
   package-owned `THIRD-PARTY-NOTICES.md`, preserving both adaptations' attribution.
-- Migration: the quick path no longer creates task files or evidence JSON.
-  To keep them, record an accepted project rule requiring a task for every
-  change. The text of `--status` without `--json` changed; `--status --json`
-  is unchanged.
+- Migration: the quick path uses one `task.mjs log` record in
+  `memory/kanban/done/` instead of a full task with acceptance criteria,
+  status moves, and evidence JSON. To keep full tasks, record an accepted
+  project rule requiring a full task for every change. The text of `--status`
+  without `--json` changed; `--status --json` is unchanged.
 - Project memory templates are unchanged.
 
 ## 1.15.0 - 2026-11-04

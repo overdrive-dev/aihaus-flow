@@ -21,11 +21,13 @@ Use for a business-visible behavior change.
 6. Run independent adversarial review for consequential changes.
 7. Promote only durable rules, decisions, and reusable knowledge.
 
-Quick path: for a covered, low-risk, mechanical edit, make the change without a
-task file, an evidence document, or planning artifacts, unless an accepted
-project rule requires a task for every change. Run the checks that cover the
-edit and report the changed files, each command with its exit code, any assumed
-decision, and what was skipped. An edit that turns out not to be covered,
-low-risk, and mechanical leaves the quick path: create the task and follow the
-Path. Auth, payments, destructive actions, schema migrations, secrets, and
-production work never qualify as quick.
+Quick path: for a covered, low-risk, mechanical edit, make the change without
+acceptance criteria, an evidence document, status moves, or planning artifacts,
+unless an accepted project rule requires a full task for every change. Run the
+checks that cover the edit, then log it with one call:
+`node .aihaus/tools/task.mjs log --title <what changed> --text <changed files; each command with its exit code; assumed decisions; what was skipped>`.
+Report the same in the result. With an accepted external tracker, log it where
+that decision says. An edit that turns out not to be covered, low-risk, and
+mechanical leaves the quick path: create the task and follow the Path. Auth,
+payments, destructive actions, schema migrations, secrets, and production work
+never qualify as quick.

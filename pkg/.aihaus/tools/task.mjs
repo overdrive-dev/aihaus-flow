@@ -10,6 +10,7 @@ import { validateEvidenceDocument } from "./evidence-validate.mjs";
 const usage = [
   "Usage: node .aihaus/tools/task.mjs <command> [--json] [--help | -h]",
   "  create --title <title> --room <room> [--external-id <id>]",
+  "  log --title <title> --text <text> [--room <room>]",
   "  move <task-id> <backlog|todo|doing|review|done>",
   "  question <task-id> --text <question>",
   "  answer <task-id> --question <question-id> --text <answer> --draft-rule <rule>",
@@ -94,6 +95,22 @@ async function createTask({ title, room, externalId }) {
     status: "backlog",
     file: path.relative(repo, destination),
   };
+}
+
+async function logTask({ title, text, room }) {
+  const { repo, board } = await taskBoard();
+  if (!title) throw new Error("log requires --title");
+  const normalizedTitle = oneLine(title, "--title");
+  const normalizedText = oneLine(text, "--text");
+  if (!room || !(await roomExists(repo, room))) throw new Error(`unknown room: ${room || "(missing)"}`);
+  const id = `T-${dateStamp()}-${randomBytes(3).toString("hex")}-${slug(normalizedTitle)}`;
+  const destination = path.join(board, "done", `${id}.md`);
+  await assertPathWithin({ root: board, candidate: destination });
+  await mkdir(path.dirname(destination), { recursive: true });
+  const created = new Date().toISOString();
+  const body = `---\nid: ${id}\nroom: ${room}\ncreated: ${created}\n---\n\n# Goal\n\n${normalizedTitle}\n\n## Log\n\n- ${created} quick path: ${normalizedText}\n\n## Evidence\n\nQuick path record; no acceptance criteria or evidence document.\n`;
+  await writeFile(destination, body, { encoding: "utf8", flag: "wx" });
+  return { ok: true, id, status: "done", file: path.relative(repo, destination) };
 }
 
 function frontmatter(content) {
@@ -294,7 +311,7 @@ function parseArgs(args) {
     command,
     json: false,
     title: null,
-    room: null,
+    room: command === "log" ? "feature" : null,
     externalId: null,
     text: null,
     question: null,
@@ -317,7 +334,7 @@ function parseArgs(args) {
     else if (arg.startsWith("-")) throw new Error(`unknown option: ${arg}`);
     else options.positionals.push(arg);
   }
-  const count = { create: 0, move: 2, question: 1, answer: 1, list: 0 }[command];
+  const count = { create: 0, log: 0, move: 2, question: 1, answer: 1, list: 0 }[command];
   if (options.positionals.length > count) throw new Error(`unknown argument: ${options.positionals[count]}`);
   return options;
 }
@@ -331,6 +348,7 @@ async function main() {
     const options = parseArgs(process.argv.slice(2));
     let result;
     if (options.command === "create") result = await createTask(options);
+    else if (options.command === "log") result = await logTask(options);
     else if (options.command === "move") result = await moveTask(options.positionals[0], options.positionals[1]);
     else if (options.command === "question") result = await addQuestion(options.positionals[0], options.text);
     else if (options.command === "answer") {

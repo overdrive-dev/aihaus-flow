@@ -117,7 +117,6 @@ test("harness contract names the two coordination levels and delegation fields",
       "Record on the task each decision assumed on an ambiguous requirement that changes behavior users or callers can observe",
       "including ambiguities a spec review reports as unlisted",
       "and continue",
-      "Without a task file, the result alone carries the list",
       "Technical mechanics follow `conventions.md` and are not listed",
       "Every judgment pass's brief includes the list, the reviewer checks each decision against the request",
       "the result reports the list so the user can overturn any decision",
@@ -152,8 +151,8 @@ test("harness contract names the two coordination levels and delegation fields",
       "Run `node .aihaus/tools/refresh.mjs --repo . --status` for a short summary",
       "If the packet is missing or stale, rebuild it by running the same command without `--status`, then check status again",
       "Add `--json` to the status command when a gap, stale claim, conflict, or warning it counts may bear on the task",
-      "The feature room's quick path has no task file and needs no such record",
-      "The feature room's quick path carries no task file or evidence document; its result reports the changed files and each command with its exit code",
+      "The feature room's quick path needs only its log record",
+      "The feature room's quick path carries no acceptance criteria or evidence document: one `tools/task.mjs log` record, repeated in the result, lists the changed files and each command with its exit code",
     ],
     "harness contract",
   );
@@ -200,7 +199,7 @@ test("adversarial review contract binds verdicts to a candidate SHA", async () =
 test("evidence contract accepts commit metadata as unvalidated", async () => {
   assertAnchors(
     await text(path.join(packageRoot, "contracts", "evidence.md")),
-    ["commit", "unvalidated metadata", "clean checkout or export", "not a degraded check", "The feature room's quick path makes no evidence document: its result reports each command and exit code"],
+    ["commit", "unvalidated metadata", "clean checkout or export", "not a degraded check", "The feature room's quick path makes no evidence document: its log record and result list each command and exit code"],
     "evidence contract",
   );
 });
@@ -221,7 +220,7 @@ test("MAP routes assignments, project memory, and package-owned files", async ()
       "first remote write",
       "and concurrency limits",
       "the harness Working style says how work runs",
-      "feature room, use its quick path (no task file or evidence document)",
+      "feature room, use its quick path (one log record, no evidence document)",
     ],
     "MAP.md",
   );
@@ -289,9 +288,12 @@ test("feature room explains the external tracker override", async () => {
     [
       "external tracker",
       "Quick path: for a covered, low-risk, mechanical edit",
-      "without a task file, an evidence document, or planning artifacts",
-      "unless an accepted project rule requires a task for every change",
-      "Run the checks that cover the edit and report the changed files, each command with its exit code, any assumed decision, and what was skipped",
+      "without acceptance criteria, an evidence document, status moves, or planning artifacts",
+      "unless an accepted project rule requires a full task for every change",
+      "Run the checks that cover the edit, then log it with one call",
+      "node .aihaus/tools/task.mjs log --title <what changed> --text <changed files; each command with its exit code; assumed decisions; what was skipped>",
+      "Report the same in the result",
+      "With an accepted external tracker, log it where that decision says",
       "An edit that turns out not to be covered, low-risk, and mechanical leaves the quick path: create the task and follow the Path",
       "Auth, payments, destructive actions, schema migrations, secrets, and production work never qualify as quick",
     ],
@@ -538,8 +540,11 @@ test("1.16.0 changelog documents lean startup and its migration opt-out", async 
   const end = changelog.indexOf("\n## ", start + 1);
   assertAnchors(changelog.slice(start, end === -1 ? undefined : end), [
     "Migration:",
-    "quick path no longer creates task files or evidence JSON",
-    "an accepted project rule requiring a task for every change",
+    "one log record in `memory/kanban/done/` via `task.mjs log`",
+    "without acceptance criteria, evidence documents, status moves, or planning artifacts",
+    "the quick path uses one `task.mjs log` record in `memory/kanban/done/` instead of a full task with acceptance criteria, status moves, and evidence JSON",
+    "an accepted project rule requiring a full task for every change",
+    "`task.mjs` and `evidence-validate.mjs` now reject unknown options and extra arguments they previously ignored",
     "The text of `--status` without `--json` changed; `--status --json` is unchanged",
     "`--help` and `-h`",
     "THIRD-PARTY-NOTICES.md",
@@ -547,8 +552,8 @@ test("1.16.0 changelog documents lean startup and its migration opt-out", async 
   ], "1.16.0 changelog entry");
   for (const file of ["README.md", "docs/architecture.md"]) {
     assertAnchors(await text(path.join(root, file)), [
-      "quick path without a task file or evidence document",
-      "an accepted project rule can require a task for every change",
+      "quick path: one kanban log record via `task.mjs log`, instead of acceptance criteria and an evidence document",
+      "an accepted project rule can require a full task for every change",
     ], file);
   }
 });

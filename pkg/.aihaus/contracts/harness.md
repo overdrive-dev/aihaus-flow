@@ -48,7 +48,7 @@ sources change:
 7. Record the applicable rule/decision IDs, source paths and revisions, remaining
    gaps, owned files, and verification plan in the task's `Context` or `Log`.
    Reuse that record when resuming instead of relying on conversation history.
-   The feature room's quick path has no task file and needs no such record.
+   The feature room's quick path needs only its log record.
 
 ## Delegation
 
@@ -120,8 +120,7 @@ who reviewed, and the profile used.
   written down; they are not a stop. Record on the task each decision assumed
   on an ambiguous requirement that changes behavior users or callers can
   observe, including ambiguities a spec review reports as unlisted, and
-  continue. Without a task file, the result alone carries the list. Technical
-  mechanics follow `conventions.md` and are not listed.
+  continue. Technical mechanics follow `conventions.md` and are not listed.
   Every judgment pass's brief includes the list, the reviewer checks each
   decision against the request, and the result reports the list so the user
   can overturn any decision. Ambiguity that no reasonable reading resolves, or
@@ -173,8 +172,9 @@ creating a shadow file task.
 
 Completion means acceptance criteria mapped to real artifacts and executable
 evidence. A tool or CI exit code may prove execution; prose cannot.
-The feature room's quick path carries no task file or evidence document; its
-result reports the changed files and each command with its exit code.
+The feature room's quick path carries no acceptance criteria or evidence
+document: one `tools/task.mjs log` record, repeated in the result, lists the
+changed files and each command with its exit code.
 
 Before staging or handing off parallel work, compare changed files to the owned
 scope with `tools/scope-check.mjs`. An explicit allowlist is required; unrelated

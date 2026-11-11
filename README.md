@@ -570,9 +570,10 @@ CI-produced evidence with exit code 0. Evidence documents can be checked with:
 node .aihaus/tools/evidence-validate.mjs path/to/evidence.json
 ```
 
-Small, covered, low-risk mechanical edits use the feature room's quick path
-without a task file or evidence document and report checks with exit codes;
-an accepted project rule can require a task for every change.
+Small, covered, low-risk mechanical edits use the feature room's quick path:
+one kanban log record via `task.mjs log`, instead of acceptance criteria and an
+evidence document. The record and result list checks with exit codes; an
+accepted project rule can require a full task for every change.
 
 Moving a task to `done` requires checked, unique acceptance criteria, answered
 business-rule questions, and an `Artifact: path/to/evidence.json` line in its

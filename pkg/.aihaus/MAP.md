@@ -9,7 +9,7 @@ workflow, role, or ledger.
 | deliver a behavior change | `rooms/feature/CONTEXT.md` |
 | diagnose and fix a defect | `rooms/bugfix/CONTEXT.md` |
 | gather evidence before deciding | `rooms/research/CONTEXT.md` |
-| small mechanical change | feature room, use its quick path (no task file or evidence document) |
+| small mechanical change | feature room, use its quick path (one log record, no evidence document) |
 | deploy, release, rollback, secrets | `contracts/ops-safety.md` plus the active room |
 | review or completion claim | `contracts/adversarial-review.md` and `contracts/evidence.md` |
 

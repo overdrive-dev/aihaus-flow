@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { linkSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -244,6 +244,81 @@ async function withRepo(prefix, callback) {
     await rm(temp, { recursive: true, force: true });
   }
 }
+
+test("log writes a dated quick-path record directly to done and list includes it", () => withRepo("aihaus-task-log-", async (temp, tool) => {
+  const help = run(process.execPath, [tool, "--help"], temp).stdout;
+  assert.match(help, /log --title <title> --text <text> \[--room <room>\]/);
+  const logged = [];
+  for (const [title, text, room, options] of [
+    ["Rename X", "src/a.mjs; node --test: exit 0", "feature", []],
+    ["Rename Y", "src/b.mjs;\nnode --test: exit 0", "bugfix", ["--room", "bugfix", "--json"]],
+  ]) {
+    const record = JSON.parse(run(process.execPath, [tool, "log", "--title", title, "--text", text, ...options], temp).stdout);
+    assert.match(record.id, /^T-\d{6}-[0-9a-f]{6}-rename-[xy]$/);
+    assert.deepEqual(record, {
+      ok: true, id: record.id, status: "done",
+      file: path.join(".aihaus", "memory", "kanban", "done", `${record.id}.md`),
+    });
+    const body = await readFile(path.join(temp, record.file), "utf8");
+    assert.ok(body.startsWith(`---\nid: ${record.id}\nroom: ${room}\ncreated: `));
+    assert.doesNotMatch(body, /^status:/m);
+    const created = body.match(/^created: (.+)$/m)?.[1];
+    assert.equal(new Date(created).toISOString(), created);
+    assert.ok(body.includes(`# Goal\n\n${title}\n`));
+    const log = body.split("## Log\n\n")[1]?.split("\n\n## Evidence")[0];
+    assert.ok(log.includes(created));
+    assert.match(log, /quick path/i);
+    assert.ok(log.includes(text.replace(/\s+/g, " ")));
+    assert.equal(log.trim().split("\n").length, 1);
+    assert.match(body, /^## Evidence\n\nQuick path record; no acceptance criteria or evidence document\.\n$/m);
+    assert.doesNotMatch(body, /^## (Acceptance|Context|Owned files|Business-rule gaps)$|^Artifact:/m);
+    logged.push({ id: record.id, title, room, status: "done", file: record.file });
+  }
+  const listed = JSON.parse(run(process.execPath, [tool, "list", "--json"], temp).stdout).tasks;
+  assert.deepEqual(listed, logged.sort((left, right) => left.id.localeCompare(right.id)));
+  for (const status of ["backlog", "todo", "doing", "review"]) {
+    assert.deepEqual(await readdir(path.join(temp, ".aihaus", "memory", "kanban", status)), []);
+  }
+}));
+
+test("log rejects missing fields, unknown rooms, and extra arguments without writing", () => withRepo("aihaus-task-log-errors-", async (temp, tool) => {
+  const help = run(process.execPath, [tool, "--help"], temp).stdout.trimEnd();
+  for (const [args, error] of [
+    [["--title", "T"], "--text is required"],
+    [["--text", "x"], "log requires --title"],
+    [["--title", " \n ", "--text", "x"], "--title is required"],
+    [["--title", "T", "--text", " \n "], "--text is required"],
+    [["--title", "T", "--text", "x", "--room", "bogus"], "unknown room: bogus"],
+    [["--title", "T", "--text", "x", "--room"], "unknown room: (missing)"],
+    [["--title", "T", "--text", "x", "extra"], "unknown argument: extra"],
+    [["--title", "T", "--text", "x", "--bogus"], "unknown option: --bogus"],
+  ]) {
+    const result = runFailure(process.execPath, [tool, "log", ...args], temp);
+    assert.equal(result.stdout, "");
+    assert.deepEqual(JSON.parse(result.stderr), { ok: false, error, usage: help });
+  }
+  assert.deepEqual(JSON.parse(run(process.execPath, [tool, "list"], temp).stdout), { ok: true, tasks: [] });
+  for (const status of ["backlog", "todo", "doing", "review", "done"]) {
+    assert.deepEqual(await readdir(path.join(temp, ".aihaus", "memory", "kanban", status)), []);
+  }
+}));
+
+test("log refuses a done directory that escapes the kanban", () => withRepo("aihaus-task-log-escape-", async (temp, tool) => {
+  const outside = await mkdtemp(path.join(os.tmpdir(), "aihaus-task-log-outside-"));
+  const done = path.join(temp, ".aihaus", "memory", "kanban", "done");
+  try {
+    await assertPathWithin({ root: temp, candidate: done });
+    await rm(done, { recursive: true });
+    await symlink(outside, done, process.platform === "win32" ? "junction" : "dir");
+    const result = runFailure(process.execPath, [tool, "log", "--title", "T", "--text", "x"], temp);
+    assert.match(JSON.parse(result.stderr).error, /outside allowed root/);
+    assert.deepEqual(await readdir(outside), []);
+  } finally {
+    await unlink(done);
+    await assertPathWithin({ root: os.tmpdir(), candidate: outside });
+    await rm(outside, { recursive: true, force: true });
+  }
+}));
 
 test("multi-line titles cannot inject task sections", () => withRepo("aihaus-task-title-", async (temp, tool) => {
   const title = "Fix login\n## Acceptance\n- [x] Works.\n## Owned files\n- src/a.mjs\n## Context\nctx\n## Log\nlog\n## Evidence\nok";
