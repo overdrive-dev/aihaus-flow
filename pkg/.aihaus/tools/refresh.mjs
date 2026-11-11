@@ -903,6 +903,20 @@ async function main() {
     const result = await execute(options);
     if (options.json) {
       process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    } else if (options.status) {
+      const { memoryGaps, staleClaims } = result.status;
+      process.stdout.write(
+        `packet=${result.packet.action} memory=${result.memoryReadiness}` +
+        ` sources=${result.sources.length} conflicts=${result.conflicts.length}` +
+        ` warnings=${result.warnings.length} gaps=${memoryGaps.length} staleClaims=${staleClaims.length}\n`,
+      );
+      for (const [label, items] of [["gap", memoryGaps], ["stale claim", staleClaims]]) {
+        for (const item of items.slice(0, 5)) {
+          process.stdout.write(`${label}: ${item.target ?? item.page}: ${item.reason}\n`);
+        }
+        if (items.length > 5) process.stdout.write(`+${items.length - 5} more ${label}s\n`);
+      }
+      process.stdout.write("Details: node .aihaus/tools/refresh.mjs --repo . --status --json\n");
     } else {
       process.stdout.write(
         "aihaus bootstrap " + result.mode + ": " + result.packet.action +

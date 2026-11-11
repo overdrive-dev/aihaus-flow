@@ -89,13 +89,13 @@ tag you are installing, not the copy from `main`.
 
 ## Set up from a GitHub Release
 
-Current published release (`v1.15.0`):
+Current published release (`v1.16.0`):
 
 ```bash
-npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.15.0/aihaus-flow-v1.15.0.tgz -- aihaus init --target . --json
+npm exec --yes --package=https://github.com/overdrive-dev/aihaus-flow/releases/download/v1.16.0/aihaus-flow-v1.16.0.tgz -- aihaus init --target . --json
 ```
 
-For another release, replace both occurrences of `v1.15.0` with the same tag.
+For another release, replace both occurrences of `v1.16.0` with the same tag.
 
 This is the go-to command for both the first setup and later updates. npm keeps
 the executable package in its cache; aihaus itself is installed as ordinary
@@ -171,6 +171,7 @@ installed entry points are:
 |---|---|---|
 | .aihaus/REFRESH.md | Provider-neutral memory synthesis routine | Package-owned; refreshed only when different or with `--force` |
 | `.aihaus/MAP.md`, `conventions.md`, `rooms/`, `roles/`, `contracts/`, `tools/` | Portable aihaus workflow | Package-owned; refreshed only when different or with `--force` |
+| `.aihaus/THIRD-PARTY-NOTICES.md` | Third-party attribution and license notices | Package-owned; refreshed only when different or with `--force` |
 | `.aihaus/VERSION` | Installed package version | Package-owned; refreshed only when different or with `--force` |
 | `.aihaus/memory/project/` | Project rules, decisions, knowledge, and procedures | Project-owned and preserved |
 | `.aihaus/memory/kanban/` | File-based task history | Project-owned and preserved |
@@ -325,8 +326,8 @@ It does not conflict with
 aihaus, and where the two differ, the aihaus test, evidence, and review
 contracts decide. `/ponytail-review` can serve as a review lens, but it does not
 produce the verdict receipt that `.aihaus/contracts/adversarial-review.md`
-requires. Ponytail's MIT notice is at the end of the installed
-`.aihaus/conventions.md`.
+requires. Ponytail's MIT notice is in the installed
+`.aihaus/THIRD-PARTY-NOTICES.md`.
 
 To keep a different rule for a project, state it in your repository
 instructions or in an accepted project rule. Both rank above package guidance.
@@ -568,6 +569,11 @@ CI-produced evidence with exit code 0. Evidence documents can be checked with:
 ```bash
 node .aihaus/tools/evidence-validate.mjs path/to/evidence.json
 ```
+
+Small, covered, low-risk mechanical edits use the feature room's quick path:
+one kanban log record via `task.mjs log`, instead of acceptance criteria and an
+evidence document. The record and result list checks with exit codes; an
+accepted project rule can require a full task for every change.
 
 Moving a task to `done` requires checked, unique acceptance criteria, answered
 business-rule questions, and an `Artifact: path/to/evidence.json` line in its

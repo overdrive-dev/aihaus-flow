@@ -5,6 +5,8 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const usage = "Usage: node .aihaus/tools/online-action-gate.mjs --command <command> [--repo <path>] [--json]\nHelp: --help or -h as the only argument.";
+
 const GIT_VALUE = String.raw`(?:"[^"]*"|'[^']*'|\S+)`;
 const GIT_OPTION = String.raw`(?:-[Cc]\s+${GIT_VALUE}|--(?:git-dir|work-tree|namespace|exec-path|config-env)(?:=|\s+)${GIT_VALUE}|--?[\w-]+(?:=${GIT_VALUE})?)`;
 
@@ -59,12 +61,19 @@ function parseArgs(args) {
 }
 
 async function main() {
+  const args = process.argv.slice(2);
+  const help = args.find((arg) => arg === "--help" || arg === "-h");
+  if (help && args.length === 1) {
+    process.stdout.write(`${usage}\n`);
+    return;
+  }
   try {
-    const result = await evaluateOnlineAction(parseArgs(process.argv.slice(2)));
+    if (help) throw new Error(`unknown argument: ${help}`);
+    const result = await evaluateOnlineAction(parseArgs(args));
     process.stdout.write(`${JSON.stringify(result)}\n`);
     if (!result.allowed) process.exitCode = 2;
   } catch (error) {
-    process.stderr.write(`${JSON.stringify({ allowed: false, reason: error.message })}\n`);
+    process.stderr.write(`${JSON.stringify({ allowed: false, reason: error.message, usage })}\n`);
     process.exitCode = 2;
   }
 }

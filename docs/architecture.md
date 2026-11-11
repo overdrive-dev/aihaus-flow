@@ -115,6 +115,10 @@ A transition to done requires a valid PASS evidence document inside the
 repository that covers exactly the checked acceptance criteria and resolved
 business-rule questions. Evidence validation rejects empty/blocked-only support;
 an independent verifier must still inspect artifacts or rerun applicable checks.
+Small, covered, low-risk mechanical edits use the feature room's quick path:
+one kanban log record via `task.mjs log`, instead of acceptance criteria and an
+evidence document. The record and result list checks with exit codes; an
+accepted project rule can require a full task for every change.
 
 ## Delegation
 

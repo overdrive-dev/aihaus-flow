@@ -148,6 +148,11 @@ test("harness contract names the two coordination levels and delegation fields",
       "fills only a role whose profile model is the session's",
       "is not a separate context",
       "directly or as a step of its host run",
+      "Run `node .aihaus/tools/refresh.mjs --repo . --status` for a short summary",
+      "If the packet is missing or stale, rebuild it by running the same command without `--status`, then check status again",
+      "Add `--json` only when the summary counts a conflict or warning, or names a gap or stale claim on a page or source this task depends on",
+      "The feature room's quick path needs only its log record",
+      "The feature room's quick path carries no acceptance criteria or evidence document: one `tools/task.mjs log` record, repeated in the result, lists the changed files and each command with its exit code",
     ],
     "harness contract",
   );
@@ -194,7 +199,7 @@ test("adversarial review contract binds verdicts to a candidate SHA", async () =
 test("evidence contract accepts commit metadata as unvalidated", async () => {
   assertAnchors(
     await text(path.join(packageRoot, "contracts", "evidence.md")),
-    ["commit", "unvalidated metadata", "clean checkout or export", "not a degraded check"],
+    ["commit", "unvalidated metadata", "clean checkout or export", "not a degraded check", "The feature room's quick path makes no evidence document: its log record and result list each command and exit code"],
     "evidence contract",
   );
 });
@@ -215,6 +220,7 @@ test("MAP routes assignments, project memory, and package-owned files", async ()
       "first remote write",
       "and concurrency limits",
       "the harness Working style says how work runs",
+      "feature room, use its quick path (one log record, no evidence document)",
     ],
     "MAP.md",
   );
@@ -224,7 +230,7 @@ test("MAP routes assignments, project memory, and package-owned files", async ()
 test("conventions name package-owned files and external trackers", async () => {
   assertAnchors(
     await text(path.join(packageRoot, "conventions.md")),
-    ["external tracker", "package-owned", "is an assumed decision: record it on the task and continue", "missing business rule that materially changes the outcome is a rule gap"],
+    ["external tracker", "package-owned", "THIRD-PARTY-NOTICES.md", "is an assumed decision: record it on the task and continue", "missing business rule that materially changes the outcome is a rule gap"],
     "conventions.md",
   );
 });
@@ -247,11 +253,18 @@ test("conventions and review carry the reuse-first change ladder", async () => {
       "Never trade away, even in moved or merged code, validation at trust boundaries",
       "calibration that physical hardware needs",
       "`shortcut: <the limit>, <when to upgrade>`",
-      "Copyright (c) 2026 DietrichGebert",
-      "The above copyright notice and this permission notice shall be included",
     ],
     "conventions.md",
   );
+  const notices = await text(path.join(packageRoot, "THIRD-PARTY-NOTICES.md"));
+  assertAnchors(notices, [
+    "The change ladder in `conventions.md` and the complexity lens in `contracts/adversarial-review.md` are adapted from",
+    "Copyright (c) 2026 DietrichGebert",
+    "The above copyright notice and this permission notice shall be included",
+  ], "THIRD-PARTY-NOTICES.md");
+  const license = await text(path.join(root, "pkg", "LICENSE"));
+  assert.equal(notices.slice(notices.indexOf("MIT License")).trim(), license.slice(license.lastIndexOf("MIT License")).trim());
+  assert.doesNotMatch(await text(path.join(packageRoot, "conventions.md")), /Copyright \(c\) 2026 DietrichGebert|Permission is hereby granted/);
   assertAnchors(
     await text(path.join(root, "pkg", "LICENSE")),
     ["Copyright (c) 2026 DietrichGebert"],
@@ -272,7 +285,20 @@ test("conventions and review carry the reuse-first change ladder", async () => {
 test("feature room explains the external tracker override", async () => {
   assertAnchors(
     await text(path.join(packageRoot, "rooms", "feature", "CONTEXT.md")),
-    ["external tracker"],
+    [
+      "external tracker",
+      "Quick path: for a covered, low-risk, mechanical edit",
+      "without acceptance criteria, an evidence document, status moves, or planning artifacts",
+      "unless an accepted project rule requires a full task for every change",
+      "Run the checks that cover the edit, then log it with one call",
+      "node .aihaus/tools/task.mjs log --title <what changed> --text <changed files; each command with its exit code; assumed decisions; what was skipped>",
+      "Report the same in the result",
+      "A delegated executor returns that text to the task writer instead of logging it",
+      "`contracts/evidence.md`; add adversarial review before completion (the quick path loads neither)",
+      "With an accepted external tracker, log it where that decision says",
+      "An edit that turns out not to be covered, low-risk, and mechanical leaves the quick path: create the task and follow the Path",
+      "Auth, payments, destructive actions, schema migrations, secrets, and production work never qualify as quick",
+    ],
     "feature room context",
   );
 });
@@ -302,6 +328,7 @@ test("router points project routes at project memory, not rooms", async () => {
       "starts and resumes",
       ".aihaus/roles/orchestrator.md",
       "Choose how to carry out the request under Working style in the harness",
+      "node .aihaus/tools/refresh.mjs --repo . --status`",
     ],
     "router adapter",
   );
@@ -506,6 +533,31 @@ test("release version is consistent across changelog and README install pin", as
   assert.ok(readme.includes(`releases/download/v${version}/aihaus-flow-v${version}.tgz`));
   const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
   assert.match(changelog, new RegExp(`^## ${escapeRegExp(version)} - `, "m"));
+});
+
+test("1.16.0 changelog documents lean startup and its migration opt-out", async () => {
+  const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
+  const start = changelog.indexOf("## 1.16.0 - 2026-11-11");
+  assert.notEqual(start, -1, "1.16.0 changelog entry must exist");
+  const end = changelog.indexOf("\n## ", start + 1);
+  assertAnchors(changelog.slice(start, end === -1 ? undefined : end), [
+    "Migration:",
+    "one log record in `memory/kanban/done/` via `task.mjs log`",
+    "without acceptance criteria, evidence documents, status moves, or planning artifacts",
+    "the quick path uses one `task.mjs log` record in `memory/kanban/done/` instead of a full task with acceptance criteria, status moves, and evidence JSON",
+    "an accepted project rule requiring a full task for every change",
+    "`task.mjs` and `evidence-validate.mjs` now reject unknown options and extra arguments they previously ignored",
+    "The text of `--status` without `--json` changed; `--status --json` is unchanged",
+    "accept `--help` or `-h` as the only argument",
+    "THIRD-PARTY-NOTICES.md",
+    "Project memory templates are unchanged.",
+  ], "1.16.0 changelog entry");
+  for (const file of ["README.md", "docs/architecture.md"]) {
+    assertAnchors(await text(path.join(root, file)), [
+      "quick path: one kanban log record via `task.mjs log`, instead of acceptance criteria and an evidence document",
+      "an accepted project rule can require a full task for every change",
+    ], file);
+  }
 });
 
 test("assumed decisions are recorded and reported, never a confirmation stop", async () => {

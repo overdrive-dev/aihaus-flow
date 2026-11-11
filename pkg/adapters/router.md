@@ -5,7 +5,7 @@ This repository uses the local `.aihaus/` package.
 1. Resolve the Git root; paths below are relative to that root. Read
    `.aihaus/MAP.md` and `.aihaus/contracts/harness.md`.
 2. Before substantive work or resuming a task, follow the harness context
-   check. Run `node .aihaus/tools/refresh.mjs --repo . --status --json` from
+   check. Run `node .aihaus/tools/refresh.mjs --repo . --status` from
    the Git root, then read the rules and decisions relevant to this task.
 3. Load one task room and one primary role. When accepted project Assignments
    in `.aihaus/memory/project/procedures.md` define a default role and profile
