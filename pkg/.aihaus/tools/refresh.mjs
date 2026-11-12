@@ -910,9 +910,15 @@ async function main() {
         ` sources=${result.sources.length} conflicts=${result.conflicts.length}` +
         ` warnings=${result.warnings.length} gaps=${memoryGaps.length} staleClaims=${staleClaims.length}\n`,
       );
-      for (const [label, items] of [["gap", memoryGaps], ["stale claim", staleClaims]]) {
+      for (const [label, items] of [
+        ["conflict", result.conflicts.map(({ message, candidates }) =>
+          `${message} ${candidates.map(({ source, value }) => `${source}=${JSON.stringify(value)}`).join(", ")}`)],
+        ["warning", result.warnings],
+        ["gap", memoryGaps.map((item) => `${item.target}: ${item.reason}`)],
+        ["stale claim", staleClaims.map((item) => `${item.page}: ${item.reason}`)],
+      ]) {
         for (const item of items.slice(0, 5)) {
-          process.stdout.write(`${label}: ${item.target ?? item.page}: ${item.reason}\n`);
+          process.stdout.write(`${label}: ${item.replace(/[\r\n]+/g, " ")}\n`);
         }
         if (items.length > 5) process.stdout.write(`+${items.length - 5} more ${label}s\n`);
       }

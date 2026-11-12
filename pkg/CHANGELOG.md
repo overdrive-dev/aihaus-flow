@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.17.0 - 2026-11-12
+
+Less to read at task start.
+
+- `refresh.mjs --status` lists conflicts and warnings before memory gaps and
+  stale claims, at most five of each with a remaining-item count. Conflict
+  lines name the sources and values that disagree. The harness requests JSON
+  only when this task depends on an item the summary names or cuts short.
+- Migration: the text of `--status` without `--json` gained conflict and warning
+  lines; `--status --json` is unchanged. Apply and dry-run output is unchanged.
+- Project memory templates are unchanged.
+
 ## 1.16.0 - 2026-11-11
 
 Less setup before a small code change.

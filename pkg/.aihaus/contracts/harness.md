@@ -31,9 +31,9 @@ sources change:
    path-specific rules; a discovery index is not an instruction loader.
 3. Run `node .aihaus/tools/refresh.mjs --repo . --status` for a short summary.
    If the packet is missing or stale, rebuild it by running the same command
-   without `--status`, then check status again. Add `--json` only when the
-   summary counts a conflict or warning, or names a gap or stale claim on a
-   page or source this task depends on. This updates disposable state, not
+   without `--status`, then check status again. Add `--json` only when this
+   task depends on a conflict, warning, gap, or stale claim that the summary
+   names or cuts short. This updates disposable state, not
    accepted project memory.
 4. Use `memory/project/README.md` to choose pages. Search relevant rule IDs,
    domain terms, and file paths, then read the matching entries and their
