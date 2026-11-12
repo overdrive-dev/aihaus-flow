@@ -150,7 +150,7 @@ test("harness contract names the two coordination levels and delegation fields",
       "directly or as a step of its host run",
       "Run `node .aihaus/tools/refresh.mjs --repo . --status` for a short summary",
       "If the packet is missing or stale, rebuild it by running the same command without `--status`, then check status again",
-      "Add `--json` only when the summary counts a conflict or warning, or names a gap or stale claim on a page or source this task depends on",
+      "Add `--json` only when this task depends on a conflict, warning, gap, or stale claim that the summary names or cuts short",
       "The feature room's quick path needs only its log record",
       "The feature room's quick path carries no acceptance criteria or evidence document: one `tools/task.mjs log` record, repeated in the result, lists the changed files and each command with its exit code",
     ],
@@ -533,6 +533,24 @@ test("release version is consistent across changelog and README install pin", as
   assert.ok(readme.includes(`releases/download/v${version}/aihaus-flow-v${version}.tgz`));
   const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
   assert.match(changelog, new RegExp(`^## ${escapeRegExp(version)} - `, "m"));
+});
+
+test("1.17.0 changelog documents conflict and warning summaries", async () => {
+  const changelog = await text(path.join(root, "pkg", "CHANGELOG.md"));
+  const start = changelog.indexOf("## 1.17.0 - 2026-11-12");
+  assert.notEqual(start, -1, "1.17.0 changelog entry must exist");
+  const end = changelog.indexOf("\n## ", start + 1);
+  assertAnchors(changelog.slice(start, end === -1 ? undefined : end), [
+    "Less to read at task start.",
+    "`refresh.mjs --status` lists conflicts and warnings before memory gaps and stale claims",
+    "at most five of each with a remaining-item count",
+    "Conflict lines name the sources and values that disagree",
+    "only when this task depends on an item the summary names or cuts short",
+    "Migration:",
+    "the text of `--status` without `--json` gained conflict and warning lines; `--status --json` is unchanged",
+    "Apply and dry-run output is unchanged.",
+    "Project memory templates are unchanged.",
+  ], "1.17.0 changelog entry");
 });
 
 test("1.16.0 changelog documents lean startup and its migration opt-out", async () => {

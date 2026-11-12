@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const setup = path.join(root, "pkg", "setup.mjs");
@@ -290,7 +291,7 @@ test("bootstrap blocks synthesis in an empty repository and ignores generated ad
     assert.equal(await exists(path.join(repository, ".aihaus", "THIRD-PARTY-NOTICES.md")), true);
     const summary = run(process.execPath, [init, "--repo", repository, "--status"], repository).stdout;
     assert.match(summary, /^packet=unchanged memory=uninitialized sources=0 conflicts=0 warnings=\d+ gaps=0 staleClaims=0\n/);
-    assert.equal(summary.trimEnd().split("\n").length, 2);
+    assert.deepEqual(summary.trimEnd().split("\n").slice(1, -1), result.warnings.map((warning) => `warning: ${warning}`));
     assert.ok(summary.length <= 1500);
     assert.ok(result.warnings.some((warning) => /insufficient authoritative/i.test(warning)));
     assert.ok(
@@ -331,6 +332,27 @@ test("bootstrap blocks synthesis in an empty repository and ignores generated ad
     assert.equal(status.status.readyForSynthesis, false);
     assert.equal(status.status.memoryReadiness, "uninitialized");
     assert.equal(status.status.stale, false);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("text status lists all four warnings after setup in an empty repository", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-summary-empty-"));
+  try {
+    await initializeGit(repository);
+    const tool = install(repository);
+    const summary = run(process.execPath, [tool, "--repo", repository, "--status"], repository).stdout;
+    assert.equal(summary, [
+      "packet=missing memory=uninitialized sources=0 conflicts=0 warnings=4 gaps=0 staleClaims=0",
+      "warning: repository has no reviewed Git commit; provenance is worktree-only",
+      "warning: no AGENTS.md or CLAUDE.md adapter source was found",
+      "warning: no safe bootstrap sources were discovered",
+      "warning: insufficient authoritative repository evidence; semantic synthesis must not run",
+      "Details: node .aihaus/tools/refresh.mjs --repo . --status --json",
+      "",
+    ].join("\n"));
+    assert.ok(summary.length <= 1500);
   } finally {
     await rm(repository, { recursive: true, force: true });
   }
@@ -512,6 +534,9 @@ test("bootstrap reports conflicting project identities without choosing one", as
       conflict.candidates.map((candidate) => candidate.value).sort(),
       ["alpha-service", "beta-service"],
     );
+    const summary = run(process.execPath, [init, "--repo", repository, "--status"], repository).stdout;
+    assert.ok(summary.split("\n").includes('conflict: Root manifests declare different project identities; agent review is required. package.json="alpha-service", pyproject.toml="beta-service"'));
+    assert.ok(summary.split("\n").includes("warning: discovered evidence contains unresolved conflicts"));
     assert.equal(await exists(path.join(repository, ".aihaus", "state", "bootstrap")), false);
   } finally {
     await rm(repository, { recursive: true, force: true });
@@ -604,6 +629,11 @@ test("text status summarizes missing, stale, and ready packets with bounded advi
       const { memoryGaps, staleClaims } = result.status;
       const lines = output.trimEnd().split("\n");
       assert.equal(lines[0], `packet=${result.packet.action} memory=${result.memoryReadiness} sources=${result.sources.length} conflicts=${result.conflicts.length} warnings=${result.warnings.length} gaps=${memoryGaps.length} staleClaims=${staleClaims.length}`);
+      assert.deepEqual(lines.slice(1, 4), [
+        'conflict: Root manifests declare different project identities; agent review is required. package.json="billing", pyproject.toml="other"',
+        "warning: no AGENTS.md or CLAUDE.md adapter source was found",
+        "warning: discovered evidence contains unresolved conflicts",
+      ]);
       for (const [items, prefix, key] of [[memoryGaps, "gap", "target"], [staleClaims, "stale claim", "page"]]) {
         const shown = lines.filter((line) => line.startsWith(`${prefix}: `));
         assert.equal(shown.length, Math.min(5, items.length));
@@ -642,7 +672,7 @@ test("text status summarizes missing, stale, and ready packets with bounded advi
     assert.equal(current.packet.action, "unchanged");
     assert.equal(current.status.memoryReadiness, "ready");
     assertSummary(status(), current);
-    assert.equal(status().trimEnd().split("\n").length, 2);
+    assert.equal(status().trimEnd().split("\n").length, 5);
 
     await writeFile(path.join(repository, "README.md"), "# Billing\n\nProcesses refunds.\n");
     current = bootstrapResult(repository, ["--status"]);
@@ -650,6 +680,60 @@ test("text status summarizes missing, stale, and ready packets with bounded advi
     assert.equal(current.status.staleClaims.length, 8);
     assertSummary(status(), current);
     assert.equal(json(), JSON.stringify(current, null, 2) + "\n");
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("text status bounds conflicts and warnings to five single-line items each", async () => {
+  const source = await readFile(path.join(root, "pkg", ".aihaus", "tools", "refresh.mjs"), "utf8");
+  // Discovery currently emits at most one conflict; exercise larger packets at the CLI boundary.
+  const main = source.slice(source.indexOf("async function main() {"), source.lastIndexOf("await main();"));
+  let output = "";
+  await runInNewContext(main + "\nmain();", {
+    parseArgs: () => ({ status: true }),
+    execute: async () => ({
+      packet: { action: "missing" },
+      memoryReadiness: "uninitialized",
+      sources: [],
+      conflicts: Array.from({ length: 7 }, (_, index) => ({
+        message: `Conflict ${index}`,
+        candidates: [{ source: "package.json", value: `alpha\n${index}` }, { source: "pyproject.toml", value: `beta${index}` }],
+      })),
+      warnings: Array.from({ length: 7 }, (_, index) => `Warning ${index}\ncontinued`),
+      status: { memoryGaps: [], staleClaims: [] },
+    }),
+    process: {
+      argv: [],
+      stdout: { write: (chunk) => { output += chunk; } },
+      stderr: { write: (chunk) => assert.fail(chunk) },
+    },
+  });
+  assert.deepEqual(output.trimEnd().split("\n"), [
+    "packet=missing memory=uninitialized sources=0 conflicts=7 warnings=7 gaps=0 staleClaims=0",
+    ...Array.from({ length: 5 }, (_, index) => `conflict: Conflict ${index} package.json="alpha\\n${index}", pyproject.toml="beta${index}"`),
+    "+2 more conflicts",
+    ...Array.from({ length: 5 }, (_, index) => `warning: Warning ${index} continued`),
+    "+2 more warnings",
+    "Details: node .aihaus/tools/refresh.mjs --repo . --status --json",
+  ]);
+});
+
+test("text status without conflicts or warnings keeps the two-line summary", async () => {
+  const repository = await mkdtemp(path.join(os.tmpdir(), "aihaus-summary-clear-"));
+  try {
+    await initializeGit(repository);
+    await writeFile(path.join(repository, "AGENTS.md"), "# Project instructions\n");
+    const tool = install(repository);
+    commitAll(repository, "project instructions and setup");
+    const reviewed = run("git", ["rev-parse", "HEAD"], repository).stdout.trim();
+    for (const name of memoryNames) {
+      await writeFile(path.join(repository, ".aihaus", "memory", "project", name),
+        `# Reviewed memory\n\nVerified: project instructions. Source: \`AGENTS.md\` (reviewed ${reviewed}).\n`);
+    }
+    bootstrapResult(repository);
+    const summary = run(process.execPath, [tool, "--repo", repository, "--status"], repository).stdout;
+    assert.equal(summary, "packet=unchanged memory=ready sources=1 conflicts=0 warnings=0 gaps=0 staleClaims=0\nDetails: node .aihaus/tools/refresh.mjs --repo . --status --json\n");
   } finally {
     await rm(repository, { recursive: true, force: true });
   }
