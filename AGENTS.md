@@ -36,13 +36,9 @@ Maintainer runbook:
   `package-release.yml`; retitle notes `AIHAUS FLOW v<VERSION>: <theme>` with
   What changed; Install or update; migration note with opt-out for new defaults.
 - Suite ~50 s, run by the author (Codex sandbox can't spawn); Windows skips 1 test.
-- Host A/B labs, one consumer per arm: `AIHAUS_LAB_ROOT=.aihaus-lab/ab/<arm>
-  node <checkout>/tools/aihaus-lab.mjs init`; `claude` and `gh` run in PowerShell.
-  At most two sessions: `claude -p --model opus --effort ultracode --strict-mcp-config
-  --tools <tools> --allowedTools <commands> --permission-mode acceptEdits
-  --max-budget-usd 15` with `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`; add `--restricted`
-  (no instruction files; prompt says read AGENTS.md) or, for native loading,
-  `--setting-sources project,local` and `claudeMdExcludes` for this AGENTS.md.
+- Host A/B labs: follow `tools/lab/README.md` (recipe, isolation, pitfalls); at
+  most two Claude sessions at once. Judge a change by model calls, cost, and
+  time, not by how much text an agent reads.
 - Setup replaces package-owned surfaces and never reseeds existing memory;
   `refresh.mjs` hashes memory templates. Ship new guidance through MAP,
   contracts, rooms, roles, or the router, not memory templates.
